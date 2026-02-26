@@ -1,0 +1,32 @@
+---
+description: Règles du projet Simulateur de nations – stack, langue, données, UI
+globs: 
+alwaysApply: true
+---
+
+# Simulateur de nations (RP-Website)
+
+## Stack
+- **Frontend:** Next.js 14+ (App Router), TypeScript, Tailwind CSS.
+- **Backend / DB / Auth:** Supabase (PostgreSQL, RLS, Auth). Pas de backend séparé ; le client Supabase (côté serveur et client) est utilisé avec RLS.
+
+## Langue
+- **Tout le texte visible par l’utilisateur doit être en français** : libellés, boutons, messages, validation, titres de page. Le code et les commentaires peuvent rester en anglais.
+
+## Données (Supabase)
+- **Pays** : table `countries` (Généralités, Société, Macros). Drapeaux : upload bucket Storage `flags` ou URL. Table optionnelle `country_macros` (clé-valeur).
+- **Historique** : `country_history` (country_id, date, population, gdp, militarism, industry, science, stability) pour variations vert/rouge sur la liste ; rempli par le cron.
+- **Règles** : `rule_parameters` (key, value jsonb). Schéma extensible.
+- **Militaire** : `military_unit_types` (branch: terre/air/mer), `country_military_limits`.
+- **Avantages** : `perks`, `country_perks`.
+- **Formatage** : utiliser `formatNumber` et `formatGdp` de `@/lib/format` (séparateur ".", PIB en "X Bn").
+
+## Conventions
+- Lecture des données : Server Components, client Supabase serveur (`@/lib/supabase/server`).
+- Écriture admin : Client Components ou Server Actions avec client Supabase + RLS. Ne pas exposer la clé service_role dans le front.
+- Variables d’environnement : `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` (pas de secrets en dur).
+- **UI/UX** : conserver une interface cohérente et lisible (thème type tableau de bord QG militaire : fond sombre, panneaux, accents verts). Utiliser les variables CSS du thème (`var(--background-panel)`, `var(--accent)`, etc.) et les composants existants. États de chargement et listes vides en français.
+
+## Structure des routes
+- **Public** : `/` = table des nations (Pays, Régime, Population, PIB, Militarisme, Industrie, Science, Stabilité avec variation vert/rouge si historique) ; `/pays/[slug]` (fiche 3 onglets) ; `/regles`.
+- **Admin** : `/admin/connexion`, `/admin/inscription` ; après auth `/admin`, `/admin/pays`, `/admin/pays/nouveau`, `/admin/pays/[id]`, `/admin/regles`. Middleware protège `/admin` sauf connexion/inscription.
