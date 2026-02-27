@@ -31,7 +31,7 @@ export default async function CountryPage({
   }
   const backHref = isAdmin ? "/admin/pays" : "/";
 
-  const [macrosRes, limitsRes, perksDefRes, countryPerksRes] = await Promise.all([
+  const [macrosRes, limitsRes, perksDefRes, countryPerksRes, budgetRes, effectsRes] = await Promise.all([
     supabase.from("country_macros").select("*").eq("country_id", country.id),
     supabase
       .from("country_military_limits")
@@ -39,12 +39,16 @@ export default async function CountryPage({
       .eq("country_id", country.id),
     supabase.from("perks").select("*").order("sort_order"),
     supabase.from("country_perks").select("perk_id").eq("country_id", country.id),
+    supabase.from("country_budget").select("*").eq("country_id", country.id).maybeSingle(),
+    supabase.from("country_effects").select("*").eq("country_id", country.id).gt("duration_remaining", 0),
   ]);
 
   const macros = macrosRes.data ?? [];
   const limits = limitsRes.data ?? [];
   const perksDef = perksDefRes.data ?? [];
   const unlockedPerkIds = new Set((countryPerksRes.data ?? []).map((p) => p.perk_id));
+  const budget = budgetRes.data ?? null;
+  const effects = effectsRes.data ?? [];
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-10">
@@ -88,6 +92,9 @@ export default async function CountryPage({
         limits={limits}
         perksDef={perksDef}
         unlockedPerkIds={unlockedPerkIds}
+        budget={budget}
+        effects={effects}
+        isAdmin={isAdmin}
       />
     </div>
   );

@@ -18,7 +18,7 @@ export default async function AdminPaysListPage() {
     .select("country_id, date, population, gdp, militarism, industry, science, stability")
     .order("date", { ascending: false });
 
-  const latestByCountry = new Map<string, (typeof historyRows)[0]>();
+  const latestByCountry = new Map<string, NonNullable<typeof historyRows>[number]>();
   if (historyRows?.length && !historyError) {
     for (const row of historyRows) {
       const id = normId(row.country_id);

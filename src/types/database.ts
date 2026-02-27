@@ -63,3 +63,34 @@ export interface CountryPerk {
   perk_id: string
   unlocked_at: string
 }
+
+export interface CountryBudget {
+  id: string
+  country_id: string
+  budget_fraction: number
+  pct_etat: number
+  pct_education: number
+  pct_recherche: number
+  pct_infrastructure: number
+  pct_sante: number
+  pct_industrie: number
+  pct_defense: number
+  pct_interieur: number
+  pct_affaires_etrangeres: number
+  created_at: string
+  updated_at: string
+}
+
+export interface CountryEffect {
+  id: string
+  country_id: string
+  name: string
+  effect_kind: string
+  effect_target: string | null
+  effect_subtype: string | null
+  value: number
+  duration_kind: string
+  duration_remaining: number
+  created_at: string
+  updated_at: string
+}

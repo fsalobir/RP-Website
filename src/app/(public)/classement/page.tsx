@@ -19,7 +19,8 @@ export default async function ClassementPage() {
     .select("country_id, date, population, gdp, militarism, industry, science, stability")
     .order("date", { ascending: false });
 
-  const latestByCountry = new Map<string, (typeof historyRows)[0]>();
+  type HistoryRow = NonNullable<typeof historyRows>[number];
+  const latestByCountry = new Map<string, HistoryRow>();
   if (historyRows?.length && !historyError) {
     for (const row of historyRows) {
       const id = normId(row.country_id);

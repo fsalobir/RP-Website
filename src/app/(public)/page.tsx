@@ -32,7 +32,7 @@ export default async function HomePage() {
     return String(id ?? "").trim().toLowerCase();
   }
 
-  const latestByCountry = new Map<string, (typeof historyRows)[0]>();
+  const latestByCountry = new Map<string, NonNullable<typeof historyRows>[number]>();
   if (historyRows?.length && !historyError) {
     for (const row of historyRows) {
       const id = normId(row.country_id);

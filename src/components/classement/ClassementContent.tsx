@@ -62,14 +62,15 @@ function getRowPrevValue(r: Row, key: MetricKey): number | null {
 /** Tri par valeur courante desc, avec rang et rang précédent pour l’évolution. */
 function useRanked(rows: Row[], metricKey: MetricKey): { row: Row; rank: number; prev_rank: number | null }[] {
   return useMemo(() => {
-    const withVal = rows.map((r) => ({
+    type WithVal = { row: Row; value: number; prevValue: number | null; rank?: number };
+    const withVal: WithVal[] = rows.map((r) => ({
       row: r,
       value: getRowValue(r, metricKey),
       prevValue: getRowPrevValue(r, metricKey),
     }));
     const sorted = [...withVal].sort((a, b) => b.value - a.value);
     sorted.forEach((x, i) => {
-      (x as { rank: number }).rank = i + 1;
+      x.rank = i + 1;
     });
     const byPrev = [...withVal].sort(
       (a, b) => (b.prevValue ?? -Infinity) - (a.prevValue ?? -Infinity)
@@ -78,7 +79,7 @@ function useRanked(rows: Row[], metricKey: MetricKey): { row: Row; rank: number;
     byPrev.forEach((x, i) => prevRankById.set(x.row.country.id, i + 1));
     return sorted.map((x) => ({
       row: x.row,
-      rank: (x as { rank: number }).rank,
+      rank: x.rank!,
       prev_rank: prevRankById.get(x.row.country.id) ?? null,
     }));
   }, [rows, metricKey]);
