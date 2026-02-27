@@ -115,11 +115,12 @@ export function getEffectDescription(e: CountryEffect): string {
   return `${kindLabel} : ${valueStr}`;
 }
 
-function formatEffectValue(effectKind: string, value: number): string {
-  if (effectKind === "budget_ministry_min_pct") return `${Number(value)} %`;
-  if (effectKind === "budget_ministry_effect_multiplier") return `${(value * 100 - 100).toFixed(0)} %`;
-  if (effectKind === "budget_allocation_cap") return `${value >= 0 ? "+" : ""}${value} %`;
-  if (effectKind.startsWith("gdp_growth") || effectKind.startsWith("population_growth")) {
+function formatEffectValue(effectKind: string | null | undefined, value: number): string {
+  const kind = effectKind ?? "";
+  if (kind === "budget_ministry_min_pct") return `${Number(value)} %`;
+  if (kind === "budget_ministry_effect_multiplier") return `${(value * 100 - 100).toFixed(0)} %`;
+  if (kind === "budget_allocation_cap") return `${value >= 0 ? "+" : ""}${value} %`;
+  if (kind.startsWith("gdp_growth") || kind.startsWith("population_growth")) {
     return (value * 100).toFixed(2) + " %";
   }
   return String(value);

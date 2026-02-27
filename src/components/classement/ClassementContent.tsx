@@ -296,7 +296,7 @@ export function ClassementContent({ rows }: { rows: Row[] }) {
                         {row.country.name}
                       </Link>
                     </td>
-                    <td className="p-3 font-mono text-[var(--foreground-muted)]">{row.country.militarism ?? "—"}</td>
+                    <td className="p-3 font-mono text-[var(--foreground-muted)]">{row.country.militarism != null ? Number(row.country.militarism).toFixed(2) : "—"}</td>
                   </tr>
                 ))}
               </tbody>
@@ -353,7 +353,7 @@ export function ClassementContent({ rows }: { rows: Row[] }) {
                           {row.country.name}
                         </Link>
                       </td>
-                      <td className="p-3 font-mono text-[var(--foreground-muted)]">{row.country.industry ?? "—"}</td>
+                      <td className="p-3 font-mono text-[var(--foreground-muted)]">{row.country.industry != null ? Number(row.country.industry).toFixed(2) : "—"}</td>
                     </tr>
                   ))}
                 {economiqueSub === "science" &&
@@ -372,7 +372,7 @@ export function ClassementContent({ rows }: { rows: Row[] }) {
                           {row.country.name}
                         </Link>
                       </td>
-                      <td className="p-3 font-mono text-[var(--foreground-muted)]">{row.country.science ?? "—"}</td>
+                      <td className="p-3 font-mono text-[var(--foreground-muted)]">{row.country.science != null ? Number(row.country.science).toFixed(2) : "—"}</td>
                     </tr>
                   ))}
                 {economiqueSub === "population" &&

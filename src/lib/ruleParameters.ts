@@ -122,9 +122,13 @@ export const BUDGET_MINISTRY_EFFECTS: Record<string, { key: string; label: strin
 
 export type BudgetMinistryValue = {
   min_pct?: number;
+  /** @deprecated Utiliser maluses par effet à la place. Conservé pour affichage / rétrocompat. */
   max_malus?: number;
   gravity_pct?: number;
+  /** Bonus / jour par effet quand allocation >= min_pct. */
   bonuses?: Record<string, number>;
+  /** Malus / jour par effet quand allocation < min_pct (même clés que bonuses). */
+  maluses?: Record<string, number>;
 };
 
 export function getRuleLabel(key: string): string {

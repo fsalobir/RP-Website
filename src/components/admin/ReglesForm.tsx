@@ -116,7 +116,7 @@ export function ReglesForm({
     if (typeof r.value === "object" && r.value !== null && !Array.isArray(r.value)) {
       return r.value as BudgetMinistryValue;
     }
-    return { min_pct: 5, max_malus: -0.05, gravity_pct: 50, bonuses: {} };
+    return { min_pct: 5, gravity_pct: 50, bonuses: {}, maluses: {} };
   }
 
   function updateBudgetField(
@@ -129,6 +129,9 @@ export function ReglesForm({
     if (field === "bonuses" && subKey) {
       const bonuses = { ...(current.bonuses ?? {}), [subKey]: val };
       updateValue(r.id, { ...current, bonuses });
+    } else if (field === "maluses" && subKey) {
+      const maluses = { ...(current.maluses ?? {}), [subKey]: val };
+      updateValue(r.id, { ...current, maluses });
     } else {
       updateValue(r.id, { ...current, [field]: val });
     }
@@ -162,19 +165,20 @@ export function ReglesForm({
     ? 1 + ((simulatorParams.gravity_pct ?? 50) / 100) * (worldAvgNum - baseNum) / Math.max(worldAvgNum, 0.01)
     : 1;
   const minPct = simulatorParams?.min_pct ?? 5;
-  const maxMalus = simulatorParams?.max_malus ?? -0.05;
   const effects = (simulatorParams && BUDGET_MINISTRY_EFFECTS[simulatorMinistry]) ?? [];
   const allocationBelowMin = simulatorAllocationPct < minPct;
-  const malusPerDay = allocationBelowMin && minPct > 0
-    ? maxMalus * (1 - simulatorAllocationPct / minPct)
+  const malusScale = allocationBelowMin && minPct > 0
+    ? (minPct - simulatorAllocationPct) / minPct
     : 0;
   const bonusScale = !allocationBelowMin && minPct < 100
     ? (simulatorAllocationPct - minPct) / (100 - minPct)
     : 0;
-  const bonusesPerDay = effects.map(({ key: effectKey, label: effectLabel }) => ({
-    label: effectLabel,
-    perDay: (simulatorParams?.bonuses?.[effectKey] ?? 0) * bonusScale * catchUpFactor,
-  }));
+  const bonusesPerDay = effects.map(({ key: effectKey, label: effectLabel }) => {
+    const rawMalus = simulatorParams?.maluses?.[effectKey] ?? -0.05;
+    const malus = malusScale * rawMalus;
+    const bonus = !allocationBelowMin ? (simulatorParams?.bonuses?.[effectKey] ?? 0) * bonusScale * catchUpFactor : 0;
+    return { label: effectLabel, perDay: bonus, malusPerDay: malus };
+  });
 
   return (
     <div className="space-y-4">
@@ -299,9 +303,9 @@ export function ReglesForm({
                   }
                 >
                   <div className="p-3" style={{ borderColor: "var(--border-muted)" }}>
-                    <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-5 xl:grid-cols-6">
-                      <div>
-                        <label className="mb-0.5 block text-xs text-[var(--foreground-muted)]">% min (éviter malus)</label>
+                    <div className="flex flex-wrap items-end gap-x-4 gap-y-2">
+                      <div className="flex flex-col gap-0.5">
+                        <label className="text-xs text-[var(--foreground-muted)]">% min</label>
                         <input
                           type="number"
                           min={0}
@@ -309,23 +313,12 @@ export function ReglesForm({
                           step={0.5}
                           value={val.min_pct ?? 5}
                           onChange={(e) => updateBudgetField(r, "min_pct", null, Number(e.target.value))}
-                          className={inputClassNarrow}
+                          className={`${inputClassNarrow} w-14`}
                           style={inputStyle}
                         />
                       </div>
-                      <div>
-                        <label className="mb-0.5 block text-xs text-[var(--foreground-muted)]">Malus max / jour</label>
-                        <input
-                          type="number"
-                          step={0.01}
-                          value={val.max_malus ?? -0.05}
-                          onChange={(e) => updateBudgetField(r, "max_malus", null, Number(e.target.value))}
-                          className={inputClassNarrow}
-                          style={inputStyle}
-                        />
-                      </div>
-                      <div>
-                        <label className="mb-0.5 block text-xs text-[var(--foreground-muted)]">Gravité effet / moyenne (%)</label>
+                      <div className="flex flex-col gap-0.5">
+                        <label className="text-xs text-[var(--foreground-muted)]">Gravité %</label>
                         <input
                           type="number"
                           min={0}
@@ -333,22 +326,36 @@ export function ReglesForm({
                           step={1}
                           value={val.gravity_pct ?? 50}
                           onChange={(e) => updateBudgetField(r, "gravity_pct", null, Number(e.target.value))}
-                          className={inputClassNarrow}
+                          className={`${inputClassNarrow} w-14`}
                           style={inputStyle}
                         />
                       </div>
                       {effectsList.map(({ key: effectKey, label: effectLabel }) => (
-                        <div key={effectKey}>
-                          <label className="mb-0.5 block text-xs text-[var(--foreground-muted)]">Bonus max {effectLabel} / jour</label>
-                          <input
-                            type="number"
-                            min={0}
-                            step={0.001}
-                            value={val.bonuses?.[effectKey] ?? 0}
-                            onChange={(e) => updateBudgetField(r, "bonuses", effectKey, Number(e.target.value))}
-                            className={inputClassNarrow}
-                            style={inputStyle}
-                          />
+                        <div key={effectKey} className="flex items-end gap-x-2">
+                          <div className="flex flex-col gap-0.5">
+                            <label className="text-xs text-[var(--foreground-muted)]">Bonus max {effectLabel}</label>
+                            <input
+                              type="number"
+                              min={0}
+                              step={0.001}
+                              value={val.bonuses?.[effectKey] ?? 0}
+                              onChange={(e) => updateBudgetField(r, "bonuses", effectKey, Number(e.target.value))}
+                              className={`${inputClassNarrow} w-14`}
+                              style={inputStyle}
+                            />
+                          </div>
+                          <div className="flex flex-col gap-0.5">
+                            <label className="text-xs text-[var(--foreground-muted)]">Malus max {effectLabel}</label>
+                            <input
+                              type="number"
+                              max={0}
+                              step={0.001}
+                              value={val.maluses?.[effectKey] ?? -0.05}
+                              onChange={(e) => updateBudgetField(r, "maluses", effectKey, Number(e.target.value))}
+                              className={`${inputClassNarrow} w-14`}
+                              style={inputStyle}
+                            />
+                          </div>
                         </div>
                       ))}
                     </div>
@@ -416,18 +423,16 @@ export function ReglesForm({
               </div>
               <div className="mt-3 rounded border p-2" style={{ borderColor: "var(--border-muted)" }}>
                 <div className="text-xs font-medium text-[var(--foreground-muted)]">Résultat / jour (× 30 ≈ / mois)</div>
-                {allocationBelowMin ? (
-                  <p className="mt-1 font-mono text-sm text-[var(--foreground)]">
-                    Malus : {malusPerDay.toFixed(4)} / jour
-                  </p>
-                ) : (
-                  <ul className="mt-1 list-none space-y-0.5 font-mono text-sm text-[var(--foreground)]">
-                    {bonusesPerDay.map(({ label, perDay }) => (
-                      <li key={label}>{label} : +{perDay.toFixed(4)} / jour</li>
-                    ))}
-                    {bonusesPerDay.length === 0 && <li className="text-[var(--foreground-muted)]">Aucun bonus</li>}
-                  </ul>
-                )}
+                <ul className="mt-1 list-none space-y-0.5 font-mono text-sm text-[var(--foreground)]">
+                  {bonusesPerDay.map(({ label, perDay, malusPerDay }) => (
+                    <li key={label}>
+                      {allocationBelowMin
+                        ? `${label} : malus ${malusPerDay.toFixed(4)} / jour`
+                        : `${label} : +${perDay.toFixed(4)} / jour`}
+                    </li>
+                  ))}
+                  {bonusesPerDay.length === 0 && <li className="text-[var(--foreground-muted)]">Aucun effet</li>}
+                </ul>
               </div>
             </div>
           </CollapsibleBlock>

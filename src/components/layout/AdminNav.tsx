@@ -22,6 +22,9 @@ export function AdminNav() {
           <Link href="/admin/pays" className={navLinkClass}>
             <span aria-hidden className="mr-1.5">🌍</span>Pays
           </Link>
+          <Link href="/admin/roster" className={navLinkClass}>
+            <span aria-hidden className="mr-1.5">🪖</span>Roster
+          </Link>
           <Link href="/classement" className={navLinkClass}>
             <span aria-hidden className="mr-1.5">📊</span>Classement
           </Link>

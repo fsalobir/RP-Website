@@ -1,10 +1,11 @@
 import Link from "next/link";
+import { AdminSignOut } from "./AdminSignOut";
 
 const navLinkClass =
   "text-sm text-[var(--foreground-muted)] hover:text-[var(--foreground)] transition-colors whitespace-nowrap";
 const separatorClass = "h-5 w-px bg-[var(--border)]" as const;
 
-export function PublicNav() {
+export function PublicNav({ isAdmin = false }: { isAdmin?: boolean }) {
   return (
     <header
       className="sticky top-0 z-50 border-b border-[var(--border)] bg-[var(--background-elevated)]"
@@ -25,12 +26,24 @@ export function PublicNav() {
             <span aria-hidden className="mr-1.5">📊</span>Classement
           </Link>
           <div className={separatorClass} role="separator" />
-          <Link
-            href="/admin/connexion"
-            className={`${navLinkClass} text-[var(--accent)] hover:text-[var(--accent-hover)]`}
-          >
-            <span aria-hidden className="mr-1.5">🔐</span>Connexion
-          </Link>
+          {isAdmin ? (
+            <>
+              <Link
+                href="/admin"
+                className={`${navLinkClass} text-[var(--accent)] hover:text-[var(--accent-hover)]`}
+              >
+                <span aria-hidden className="mr-1.5">🔐</span>Admin
+              </Link>
+              <AdminSignOut />
+            </>
+          ) : (
+            <Link
+              href="/admin/connexion"
+              className={`${navLinkClass} text-[var(--accent)] hover:text-[var(--accent-hover)]`}
+            >
+              <span aria-hidden className="mr-1.5">🔐</span>Connexion
+            </Link>
+          )}
         </nav>
       </div>
     </header>

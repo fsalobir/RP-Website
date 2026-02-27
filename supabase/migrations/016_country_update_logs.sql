@@ -1,0 +1,317 @@
+-- Table de logs pour chaque passage du cron : inputs (taux, effets, budget) et output (avant/après).
+-- Permet le debug sur la fiche pays.
+
+CREATE TABLE IF NOT EXISTS public.country_update_logs (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  country_id uuid NOT NULL REFERENCES public.countries(id) ON DELETE CASCADE,
+  run_at timestamptz NOT NULL,
+  inputs jsonb NOT NULL DEFAULT '{}',
+  population_before bigint,
+  gdp_before numeric,
+  militarism_before smallint,
+  industry_before smallint,
+  science_before smallint,
+  stability_before smallint,
+  population_after bigint,
+  gdp_after numeric,
+  militarism_after smallint,
+  industry_after smallint,
+  science_after smallint,
+  stability_after smallint,
+  created_at timestamptz DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_country_update_logs_country_run ON public.country_update_logs(country_id, run_at DESC);
+
+ALTER TABLE public.country_update_logs ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Country update logs: lecture publique" ON public.country_update_logs;
+CREATE POLICY "Country update logs: lecture publique"
+  ON public.country_update_logs FOR SELECT USING (true);
+
+COMMENT ON TABLE public.country_update_logs IS 'Logs de chaque passage du cron (inputs + avant/après) pour debug sur la fiche pays.';
+
+-- Réécrire le cron pour remplir country_update_logs (inputs + avant, puis après).
+CREATE OR REPLACE FUNCTION public.run_daily_country_update()
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_run_at timestamptz;
+  pop_base numeric;
+  gdp_base numeric;
+  gdp_per_mil numeric;
+  gdp_per_ind numeric;
+  gdp_per_sci numeric;
+  gdp_per_stab numeric;
+  pop_per_mil numeric;
+  pop_per_ind numeric;
+  pop_per_sci numeric;
+  pop_per_stab numeric;
+BEGIN
+  v_run_at := now();
+
+  -- 1) Snapshot : enregistrer l'état actuel dans country_history (date = aujourd'hui)
+  INSERT INTO public.country_history (
+    country_id,
+    date,
+    population,
+    gdp,
+    militarism,
+    industry,
+    science,
+    stability
+  )
+  SELECT
+    c.id,
+    current_date,
+    c.population,
+    c.gdp,
+    c.militarism,
+    c.industry,
+    c.science,
+    c.stability
+  FROM public.countries c
+  ON CONFLICT (country_id, date)
+  DO UPDATE SET
+    population = EXCLUDED.population,
+    gdp = EXCLUDED.gdp,
+    militarism = EXCLUDED.militarism,
+    industry = EXCLUDED.industry,
+    science = EXCLUDED.science,
+    stability = EXCLUDED.stability;
+
+  -- 2) Lire les paramètres de croissance (rule_parameters)
+  SELECT COALESCE((value #>> '{}')::numeric, 0.001) INTO pop_base
+  FROM public.rule_parameters WHERE key = 'population_growth_base_rate' LIMIT 1;
+  SELECT COALESCE((value #>> '{}')::numeric, 0.0005) INTO gdp_base
+  FROM public.rule_parameters WHERE key = 'gdp_growth_base_rate' LIMIT 1;
+
+  SELECT COALESCE((value #>> '{}')::numeric, 0) INTO gdp_per_mil FROM public.rule_parameters WHERE key = 'gdp_growth_per_militarism' LIMIT 1;
+  SELECT COALESCE((value #>> '{}')::numeric, 0) INTO gdp_per_ind FROM public.rule_parameters WHERE key = 'gdp_growth_per_industry' LIMIT 1;
+  SELECT COALESCE((value #>> '{}')::numeric, 0) INTO gdp_per_sci FROM public.rule_parameters WHERE key = 'gdp_growth_per_science' LIMIT 1;
+  SELECT COALESCE((value #>> '{}')::numeric, 0) INTO gdp_per_stab FROM public.rule_parameters WHERE key = 'gdp_growth_per_stability' LIMIT 1;
+
+  SELECT COALESCE((value #>> '{}')::numeric, 0) INTO pop_per_mil FROM public.rule_parameters WHERE key = 'population_growth_per_militarism' LIMIT 1;
+  SELECT COALESCE((value #>> '{}')::numeric, 0) INTO pop_per_ind FROM public.rule_parameters WHERE key = 'population_growth_per_industry' LIMIT 1;
+  SELECT COALESCE((value #>> '{}')::numeric, 0) INTO pop_per_sci FROM public.rule_parameters WHERE key = 'population_growth_per_science' LIMIT 1;
+  SELECT COALESCE((value #>> '{}')::numeric, 0) INTO pop_per_stab FROM public.rule_parameters WHERE key = 'population_growth_per_stability' LIMIT 1;
+
+  -- 3) Logs : insérer les lignes "avant" + inputs (taux, effets, budget)
+  WITH
+  pop_effects AS (
+    SELECT country_id, SUM(CASE WHEN ABS(value) > 1 THEN value / 100.0 ELSE value END) AS rate
+    FROM public.country_effects
+    WHERE effect_kind IN ('population_growth_base', 'population_growth_per_stat') AND duration_remaining > 0
+    GROUP BY country_id
+  ),
+  gdp_effects AS (
+    SELECT country_id, SUM(CASE WHEN ABS(value) > 1 THEN value / 100.0 ELSE value END) AS rate
+    FROM public.country_effects
+    WHERE effect_kind IN ('gdp_growth_base', 'gdp_growth_per_stat') AND duration_remaining > 0
+    GROUP BY country_id
+  ),
+  stat_effects AS (
+    SELECT
+      country_id,
+      COALESCE(SUM(value) FILTER (WHERE effect_target = 'militarism'), 0) AS delta_mil,
+      COALESCE(SUM(value) FILTER (WHERE effect_target = 'industry'), 0) AS delta_ind,
+      COALESCE(SUM(value) FILTER (WHERE effect_target = 'science'), 0) AS delta_sci,
+      COALESCE(SUM(value) FILTER (WHERE effect_target = 'stability'), 0) AS delta_stab
+    FROM public.country_effects
+    WHERE effect_kind = 'stat_delta' AND duration_remaining > 0
+      AND effect_target IN ('militarism', 'industry', 'science', 'stability')
+    GROUP BY country_id
+  ),
+  budget_bonuses AS (
+    SELECT
+      b.country_id,
+      (b.pct_sante / 100.0) * COALESCE((SELECT (value->'bonuses'->>'population')::numeric FROM public.rule_parameters WHERE key = 'budget_sante' LIMIT 1), 0) AS pop_rate,
+      (b.pct_infrastructure / 100.0) * COALESCE((SELECT (value->'bonuses'->>'gdp')::numeric FROM public.rule_parameters WHERE key = 'budget_infrastructure' LIMIT 1), 0)
+        + (b.pct_affaires_etrangeres / 100.0) * COALESCE((SELECT (value->'bonuses'->>'gdp')::numeric FROM public.rule_parameters WHERE key = 'budget_affaires_etrangeres' LIMIT 1), 0) AS gdp_rate,
+      (b.pct_defense / 100.0) * COALESCE((SELECT (value->'bonuses'->>'militarism')::numeric FROM public.rule_parameters WHERE key = 'budget_defense' LIMIT 1), 0) AS mil_delta,
+      (b.pct_infrastructure / 100.0) * COALESCE((SELECT (value->'bonuses'->>'industry')::numeric FROM public.rule_parameters WHERE key = 'budget_infrastructure' LIMIT 1), 0)
+        + (b.pct_industrie / 100.0) * COALESCE((SELECT (value->'bonuses'->>'industry')::numeric FROM public.rule_parameters WHERE key = 'budget_industrie' LIMIT 1), 0) AS ind_delta,
+      (b.pct_education / 100.0) * COALESCE((SELECT (value->'bonuses'->>'science')::numeric FROM public.rule_parameters WHERE key = 'budget_education' LIMIT 1), 0)
+        + (b.pct_recherche / 100.0) * COALESCE((SELECT (value->'bonuses'->>'science')::numeric FROM public.rule_parameters WHERE key = 'budget_recherche' LIMIT 1), 0) AS sci_delta,
+      (b.pct_education / 100.0) * COALESCE((SELECT (value->'bonuses'->>'stability')::numeric FROM public.rule_parameters WHERE key = 'budget_education' LIMIT 1), 0)
+        + (b.pct_interieur / 100.0) * COALESCE((SELECT (value->'bonuses'->>'stability')::numeric FROM public.rule_parameters WHERE key = 'budget_interieur' LIMIT 1), 0)
+        + (b.pct_affaires_etrangeres / 100.0) * COALESCE((SELECT (value->'bonuses'->>'stability')::numeric FROM public.rule_parameters WHERE key = 'budget_affaires_etrangeres' LIMIT 1), 0) AS stab_delta
+    FROM public.country_budget b
+  ),
+  country_updates AS (
+    SELECT
+      c.id AS country_id,
+      COALESCE(pe.rate, 0) AS pop_effect_rate,
+      COALESCE(ge.rate, 0) AS gdp_effect_rate,
+      COALESCE(se.delta_mil, 0) AS delta_mil,
+      COALESCE(se.delta_ind, 0) AS delta_ind,
+      COALESCE(se.delta_sci, 0) AS delta_sci,
+      COALESCE(se.delta_stab, 0) AS delta_stab,
+      COALESCE(bb.pop_rate, 0) AS budget_pop_rate,
+      COALESCE(bb.gdp_rate, 0) AS budget_gdp_rate,
+      COALESCE(bb.mil_delta, 0) AS budget_mil,
+      COALESCE(bb.ind_delta, 0) AS budget_ind,
+      COALESCE(bb.sci_delta, 0) AS budget_sci,
+      COALESCE(bb.stab_delta, 0) AS budget_stab
+    FROM public.countries c
+    LEFT JOIN pop_effects pe ON pe.country_id = c.id
+    LEFT JOIN gdp_effects ge ON ge.country_id = c.id
+    LEFT JOIN stat_effects se ON se.country_id = c.id
+    LEFT JOIN budget_bonuses bb ON bb.country_id = c.id
+  )
+  INSERT INTO public.country_update_logs (
+    country_id,
+    run_at,
+    inputs,
+    population_before,
+    gdp_before,
+    militarism_before,
+    industry_before,
+    science_before,
+    stability_before
+  )
+  SELECT
+    c.id,
+    v_run_at,
+    jsonb_build_object(
+      'pop_base', pop_base,
+      'gdp_base', gdp_base,
+      'pop_from_stats', (COALESCE(c.militarism, 0) * pop_per_mil + COALESCE(c.industry, 0) * pop_per_ind + COALESCE(c.science, 0) * pop_per_sci + COALESCE(c.stability, 0) * pop_per_stab),
+      'gdp_from_stats', (COALESCE(c.militarism, 0) * gdp_per_mil + COALESCE(c.industry, 0) * gdp_per_ind + COALESCE(c.science, 0) * gdp_per_sci + COALESCE(c.stability, 0) * gdp_per_stab),
+      'pop_effect_rate', u.pop_effect_rate,
+      'gdp_effect_rate', u.gdp_effect_rate,
+      'budget_pop_rate', u.budget_pop_rate,
+      'budget_gdp_rate', u.budget_gdp_rate,
+      'pop_total_rate', (pop_base + COALESCE(c.militarism, 0) * pop_per_mil + COALESCE(c.industry, 0) * pop_per_ind + COALESCE(c.science, 0) * pop_per_sci + COALESCE(c.stability, 0) * pop_per_stab + u.pop_effect_rate + u.budget_pop_rate),
+      'gdp_total_rate', (gdp_base + COALESCE(c.militarism, 0) * gdp_per_mil + COALESCE(c.industry, 0) * gdp_per_ind + COALESCE(c.science, 0) * gdp_per_sci + COALESCE(c.stability, 0) * gdp_per_stab + u.gdp_effect_rate + u.budget_gdp_rate),
+      'delta_mil', u.delta_mil, 'delta_ind', u.delta_ind, 'delta_sci', u.delta_sci, 'delta_stab', u.delta_stab,
+      'budget_mil', u.budget_mil, 'budget_ind', u.budget_ind, 'budget_sci', u.budget_sci, 'budget_stab', u.budget_stab,
+      'budget_scale', 50
+    ),
+    c.population,
+    c.gdp,
+    c.militarism,
+    c.industry,
+    c.science,
+    c.stability
+  FROM public.countries c
+  JOIN country_updates u ON u.country_id = c.id;
+
+  -- 4) Mise à jour des pays (même logique qu'avant)
+  WITH
+  pop_effects AS (
+    SELECT country_id, SUM(CASE WHEN ABS(value) > 1 THEN value / 100.0 ELSE value END) AS rate
+    FROM public.country_effects
+    WHERE effect_kind IN ('population_growth_base', 'population_growth_per_stat') AND duration_remaining > 0
+    GROUP BY country_id
+  ),
+  gdp_effects AS (
+    SELECT country_id, SUM(CASE WHEN ABS(value) > 1 THEN value / 100.0 ELSE value END) AS rate
+    FROM public.country_effects
+    WHERE effect_kind IN ('gdp_growth_base', 'gdp_growth_per_stat') AND duration_remaining > 0
+    GROUP BY country_id
+  ),
+  stat_effects AS (
+    SELECT
+      country_id,
+      COALESCE(SUM(value) FILTER (WHERE effect_target = 'militarism'), 0) AS delta_mil,
+      COALESCE(SUM(value) FILTER (WHERE effect_target = 'industry'), 0) AS delta_ind,
+      COALESCE(SUM(value) FILTER (WHERE effect_target = 'science'), 0) AS delta_sci,
+      COALESCE(SUM(value) FILTER (WHERE effect_target = 'stability'), 0) AS delta_stab
+    FROM public.country_effects
+    WHERE effect_kind = 'stat_delta' AND duration_remaining > 0
+      AND effect_target IN ('militarism', 'industry', 'science', 'stability')
+    GROUP BY country_id
+  ),
+  budget_bonuses AS (
+    SELECT
+      b.country_id,
+      (b.pct_sante / 100.0) * COALESCE((SELECT (value->'bonuses'->>'population')::numeric FROM public.rule_parameters WHERE key = 'budget_sante' LIMIT 1), 0) AS pop_rate,
+      (b.pct_infrastructure / 100.0) * COALESCE((SELECT (value->'bonuses'->>'gdp')::numeric FROM public.rule_parameters WHERE key = 'budget_infrastructure' LIMIT 1), 0)
+        + (b.pct_affaires_etrangeres / 100.0) * COALESCE((SELECT (value->'bonuses'->>'gdp')::numeric FROM public.rule_parameters WHERE key = 'budget_affaires_etrangeres' LIMIT 1), 0) AS gdp_rate,
+      (b.pct_defense / 100.0) * COALESCE((SELECT (value->'bonuses'->>'militarism')::numeric FROM public.rule_parameters WHERE key = 'budget_defense' LIMIT 1), 0) AS mil_delta,
+      (b.pct_infrastructure / 100.0) * COALESCE((SELECT (value->'bonuses'->>'industry')::numeric FROM public.rule_parameters WHERE key = 'budget_infrastructure' LIMIT 1), 0)
+        + (b.pct_industrie / 100.0) * COALESCE((SELECT (value->'bonuses'->>'industry')::numeric FROM public.rule_parameters WHERE key = 'budget_industrie' LIMIT 1), 0) AS ind_delta,
+      (b.pct_education / 100.0) * COALESCE((SELECT (value->'bonuses'->>'science')::numeric FROM public.rule_parameters WHERE key = 'budget_education' LIMIT 1), 0)
+        + (b.pct_recherche / 100.0) * COALESCE((SELECT (value->'bonuses'->>'science')::numeric FROM public.rule_parameters WHERE key = 'budget_recherche' LIMIT 1), 0) AS sci_delta,
+      (b.pct_education / 100.0) * COALESCE((SELECT (value->'bonuses'->>'stability')::numeric FROM public.rule_parameters WHERE key = 'budget_education' LIMIT 1), 0)
+        + (b.pct_interieur / 100.0) * COALESCE((SELECT (value->'bonuses'->>'stability')::numeric FROM public.rule_parameters WHERE key = 'budget_interieur' LIMIT 1), 0)
+        + (b.pct_affaires_etrangeres / 100.0) * COALESCE((SELECT (value->'bonuses'->>'stability')::numeric FROM public.rule_parameters WHERE key = 'budget_affaires_etrangeres' LIMIT 1), 0) AS stab_delta
+    FROM public.country_budget b
+  ),
+  country_updates AS (
+    SELECT
+      c.id AS country_id,
+      COALESCE(pe.rate, 0) AS pop_effect_rate,
+      COALESCE(ge.rate, 0) AS gdp_effect_rate,
+      COALESCE(se.delta_mil, 0) AS delta_mil,
+      COALESCE(se.delta_ind, 0) AS delta_ind,
+      COALESCE(se.delta_sci, 0) AS delta_sci,
+      COALESCE(se.delta_stab, 0) AS delta_stab,
+      COALESCE(bb.pop_rate, 0) AS budget_pop_rate,
+      COALESCE(bb.gdp_rate, 0) AS budget_gdp_rate,
+      COALESCE(bb.mil_delta, 0) AS budget_mil,
+      COALESCE(bb.ind_delta, 0) AS budget_ind,
+      COALESCE(bb.sci_delta, 0) AS budget_sci,
+      COALESCE(bb.stab_delta, 0) AS budget_stab
+    FROM public.countries c
+    LEFT JOIN pop_effects pe ON pe.country_id = c.id
+    LEFT JOIN gdp_effects ge ON ge.country_id = c.id
+    LEFT JOIN stat_effects se ON se.country_id = c.id
+    LEFT JOIN budget_bonuses bb ON bb.country_id = c.id
+  )
+  UPDATE public.countries c
+  SET
+    population = GREATEST(0, (
+      c.population + c.population * (
+        pop_base
+        + COALESCE(c.militarism, 0) * pop_per_mil
+        + COALESCE(c.industry, 0) * pop_per_ind
+        + COALESCE(c.science, 0) * pop_per_sci
+        + COALESCE(c.stability, 0) * pop_per_stab
+        + u.pop_effect_rate
+        + u.budget_pop_rate
+      )
+    )::bigint),
+    gdp = GREATEST(0, (
+      c.gdp + c.gdp * (
+        gdp_base
+        + COALESCE(c.militarism, 0) * gdp_per_mil
+        + COALESCE(c.industry, 0) * gdp_per_ind
+        + COALESCE(c.science, 0) * gdp_per_sci
+        + COALESCE(c.stability, 0) * gdp_per_stab
+        + u.gdp_effect_rate
+        + u.budget_gdp_rate
+      )
+    )),
+    militarism = LEAST(10, GREATEST(0, ROUND((COALESCE(c.militarism, 0) + u.delta_mil + u.budget_mil * 50.0)::numeric, 0)))::smallint,
+    industry   = LEAST(10, GREATEST(0, ROUND((COALESCE(c.industry, 0)   + u.delta_ind + u.budget_ind * 50.0)::numeric, 0)))::smallint,
+    science    = LEAST(10, GREATEST(0, ROUND((COALESCE(c.science, 0)    + u.delta_sci + u.budget_sci * 50.0)::numeric, 0)))::smallint,
+    stability  = LEAST(3, GREATEST(-3, ROUND((COALESCE(c.stability, 0) + u.delta_stab + u.budget_stab * 50.0)::numeric, 0)))::smallint,
+    updated_at = now()
+  FROM country_updates u
+  WHERE c.id = u.country_id;
+
+  -- 5) Remplir les colonnes *_after dans les logs
+  UPDATE public.country_update_logs l
+  SET
+    population_after = c.population,
+    gdp_after = c.gdp,
+    militarism_after = c.militarism,
+    industry_after = c.industry,
+    science_after = c.science,
+    stability_after = c.stability
+  FROM public.countries c
+  WHERE l.country_id = c.id AND l.run_at = v_run_at;
+
+  -- 6) Effets : décrémenter la durée restante, supprimer si <= 0
+  UPDATE public.country_effects SET duration_remaining = duration_remaining - 1 WHERE duration_remaining > 0;
+  DELETE FROM public.country_effects WHERE duration_remaining <= 0;
+END;
+$$;
+
+COMMENT ON FUNCTION public.run_daily_country_update() IS
+  'Cron quotidien : snapshot, logs (inputs + avant/après), mise à jour pays, décrément effets.';

@@ -277,13 +277,14 @@ function StatCell({
   const diff = num != null && prevNum != null ? num - prevNum : null;
   const isUp = diff != null && diff > 0;
   const isDown = diff != null && diff < 0;
+  const diffFormatted = diff != null ? Number(diff.toFixed(2)) : null;
 
   return (
     <td className="p-3">
       <span className="font-mono tabular-nums text-[var(--foreground)]">
-        {num != null ? num : "—"}
+        {num != null ? Number(num).toFixed(2) : "—"}
       </span>
-      {diff != null && diff !== 0 && (
+      {diffFormatted != null && diffFormatted !== 0 && (
         <span
           className="ml-1 font-mono text-xs"
           style={{
@@ -291,7 +292,7 @@ function StatCell({
           }}
           title={isUp ? "En hausse" : "En baisse"}
         >
-          ({isUp ? "+" : ""}{diff})
+          ({isUp ? "+" : ""}{diffFormatted})
         </span>
       )}
     </td>
