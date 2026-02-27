@@ -31,7 +31,7 @@ export default async function CountryPage({
   }
   const backHref = isAdmin ? "/admin/pays" : "/";
 
-  const [macrosRes, limitsRes, perksDefRes, countryPerksRes, budgetRes, effectsRes] = await Promise.all([
+  const [macrosRes, limitsRes, perksDefRes, countryPerksRes, budgetRes, effectsRes, countriesRes] = await Promise.all([
     supabase.from("country_macros").select("*").eq("country_id", country.id),
     supabase
       .from("country_military_limits")
@@ -41,6 +41,7 @@ export default async function CountryPage({
     supabase.from("country_perks").select("perk_id").eq("country_id", country.id),
     supabase.from("country_budget").select("*").eq("country_id", country.id).maybeSingle(),
     supabase.from("country_effects").select("*").eq("country_id", country.id).gt("duration_remaining", 0),
+    supabase.from("countries").select("id, population, gdp"),
   ]);
 
   const macros = macrosRes.data ?? [];
@@ -49,6 +50,12 @@ export default async function CountryPage({
   const unlockedPerkIds = new Set((countryPerksRes.data ?? []).map((p) => p.perk_id));
   const budget = budgetRes.data ?? null;
   const effects = effectsRes.data ?? [];
+
+  const countries = countriesRes.data ?? [];
+  const byPopulation = [...countries].sort((a, b) => Number(b.population) - Number(a.population));
+  const byGdp = [...countries].sort((a, b) => Number(b.gdp) - Number(a.gdp));
+  const rankPopulation = byPopulation.findIndex((c) => c.id === country.id) + 1 || 0;
+  const rankGdp = byGdp.findIndex((c) => c.id === country.id) + 1 || 0;
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-10">
@@ -94,6 +101,8 @@ export default async function CountryPage({
         unlockedPerkIds={unlockedPerkIds}
         budget={budget}
         effects={effects}
+        rankPopulation={rankPopulation}
+        rankGdp={rankGdp}
         isAdmin={isAdmin}
       />
     </div>

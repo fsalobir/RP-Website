@@ -23,6 +23,7 @@ export const EFFECT_CATEGORY_IDS = [
   "population_growth",
   "stat_delta",
   "budget_ministry",
+  "budget_debt_surplus",
 ] as const;
 export type EffectCategoryId = (typeof EFFECT_CATEGORY_IDS)[number];
 
@@ -31,6 +32,7 @@ export const EFFECT_CATEGORY_LABELS: Record<EffectCategoryId, string> = {
   population_growth: "Croissance population",
   stat_delta: "Stats (société)",
   budget_ministry: "Budget ministère",
+  budget_debt_surplus: "Allocation de Budget Maximum",
 };
 
 /** Sous-type Croissance PIB / Population : base ou par stat. */
@@ -68,43 +70,75 @@ export function buildEffectKeys(
     const effect_kind = subChoice === "min_pct" ? "budget_ministry_min_pct" : "budget_ministry_effect_multiplier";
     return { effect_kind, effect_target: target, effect_subtype: null };
   }
+  if (category === "budget_debt_surplus") {
+    return { effect_kind: "budget_allocation_cap", effect_target: null, effect_subtype: null };
+  }
   return { effect_kind: "", effect_target: null, effect_subtype: null };
 }
 
 /** Libellé court pour effect_kind (affichage liste). */
 export const EFFECT_KIND_LABELS: Record<string, string> = {
-  gdp_growth_base: "Croissance PIB (base)",
+  gdp_growth_base: "Croissance PIB (taux de base)",
   gdp_growth_per_stat: "Croissance PIB (par stat)",
-  population_growth_base: "Croissance population (base)",
+  population_growth_base: "Croissance population (taux de base)",
   population_growth_per_stat: "Croissance population (par stat)",
   stat_delta: "Stat société",
   budget_ministry_min_pct: "Budget ministère (minimum forcé)",
-  budget_ministry_effect_multiplier: "Budget ministère (bonus/malus effet)",
+  budget_ministry_effect_multiplier: "Budget ministère (bonus/malus d’effet)",
+  budget_allocation_cap: "Allocation de Budget Maximum",
 };
 
-/** Description lisible d’un effet (nom du type + cible + valeur). */
+/** Description élégante et lisible pour l’admin et le joueur. */
 export function getEffectDescription(e: CountryEffect): string {
-  const kindLabel = EFFECT_KIND_LABELS[e.effect_kind] ?? e.effect_kind;
+  const valueStr = formatEffectValue(e.effect_kind, e.value);
   const targetLabel = e.effect_target
     ? STAT_LABELS[e.effect_target as StatKey] ?? BUDGET_MINISTRY_LABELS[e.effect_target] ?? e.effect_target
-    : "";
-  const valueStr = formatEffectValue(e.effect_kind, e.value);
+    : null;
+
+  if (e.effect_kind === "budget_ministry_min_pct" && targetLabel) {
+    return `Minimum forcé — ${targetLabel} : ${valueStr}`;
+  }
+  if (e.effect_kind === "budget_ministry_effect_multiplier" && targetLabel) {
+    return `Bonus/Malus d’effet — ${targetLabel} : ${valueStr}`;
+  }
+  if (e.effect_kind === "budget_allocation_cap") {
+    return `Allocation de Budget Maximum : ${valueStr}`;
+  }
+  if (e.effect_kind === "gdp_growth_base") return `Croissance PIB (base) : ${valueStr}`;
+  if (e.effect_kind === "gdp_growth_per_stat" && targetLabel) return `Croissance PIB — ${targetLabel} : ${valueStr}`;
+  if (e.effect_kind === "population_growth_base") return `Croissance population (base) : ${valueStr}`;
+  if (e.effect_kind === "population_growth_per_stat" && targetLabel) return `Croissance population — ${targetLabel} : ${valueStr}`;
+  if (e.effect_kind === "stat_delta" && targetLabel) return `Stat — ${targetLabel} : ${valueStr}`;
+
+  const kindLabel = EFFECT_KIND_LABELS[e.effect_kind] ?? e.effect_kind;
   if (targetLabel) return `${kindLabel} — ${targetLabel} : ${valueStr}`;
   return `${kindLabel} : ${valueStr}`;
 }
 
 function formatEffectValue(effectKind: string, value: number): string {
-  if (effectKind === "budget_ministry_min_pct") return `${value} %`;
+  if (effectKind === "budget_ministry_min_pct") return `${Number(value)} %`;
   if (effectKind === "budget_ministry_effect_multiplier") return `${(value * 100 - 100).toFixed(0)} %`;
+  if (effectKind === "budget_allocation_cap") return `${value >= 0 ? "+" : ""}${value} %`;
   if (effectKind.startsWith("gdp_growth") || effectKind.startsWith("population_growth")) {
     return (value * 100).toFixed(2) + " %";
   }
   return String(value);
 }
 
-/** True si l’effet est un bonus (affichage vert). */
+/** True si l’effet doit s’afficher en vert (bonus). Minimum forcé = toujours rouge (dépense forcée). */
+export function isEffectDisplayPositive(e: CountryEffect): boolean {
+  if (e.effect_kind === "budget_ministry_min_pct") return false;
+  return Number(e.value) > 0;
+}
+
+/** @deprecated Utiliser isEffectDisplayPositive pour l’affichage. */
 export function isEffectPositive(value: number): boolean {
   return value > 0;
+}
+
+/** Clé budget (effect_target) vers clé pct (country_budget). */
+export function budgetKeyToPctKey(budgetKey: string): string {
+  return budgetKey.replace(/^budget_/, "pct_");
 }
 
 /** Durée restante affichée (jours ou mises à jour). */
@@ -133,5 +167,27 @@ export function parseEffectToForm(e: CountryEffect): {
   if (e.effect_kind === "stat_delta") return { category: "stat_delta", subChoice: null, target: e.effect_target };
   if (e.effect_kind === "budget_ministry_min_pct") return { category: "budget_ministry", subChoice: "min_pct", target: e.effect_target };
   if (e.effect_kind === "budget_ministry_effect_multiplier") return { category: "budget_ministry", subChoice: "effect_multiplier", target: e.effect_target };
+  if (e.effect_kind === "budget_allocation_cap") return { category: "budget_debt_surplus", subChoice: null, target: null };
   return { category: "gdp_growth", subChoice: "base", target: null };
+}
+
+/** Minimum forcé par ministère (pct_*) à partir des effets actifs. */
+export function getForcedMinPcts(effects: CountryEffect[]): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const e of effects) {
+    if (e.effect_kind !== "budget_ministry_min_pct" || !e.effect_target) continue;
+    const pctKey = budgetKeyToPctKey(e.effect_target);
+    const val = Math.max(0, Number(e.value));
+    out[pctKey] = Math.max(out[pctKey] ?? 0, val);
+  }
+  return out;
+}
+
+/** Modificateur total d’allocation (100 + sum des effets budget_allocation_cap). Ex. +20 et -10 => 110. */
+export function getAllocationCapPercent(effects: CountryEffect[]): number {
+  let sum = 0;
+  for (const e of effects) {
+    if (e.effect_kind === "budget_allocation_cap") sum += Number(e.value);
+  }
+  return 100 + sum;
 }

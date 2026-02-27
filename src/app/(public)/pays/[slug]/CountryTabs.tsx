@@ -11,7 +11,7 @@ import { createClient } from "@/lib/supabase/client";
 import { Tooltip } from "@/components/ui/Tooltip";
 import {
   getEffectDescription,
-  isEffectPositive,
+  isEffectDisplayPositive,
   formatDurationRemaining,
   EFFECT_CATEGORY_IDS,
   EFFECT_CATEGORY_LABELS,
@@ -24,6 +24,9 @@ import {
   getBudgetMinistryOptions,
   buildEffectKeys,
   parseEffectToForm,
+  getForcedMinPcts,
+  getAllocationCapPercent,
+  budgetKeyToPctKey,
   type EffectCategoryId,
 } from "@/lib/countryEffects";
 
@@ -71,6 +74,8 @@ export function CountryTabs({
   unlockedPerkIds,
   budget,
   effects,
+  rankPopulation,
+  rankGdp,
   isAdmin,
 }: {
   country: Country;
@@ -80,8 +85,11 @@ export function CountryTabs({
   unlockedPerkIds: Set<string>;
   budget: CountryBudget | null;
   effects: CountryEffect[];
+  rankPopulation: number;
+  rankGdp: number;
   isAdmin: boolean;
 }) {
+  const rankEmoji = (r: number) => (r === 1 ? "👑" : r === 2 ? "🥈" : r === 3 ? "🥉" : null);
   const router = useRouter();
   const [tab, setTab] = useState<"general" | "military" | "perks" | "budget">("general");
   const [budgetFraction, setBudgetFraction] = useState(DEFAULT_BUDGET_FRACTION);
@@ -103,7 +111,8 @@ export function CountryTabs({
   useEffect(() => {
     if (!budget) return;
     setBudgetFraction(Number(budget.budget_fraction) || DEFAULT_BUDGET_FRACTION);
-    setPcts({
+    const forcedMinPctsInit = getForcedMinPcts(effects);
+    const raw = {
       pct_etat: Number(budget.pct_etat) || 0,
       pct_education: Number(budget.pct_education) || 0,
       pct_recherche: Number(budget.pct_recherche) || 0,
@@ -113,10 +122,17 @@ export function CountryTabs({
       pct_defense: Number(budget.pct_defense) || 0,
       pct_interieur: Number(budget.pct_interieur) || 0,
       pct_affaires_etrangeres: Number(budget.pct_affaires_etrangeres) || 0,
+    };
+    BUDGET_MINISTRIES.forEach((m) => {
+      const minVal = forcedMinPctsInit[m.key] ?? 0;
+      raw[m.key] = Math.max(raw[m.key], minVal);
     });
-  }, [budget?.id]);
+    setPcts(raw);
+  }, [budget?.id, effects]);
 
   const totalPct = BUDGET_MINISTRIES.reduce((s, m) => s + pcts[m.key], 0);
+  const forcedMinPcts = getForcedMinPcts(effects);
+  const allocationCap = getAllocationCapPercent(effects);
   const gdpNum = Number(country.gdp) || 0;
   const totalBudgetAnnual = gdpNum * budgetFraction;
   const totalBudgetMonthly = totalBudgetAnnual / 12;
@@ -156,7 +172,7 @@ export function CountryTabs({
               : undefined
           }
         >
-          Généralités · Société · Macros
+          Généralités
         </button>
         <button
           type="button"
@@ -200,49 +216,26 @@ export function CountryTabs({
       </div>
 
       {tab === "general" && (
-        <div className="space-y-6">
+        <div className="space-y-8">
           <section className={panelClass} style={panelStyle}>
-            <h2 className="mb-4 text-lg font-semibold text-[var(--foreground)]">
-              Généralités
-            </h2>
-            <dl className="grid gap-3 sm:grid-cols-2">
-              <div>
-                <dt className="text-sm text-[var(--foreground-muted)]">Nom</dt>
-                <dd className="font-medium">{country.name}</dd>
+            <div className="mb-8 flex flex-wrap justify-center gap-x-12 gap-y-4">
+              <div className="text-center">
+                <dt className="text-sm font-semibold text-[var(--foreground-muted)]">
+                  <strong className="text-[var(--foreground)]">Population</strong>
+                  {rankPopulation > 0 && ` — ${rankEmoji(rankPopulation) ? `${rankEmoji(rankPopulation)} ` : ""}#${rankPopulation}`}
+                </dt>
+                <dd className="stat-value mt-0.5 text-2xl font-bold text-[var(--foreground)]">{formatNumber(country.population)}</dd>
               </div>
-              <div>
-                <dt className="text-sm text-[var(--foreground-muted)]">Régime</dt>
-                <dd className="font-medium">{country.regime ?? "—"}</dd>
+              <div className="text-center">
+                <dt className="text-sm font-semibold text-[var(--foreground-muted)]">
+                  <strong className="text-[var(--foreground)]">PIB</strong>
+                  {rankGdp > 0 && ` — ${rankEmoji(rankGdp) ? `${rankEmoji(rankGdp)} ` : ""}#${rankGdp}`}
+                </dt>
+                <dd className="stat-value mt-0.5 text-2xl font-bold text-[var(--foreground)]">{formatGdp(country.gdp)}</dd>
               </div>
-              <div>
-                <dt className="text-sm text-[var(--foreground-muted)]">Population</dt>
-                <dd className="stat-value font-semibold">{formatNumber(country.population)}</dd>
-              </div>
-              <div>
-                <dt className="text-sm text-[var(--foreground-muted)]">PIB</dt>
-                <dd className="stat-value font-semibold">{formatGdp(country.gdp)}</dd>
-              </div>
-              {country.flag_url && (
-                <div className="sm:col-span-2">
-                  <dt className="text-sm text-[var(--foreground-muted)]">Drapeau</dt>
-                  <dd>
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src={country.flag_url}
-                      alt=""
-                      width={120}
-                      height={80}
-                      className="h-20 w-[120px] rounded border border-[var(--border)] object-cover"
-                      style={{ borderColor: "var(--border)" }}
-                    />
-                  </dd>
-                </div>
-              )}
-            </dl>
+            </div>
 
-            <h3 className="mb-3 mt-6 text-base font-semibold text-[var(--foreground)]">
-              Effets en cours
-            </h3>
+            <hr className="my-8 border-0 border-t" style={{ borderColor: "var(--border)" }} />
             {effects.length === 0 ? (
               <p className="text-[var(--foreground-muted)]">Aucun effet en cours.</p>
             ) : (
@@ -256,7 +249,7 @@ export function CountryTabs({
                     <div className="min-w-0 flex-1">
                       <span className="font-medium text-[var(--foreground)]">{e.name}</span>
                       <p
-                        className={`text-sm ${isEffectPositive(Number(e.value)) ? "text-[var(--accent)]" : "text-[var(--danger)]"}`}
+                        className={`text-sm ${isEffectDisplayPositive(e) ? "text-[var(--accent)]" : "text-[var(--danger)]"}`}
                       >
                         {getEffectDescription(e)}
                       </p>
@@ -346,6 +339,7 @@ export function CountryTabs({
                           setEffectCategory(c);
                           setEffectSubChoice(c === "gdp_growth" || c === "population_growth" ? "base" : c === "budget_ministry" ? "min_pct" : null);
                           setEffectTarget(c === "stat_delta" ? STAT_KEYS[0] : c === "budget_ministry" ? getBudgetMinistryOptions()[0].key : null);
+                          if (c === "budget_debt_surplus") setEffectValue("");
                         }}
                         className="rounded border bg-[var(--background)] px-2 py-1.5 text-sm text-[var(--foreground)]"
                         style={{ borderColor: "var(--border)" }}
@@ -428,11 +422,23 @@ export function CountryTabs({
                         </select>
                       </div>
                     )}
+                    {effectCategory === "budget_debt_surplus" && (
+                      <p className="text-sm text-[var(--foreground-muted)]">
+                        Positif = excédent (plafond d’allocation augmenté, ex. +20 → 120 % max). Négatif = dette (plafond réduit, ex. -20 → 80 % max).
+                      </p>
+                    )}
                     <div>
-                      <label className="mb-1 block text-sm text-[var(--foreground-muted)]">Valeur (nombre, négatif = malus)</label>
+                      <label className="mb-1 block text-sm text-[var(--foreground-muted)]">
+                        {effectCategory === "budget_ministry" && effectSubChoice === "min_pct"
+                          ? "Pourcentage minimum (dépense forcée, valeur positive uniquement)"
+                          : effectCategory === "budget_debt_surplus"
+                            ? "Pourcentage (excédent + / dette −)"
+                            : "Valeur (nombre, négatif = malus)"}
+                      </label>
                       <input
                         type="number"
-                        step="any"
+                        step={effectCategory === "budget_debt_surplus" ? 1 : "any"}
+                        min={effectCategory === "budget_ministry" && effectSubChoice === "min_pct" ? 0 : undefined}
                         value={effectValue}
                         onChange={(e) => setEffectValue(e.target.value)}
                         className="w-32 rounded border bg-[var(--background)] px-2 py-1.5 text-sm font-mono text-[var(--foreground)]"
@@ -477,12 +483,17 @@ export function CountryTabs({
                             setEffectSaving(false);
                             return;
                           }
-                          const durationNum = Math.max(0, Math.floor(Number(effectDurationRemaining) || 0));
                           const { effect_kind, effect_target, effect_subtype } = buildEffectKeys(
                             effectCategory,
                             effectSubChoice,
                             effectTarget
                           );
+                          if (effect_kind === "budget_ministry_min_pct" && valueNum < 0) {
+                            setEffectError("Le minimum forcé doit être une valeur positive.");
+                            setEffectSaving(false);
+                            return;
+                          }
+                          const durationNum = Math.max(0, Math.floor(Number(effectDurationRemaining) || 0));
                           const supabase = createClient();
                           const row = {
                             name: effectName.trim(),
@@ -500,6 +511,69 @@ export function CountryTabs({
                           } else {
                             const { error } = await supabase.from("country_effects").insert({ ...row, country_id: country.id });
                             if (error) err = error.message;
+                          }
+                          if (!err && !editingEffect) {
+                            if (effect_kind === "budget_ministry_min_pct" && effect_target) {
+                              const pctKey = budgetKeyToPctKey(effect_target);
+                              const current = budget ? { ...budget } : null;
+                              const curPcts: Record<string, number> = current
+                                ? {
+                                    pct_etat: Number(current.pct_etat) || 0,
+                                    pct_education: Number(current.pct_education) || 0,
+                                    pct_recherche: Number(current.pct_recherche) || 0,
+                                    pct_infrastructure: Number(current.pct_infrastructure) || 0,
+                                    pct_sante: Number(current.pct_sante) || 0,
+                                    pct_industrie: Number(current.pct_industrie) || 0,
+                                    pct_defense: Number(current.pct_defense) || 0,
+                                    pct_interieur: Number(current.pct_interieur) || 0,
+                                    pct_affaires_etrangeres: Number(current.pct_affaires_etrangeres) || 0,
+                                  }
+                                : getDefaultPcts();
+                              const forcedVal = Math.max(0, valueNum);
+                              curPcts[pctKey] = Math.max(curPcts[pctKey] ?? 0, forcedVal);
+                              let total = BUDGET_MINISTRIES.reduce((s, m) => s + (curPcts[m.key] ?? 0), 0);
+                              if (total > 100) {
+                                const others = BUDGET_MINISTRIES.filter((mm) => mm.key !== pctKey);
+                                const othersSum = others.reduce((s, m) => s + (curPcts[m.key] ?? 0), 0);
+                                const targetOthers = 100 - curPcts[pctKey];
+                                if (othersSum > 0 && targetOthers >= 0) {
+                                  const scale = targetOthers / othersSum;
+                                  others.forEach((m) => { curPcts[m.key] = (curPcts[m.key] ?? 0) * scale; });
+                                }
+                                total = BUDGET_MINISTRIES.reduce((s, m) => s + (curPcts[m.key] ?? 0), 0);
+                              }
+                              if (current?.id) {
+                                await supabase.from("country_budget").update({ ...curPcts, updated_at: new Date().toISOString() }).eq("id", current.id);
+                              } else {
+                                await supabase.from("country_budget").insert({
+                                  country_id: country.id,
+                                  budget_fraction: DEFAULT_BUDGET_FRACTION,
+                                  ...curPcts,
+                                });
+                              }
+                            } else if (effect_kind === "budget_allocation_cap" && valueNum < 0) {
+                              const cap = 100 + valueNum;
+                              const current = budget;
+                              if (current && cap > 0) {
+                                const curPcts: Record<string, number> = {
+                                  pct_etat: Number(current.pct_etat) || 0,
+                                  pct_education: Number(current.pct_education) || 0,
+                                  pct_recherche: Number(current.pct_recherche) || 0,
+                                  pct_infrastructure: Number(current.pct_infrastructure) || 0,
+                                  pct_sante: Number(current.pct_sante) || 0,
+                                  pct_industrie: Number(current.pct_industrie) || 0,
+                                  pct_defense: Number(current.pct_defense) || 0,
+                                  pct_interieur: Number(current.pct_interieur) || 0,
+                                  pct_affaires_etrangeres: Number(current.pct_affaires_etrangeres) || 0,
+                                };
+                                const total = BUDGET_MINISTRIES.reduce((s, m) => s + curPcts[m.key], 0);
+                                if (total > 0) {
+                                  const scale = cap / total;
+                                  BUDGET_MINISTRIES.forEach((m) => { curPcts[m.key] = curPcts[m.key] * scale; });
+                                  await supabase.from("country_budget").update({ ...curPcts, updated_at: new Date().toISOString() }).eq("id", current.id);
+                                }
+                              }
+                            }
                           }
                           setEffectError(err);
                           setEffectSaving(false);
@@ -534,27 +608,80 @@ export function CountryTabs({
           </section>
 
           <section className={panelClass} style={panelStyle}>
-            <h2 className="mb-4 text-lg font-semibold text-[var(--foreground)]">
-              Société
-            </h2>
-            <dl className="grid gap-4 sm:grid-cols-4">
-              <div>
-                <dt className="text-sm text-[var(--foreground-muted)]">Militarisme</dt>
-                <dd className="stat-value text-xl font-semibold">{country.militarism}/10</dd>
+            <div className="mb-8 flex flex-col gap-5 sm:flex-row sm:gap-10 sm:justify-center">
+              {[
+                { key: "militarism" as const, label: "Militarisme", emoji: "🎖️", value: Number(country.militarism) },
+                { key: "industry" as const, label: "Industrie", emoji: "🏭", value: Number(country.industry) },
+                { key: "science" as const, label: "Science", emoji: "🔬", value: Number(country.science) },
+              ].map(({ label, emoji, value }) => (
+                <div key={label} className="flex flex-col items-center gap-1">
+                  <span className="text-center text-sm font-semibold text-[var(--foreground)]">
+                    {emoji} {label}
+                  </span>
+                  <span className="text-2xl font-bold text-[var(--foreground)]">
+                    {Number(value).toFixed(2)}
+                  </span>
+                </div>
+              ))}
+            </div>
+
+            <div className="mt-10 max-w-2xl mx-auto">
+              <span className="mb-2 block text-center text-sm font-semibold text-[var(--foreground)]">
+                ⚖️ Stabilité
+              </span>
+              <div
+                className="relative h-5 w-full rounded overflow-visible"
+                style={{
+                  background: "linear-gradient(to right, #dc2626, #ea580c, #ca8a04, #65a30d, #16a34a)",
+                }}
+              >
+                {[-3, -2, -1, 0, 1, 2, 3].map((n) => (
+                  <div
+                    key={n}
+                    className="absolute top-0 bottom-0 w-px bg-black"
+                    style={{ left: `${((n + 3) / 6) * 100}%` }}
+                  />
+                ))}
+                <div
+                  className="absolute top-0 flex flex-col items-center"
+                  style={{
+                    left: `${((Math.max(-3, Math.min(3, Number(country.stability))) + 3) / 6) * 100}%`,
+                    transform: "translateX(-50%)",
+                  }}
+                >
+                  <div
+                    className="border-[5px] border-transparent border-b-[#0f1419]"
+                    style={{ borderBottomWidth: "6px" }}
+                    aria-hidden
+                  />
+                  <span className="mt-0.5 rounded bg-[var(--background-panel)] px-1.5 py-0.5 text-xs font-bold text-[var(--foreground)] shadow-sm">
+                    {country.stability}
+                  </span>
+                </div>
               </div>
-              <div>
-                <dt className="text-sm text-[var(--foreground-muted)]">Industrie</dt>
-                <dd className="stat-value text-xl font-semibold">{country.industry}/10</dd>
+              <div className="relative mt-6 h-8 w-full">
+                {[
+                  { n: -3, label: "Chaos" },
+                  { n: -2, label: "État Failli" },
+                  { n: -1, label: "Instable" },
+                  { n: 0, label: "Précaire" },
+                  { n: 1, label: "Stable" },
+                  { n: 2, label: "Uni" },
+                  { n: 3, label: "Prospère" },
+                ].map(({ n, label }) => (
+                  <span
+                    key={n}
+                    className="absolute top-0 -translate-x-1/2 rounded bg-[var(--background-panel)] px-1.5 py-0.5 text-center text-xs text-[var(--foreground-muted)] shadow-sm whitespace-nowrap"
+                    style={{
+                      left: `${((n + 3) / 6) * 100}%`,
+                      border: "1px solid var(--border-muted)",
+                    }}
+                  >
+                    {label}
+                  </span>
+                ))}
               </div>
-              <div>
-                <dt className="text-sm text-[var(--foreground-muted)]">Science</dt>
-                <dd className="stat-value text-xl font-semibold">{country.science}/10</dd>
-              </div>
-              <div>
-                <dt className="text-sm text-[var(--foreground-muted)]">Stabilité</dt>
-                <dd className="stat-value text-xl font-semibold">{country.stability} (-3 à 3)</dd>
-              </div>
-            </dl>
+            </div>
           </section>
         </div>
       )}
@@ -663,8 +790,14 @@ export function CountryTabs({
               </p>
               <ul className="list-inside list-disc space-y-1 pl-1">
                 <li>Si un département ne reçoit pas de financement ou pas suffisamment, l'effet national peut être négatif.</li>
-                <li>Tout fond non alloué sera perdu : allouez à 100 %.</li>
+                <li>La somme doit atteindre le plafond d'allocation (100 % normal ; effets Allocation de Budget Maximum peuvent le modifier).</li>
               </ul>
+              {allocationCap !== 100 && (
+                <p className="text-sm text-[var(--foreground)]">
+                  Plafond d'allocation actuel : <strong>{allocationCap} %</strong>
+                  {allocationCap < 100 ? " (dette)" : " (excédent)"}.
+                </p>
+              )}
             </div>
             <div className="mb-4 flex flex-wrap items-center gap-4">
               <div className="flex items-center gap-2">
@@ -714,6 +847,7 @@ export function CountryTabs({
                   )}
                   {BUDGET_MINISTRIES.filter((m) => m.group === groupNum).map(({ key, label, tooltip }) => {
                     const value = pcts[key];
+                    const forcedMin = forcedMinPcts[key] ?? 0;
                     const amountMonthlyBn = (totalBudgetMonthly * value) / 100 / 1e9;
                     return (
                       <div key={key} className="flex flex-wrap items-center gap-4 py-1">
@@ -721,20 +855,35 @@ export function CountryTabs({
                           <Tooltip content={tooltip}>
                             <span className="inline-flex items-center gap-1.5 text-sm font-medium text-[var(--foreground)]">
                               {label}
+                              {forcedMin > 0 && (
+                                <span className="text-xs text-[var(--danger)]">(min. {forcedMin} %)</span>
+                              )}
                               <span className="text-[var(--foreground-muted)]" aria-hidden>ⓘ</span>
                             </span>
                           </Tooltip>
                         </div>
-                        <div className="flex min-w-0 flex-1 items-center gap-3">
-                          <input
-                            type="range"
-                            min={0}
-                            max={100}
-                            step={0.5}
-                            value={value}
-                            onChange={(e) => setPcts((prev) => ({ ...prev, [key]: Number(e.target.value) }))}
-                            className="h-2 flex-1 accent-[var(--accent)]"
-                          />
+                        <div className="relative flex min-w-0 flex-1 items-center gap-3">
+                          <div className="relative flex-1">
+                            {forcedMin > 0 && (
+                              <div
+                                className="absolute top-1/2 z-10 h-4 w-0.5 -translate-y-1/2 rounded"
+                                style={{
+                                  left: `${forcedMin}%`,
+                                  background: "var(--danger)",
+                                }}
+                                title="Minimum forcé"
+                              />
+                            )}
+                            <input
+                              type="range"
+                              min={0}
+                              max={100}
+                              step={0.5}
+                              value={value}
+                              onChange={(e) => setPcts((prev) => ({ ...prev, [key]: Math.max(forcedMin, Number(e.target.value)) }))}
+                              className="h-2 w-full accent-[var(--accent)]"
+                            />
+                          </div>
                           <span className="w-12 shrink-0 text-right text-sm font-mono text-[var(--foreground-muted)]">
                             {value.toFixed(1)} %
                           </span>
@@ -755,27 +904,32 @@ export function CountryTabs({
                   <div
                     className="h-full rounded transition-all"
                     style={{
-                      width: `${Math.min(totalPct, 100)}%`,
-                      background: totalPct > 100 ? "var(--danger)" : "var(--accent)",
+                      width: `${Math.min(100, (totalPct / allocationCap) * 100)}%`,
+                      background: totalPct > allocationCap ? "var(--danger)" : "var(--accent)",
                     }}
                   />
                 </div>
-                <span className={`w-14 shrink-0 text-right text-sm font-mono ${totalPct > 100 ? "text-[var(--danger)]" : "text-[var(--foreground-muted)]"}`}>
+                <span className={`w-14 shrink-0 text-right text-sm font-mono ${totalPct > allocationCap ? "text-[var(--danger)]" : "text-[var(--foreground-muted)]"}`}>
                   {totalPct.toFixed(1)} %
                 </span>
               </div>
-              {totalPct > 100 && (
+              {allocationCap !== 100 && (
+                <p className="text-xs text-[var(--foreground-muted)]">
+                  Maximum autorisé : {allocationCap} %.
+                </p>
+              )}
+              {totalPct > allocationCap && (
                 <p className="text-sm text-[var(--danger)]">
-                  La somme des allocations ne doit pas dépasser 100 %. Réduisez les pourcentages pour pouvoir enregistrer.
+                  La somme ne doit pas dépasser {allocationCap} %. Réduisez les pourcentages pour pouvoir enregistrer.
                 </p>
               )}
               <div className="flex justify-end">
                 <button
                   type="button"
-                  disabled={budgetSaving || totalPct > 100}
+                  disabled={budgetSaving || totalPct > allocationCap}
                   onClick={async () => {
-                    if (totalPct > 100) {
-                      setBudgetError("La somme des allocations ne doit pas dépasser 100 %.");
+                    if (totalPct > allocationCap) {
+                      setBudgetError(`La somme des allocations ne doit pas dépasser ${allocationCap} %.`);
                       return;
                     }
                     setBudgetError(null);
