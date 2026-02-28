@@ -31,7 +31,7 @@ async function fetchCountryPageGlobals() {
     supabase
       .from("rule_parameters")
       .select("key, value")
-      .in("key", [...RULE_KEYS, "mobilisation_config", "mobilisation_level_effects"]),
+      .in("key", [...RULE_KEYS, "mobilisation_config", "mobilisation_level_effects", "world_date"]),
     supabase
       .from("military_roster_units")
       .select("*")
@@ -132,7 +132,7 @@ export default async function CountryPage({
     ? { score: mobilisationRes.data.score, target_score: mobilisationRes.data.target_score }
     : null;
 
-  const worldAverages = isAdmin && countries.length > 0
+  const worldAverages = countries.length > 0
     ? {
         pop_avg: countries.reduce((s, c) => s + Number(c.population ?? 0), 0) / countries.length,
         gdp_avg: countries.reduce((s, c) => s + Number(c.gdp ?? 0), 0) / countries.length,
@@ -193,6 +193,7 @@ export default async function CountryPage({
         rosterByBranch={rosterByBranch}
         mobilisationConfig={mobilisationConfig}
         mobilisationState={mobilisationState}
+        worldDate={ruleParametersByKey.world_date?.value as { month: number; year: number } | undefined}
       />
     </div>
   );

@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { getRuleLabel, BUDGET_MINISTRY_LABELS } from "@/lib/ruleParameters";
+import { formatWorldDate } from "@/lib/worldDate";
 import {
   EFFECT_KIND_LABELS,
   STAT_LABELS,
@@ -90,12 +91,18 @@ export default async function ReglesPage() {
             <tbody>
               {rules.map((r) => {
                 const isGlobalGrowth = r.key === "global_growth_effects" && Array.isArray(r.value);
+                const isWorldDate = r.key === "world_date" && typeof r.value === "object" && r.value !== null && "month" in r.value && "year" in r.value;
+                const isWorldDateAdvance = r.key === "world_date_advance_months";
                 const valueCell = isGlobalGrowth ? (
                   <ul className="list-disc pl-4 space-y-0.5">
                     {(r.value as GlobalGrowthEntry[]).map((e, i) => (
                       <li key={i}>{formatGlobalGrowthEntry(e)}</li>
                     ))}
                   </ul>
+                ) : isWorldDate ? (
+                  <span>{formatWorldDate(r.value as { month: number; year: number })}</span>
+                ) : isWorldDateAdvance ? (
+                  <span>{typeof r.value === "number" ? r.value : Number(r.value) ?? "—"} mois</span>
                 ) : (
                   <span className="font-mono">
                     {typeof r.value === "object"

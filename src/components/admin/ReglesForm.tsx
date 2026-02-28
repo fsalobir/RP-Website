@@ -12,6 +12,7 @@ import {
   BUDGET_MINISTRY_EFFECTS,
   type BudgetMinistryValue,
 } from "@/lib/ruleParameters";
+import { MOIS_LABELS } from "@/lib/worldDate";
 import {
   ALL_EFFECT_KIND_IDS,
   EFFECT_KIND_LABELS,
@@ -105,6 +106,7 @@ export function ReglesForm({
   const [simulatorWorldAvg, setSimulatorWorldAvg] = useState<string>("5");
   const [simulatorAllocationPct, setSimulatorAllocationPct] = useState<number>(10);
   const [mobilisationOpen, setMobilisationOpen] = useState(false);
+  const [worldDateOpen, setWorldDateOpen] = useState(false);
 
   const supabase = createClient();
 
@@ -144,14 +146,18 @@ export function ReglesForm({
   const mobilisationConfigKey = "mobilisation_config";
   const mobilisationEffectsKey = "mobilisation_level_effects";
   const globalGrowthEffectsKey = "global_growth_effects";
+  const worldDateKey = "world_date";
+  const worldDateAdvanceKey = "world_date_advance_months";
   const otherRules = useMemo(
     () => items.filter(
-      (r) => !allSectionKeys.has(r.key) && r.key !== mobilisationConfigKey && r.key !== mobilisationEffectsKey && r.key !== globalGrowthEffectsKey
+      (r) => !allSectionKeys.has(r.key) && r.key !== mobilisationConfigKey && r.key !== mobilisationEffectsKey && r.key !== globalGrowthEffectsKey && r.key !== worldDateKey && r.key !== worldDateAdvanceKey
     ),
     [items, allSectionKeys]
   );
 
   const globalGrowthEffectsRule = useMemo(() => items.find((r) => r.key === globalGrowthEffectsKey), [items]);
+  const worldDateRule = useMemo(() => items.find((r) => r.key === worldDateKey), [items]);
+  const worldDateAdvanceRule = useMemo(() => items.find((r) => r.key === worldDateAdvanceKey), [items]);
   function getGlobalGrowthEffects(): GlobalGrowthEffectEntry[] {
     if (!globalGrowthEffectsRule?.value || !Array.isArray(globalGrowthEffectsRule.value)) return [];
     return (globalGrowthEffectsRule.value as GlobalGrowthEffectEntry[]).filter(
@@ -578,6 +584,66 @@ export function ReglesForm({
                     </div>
                   </div>
                 )}
+              </div>
+            </CollapsibleBlock>
+          )}
+
+          {worldDateRule && worldDateAdvanceRule && (
+            <CollapsibleBlock title="Date du monde" open={worldDateOpen} onToggle={() => setWorldDateOpen((o) => !o)}>
+              <div className="p-3 space-y-3">
+                <p className="text-xs text-[var(--foreground-muted)]">
+                  Date du monde affichée sur le site (ex. Rapport du Cabinet). Avance automatiquement à chaque passage du cron selon la temporalité ci‑dessous.
+                </p>
+                <div className="flex flex-wrap items-end gap-x-6 gap-y-2">
+                  <div className="flex flex-col gap-0.5">
+                    <label className="text-xs text-[var(--foreground-muted)]">Mois</label>
+                    <select
+                      value={typeof worldDateRule.value === "object" && worldDateRule.value !== null && "month" in worldDateRule.value ? Number((worldDateRule.value as { month?: number }).month) : 1}
+                      onChange={(e) => {
+                        const month = Number(e.target.value);
+                        const current = typeof worldDateRule.value === "object" && worldDateRule.value !== null && "year" in worldDateRule.value ? (worldDateRule.value as { year?: number }).year : 2025;
+                        updateValue(worldDateRule.id, { month, year: current });
+                      }}
+                      className="rounded border py-1.5 px-2 text-sm w-36"
+                      style={{ borderColor: "var(--border)", background: "var(--background)" }}
+                    >
+                      {MOIS_LABELS.map((label, i) => (
+                        <option key={i} value={i + 1}>{label}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="flex flex-col gap-0.5">
+                    <label className="text-xs text-[var(--foreground-muted)]">Année</label>
+                    <input
+                      type="number"
+                      min={1}
+                      max={9999}
+                      value={typeof worldDateRule.value === "object" && worldDateRule.value !== null && "year" in worldDateRule.value ? Number((worldDateRule.value as { year?: number }).year) : 2025}
+                      onChange={(e) => {
+                        const year = Math.max(1, Math.min(9999, Number(e.target.value) || 2025));
+                        const current = typeof worldDateRule.value === "object" && worldDateRule.value !== null && "month" in worldDateRule.value ? (worldDateRule.value as { month?: number }).month : 1;
+                        updateValue(worldDateRule.id, { month: current, year });
+                      }}
+                      className="rounded border py-1.5 px-2 text-sm w-20"
+                      style={{ borderColor: "var(--border)", background: "var(--background)" }}
+                    />
+                  </div>
+                  <div className="flex flex-col gap-0.5">
+                    <label className="text-xs text-[var(--foreground-muted)]">Mois par mise à jour (temporalité)</label>
+                    <input
+                      type="number"
+                      min={1}
+                      max={12}
+                      value={typeof worldDateAdvanceRule.value === "number" ? worldDateAdvanceRule.value : (worldDateAdvanceRule.value as unknown as number) ?? 1}
+                      onChange={(e) => {
+                        const v = Math.max(1, Math.min(12, Math.round(Number(e.target.value)) || 1));
+                        updateValue(worldDateAdvanceRule.id, v);
+                      }}
+                      className="rounded border py-1.5 px-2 text-sm w-16"
+                      style={{ borderColor: "var(--border)", background: "var(--background)" }}
+                    />
+                  </div>
+                </div>
               </div>
             </CollapsibleBlock>
           )}

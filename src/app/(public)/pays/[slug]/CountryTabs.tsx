@@ -27,6 +27,7 @@ import { CountryTabMilitary } from "./CountryTabMilitary";
 import { CountryTabPerks } from "./CountryTabPerks";
 import { CountryTabBudget } from "./CountryTabBudget";
 import { CountryTabDebug } from "./CountryTabDebug";
+import { CountryTabCabinet } from "./CountryTabCabinet";
 
 const BUDGET_MINISTRIES = [
   { key: "pct_etat" as const, label: "Ministère d'État", tooltip: "Génère des actions d'état.", group: 1 as const },
@@ -77,6 +78,7 @@ export function CountryTabs({
   rosterByBranch,
   mobilisationConfig,
   mobilisationState,
+  worldDate,
 }: {
   country: Country;
   macros: { key: string; value: number }[];
@@ -96,11 +98,12 @@ export function CountryTabs({
   rosterByBranch: Record<MilitaryBranch, RosterRowByBranch[]>;
   mobilisationConfig?: { level_thresholds?: Record<string, number>; daily_step?: number };
   mobilisationState?: { score: number; target_score: number } | null;
+  worldDate?: { month: number; year: number };
 }) {
   const canEditCountry = isAdmin || isPlayerForThisCountry;
   const rankEmoji = (r: number) => (r === 1 ? "👑" : r === 2 ? "🥈" : r === 3 ? "🥉" : null);
   const router = useRouter();
-  const [tab, setTab] = useState<"general" | "military" | "perks" | "budget" | "debug">("general");
+  const [tab, setTab] = useState<"general" | "military" | "perks" | "budget" | "cabinet" | "debug">("cabinet");
   const [budgetFraction, setBudgetFraction] = useState(DEFAULT_BUDGET_FRACTION);
   const [pcts, setPcts] = useState<Record<BudgetPctKey, number>>(getDefaultPcts);
   const [budgetSaving, setBudgetSaving] = useState(false);
@@ -202,7 +205,7 @@ export function CountryTabs({
   );
 
   const tickBreakdownResult = useMemo(() => {
-    if (!isAdmin || !worldAverages || Object.keys(ruleParametersByKey).length === 0) return null;
+    if (!worldAverages || Object.keys(ruleParametersByKey).length === 0) return null;
     const snapshot = {
       population: Number(country.population ?? 0),
       gdp: Number(country.gdp ?? 0),
@@ -234,7 +237,6 @@ export function CountryTabs({
       }
     );
   }, [
-    isAdmin,
     worldAverages,
     ruleParametersByKey,
     country.population,
@@ -653,6 +655,19 @@ export function CountryTabs({
       <div className="tab-list mb-6" style={{ borderColor: "var(--border)" }}>
         <button
           type="button"
+          className={`tab ${tab === "cabinet" ? "tab-active" : ""}`}
+          data-state={tab === "cabinet" ? "active" : "inactive"}
+          onClick={() => setTab("cabinet")}
+          style={
+            tab === "cabinet"
+              ? { color: "var(--accent)", borderBottomColor: "var(--accent)" }
+              : undefined
+          }
+        >
+          Rapport du Cabinet
+        </button>
+        <button
+          type="button"
           className={`tab ${tab === "general" ? "tab-active" : ""}`}
           data-state={tab === "general" ? "active" : "inactive"}
           onClick={() => setTab("general")}
@@ -836,6 +851,19 @@ export function CountryTabs({
           updateLogs={updateLogs}
           ruleParametersByKey={ruleParametersByKey}
           worldAverages={worldAverages}
+        />
+      )}
+
+      {tab === "cabinet" && (
+        <CountryTabCabinet
+          breakdown={tickBreakdownResult?.breakdown ?? null}
+          expected={tickBreakdownResult?.expected ?? null}
+          country={country}
+          worldDate={worldDate ?? null}
+          worldAverages={worldAverages ?? null}
+          lastUpdateLog={updateLogs[0] ?? null}
+          panelClass={panelClass}
+          panelStyle={panelStyle}
         />
       )}
 
