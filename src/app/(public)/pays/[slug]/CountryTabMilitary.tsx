@@ -1,10 +1,9 @@
 "use client";
 
 import type { MilitaryBranch } from "@/types/database";
-import type { CountryEffect } from "@/types/database";
 import { formatNumber } from "@/lib/format";
 import { Tooltip } from "@/components/ui/Tooltip";
-import { getUnitExtraEffectSum } from "@/lib/countryEffects";
+import { getUnitExtraEffectSum, MOBILISATION_LEVELS, type ResolvedEffect } from "@/lib/countryEffects";
 import type { RosterRowByBranch } from "./countryTabsTypes";
 
 const BRANCH_LABELS: Record<MilitaryBranch, string> = {
@@ -13,14 +12,6 @@ const BRANCH_LABELS: Record<MilitaryBranch, string> = {
   mer: "Mer",
   strategique: "Stratégique",
 };
-
-const MOBILISATION_LEVELS: { key: string; label: string }[] = [
-  { key: "demobilisation", label: "Démobilisation" },
-  { key: "reserve_active", label: "Réserve Active" },
-  { key: "mobilisation_partielle", label: "Mobilisation Partielle" },
-  { key: "mobilisation_generale", label: "Mobilisation Générale" },
-  { key: "guerre_patriotique", label: "Guerre Patriotique" },
-];
 
 function getMobilisationLevelKey(score: number, thresholds: Record<string, number> | undefined): string {
   if (!thresholds) return "demobilisation";
@@ -56,7 +47,7 @@ type CountryTabMilitaryProps = {
   setMilitaryEdit: React.Dispatch<React.SetStateAction<Record<string, { current_level: number; extra_count: number }>>>;
   militarySavingId: string | null;
   isAdmin: boolean;
-  effects: CountryEffect[];
+  effects: ResolvedEffect[];
   onSaveMilitaryUnit: (rosterUnitId: string, currentLevel: number, extraCount: number) => Promise<void>;
 };
 

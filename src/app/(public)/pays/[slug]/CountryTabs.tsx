@@ -15,14 +15,18 @@ import {
   getAllocationCapPercent,
   budgetKeyToPctKey,
   getLimitModifierPercent,
+  getEffectsForCountry,
+  getMobilisationLevelLabel,
   type EffectCategoryId,
 } from "@/lib/countryEffects";
+import { getTickBreakdown } from "@/lib/tickBreakdown";
 import { setMobilisationTarget } from "./actions";
 import type { RosterRowByBranch } from "./countryTabsTypes";
 import { CountryTabGeneral } from "./CountryTabGeneral";
 import { CountryTabMilitary } from "./CountryTabMilitary";
 import { CountryTabPerks } from "./CountryTabPerks";
 import { CountryTabBudget } from "./CountryTabBudget";
+import { CountryTabDebug } from "./CountryTabDebug";
 
 const BUDGET_MINISTRIES = [
   { key: "pct_etat" as const, label: "Ministère d'État", tooltip: "Génère des actions d'état.", group: 1 as const },
@@ -96,7 +100,7 @@ export function CountryTabs({
   const canEditCountry = isAdmin || isPlayerForThisCountry;
   const rankEmoji = (r: number) => (r === 1 ? "👑" : r === 2 ? "🥈" : r === 3 ? "🥉" : null);
   const router = useRouter();
-  const [tab, setTab] = useState<"general" | "military" | "perks" | "budget">("general");
+  const [tab, setTab] = useState<"general" | "military" | "perks" | "budget" | "debug">("general");
   const [budgetFraction, setBudgetFraction] = useState(DEFAULT_BUDGET_FRACTION);
   const [pcts, setPcts] = useState<Record<BudgetPctKey, number>>(getDefaultPcts);
   const [budgetSaving, setBudgetSaving] = useState(false);
@@ -137,6 +141,116 @@ export function CountryTabs({
     return out;
   }, [rosterByBranch]);
 
+  const mobilisationLevelKey = useMemo(() => {
+    if (!mobilisationConfig?.level_thresholds || mobilisationState == null) return null;
+    const score = mobilisationState.score ?? 0;
+    const entries = Object.entries(mobilisationConfig.level_thresholds)
+      .filter(([, val]) => typeof val === "number")
+      .sort(([, a], [, b]) => (b as number) - (a as number));
+    const found = entries.find(([, val]) => (val as number) <= score);
+    return found?.[0] ?? null;
+  }, [mobilisationConfig?.level_thresholds, mobilisationState?.score]);
+
+  const globalGrowthEffects = useMemo(() => {
+    const raw = ruleParametersByKey.global_growth_effects?.value;
+    if (!Array.isArray(raw)) return [];
+    return raw.filter(
+      (e: unknown): e is { effect_kind: string; effect_target: string | null; value: number } =>
+        e != null &&
+        typeof (e as { effect_kind?: unknown }).effect_kind === "string" &&
+        typeof (e as { value?: unknown }).value === "number"
+    ).map((e) => {
+      const rawTarget = (e as { effect_target?: string | null }).effect_target;
+      const effect_target =
+        rawTarget == null ? null : typeof rawTarget === "string" ? rawTarget : String(rawTarget);
+      return {
+        effect_kind: (e as { effect_kind: string }).effect_kind,
+        effect_target,
+        value: Number((e as { value: number }).value),
+      };
+    });
+  }, [ruleParametersByKey.global_growth_effects?.value]);
+
+  const mobilisationLevelEffects = useMemo(() => {
+    const raw = ruleParametersByKey.mobilisation_level_effects?.value;
+    if (!Array.isArray(raw) || !mobilisationLevelKey) return [];
+    return raw
+      .filter(
+        (e: unknown): e is { level: string; effect_kind: string; effect_target: string | null; value: number } =>
+          e != null &&
+          typeof (e as { level?: string }).level === "string" &&
+          (e as { level: string }).level === mobilisationLevelKey &&
+          typeof (e as { effect_kind?: unknown }).effect_kind === "string" &&
+          typeof (e as { value?: unknown }).value === "number"
+      )
+      .map((e) => ({
+        effect_kind: e.effect_kind,
+        effect_target: e.effect_target ?? null,
+        value: Number(e.value),
+      }));
+  }, [ruleParametersByKey.mobilisation_level_effects?.value, mobilisationLevelKey]);
+
+  const resolvedEffects = useMemo(
+    () =>
+      getEffectsForCountry({
+        countryId: country.id,
+        countryEffects: effects,
+        mobilisationLevelEffects,
+        globalGrowthEffects,
+      }),
+    [country.id, effects, mobilisationLevelEffects, globalGrowthEffects]
+  );
+
+  const tickBreakdownResult = useMemo(() => {
+    if (!isAdmin || !worldAverages || Object.keys(ruleParametersByKey).length === 0) return null;
+    const snapshot = {
+      population: Number(country.population ?? 0),
+      gdp: Number(country.gdp ?? 0),
+      militarism: Number(country.militarism ?? 0),
+      industry: Number(country.industry ?? 0),
+      science: Number(country.science ?? 0),
+      stability: Number(country.stability ?? 0),
+    };
+    const budgetPcts = {
+      pct_sante: pcts.pct_sante ?? 0,
+      pct_education: pcts.pct_education ?? 0,
+      pct_recherche: pcts.pct_recherche ?? 0,
+      pct_infrastructure: pcts.pct_infrastructure ?? 0,
+      pct_industrie: pcts.pct_industrie ?? 0,
+      pct_defense: pcts.pct_defense ?? 0,
+      pct_interieur: pcts.pct_interieur ?? 0,
+      pct_affaires_etrangeres: pcts.pct_affaires_etrangeres ?? 0,
+    };
+    return getTickBreakdown(
+      snapshot,
+      budgetPcts,
+      ruleParametersByKey,
+      worldAverages,
+      { countryEffects: effects, mobilisationLevelEffects, globalGrowthEffects },
+      {
+        mobilisationLevelName: getMobilisationLevelLabel(mobilisationLevelKey),
+        rosterUnitName: (id) => rosterUnitsFlat.find((u) => u.id === id)?.name_fr ?? null,
+        rosterUnitsForExtra: rosterUnitsFlat,
+      }
+    );
+  }, [
+    isAdmin,
+    worldAverages,
+    ruleParametersByKey,
+    country.population,
+    country.gdp,
+    country.militarism,
+    country.industry,
+    country.science,
+    country.stability,
+    pcts,
+    effects,
+    mobilisationLevelEffects,
+    globalGrowthEffects,
+    mobilisationLevelKey,
+    rosterUnitsFlat,
+  ]);
+
   useEffect(() => {
     const next: Record<string, { current_level: number; extra_count: number }> = {};
     const branches: MilitaryBranch[] = ["terre", "air", "mer", "strategique"];
@@ -174,7 +288,7 @@ export function CountryTabs({
   useEffect(() => {
     if (!budget) return;
     setBudgetFraction(Number(budget.budget_fraction) || DEFAULT_BUDGET_FRACTION);
-    const forcedMinPctsInit = getForcedMinPcts(effects);
+    const forcedMinPctsInit = getForcedMinPcts(resolvedEffects);
     const raw = {
       pct_etat: Number(budget.pct_etat) || 0,
       pct_education: Number(budget.pct_education) || 0,
@@ -191,11 +305,11 @@ export function CountryTabs({
       raw[m.key] = Math.max(raw[m.key], minVal);
     });
     setPcts(raw);
-  }, [budget?.id, effects]);
+  }, [budget?.id, resolvedEffects]);
 
   const totalPct = BUDGET_MINISTRIES.reduce((s, m) => s + pcts[m.key], 0);
-  const forcedMinPcts = getForcedMinPcts(effects);
-  const allocationCap = getAllocationCapPercent(effects);
+  const forcedMinPcts = getForcedMinPcts(resolvedEffects);
+  const allocationCap = getAllocationCapPercent(resolvedEffects);
   const gdpNum = Number(country.gdp) || 0;
   const totalBudgetAnnual = gdpNum * budgetFraction;
   const totalBudgetMonthly = totalBudgetAnnual / 12;
@@ -219,11 +333,11 @@ export function CountryTabs({
     for (const b of ["terre", "air", "mer", "strategique"] as const) {
       const rows = limitsByBranch[b] ?? [];
       const base = rows.reduce((s, r) => s + r.limit_value, 0);
-      const mod = getLimitModifierPercent(effects, b) / 100;
+      const mod = getLimitModifierPercent(resolvedEffects, b) / 100;
       out[b] = Math.round(base * (1 + mod));
     }
     return out;
-  }, [limitsByBranch, effects]);
+  }, [limitsByBranch, resolvedEffects]);
 
   const panelClass =
     "rounded-lg border p-6";
@@ -589,6 +703,21 @@ export function CountryTabs({
         >
           Budget
         </button>
+        {isAdmin && (
+          <button
+            type="button"
+            className={`tab ${tab === "debug" ? "tab-active" : ""}`}
+            data-state={tab === "debug" ? "active" : "inactive"}
+            onClick={() => setTab("debug")}
+            style={
+              tab === "debug"
+                ? { color: "var(--accent)", borderBottomColor: "var(--accent)" }
+                : undefined
+            }
+          >
+            Debug
+          </button>
+        )}
       </div>
 
       {tab === "general" && (
@@ -667,7 +796,7 @@ export function CountryTabs({
           setMilitaryEdit={setMilitaryEdit}
           militarySavingId={militarySavingId}
           isAdmin={isAdmin}
-          effects={effects}
+          effects={resolvedEffects}
           onSaveMilitaryUnit={handleSaveMilitaryUnit}
         />
       )}
@@ -702,11 +831,21 @@ export function CountryTabs({
           isAdmin={isAdmin}
           budget={budget}
           onSaveBudget={handleSaveBudget}
-          effects={effects}
+          effects={resolvedEffects}
           rosterUnitsFlat={rosterUnitsFlat}
           updateLogs={updateLogs}
           ruleParametersByKey={ruleParametersByKey}
           worldAverages={worldAverages}
+        />
+      )}
+
+      {tab === "debug" && tickBreakdownResult && (
+        <CountryTabDebug
+          breakdown={tickBreakdownResult.breakdown}
+          expected={tickBreakdownResult.expected}
+          country={country}
+          panelClass={panelClass}
+          panelStyle={panelStyle}
         />
       )}
     </div>

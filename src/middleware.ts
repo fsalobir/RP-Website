@@ -8,6 +8,12 @@ export async function middleware(request: NextRequest) {
   const path = request.nextUrl.pathname;
   const response = NextResponse.next();
 
+  // En dev : n'appeler Supabase que pour /admin pour limiter la dégradation (moins d'appels réseau)
+  const isAdminArea = path.startsWith("/admin");
+  const skipAuthInDev = process.env.NODE_ENV === "development" && !isAdminArea;
+
+  if (skipAuthInDev) return response;
+
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,

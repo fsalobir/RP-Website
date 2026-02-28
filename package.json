@@ -4,6 +4,9 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "dev:fast": "node --max-old-space-size=4096 ./node_modules/next/dist/bin/next dev",
+    "dev:watch": "node scripts/dev-with-restart.js",
+    "test:prod": "next build && next start",
     "build": "next build",
     "start": "next start",
     "lint": "eslint"

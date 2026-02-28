@@ -1,14 +1,14 @@
 import { createClient } from "@/lib/supabase/server";
+import { getCachedAuth } from "@/lib/auth-server";
 import { redirect } from "next/navigation";
 import { JoueursManager } from "./JoueursManager";
 
 export default async function AdminJoueursPage() {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) redirect("/admin/connexion");
-  const { data: adminRow } = await supabase.from("admins").select("id").eq("user_id", user.id).single();
-  if (!adminRow) redirect("/admin/connexion?error=non-admin");
+  const auth = await getCachedAuth();
+  if (!auth.user) redirect("/admin/connexion");
+  if (!auth.isAdmin) redirect("/admin/connexion?error=non-admin");
 
+  const supabase = await createClient();
   const [playersRes, countriesRes] = await Promise.all([
     supabase
       .from("country_players")

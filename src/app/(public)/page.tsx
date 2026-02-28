@@ -2,8 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import Link from "next/link";
 import { CountriesTable } from "@/components/countries/CountriesTable";
 
-export const dynamic = "force-dynamic";
-export const revalidate = 0;
+export const revalidate = 3600;
 
 export default async function HomePage({
   searchParams,
@@ -14,10 +13,19 @@ export default async function HomePage({
   const showUnauthorized = params.error === "non-autorise";
   const supabase = await createClient();
 
-  const { data: countries, error } = await supabase
-    .from("countries")
-    .select("id, name, slug, flag_url, regime, population, gdp, militarism, industry, science, stability")
-    .order("name");
+  const [countriesResult, historyResult] = await Promise.all([
+    supabase
+      .from("countries")
+      .select("id, name, slug, flag_url, regime, population, gdp, militarism, industry, science, stability")
+      .order("name"),
+    supabase
+      .from("country_history")
+      .select("country_id, date, population, gdp, militarism, industry, science, stability")
+      .order("date", { ascending: false }),
+  ]);
+
+  const { data: countries, error } = countriesResult;
+  const { data: historyRows, error: historyError } = historyResult;
 
   if (error) {
     return (
@@ -28,11 +36,6 @@ export default async function HomePage({
       </div>
     );
   }
-
-  const { data: historyRows, error: historyError } = await supabase
-    .from("country_history")
-    .select("country_id, date, population, gdp, militarism, industry, science, stability")
-    .order("date", { ascending: false });
 
   function normId(id: string | null | undefined): string {
     return String(id ?? "").trim().toLowerCase();

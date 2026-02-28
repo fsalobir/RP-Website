@@ -1,5 +1,32 @@
 import { createClient } from "@/lib/supabase/server";
-import { getRuleLabel } from "@/lib/ruleParameters";
+import { getRuleLabel, BUDGET_MINISTRY_LABELS } from "@/lib/ruleParameters";
+import {
+  EFFECT_KIND_LABELS,
+  STAT_LABELS,
+  MILITARY_BRANCH_EFFECT_LABELS,
+  formatEffectValue,
+  EFFECT_KINDS_WITH_STAT_TARGET,
+  EFFECT_KINDS_WITH_BUDGET_TARGET,
+  EFFECT_KINDS_WITH_BRANCH_TARGET,
+} from "@/lib/countryEffects";
+
+type GlobalGrowthEntry = { effect_kind: string; effect_target: string | null; value: number };
+
+function formatGlobalGrowthEntry(e: GlobalGrowthEntry): string {
+  const kindLabel = EFFECT_KIND_LABELS[e.effect_kind] ?? e.effect_kind;
+  let targetLabel: string | null = null;
+  if (e.effect_target) {
+    if (EFFECT_KINDS_WITH_STAT_TARGET.has(e.effect_kind))
+      targetLabel = STAT_LABELS[e.effect_target as keyof typeof STAT_LABELS] ?? e.effect_target;
+    else if (EFFECT_KINDS_WITH_BUDGET_TARGET.has(e.effect_kind))
+      targetLabel = BUDGET_MINISTRY_LABELS[e.effect_target] ?? e.effect_target;
+    else if (EFFECT_KINDS_WITH_BRANCH_TARGET.has(e.effect_kind))
+      targetLabel = MILITARY_BRANCH_EFFECT_LABELS[e.effect_target] ?? e.effect_target;
+    else targetLabel = e.effect_target;
+  }
+  const valueStr = formatEffectValue(e.effect_kind, Number(e.value));
+  return targetLabel ? `${kindLabel} — ${targetLabel} : ${valueStr}` : `${kindLabel} : ${valueStr}`;
+}
 
 export default async function ReglesPage() {
   const supabase = await createClient();
@@ -61,23 +88,35 @@ export default async function ReglesPage() {
               </tr>
             </thead>
             <tbody>
-              {rules.map((r) => (
-                <tr
-                  key={r.key}
-                  className="border-b"
-                  style={{ borderColor: "var(--border-muted)" }}
-                >
-                  <td className="p-4 text-[var(--foreground)]">{getRuleLabel(r.key)}</td>
-                  <td className="stat-value p-4 font-mono">
+              {rules.map((r) => {
+                const isGlobalGrowth = r.key === "global_growth_effects" && Array.isArray(r.value);
+                const valueCell = isGlobalGrowth ? (
+                  <ul className="list-disc pl-4 space-y-0.5">
+                    {(r.value as GlobalGrowthEntry[]).map((e, i) => (
+                      <li key={i}>{formatGlobalGrowthEntry(e)}</li>
+                    ))}
+                  </ul>
+                ) : (
+                  <span className="font-mono">
                     {typeof r.value === "object"
                       ? JSON.stringify(r.value)
                       : String(r.value)}
-                  </td>
-                  <td className="p-4 text-[var(--foreground-muted)]">
-                    {r.description ?? "—"}
-                  </td>
-                </tr>
-              ))}
+                  </span>
+                );
+                return (
+                  <tr
+                    key={r.key}
+                    className="border-b"
+                    style={{ borderColor: "var(--border-muted)" }}
+                  >
+                    <td className="p-4 text-[var(--foreground)]">{getRuleLabel(r.key)}</td>
+                    <td className="stat-value p-4">{valueCell}</td>
+                    <td className="p-4 text-[var(--foreground-muted)]">
+                      {r.description ?? "—"}
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>

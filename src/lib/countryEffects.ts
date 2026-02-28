@@ -1,5 +1,17 @@
 /**
- * Effets en cours par pays : catégories, libellés et helpers d’affichage.
+ * Effets par pays : source unique des effect_kinds et résolution « effets pour un pays ».
+ *
+ * 1) Types d’effets (source unique)
+ *    - ALL_EFFECT_KIND_IDS, EFFECT_KIND_META (targetType, valueFormat, label).
+ *    - Sets dérivés : EFFECT_KINDS_WITH_STAT_TARGET, _BUDGET_TARGET, _NO_TARGET, _BRANCH_TARGET, _ROSTER_UNIT_TARGET.
+ *    - Helpers : getEffectKindValueHelper(kind), formatEffectValue(kind, value), buildEffectKeys, parseEffectToForm.
+ *    Pour ajouter un nouveau type : l’étendre ici ; il apparaît partout (Global, Mobilisation, effets actifs pays).
+ *
+ * 2) Résolution « effets pour un pays » (extensible)
+ *    - getEffectsForCountry(context) agrège les effets de toutes les sources dans EFFECT_SOURCES.
+ *    - Sources actuelles : country_effects, mobilisation (niveau dérivé du score), global_growth_effects.
+ *    Pour ajouter un nouvel « endroit » (ex. traité, événement) : ajouter une source dans EFFECT_SOURCES.
+ *
  * Réutilise BUDGET_MINISTRY_KEYS / BUDGET_MINISTRY_LABELS de ruleParameters.
  */
 
@@ -68,6 +80,21 @@ export const MILITARY_BRANCH_EFFECT_LABELS: Record<string, string> = {
   strategique: "Stratégique",
 };
 
+/** Niveaux de mobilisation (ordre pour affichage et dérivation du palier actuel). */
+export const MOBILISATION_LEVELS: { key: string; label: string }[] = [
+  { key: "demobilisation", label: "Démobilisation" },
+  { key: "reserve_active", label: "Réserve Active" },
+  { key: "mobilisation_partielle", label: "Mobilisation Partielle" },
+  { key: "mobilisation_generale", label: "Mobilisation Générale" },
+  { key: "guerre_patriotique", label: "Guerre Patriotique" },
+];
+
+/** Libellé du palier de mobilisation à partir de sa clé (pour breakdown, tooltips). */
+export function getMobilisationLevelLabel(key: string | null | undefined): string {
+  if (!key) return "—";
+  return MOBILISATION_LEVELS.find((l) => l.key === key)?.label ?? key;
+}
+
 /** Construire effect_kind + effect_target + effect_subtype à partir des choix du formulaire. */
 export function buildEffectKeys(
   category: EffectCategoryId,
@@ -100,25 +127,144 @@ export function buildEffectKeys(
   return { effect_kind: "", effect_target: null, effect_subtype: null };
 }
 
-/** Libellé court pour effect_kind (affichage liste). */
-export const EFFECT_KIND_LABELS: Record<string, string> = {
-  gdp_growth_base: "Croissance PIB (taux de base)",
-  gdp_growth_per_stat: "Croissance PIB (par stat)",
-  population_growth_base: "Croissance population (taux de base)",
-  population_growth_per_stat: "Croissance population (par stat)",
-  stat_delta: "Stat société",
-  budget_ministry_min_pct: "Budget ministère (minimum forcé)",
-  budget_ministry_effect_multiplier: "Budget ministère (bonus/malus d’effet)",
-  budget_allocation_cap: "Allocation de Budget Maximum",
-  military_unit_extra: "Unité militaire (bonus/malus extra)",
-  military_unit_tech_rate: "Unité militaire (bonus points tech/jour)",
-  military_unit_limit_modifier: "Unité militaire (modificateur de limites %)",
+/** Types de cible pour un effect_kind. */
+export type EffectTargetType = "none" | "stat" | "budget_ministry" | "military_branch" | "roster_unit";
+
+/** Format de valeur pour affichage/saisie (formulaires Global, Mobilisation). */
+export type EffectValueFormat =
+  | "percent_decimal"
+  | "raw"
+  | "percent_display"
+  | "multiplier"
+  | "integer"
+  | "integer_percent";
+
+/** Métadonnées par effect_kind (source unique pour Sets et helper valeur). */
+export interface EffectKindMeta {
+  targetType: EffectTargetType;
+  valueFormat: EffectValueFormat;
+  label: string;
+}
+
+/** Liste ordonnée de tous les effect_kinds (ordre stable pour dropdowns). */
+export const ALL_EFFECT_KIND_IDS = [
+  "gdp_growth_base",
+  "gdp_growth_per_stat",
+  "population_growth_base",
+  "population_growth_per_stat",
+  "stat_delta",
+  "budget_ministry_min_pct",
+  "budget_ministry_effect_multiplier",
+  "budget_allocation_cap",
+  "military_unit_extra",
+  "military_unit_tech_rate",
+  "military_unit_limit_modifier",
+] as const;
+
+export type EffectKindId = (typeof ALL_EFFECT_KIND_IDS)[number];
+
+/** Métadonnées par effect_kind. */
+export const EFFECT_KIND_META: Record<EffectKindId, EffectKindMeta> = {
+  gdp_growth_base: { targetType: "none", valueFormat: "percent_decimal", label: "Croissance PIB (taux de base)" },
+  gdp_growth_per_stat: { targetType: "stat", valueFormat: "percent_decimal", label: "Croissance PIB (par stat)" },
+  population_growth_base: { targetType: "none", valueFormat: "percent_decimal", label: "Croissance population (taux de base)" },
+  population_growth_per_stat: { targetType: "stat", valueFormat: "percent_decimal", label: "Croissance population (par stat)" },
+  stat_delta: { targetType: "stat", valueFormat: "raw", label: "Stat société" },
+  budget_ministry_min_pct: { targetType: "budget_ministry", valueFormat: "percent_display", label: "Budget ministère (minimum forcé)" },
+  budget_ministry_effect_multiplier: { targetType: "budget_ministry", valueFormat: "multiplier", label: "Budget ministère (bonus/malus d'effet)" },
+  budget_allocation_cap: { targetType: "none", valueFormat: "percent_display", label: "Allocation de Budget Maximum" },
+  military_unit_extra: { targetType: "roster_unit", valueFormat: "integer", label: "Unité militaire (bonus/malus extra)" },
+  military_unit_tech_rate: { targetType: "roster_unit", valueFormat: "integer", label: "Unité militaire (bonus points tech/jour)" },
+  military_unit_limit_modifier: { targetType: "military_branch", valueFormat: "integer_percent", label: "Unité militaire (modificateur de limites %)" },
 };
+
+/** Libellé court pour effect_kind (affichage liste). Dérivé des métadonnées, avec fallback. */
+export const EFFECT_KIND_LABELS: Record<string, string> = Object.fromEntries(
+  ALL_EFFECT_KIND_IDS.map((id) => [id, EFFECT_KIND_META[id].label])
+);
+
+/** Sets dérivés pour les formulaires (cible selon le kind). */
+const _STAT = new Set<string>(["stat_delta", "gdp_growth_per_stat", "population_growth_per_stat"]);
+const _BUDGET = new Set<string>(["budget_ministry_min_pct", "budget_ministry_effect_multiplier"]);
+const _NONE = new Set<string>(["gdp_growth_base", "population_growth_base", "budget_allocation_cap"]);
+const _BRANCH = new Set<string>(["military_unit_limit_modifier"]);
+const _ROSTER = new Set<string>(["military_unit_extra", "military_unit_tech_rate"]);
+
+export const EFFECT_KINDS_WITH_STAT_TARGET: ReadonlySet<string> = _STAT;
+export const EFFECT_KINDS_WITH_BUDGET_TARGET: ReadonlySet<string> = _BUDGET;
+export const EFFECT_KINDS_NO_TARGET: ReadonlySet<string> = _NONE;
+export const EFFECT_KINDS_WITH_BRANCH_TARGET: ReadonlySet<string> = _BRANCH;
+export const EFFECT_KINDS_WITH_ROSTER_UNIT_TARGET: ReadonlySet<string> = _ROSTER;
+
+/** Helper valeur pour formulaires (Global, Mobilisation) : libellé, step, conversion affichage ↔ stocké. */
+export function getEffectKindValueHelper(effectKind: string): {
+  valueLabel: string;
+  valueStep: number;
+  displayToStored: (displayValue: number) => number;
+  storedToDisplay: (storedValue: number) => number;
+} {
+  const meta: EffectKindMeta | undefined = effectKind
+    ? EFFECT_KIND_META[effectKind as EffectKindId]
+    : undefined;
+  const format = meta?.valueFormat ?? "raw";
+
+  switch (format) {
+    case "percent_decimal":
+      return {
+        valueLabel: "Taux (%)",
+        valueStep: 0.01,
+        displayToStored: (x) => x / 100,
+        storedToDisplay: (x) => x * 100,
+      };
+    case "raw":
+      return {
+        valueLabel: "Delta",
+        valueStep: 0.01,
+        displayToStored: (x) => x,
+        storedToDisplay: (x) => x,
+      };
+    case "percent_display":
+      return {
+        valueLabel: effectKind === "budget_allocation_cap" ? "% (+/-)" : "Min. %",
+        valueStep: 0.01,
+        displayToStored: (x) => x,
+        storedToDisplay: (x) => x,
+      };
+    case "multiplier":
+      return {
+        valueLabel: "Mult.",
+        valueStep: 0.01,
+        displayToStored: (x) => (100 + x) / 100,
+        storedToDisplay: (x) => (x * 100 - 100),
+      };
+    case "integer":
+      return {
+        valueLabel: effectKind === "military_unit_tech_rate" ? "Pts/jour" : "Extra",
+        valueStep: 1,
+        displayToStored: (x) => Math.floor(x),
+        storedToDisplay: (x) => Number(x),
+      };
+    case "integer_percent":
+      return {
+        valueLabel: "%",
+        valueStep: 0.01,
+        displayToStored: (x) => x,
+        storedToDisplay: (x) => Number(x),
+      };
+    default:
+      return {
+        valueLabel: "Valeur",
+        valueStep: 0.01,
+        displayToStored: (x) => x,
+        storedToDisplay: (x) => x,
+      };
+  }
+}
 
 /** Description élégante et lisible pour l’admin et le joueur. */
 export type GetEffectDescriptionOptions = { rosterUnitName?: (id: string) => string | null };
 
-export function getEffectDescription(e: CountryEffect, options?: GetEffectDescriptionOptions): string {
+export function getEffectDescription(e: CountryEffect | ResolvedEffect, options?: GetEffectDescriptionOptions): string {
   const valueStr = formatEffectValue(e.effect_kind, e.value);
   let targetLabel: string | null = null;
   if (e.effect_target) {
@@ -153,7 +299,7 @@ export function getEffectDescription(e: CountryEffect, options?: GetEffectDescri
   return `${kindLabel} : ${valueStr}`;
 }
 
-function formatEffectValue(effectKind: string | null | undefined, value: number): string {
+export function formatEffectValue(effectKind: string | null | undefined, value: number): string {
   const kind = effectKind ?? "";
   if (kind === "budget_ministry_min_pct") return `${Number(value)} %`;
   if (kind === "budget_ministry_effect_multiplier") return `${(value * 100 - 100).toFixed(0)} %`;
@@ -216,8 +362,70 @@ export function parseEffectToForm(e: CountryEffect): {
   return { category: "gdp_growth", subChoice: "base", target: null };
 }
 
+/** Effet résolu (country_effects ou agrégé depuis global/mobilisation). Compatible avec les helpers. */
+export type ResolvedEffect = {
+  effect_kind: string;
+  effect_target: string | null;
+  value: number;
+  duration_remaining?: number;
+};
+
+/** Contexte pour résoudre les effets applicables à un pays (sources enregistrées). */
+export type EffectResolutionContext = {
+  countryId: string;
+  countryEffects: CountryEffect[];
+  mobilisationLevelEffects: Array<{ effect_kind: string; effect_target: string | null; value: number }>;
+  globalGrowthEffects: Array<{ effect_kind: string; effect_target: string | null; value: number }>;
+};
+
+/** Pseudo-durée pour les effets globaux/mobilisation (toujours actifs). */
+const PERMANENT_DURATION = 1;
+
+function countryEffectsSource(ctx: EffectResolutionContext): ResolvedEffect[] {
+  return ctx.countryEffects.map((e) => ({
+    effect_kind: e.effect_kind,
+    effect_target: e.effect_target,
+    value: Number(e.value),
+    duration_remaining: e.duration_remaining,
+  }));
+}
+
+function mobilisationEffectsSource(ctx: EffectResolutionContext): ResolvedEffect[] {
+  return ctx.mobilisationLevelEffects.map((e) => ({
+    effect_kind: e.effect_kind,
+    effect_target: e.effect_target ?? null,
+    value: Number(e.value),
+    duration_remaining: PERMANENT_DURATION,
+  }));
+}
+
+function globalEffectsSource(ctx: EffectResolutionContext): ResolvedEffect[] {
+  return ctx.globalGrowthEffects.map((e) => ({
+    effect_kind: e.effect_kind,
+    effect_target: e.effect_target ?? null,
+    value: Number(e.value),
+    duration_remaining: PERMANENT_DURATION,
+  }));
+}
+
+/** Registry de sources d'effets. Ajouter une source ici pour un nouvel « endroit » sans toucher aux consommateurs. */
+export const EFFECT_SOURCES: Array<(ctx: EffectResolutionContext) => ResolvedEffect[]> = [
+  countryEffectsSource,
+  mobilisationEffectsSource,
+  globalEffectsSource,
+];
+
+/** Agrège les effets de toutes les sources pour un pays. Utiliser cette liste pour getForcedMinPcts, getAllocationCapPercent, getUnitExtraEffectSum, getLimitModifierPercent, expectedNextTick. */
+export function getEffectsForCountry(context: EffectResolutionContext): ResolvedEffect[] {
+  const out: ResolvedEffect[] = [];
+  for (const source of EFFECT_SOURCES) {
+    out.push(...source(context));
+  }
+  return out;
+}
+
 /** Minimum forcé par ministère (pct_*) à partir des effets actifs. */
-export function getForcedMinPcts(effects: CountryEffect[]): Record<string, number> {
+export function getForcedMinPcts(effects: Array<{ effect_kind: string; effect_target: string | null; value: number }>): Record<string, number> {
   const out: Record<string, number> = {};
   for (const e of effects) {
     if (e.effect_kind !== "budget_ministry_min_pct" || !e.effect_target) continue;
@@ -229,7 +437,7 @@ export function getForcedMinPcts(effects: CountryEffect[]): Record<string, numbe
 }
 
 /** Modificateur total d’allocation (100 + sum des effets budget_allocation_cap). Ex. +20 et -10 => 110. */
-export function getAllocationCapPercent(effects: CountryEffect[]): number {
+export function getAllocationCapPercent(effects: Array<{ effect_kind: string; value: number }>): number {
   let sum = 0;
   for (const e of effects) {
     if (e.effect_kind === "budget_allocation_cap") sum += Number(e.value);
@@ -238,10 +446,13 @@ export function getAllocationCapPercent(effects: CountryEffect[]): number {
 }
 
 /** Somme des bonus/malus extra pour une unité (effets actifs military_unit_extra). */
-export function getUnitExtraEffectSum(effects: CountryEffect[], rosterUnitId: string): number {
+export function getUnitExtraEffectSum(
+  effects: Array<{ effect_kind: string; effect_target: string | null; value: number; duration_remaining?: number }>,
+  rosterUnitId: string
+): number {
   let sum = 0;
   for (const e of effects) {
-    if (e.effect_kind === "military_unit_extra" && e.effect_target === rosterUnitId && e.duration_remaining > 0) {
+    if (e.effect_kind === "military_unit_extra" && e.effect_target === rosterUnitId && (e.duration_remaining ?? 0) > 0) {
       sum += Number(e.value);
     }
   }
@@ -249,10 +460,13 @@ export function getUnitExtraEffectSum(effects: CountryEffect[], rosterUnitId: st
 }
 
 /** Somme des modificateurs de limite (%) pour une branche (effets military_unit_limit_modifier). */
-export function getLimitModifierPercent(effects: CountryEffect[], branch: string): number {
+export function getLimitModifierPercent(
+  effects: Array<{ effect_kind: string; effect_target: string | null; value: number; duration_remaining?: number }>,
+  branch: string
+): number {
   let sum = 0;
   for (const e of effects) {
-    if (e.effect_kind === "military_unit_limit_modifier" && e.effect_target === branch && e.duration_remaining > 0) {
+    if (e.effect_kind === "military_unit_limit_modifier" && e.effect_target === branch && (e.duration_remaining ?? 0) > 0) {
       sum += Number(e.value);
     }
   }

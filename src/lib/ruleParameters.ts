@@ -4,16 +4,7 @@
  */
 
 export const RULE_KEY_LABELS: Record<string, string> = {
-  gdp_growth_base_rate: "Croissance économique basique",
-  population_growth_base_rate: "Croissance démographique basique",
-  gdp_growth_per_militarism: "Militarisme",
-  gdp_growth_per_industry: "Industrie",
-  gdp_growth_per_science: "Science",
-  gdp_growth_per_stability: "Stabilité",
-  population_growth_per_militarism: "Militarisme",
-  population_growth_per_industry: "Industrie",
-  population_growth_per_science: "Science",
-  population_growth_per_stability: "Stabilité",
+  global_growth_effects: "Global (appliqué à tous les pays)",
   budget_etat: "Ministère d'État",
   budget_education: "Ministère de l'Éducation",
   budget_recherche: "Ministère de la Recherche",
@@ -30,28 +21,8 @@ export type RuleSection = {
   keys: string[];
 };
 
-/** Ordre et regroupement pour l’admin : base, puis PIB par stat, puis démo par stat. */
+/** Regroupement pour l’admin (croissance globale gérée par la section dédiée global_growth_effects). */
 export const RULE_SECTIONS: RuleSection[] = [
-  { title: "Croissance économique basique", keys: ["gdp_growth_base_rate"] },
-  {
-    title: "Croissance du PIB par stat",
-    keys: [
-      "gdp_growth_per_militarism",
-      "gdp_growth_per_industry",
-      "gdp_growth_per_science",
-      "gdp_growth_per_stability",
-    ],
-  },
-  { title: "Croissance démographique basique", keys: ["population_growth_base_rate"] },
-  {
-    title: "Croissance démographique par stat",
-    keys: [
-      "population_growth_per_militarism",
-      "population_growth_per_industry",
-      "population_growth_per_science",
-      "population_growth_per_stability",
-    ],
-  },
   {
     title: "Budget d'état (ministères)",
     keys: [

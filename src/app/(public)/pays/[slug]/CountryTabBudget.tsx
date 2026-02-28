@@ -1,12 +1,11 @@
 "use client";
 
 import type { Country } from "@/types/database";
-import type { CountryEffect } from "@/types/database";
 import type { CountryUpdateLog } from "@/types/database";
 import { formatNumber, formatGdp } from "@/lib/format";
 import { Tooltip } from "@/components/ui/Tooltip";
 import { getExpectedNextTick } from "@/lib/expectedNextTick";
-import { getEffectDescription } from "@/lib/countryEffects";
+import { getEffectDescription, type ResolvedEffect } from "@/lib/countryEffects";
 
 type BudgetMinistry = {
   key: string;
@@ -35,7 +34,7 @@ type CountryTabBudgetProps = {
   isAdmin: boolean;
   budget: { id: string } | null;
   onSaveBudget: () => Promise<void>;
-  effects: CountryEffect[];
+  effects: ResolvedEffect[];
   rosterUnitsFlat: { id: string; name_fr: string }[];
   updateLogs: CountryUpdateLog[];
   ruleParametersByKey: Record<string, { value: unknown }>;
@@ -275,12 +274,7 @@ export function CountryTabBudget({
           budgetPcts,
           ruleParametersByKey,
           worldAverages,
-          effects.map((e) => ({
-            effect_kind: e.effect_kind,
-            effect_target: e.effect_target,
-            value: e.value,
-            duration_remaining: e.duration_remaining,
-          })),
+          effects,
         );
         return (
           <section className={panelClass} style={panelStyle}>

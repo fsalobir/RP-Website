@@ -2,6 +2,7 @@
 
 import { useState, useMemo } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { revalidateCountryPageGlobals } from "@/app/admin/regles/actions";
 import type { RuleParameter } from "@/types/database";
 import {
   RULE_SECTIONS,
@@ -12,12 +13,20 @@ import {
   type BudgetMinistryValue,
 } from "@/lib/ruleParameters";
 import {
+  ALL_EFFECT_KIND_IDS,
   EFFECT_KIND_LABELS,
+  EFFECT_KINDS_WITH_STAT_TARGET,
+  EFFECT_KINDS_WITH_BUDGET_TARGET,
+  EFFECT_KINDS_NO_TARGET,
+  EFFECT_KINDS_WITH_BRANCH_TARGET,
+  EFFECT_KINDS_WITH_ROSTER_UNIT_TARGET,
   STAT_KEYS,
   STAT_LABELS,
   MILITARY_BRANCH_EFFECT_IDS,
   MILITARY_BRANCH_EFFECT_LABELS,
   getBudgetMinistryOptions,
+  getEffectKindValueHelper,
+  formatEffectValue,
 } from "@/lib/countryEffects";
 
 function CollapsibleBlock({
@@ -65,30 +74,11 @@ function CollapsibleBlock({
   );
 }
 
-/** Effets dont la cible est une stat (militarism, industry, etc.). */
-const EFFECT_KINDS_WITH_STAT_TARGET = new Set([
-  "stat_delta",
-  "gdp_growth_per_stat",
-  "population_growth_per_stat",
-]);
-/** Effets dont la cible est un ministère budget. */
-const EFFECT_KINDS_WITH_BUDGET_TARGET = new Set([
-  "budget_ministry_min_pct",
-  "budget_ministry_effect_multiplier",
-]);
-/** Effets sans cible (ou cible implicite). */
-const EFFECT_KINDS_NO_TARGET = new Set([
-  "gdp_growth_base",
-  "population_growth_base",
-  "budget_allocation_cap",
-]);
-/** Effets dont la cible est une branche militaire. */
-const EFFECT_KINDS_WITH_BRANCH_TARGET = new Set(["military_unit_limit_modifier"]);
-/** Effets dont la cible est une unité du roster. */
-const EFFECT_KINDS_WITH_ROSTER_UNIT_TARGET = new Set([
-  "military_unit_extra",
-  "military_unit_tech_rate",
-]);
+type GlobalGrowthEffectEntry = {
+  effect_kind: string;
+  effect_target: string | null;
+  value: number;
+};
 
 export function ReglesForm({
   rules,
@@ -100,9 +90,12 @@ export function ReglesForm({
   const [items, setItems] = useState(rules);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [growthOpen, setGrowthOpen] = useState(true);
-  const [growthPibOpen, setGrowthPibOpen] = useState(true);
-  const [growthPopOpen, setGrowthPopOpen] = useState(true);
+  const [globalGrowthOpen, setGlobalGrowthOpen] = useState(true);
+  const [globalEffectFormOpen, setGlobalEffectFormOpen] = useState(false);
+  const [globalEffectEditIndex, setGlobalEffectEditIndex] = useState<number | null>(null);
+  const [globalEffectKind, setGlobalEffectKind] = useState<string>("gdp_growth_base");
+  const [globalEffectTarget, setGlobalEffectTarget] = useState<string | null>(null);
+  const [globalEffectValue, setGlobalEffectValue] = useState<string>("");
   const [budgetOpen, setBudgetOpen] = useState(true);
   const [budgetMinistryOpen, setBudgetMinistryOpen] = useState<Record<string, boolean>>(() =>
     Object.fromEntries(BUDGET_MINISTRY_KEYS.map((k) => [k, true]))
@@ -125,6 +118,7 @@ export function ReglesForm({
     if (items.length === 0) return;
     setError(null);
     setSaving(true);
+    let hadError = false;
     for (const row of items) {
       const { error: err } = await supabase
         .from("rule_parameters")
@@ -132,8 +126,12 @@ export function ReglesForm({
         .eq("id", row.id);
       if (err) {
         setError(err.message);
+        hadError = true;
         break;
       }
+    }
+    if (!hadError) {
+      await revalidateCountryPageGlobals();
     }
     setSaving(false);
   }
@@ -145,12 +143,101 @@ export function ReglesForm({
   );
   const mobilisationConfigKey = "mobilisation_config";
   const mobilisationEffectsKey = "mobilisation_level_effects";
+  const globalGrowthEffectsKey = "global_growth_effects";
   const otherRules = useMemo(
     () => items.filter(
-      (r) => !allSectionKeys.has(r.key) && r.key !== mobilisationConfigKey && r.key !== mobilisationEffectsKey
+      (r) => !allSectionKeys.has(r.key) && r.key !== mobilisationConfigKey && r.key !== mobilisationEffectsKey && r.key !== globalGrowthEffectsKey
     ),
     [items, allSectionKeys]
   );
+
+  const globalGrowthEffectsRule = useMemo(() => items.find((r) => r.key === globalGrowthEffectsKey), [items]);
+  function getGlobalGrowthEffects(): GlobalGrowthEffectEntry[] {
+    if (!globalGrowthEffectsRule?.value || !Array.isArray(globalGrowthEffectsRule.value)) return [];
+    return (globalGrowthEffectsRule.value as GlobalGrowthEffectEntry[]).filter(
+      (e) => e && typeof e.effect_kind === "string" && typeof e.value === "number"
+    );
+  }
+  function setGlobalGrowthEffects(arr: GlobalGrowthEffectEntry[]) {
+    if (!globalGrowthEffectsRule) return;
+    updateValue(globalGrowthEffectsRule.id, arr);
+  }
+  function addGlobalEffect(entry: GlobalGrowthEffectEntry) {
+    setGlobalGrowthEffects([...getGlobalGrowthEffects(), entry]);
+  }
+  function updateGlobalEffectAtIndex(index: number, entry: GlobalGrowthEffectEntry) {
+    const arr = getGlobalGrowthEffects();
+    const next = arr.map((e, i) => (i === index ? entry : e));
+    setGlobalGrowthEffects(next);
+  }
+  function removeGlobalEffect(index: number) {
+    setGlobalGrowthEffects(getGlobalGrowthEffects().filter((_, i) => i !== index));
+  }
+  function getDefaultTargetForKindGlobal(effectKind: string): string | null {
+    if (EFFECT_KINDS_WITH_STAT_TARGET.has(effectKind)) return STAT_KEYS[0];
+    if (EFFECT_KINDS_WITH_BUDGET_TARGET.has(effectKind)) return getBudgetMinistryOptions()[0]?.key ?? BUDGET_MINISTRY_KEYS[0];
+    if (EFFECT_KINDS_WITH_BRANCH_TARGET.has(effectKind)) return MILITARY_BRANCH_EFFECT_IDS[0];
+    if (EFFECT_KINDS_WITH_ROSTER_UNIT_TARGET.has(effectKind)) return rosterUnits[0]?.id ?? null;
+    return null;
+  }
+  function openAddGlobalEffect() {
+    const firstKind = ALL_EFFECT_KIND_IDS[0];
+    setGlobalEffectKind(firstKind);
+    setGlobalEffectTarget(getDefaultTargetForKindGlobal(firstKind));
+    setGlobalEffectValue("");
+    setGlobalEffectEditIndex(null);
+    setGlobalEffectFormOpen(true);
+  }
+  function openEditGlobalEffect(index: number) {
+    const arr = getGlobalGrowthEffects();
+    const e = arr[index];
+    if (!e) return;
+    const helper = getEffectKindValueHelper(e.effect_kind);
+    setGlobalEffectKind(e.effect_kind);
+    setGlobalEffectTarget(e.effect_target);
+    setGlobalEffectValue(String(helper.storedToDisplay(Number(e.value))));
+    setGlobalEffectEditIndex(index);
+    setGlobalEffectFormOpen(true);
+  }
+  function saveGlobalEffectForm() {
+    const valueNum = Number(globalEffectValue);
+    if (Number.isNaN(valueNum)) return;
+    const helper = getEffectKindValueHelper(globalEffectKind);
+    const valueStored = helper.displayToStored(valueNum);
+    const needsTarget =
+      EFFECT_KINDS_WITH_STAT_TARGET.has(globalEffectKind) ||
+      EFFECT_KINDS_WITH_BUDGET_TARGET.has(globalEffectKind) ||
+      EFFECT_KINDS_WITH_BRANCH_TARGET.has(globalEffectKind) ||
+      EFFECT_KINDS_WITH_ROSTER_UNIT_TARGET.has(globalEffectKind);
+    const entry: GlobalGrowthEffectEntry = {
+      effect_kind: globalEffectKind,
+      effect_target: needsTarget ? globalEffectTarget : null,
+      value: valueStored,
+    };
+    if (globalEffectEditIndex !== null) {
+      updateGlobalEffectAtIndex(globalEffectEditIndex, entry);
+    } else {
+      addGlobalEffect(entry);
+    }
+    setGlobalEffectFormOpen(false);
+  }
+  function labelForGlobalEffect(e: GlobalGrowthEffectEntry): string {
+    const kindLabel = EFFECT_KIND_LABELS[e.effect_kind] ?? e.effect_kind;
+    let targetLabel: string | null = null;
+    if (e.effect_target) {
+      if (EFFECT_KINDS_WITH_STAT_TARGET.has(e.effect_kind))
+        targetLabel = STAT_LABELS[e.effect_target as keyof typeof STAT_LABELS] ?? e.effect_target;
+      else if (EFFECT_KINDS_WITH_BUDGET_TARGET.has(e.effect_kind))
+        targetLabel = BUDGET_MINISTRY_LABELS[e.effect_target] ?? e.effect_target;
+      else if (EFFECT_KINDS_WITH_BRANCH_TARGET.has(e.effect_kind))
+        targetLabel = MILITARY_BRANCH_EFFECT_LABELS[e.effect_target] ?? e.effect_target;
+      else if (EFFECT_KINDS_WITH_ROSTER_UNIT_TARGET.has(e.effect_kind))
+        targetLabel = rosterUnits.find((u) => u.id === e.effect_target)?.name_fr ?? e.effect_target;
+      else targetLabel = e.effect_target;
+    }
+    const valueStr = formatEffectValue(e.effect_kind, e.value);
+    return targetLabel ? `${kindLabel} — ${targetLabel} : ${valueStr}` : `${kindLabel} : ${valueStr}`;
+  }
 
   const mobilisationConfigRule = useMemo(() => items.find((r) => r.key === mobilisationConfigKey), [items]);
   const mobilisationEffectsRule = useMemo(() => items.find((r) => r.key === mobilisationEffectsKey), [items]);
@@ -338,74 +425,162 @@ export function ReglesForm({
           className="rounded-lg border overflow-hidden"
           style={{ background: "var(--background-panel)", borderColor: "var(--border)" }}
         >
-          <CollapsibleBlock title="Croissance Globale" open={growthOpen} onToggle={() => setGrowthOpen((o) => !o)}>
-            <div className="pl-4 ml-2 border-l-2" style={{ borderColor: "var(--border-muted)" }}>
-              <CollapsibleBlock title="PIB" open={growthPibOpen} onToggle={() => setGrowthPibOpen((o) => !o)}>
-                <div className="p-2">
-                <div className="grid gap-1.5 grid-cols-2 sm:grid-cols-3 lg:grid-cols-6">
-                  {[
-                    { key: "gdp_growth_base_rate", label: "PIB / Base (%)" },
-                    { key: "gdp_growth_per_militarism", label: "PIB / Militarisme (%)" },
-                    { key: "gdp_growth_per_industry", label: "PIB / Industrie (%)" },
-                    { key: "gdp_growth_per_science", label: "PIB / Science (%)" },
-                    { key: "gdp_growth_per_stability", label: "PIB / Stabilité (%)" },
-                  ].map(({ key, label }) => {
-                    const r = rulesByKey.get(key);
-                    if (!r) return null;
-                    return (
-                      <div key={r.id} className="flex flex-col gap-0.5">
-                        <label className="text-xs text-[var(--foreground-muted)]">{label}</label>
-                        <input
-                          type="text"
-                          value={
-                            typeof r.value === "object"
-                              ? JSON.stringify(r.value)
-                              : String(r.value ?? "")
-                          }
-                          onChange={(e) => parseRuleValueAndUpdate(r.id, e.target.value)}
-                          className={inputClassNarrow}
-                          style={inputStyle}
-                        />
+          {globalGrowthEffectsRule && (
+            <CollapsibleBlock title="Global [Appliqué à tous les pays]" open={globalGrowthOpen} onToggle={() => setGlobalGrowthOpen((o) => !o)}>
+              <div className="p-3 space-y-3">
+                <p className="text-xs text-[var(--foreground-muted)]">
+                  Effets de croissance PIB et population appliqués à tous les pays à chaque passage du cron.
+                </p>
+                <ul className="space-y-2">
+                  {getGlobalGrowthEffects().map((e, idx) => (
+                    <li
+                      key={idx}
+                      className="flex flex-wrap items-center justify-between gap-2 rounded border py-2 px-3"
+                      style={{ borderColor: "var(--border-muted)" }}
+                    >
+                      <span className="text-sm text-[var(--foreground)]">{labelForGlobalEffect(e)}</span>
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          onClick={() => openEditGlobalEffect(idx)}
+                          className="text-xs text-[var(--accent)] hover:underline"
+                        >
+                          Modifier
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => removeGlobalEffect(idx)}
+                          className="text-xs text-[var(--danger)] hover:underline"
+                        >
+                          Supprimer
+                        </button>
                       </div>
-                    );
-                  })}
-                </div>
+                    </li>
+                  ))}
+                </ul>
+                {!globalEffectFormOpen ? (
+                  <button
+                    type="button"
+                    onClick={openAddGlobalEffect}
+                    className="text-sm text-[var(--accent)] hover:underline"
+                  >
+                    Ajouter un effet
+                  </button>
+                ) : (
+                  <div className="rounded border p-3 space-y-2" style={{ borderColor: "var(--border-muted)" }}>
+                    <div>
+                      <label className="mb-0.5 block text-xs text-[var(--foreground-muted)]">Type d’effet</label>
+                      <select
+                        value={globalEffectKind}
+                        onChange={(ev) => {
+                          const k = ev.target.value;
+                          setGlobalEffectKind(k);
+                          setGlobalEffectTarget(getDefaultTargetForKindGlobal(k));
+                        }}
+                        className={inputClass}
+                        style={inputStyle}
+                      >
+                        {ALL_EFFECT_KIND_IDS.map((k) => (
+                          <option key={k} value={k}>{EFFECT_KIND_LABELS[k] ?? k}</option>
+                        ))}
+                      </select>
+                    </div>
+                    {EFFECT_KINDS_WITH_STAT_TARGET.has(globalEffectKind) && (
+                      <div>
+                        <label className="mb-0.5 block text-xs text-[var(--foreground-muted)]">Stat</label>
+                        <select
+                          value={globalEffectTarget ?? STAT_KEYS[0]}
+                          onChange={(ev) => setGlobalEffectTarget(ev.target.value || null)}
+                          className={inputClass}
+                          style={inputStyle}
+                        >
+                          {STAT_KEYS.map((k) => (
+                            <option key={k} value={k}>{STAT_LABELS[k]}</option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+                    {EFFECT_KINDS_WITH_BUDGET_TARGET.has(globalEffectKind) && (
+                      <div>
+                        <label className="mb-0.5 block text-xs text-[var(--foreground-muted)]">Ministère</label>
+                        <select
+                          value={globalEffectTarget ?? getBudgetMinistryOptions()[0]?.key ?? ""}
+                          onChange={(ev) => setGlobalEffectTarget(ev.target.value || null)}
+                          className={inputClass}
+                          style={inputStyle}
+                        >
+                          {getBudgetMinistryOptions().map(({ key, label }) => (
+                            <option key={key} value={key}>{label}</option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+                    {EFFECT_KINDS_WITH_BRANCH_TARGET.has(globalEffectKind) && (
+                      <div>
+                        <label className="mb-0.5 block text-xs text-[var(--foreground-muted)]">Branche</label>
+                        <select
+                          value={globalEffectTarget ?? MILITARY_BRANCH_EFFECT_IDS[0]}
+                          onChange={(ev) => setGlobalEffectTarget(ev.target.value || null)}
+                          className={inputClass}
+                          style={inputStyle}
+                        >
+                          {MILITARY_BRANCH_EFFECT_IDS.map((b) => (
+                            <option key={b} value={b}>{MILITARY_BRANCH_EFFECT_LABELS[b]}</option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+                    {EFFECT_KINDS_WITH_ROSTER_UNIT_TARGET.has(globalEffectKind) && (
+                      <div>
+                        <label className="mb-0.5 block text-xs text-[var(--foreground-muted)]">Unité</label>
+                        <select
+                          value={globalEffectTarget ?? rosterUnits[0]?.id ?? ""}
+                          onChange={(ev) => setGlobalEffectTarget(ev.target.value || null)}
+                          className={inputClass}
+                          style={inputStyle}
+                        >
+                          {rosterUnits.map((u) => (
+                            <option key={u.id} value={u.id}>{u.name_fr}</option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+                    <div>
+                      <label className="mb-0.5 block text-xs text-[var(--foreground-muted)]">
+                        {getEffectKindValueHelper(globalEffectKind).valueLabel}
+                      </label>
+                      <input
+                        type="number"
+                        step={getEffectKindValueHelper(globalEffectKind).valueStep}
+                        value={globalEffectValue}
+                        onChange={(e) => setGlobalEffectValue(e.target.value)}
+                        className={inputClassNarrow}
+                        style={inputStyle}
+                      />
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={saveGlobalEffectForm}
+                        className="rounded py-1.5 px-3 text-sm font-medium"
+                        style={{ background: "var(--accent)", color: "#0f1419" }}
+                      >
+                        Enregistrer
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setGlobalEffectFormOpen(false)}
+                        className="rounded border py-1.5 px-3 text-sm"
+                        style={{ borderColor: "var(--border)" }}
+                      >
+                        Annuler
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             </CollapsibleBlock>
-            <CollapsibleBlock title="Population" open={growthPopOpen} onToggle={() => setGrowthPopOpen((o) => !o)}>
-              <div className="p-2">
-                <div className="grid gap-1.5 grid-cols-2 sm:grid-cols-3 lg:grid-cols-6">
-                  {[
-                    { key: "population_growth_base_rate", label: "Population / Base (%)" },
-                    { key: "population_growth_per_militarism", label: "Population / Militarisme (%)" },
-                    { key: "population_growth_per_industry", label: "Population / Industrie (%)" },
-                    { key: "population_growth_per_science", label: "Population / Science (%)" },
-                    { key: "population_growth_per_stability", label: "Population / Stabilité (%)" },
-                  ].map(({ key, label }) => {
-                    const r = rulesByKey.get(key);
-                    if (!r) return null;
-                    return (
-                      <div key={r.id} className="flex flex-col gap-0.5">
-                        <label className="text-xs text-[var(--foreground-muted)]">{label}</label>
-                        <input
-                          type="text"
-                          value={
-                            typeof r.value === "object"
-                              ? JSON.stringify(r.value)
-                              : String(r.value ?? "")
-                          }
-                          onChange={(e) => parseRuleValueAndUpdate(r.id, e.target.value)}
-                          className={inputClassNarrow}
-                          style={inputStyle}
-                        />
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            </CollapsibleBlock>
-            </div>
-          </CollapsibleBlock>
+          )}
 
           <CollapsibleBlock title="Paramètres Budget" open={budgetOpen} onToggle={() => setBudgetOpen((o) => !o)}>
             <div className="pl-4 ml-2 border-l-2" style={{ borderColor: "var(--border-muted)" }}>
@@ -627,31 +802,11 @@ export function ReglesForm({
                                 const needsBranchTarget = EFFECT_KINDS_WITH_BRANCH_TARGET.has(kind);
                                 const needsRosterTarget = EFFECT_KINDS_WITH_ROSTER_UNIT_TARGET.has(kind);
                                 const noTarget = EFFECT_KINDS_NO_TARGET.has(kind);
-                                const valueLabel =
-                                  kind.startsWith("gdp_growth") || kind.startsWith("population_growth")
-                                    ? "Taux (%)"
-                                    : kind === "stat_delta"
-                                      ? "Delta"
-                                      : kind === "budget_ministry_min_pct"
-                                        ? "Min. %"
-                                        : kind === "budget_ministry_effect_multiplier"
-                                          ? "Mult."
-                                          : kind === "budget_allocation_cap"
-                                            ? "% (+/-)"
-                                            : kind === "military_unit_extra"
-                                              ? "Extra"
-                                              : kind === "military_unit_tech_rate"
-                                                ? "Pts/jour"
-                                                : kind === "military_unit_limit_modifier"
-                                                  ? "%"
-                                                  : "Valeur";
-                                const valueStep =
-                                  kind === "military_unit_extra" || kind === "military_unit_tech_rate" ? 1 : 0.01;
-                                const isGrowth = kind.startsWith("gdp_growth") || kind.startsWith("population_growth");
-                                const inputValue = isGrowth ? Number(e.value) * 100 : Number(e.value);
+                                const valueHelper = getEffectKindValueHelper(kind);
+                                const inputValue = valueHelper.storedToDisplay(Number(e.value));
                                 const onValueChange = (val: number) =>
                                   updateMobilisationEffect(idx, {
-                                    value: isGrowth ? val / 100 : val,
+                                    value: valueHelper.displayToStored(val),
                                   });
                                 return (
                                   <li key={idx} className="flex flex-wrap items-center gap-2 text-xs">
@@ -715,10 +870,10 @@ export function ReglesForm({
                                       </select>
                                     )}
                                     <label className="flex items-center gap-1">
-                                      <span className="text-[var(--foreground-muted)] shrink-0">{valueLabel}</span>
+                                      <span className="text-[var(--foreground-muted)] shrink-0">{valueHelper.valueLabel}</span>
                                       <input
                                         type="number"
-                                        step={valueStep}
+                                        step={valueHelper.valueStep}
                                         value={inputValue}
                                         onChange={(ev) => onValueChange(Number(ev.target.value) || 0)}
                                         className="w-20 rounded border bg-[var(--background)] px-1.5 py-1 font-mono text-[var(--foreground)]"

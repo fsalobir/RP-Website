@@ -16,7 +16,8 @@ alwaysApply: true
 ## Données (Supabase)
 - **Pays** : table `countries` (Généralités, Société, Macros). Drapeaux : upload bucket Storage `flags` ou URL. Table optionnelle `country_macros` (clé-valeur).
 - **Historique** : `country_history` (country_id, date, population, gdp, militarism, industry, science, stability) pour variations vert/rouge sur la liste ; rempli par le cron.
-- **Règles** : `rule_parameters` (key, value jsonb). Schéma extensible.
+- **Règles** : `rule_parameters` (key, value jsonb). Clés notables : `global_growth_effects` (tableau d’effets appliqués à tous les pays), `mobilisation_config`, `mobilisation_level_effects`. Schéma extensible.
+- **Effets** : types centralisés dans `@/lib/countryEffects.ts` (ALL_EFFECT_KIND_IDS, EFFECT_KIND_META). Résolution « effets pour un pays » via `getEffectsForCountry(context)` qui agrège country_effects, mobilisation, global_growth_effects (sources extensibles).
 - **Militaire** : `military_unit_types` (branch: terre/air/mer), `country_military_limits`.
 - **Avantages** : `perks`, `country_perks`.
 - **Formatage** : utiliser `formatNumber` et `formatGdp` de `@/lib/format` (séparateur ".", PIB en "X Bn").

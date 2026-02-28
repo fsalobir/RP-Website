@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { getCachedAuth } from "@/lib/auth-server";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { AdminNav } from "@/components/layout/AdminNav";
@@ -8,10 +9,9 @@ export default async function AdminLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const auth = await getCachedAuth();
 
-  if (!user) {
+  if (!auth.user) {
     return (
       <div className="min-h-screen flex flex-col">
         <header className="sticky top-0 z-50 border-b bg-[var(--background-elevated)]" style={{ borderColor: "var(--border)" }}>
@@ -38,15 +38,10 @@ export default async function AdminLayout({
     );
   }
 
-  const { data: adminRow } = await supabase
-    .from("admins")
-    .select("id")
-    .eq("user_id", user.id)
-    .single();
-  if (!adminRow) {
-    const { data: countryId } = await supabase.rpc("get_country_for_player", { p_user_id: user.id });
-    if (countryId) {
-      const { data: country } = await supabase.from("countries").select("slug").eq("id", countryId).single();
+  if (!auth.isAdmin) {
+    if (auth.playerCountryId) {
+      const supabase = await createClient();
+      const { data: country } = await supabase.from("countries").select("slug").eq("id", auth.playerCountryId).single();
       if (country?.slug) redirect(`/pays/${country.slug}`);
     }
     redirect("/admin/connexion?error=non-admin");

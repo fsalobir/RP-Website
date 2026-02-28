@@ -1,4 +1,6 @@
-import { createClient } from "@/lib/supabase/server";
+import { unstable_cache } from "next/cache";
+import { createClient, createAnonClientForCache } from "@/lib/supabase/server";
+import { getCachedAuth } from "@/lib/auth-server";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { CountryTabs } from "./CountryTabs";
@@ -10,6 +12,52 @@ import type {
   MilitaryRosterUnitLevel,
   CountryMilitaryUnit,
 } from "@/types/database";
+
+const RULE_KEYS = [
+  "global_growth_effects",
+  "budget_sante",
+  "budget_education",
+  "budget_recherche",
+  "budget_infrastructure",
+  "budget_industrie",
+  "budget_defense",
+  "budget_interieur",
+  "budget_affaires_etrangeres",
+] as const;
+
+async function fetchCountryPageGlobals() {
+  const supabase = createAnonClientForCache();
+  const [ruleRes, rosterUnitsRes, rosterLevelsRes, perksRes] = await Promise.all([
+    supabase
+      .from("rule_parameters")
+      .select("key, value")
+      .in("key", [...RULE_KEYS, "mobilisation_config", "mobilisation_level_effects"]),
+    supabase
+      .from("military_roster_units")
+      .select("*")
+      .order("branch")
+      .order("sort_order")
+      .order("name_fr"),
+    supabase
+      .from("military_roster_unit_levels")
+      .select("*")
+      .order("unit_id")
+      .order("level"),
+    supabase.from("perks").select("*").order("sort_order"),
+  ]);
+  return {
+    ruleParamsData: ruleRes.data ?? [],
+    rosterUnits: (rosterUnitsRes.data ?? []) as MilitaryRosterUnit[],
+    rosterLevels: (rosterLevelsRes.data ?? []) as MilitaryRosterUnitLevel[],
+    perksDef: perksRes.data ?? [],
+  };
+}
+
+const getCachedCountryPageGlobals = unstable_cache(
+  fetchCountryPageGlobals,
+  ["country-page-globals"],
+  { revalidate: 60, tags: ["country-page-globals"] }
+);
 
 export type { RosterRowByBranch };
 
@@ -29,51 +77,18 @@ export default async function CountryPage({
 
   if (error || !country) notFound();
 
-  const { data: { user } } = await supabase.auth.getUser();
-  let isAdmin = false;
-  let isPlayerForThisCountry = false;
-  let assignedPlayerEmail: string | null = null;
-  if (user) {
-    const [adminRes, playerForCountryRes, playerOfCountryRes] = await Promise.all([
-      supabase.from("admins").select("id").eq("user_id", user.id).single(),
-      supabase.from("country_players").select("country_id").eq("user_id", user.id).eq("country_id", country.id).maybeSingle(),
-      supabase.from("country_players").select("email, name").eq("country_id", country.id).maybeSingle(),
-    ]);
-    isAdmin = !!adminRes.data;
-    isPlayerForThisCountry = !!playerForCountryRes.data;
-    const playerRow = playerOfCountryRes.data;
-    assignedPlayerEmail = (playerRow?.name?.trim() || playerRow?.email) ?? null;
-  }
+  const auth = await getCachedAuth();
+  const isAdmin = auth.isAdmin;
+  const isPlayerForThisCountry = auth.playerCountryId === country.id;
   const backHref = isAdmin ? "/admin/pays" : "/";
 
-  const ruleKeys = [
-    "population_growth_base_rate",
-    "gdp_growth_base_rate",
-    "gdp_growth_per_militarism",
-    "gdp_growth_per_industry",
-    "gdp_growth_per_science",
-    "gdp_growth_per_stability",
-    "population_growth_per_militarism",
-    "population_growth_per_industry",
-    "population_growth_per_science",
-    "population_growth_per_stability",
-    "budget_sante",
-    "budget_education",
-    "budget_recherche",
-    "budget_infrastructure",
-    "budget_industrie",
-    "budget_defense",
-    "budget_interieur",
-    "budget_affaires_etrangeres",
-  ];
-
-  const [macrosRes, limitsRes, perksDefRes, countryPerksRes, budgetRes, effectsRes, countriesRes, updateLogsRes, ruleParamsRes, ruleMobilisationRes, mobilisationRes, rosterUnitsRes, rosterLevelsRes, countryMilitaryUnitsRes] = await Promise.all([
+  const [cachedGlobals, macrosRes, limitsRes, countryPerksRes, budgetRes, effectsRes, countriesRes, updateLogsRes, mobilisationRes, countryMilitaryUnitsRes, assignedPlayerRes] = await Promise.all([
+    getCachedCountryPageGlobals(),
     supabase.from("country_macros").select("*").eq("country_id", country.id),
     supabase
       .from("country_military_limits")
       .select("*, military_unit_types(*)")
       .eq("country_id", country.id),
-    supabase.from("perks").select("*").order("sort_order"),
     supabase.from("country_perks").select("perk_id").eq("country_id", country.id),
     supabase.from("country_budget").select("*").eq("country_id", country.id).maybeSingle(),
     supabase.from("country_effects").select("*").eq("country_id", country.id).gt("duration_remaining", 0),
@@ -81,20 +96,19 @@ export default async function CountryPage({
     isAdmin
       ? supabase.from("country_update_logs").select("*").eq("country_id", country.id).order("run_at", { ascending: false }).limit(10)
       : Promise.resolve({ data: [] as CountryUpdateLog[] }),
-    isAdmin ? supabase.from("rule_parameters").select("key, value").in("key", ruleKeys) : Promise.resolve({ data: null }),
-    supabase.from("rule_parameters").select("key, value").eq("key", "mobilisation_config").maybeSingle(),
     supabase.from("country_mobilisation").select("score, target_score").eq("country_id", country.id).maybeSingle(),
-    supabase.from("military_roster_units").select("*").order("branch").order("sort_order").order("name_fr"),
-    supabase.from("military_roster_unit_levels").select("*").order("unit_id").order("level"),
     supabase.from("country_military_units").select("*").eq("country_id", country.id),
+    supabase.from("country_players").select("email, name").eq("country_id", country.id).maybeSingle(),
   ]);
+
+  const { ruleParamsData, rosterUnits, rosterLevels, perksDef } = cachedGlobals;
+
+  const playerRow = assignedPlayerRes.data;
+  const assignedPlayerEmail = (playerRow?.name?.trim() || playerRow?.email) ?? null;
 
   const macros = macrosRes.data ?? [];
   const limits = limitsRes.data ?? [];
-  const rosterUnits = (rosterUnitsRes.data ?? []) as MilitaryRosterUnit[];
-  const rosterLevels = (rosterLevelsRes.data ?? []) as MilitaryRosterUnitLevel[];
   const countryMilitaryUnits = (countryMilitaryUnitsRes.data ?? []) as CountryMilitaryUnit[];
-  const perksDef = perksDefRes.data ?? [];
   const unlockedPerkIds = new Set((countryPerksRes.data ?? []).map((p) => p.perk_id));
   const budget = budgetRes.data ?? null;
   const effects = effectsRes.data ?? [];
@@ -107,13 +121,8 @@ export default async function CountryPage({
   const updateLogs = (updateLogsRes.data ?? []) as CountryUpdateLog[];
 
   const ruleParametersByKey: Record<string, { value: unknown }> = {};
-  if (ruleParamsRes.data) {
-    for (const r of ruleParamsRes.data) {
-      ruleParametersByKey[r.key] = { value: r.value };
-    }
-  }
-  if (ruleMobilisationRes.data) {
-    ruleParametersByKey[ruleMobilisationRes.data.key] = { value: ruleMobilisationRes.data.value };
+  for (const r of ruleParamsData) {
+    ruleParametersByKey[r.key] = { value: r.value };
   }
 
   const mobilisationConfig = ruleParametersByKey.mobilisation_config?.value as

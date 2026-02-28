@@ -1,7 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { ClassementContent } from "@/components/classement/ClassementContent";
 
-export const dynamic = "force-dynamic";
+export const revalidate = 3600;
 
 function normId(id: string | null | undefined): string {
   return String(id ?? "").trim().toLowerCase();
@@ -9,15 +9,19 @@ function normId(id: string | null | undefined): string {
 
 export default async function ClassementPage() {
   const supabase = await createClient();
-  const { data: countries } = await supabase
-    .from("countries")
-    .select("id, name, slug, flag_url, population, gdp, militarism, industry, science, stability")
-    .order("name");
+  const [countriesResult, historyResult] = await Promise.all([
+    supabase
+      .from("countries")
+      .select("id, name, slug, flag_url, population, gdp, militarism, industry, science, stability")
+      .order("name"),
+    supabase
+      .from("country_history")
+      .select("country_id, date, population, gdp, militarism, industry, science, stability")
+      .order("date", { ascending: false }),
+  ]);
 
-  const { data: historyRows, error: historyError } = await supabase
-    .from("country_history")
-    .select("country_id, date, population, gdp, militarism, industry, science, stability")
-    .order("date", { ascending: false });
+  const { data: countries } = countriesResult;
+  const { data: historyRows, error: historyError } = historyResult;
 
   type HistoryRow = NonNullable<typeof historyRows>[number];
   const latestByCountry = new Map<string, HistoryRow>();
