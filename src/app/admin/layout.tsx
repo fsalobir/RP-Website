@@ -44,6 +44,11 @@ export default async function AdminLayout({
     .eq("user_id", user.id)
     .single();
   if (!adminRow) {
+    const { data: countryId } = await supabase.rpc("get_country_for_player", { p_user_id: user.id });
+    if (countryId) {
+      const { data: country } = await supabase.from("countries").select("slug").eq("id", countryId).single();
+      if (country?.slug) redirect(`/pays/${country.slug}`);
+    }
     redirect("/admin/connexion?error=non-admin");
   }
 

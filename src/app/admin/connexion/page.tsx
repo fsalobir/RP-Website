@@ -4,6 +4,7 @@ import { useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { getRedirectPathAfterLogin } from "./actions";
 
 export default function AdminConnexionPage() {
   const [email, setEmail] = useState("");
@@ -26,7 +27,9 @@ export default function AdminConnexionPage() {
       setError(signError.message === "Invalid login credentials" ? "Identifiants incorrects." : signError.message);
       return;
     }
-    router.push("/admin");
+    const { path, error: redirectError } = await getRedirectPathAfterLogin();
+    if (redirectError) setError(redirectError);
+    router.push(path === "/" && redirectError ? "/?error=non-autorise" : path);
     router.refresh();
   }
 
@@ -40,10 +43,10 @@ export default function AdminConnexionPage() {
         }}
       >
         <h1 className="mb-2 text-xl font-bold text-[var(--foreground)]">
-          Connexion administration
+          Connexion
         </h1>
         <p className="mb-6 text-sm text-[var(--foreground-muted)]">
-          Utilisez vos identifiants pour accéder au tableau de bord.
+          Connectez-vous avec votre compte joueur ou administrateur.
         </p>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>

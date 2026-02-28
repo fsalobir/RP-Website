@@ -34,13 +34,18 @@ export default async function CountryPage({
 
   const { data: { user } } = await supabase.auth.getUser();
   let isAdmin = false;
+  let isPlayerForThisCountry = false;
+  let assignedPlayerEmail: string | null = null;
   if (user) {
-    const { data: adminRow } = await supabase
-      .from("admins")
-      .select("id")
-      .eq("user_id", user.id)
-      .single();
-    isAdmin = !!adminRow;
+    const [adminRes, playerForCountryRes, playerOfCountryRes] = await Promise.all([
+      supabase.from("admins").select("id").eq("user_id", user.id).single(),
+      supabase.from("country_players").select("country_id").eq("user_id", user.id).eq("country_id", country.id).maybeSingle(),
+      supabase.from("country_players").select("email, name").eq("country_id", country.id).maybeSingle(),
+    ]);
+    isAdmin = !!adminRes.data;
+    isPlayerForThisCountry = !!playerForCountryRes.data;
+    const playerRow = playerOfCountryRes.data;
+    assignedPlayerEmail = (playerRow?.name?.trim() || playerRow?.email) ?? null;
   }
   const backHref = isAdmin ? "/admin/pays" : "/";
 
@@ -175,6 +180,11 @@ export default async function CountryPage({
           {country.regime && (
             <p className="text-[var(--foreground-muted)]">{country.regime}</p>
           )}
+          {assignedPlayerEmail && (
+            <p className="mt-1 text-sm text-[var(--foreground-muted)]">
+              Joueur : {assignedPlayerEmail}
+            </p>
+          )}
         </div>
       </div>
 
@@ -189,6 +199,8 @@ export default async function CountryPage({
         rankPopulation={rankPopulation}
         rankGdp={rankGdp}
         isAdmin={isAdmin}
+        isPlayerForThisCountry={isPlayerForThisCountry}
+        assignedPlayerEmail={assignedPlayerEmail}
         updateLogs={updateLogs}
         ruleParametersByKey={ruleParametersByKey}
         worldAverages={worldAverages}

@@ -5,7 +5,15 @@ const navLinkClass =
   "text-sm text-[var(--foreground-muted)] hover:text-[var(--foreground)] transition-colors whitespace-nowrap";
 const separatorClass = "h-5 w-px bg-[var(--border)]" as const;
 
-export function PublicNav({ isAdmin = false }: { isAdmin?: boolean }) {
+export function PublicNav({
+  isAdmin = false,
+  playerDisplayName = null,
+  isLoggedIn = false,
+}: {
+  isAdmin?: boolean;
+  playerDisplayName?: string | null;
+  isLoggedIn?: boolean;
+}) {
   return (
     <header
       className="sticky top-0 z-50 border-b border-[var(--border)] bg-[var(--background-elevated)]"
@@ -26,14 +34,19 @@ export function PublicNav({ isAdmin = false }: { isAdmin?: boolean }) {
             <span aria-hidden className="mr-1.5">📊</span>Classement
           </Link>
           <div className={separatorClass} role="separator" />
-          {isAdmin ? (
+          {isLoggedIn ? (
             <>
-              <Link
-                href="/admin"
-                className={`${navLinkClass} text-[var(--accent)] hover:text-[var(--accent-hover)]`}
-              >
-                <span aria-hidden className="mr-1.5">🔐</span>Admin
-              </Link>
+              {isAdmin && (
+                <Link
+                  href="/admin"
+                  className={`${navLinkClass} text-[var(--accent)] hover:text-[var(--accent-hover)]`}
+                >
+                  <span aria-hidden className="mr-1.5">🔐</span>Admin
+                </Link>
+              )}
+              <span className="text-sm text-[var(--foreground-muted)]">
+                Connecté{playerDisplayName ? ` : ${playerDisplayName}` : isAdmin ? " (admin)" : ""}
+              </span>
               <AdminSignOut />
             </>
           ) : (

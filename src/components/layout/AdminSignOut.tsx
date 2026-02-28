@@ -9,7 +9,7 @@ export function AdminSignOut() {
   async function handleSignOut() {
     const supabase = createClient();
     await supabase.auth.signOut();
-    router.push("/admin/connexion");
+    router.push("/");
     router.refresh();
   }
 

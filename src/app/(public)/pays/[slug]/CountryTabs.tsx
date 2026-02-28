@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import type { Country } from "@/types/database";
 import type { MilitaryBranch } from "@/types/database";
@@ -31,6 +31,9 @@ import {
   getForcedMinPcts,
   getAllocationCapPercent,
   budgetKeyToPctKey,
+  getUnitExtraEffectSum,
+  MILITARY_UNIT_EFFECT_SUB_IDS,
+  MILITARY_UNIT_EFFECT_SUB_LABELS,
   type EffectCategoryId,
 } from "@/lib/countryEffects";
 
@@ -88,6 +91,8 @@ export function CountryTabs({
   rankPopulation,
   rankGdp,
   isAdmin,
+  isPlayerForThisCountry = false,
+  assignedPlayerEmail = null,
   updateLogs,
   ruleParametersByKey,
   worldAverages,
@@ -103,11 +108,14 @@ export function CountryTabs({
   rankPopulation: number;
   rankGdp: number;
   isAdmin: boolean;
+  isPlayerForThisCountry?: boolean;
+  assignedPlayerEmail?: string | null;
   updateLogs: CountryUpdateLog[];
   ruleParametersByKey: Record<string, { value: unknown }>;
   worldAverages: { pop_avg: number; gdp_avg: number; mil_avg: number; ind_avg: number; sci_avg: number; stab_avg: number } | null;
   rosterByBranch: Record<MilitaryBranch, RosterRowByBranch[]>;
 }) {
+  const canEditCountry = isAdmin || isPlayerForThisCountry;
   const rankEmoji = (r: number) => (r === 1 ? "👑" : r === 2 ? "🥈" : r === 3 ? "🥉" : null);
   const router = useRouter();
   const [tab, setTab] = useState<"general" | "military" | "perks" | "budget">("general");
@@ -129,6 +137,22 @@ export function CountryTabs({
   const [militaryEdit, setMilitaryEdit] = useState<Record<string, { current_level: number; extra_count: number }>>({});
   const [militarySavingId, setMilitarySavingId] = useState<string | null>(null);
   const [militaryError, setMilitaryError] = useState<string | null>(null);
+  const [militarySubtypeOpen, setMilitarySubtypeOpen] = useState<Record<string, boolean>>({});
+  const [generalName, setGeneralName] = useState("");
+  const [generalRegime, setGeneralRegime] = useState("");
+  const [generalFlagUrl, setGeneralFlagUrl] = useState("");
+  const [generalSaving, setGeneralSaving] = useState(false);
+  const [generalError, setGeneralError] = useState<string | null>(null);
+
+  const rosterUnitsFlat = useMemo(() => {
+    const out: { id: string; name_fr: string }[] = [];
+    for (const b of ["terre", "air", "mer", "strategique"] as const) {
+      for (const row of rosterByBranch[b]) {
+        out.push({ id: row.unit.id, name_fr: row.unit.name_fr });
+      }
+    }
+    return out;
+  }, [rosterByBranch]);
 
   useEffect(() => {
     const next: Record<string, { current_level: number; extra_count: number }> = {};
@@ -145,6 +169,12 @@ export function CountryTabs({
       setMilitaryEdit(next);
     }
   }, [rosterByBranch]);
+
+  useEffect(() => {
+    setGeneralName(country.name ?? "");
+    setGeneralRegime(country.regime ?? "");
+    setGeneralFlagUrl(country.flag_url ?? "");
+  }, [country.id, country.name, country.regime, country.flag_url]);
 
   useEffect(() => {
     if (!budget) return;
@@ -273,6 +303,72 @@ export function CountryTabs({
               </div>
             </div>
 
+            {canEditCountry && (
+              <div className="mb-8 mt-6 rounded-lg border p-4" style={{ borderColor: "var(--border-muted)", background: "var(--background-elevated)" }}>
+                <h3 className="mb-3 text-sm font-semibold text-[var(--foreground)]">Modifier les généralités</h3>
+                {generalError && <p className="mb-2 text-sm text-[var(--danger)]">{generalError}</p>}
+                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                  <div>
+                    <label className="mb-1 block text-xs text-[var(--foreground-muted)]">Nom du pays</label>
+                    <input
+                      type="text"
+                      value={generalName}
+                      onChange={(e) => setGeneralName(e.target.value)}
+                      className="w-full rounded border bg-[var(--background)] px-2 py-1.5 text-sm text-[var(--foreground)]"
+                      style={{ borderColor: "var(--border)" }}
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-xs text-[var(--foreground-muted)]">Régime</label>
+                    <input
+                      type="text"
+                      value={generalRegime}
+                      onChange={(e) => setGeneralRegime(e.target.value)}
+                      className="w-full rounded border bg-[var(--background)] px-2 py-1.5 text-sm text-[var(--foreground)]"
+                      style={{ borderColor: "var(--border)" }}
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-xs text-[var(--foreground-muted)]">URL du drapeau</label>
+                    <input
+                      type="url"
+                      value={generalFlagUrl}
+                      onChange={(e) => setGeneralFlagUrl(e.target.value)}
+                      placeholder="https://…"
+                      className="w-full rounded border bg-[var(--background)] px-2 py-1.5 text-sm text-[var(--foreground)]"
+                      style={{ borderColor: "var(--border)" }}
+                    />
+                  </div>
+                </div>
+                <div className="mt-3">
+                  <button
+                    type="button"
+                    disabled={generalSaving}
+                    onClick={async () => {
+                      setGeneralError(null);
+                      setGeneralSaving(true);
+                      const supabase = createClient();
+                      const { error } = await supabase
+                        .from("countries")
+                        .update({
+                          name: generalName.trim() || country.name,
+                          regime: generalRegime.trim() || null,
+                          flag_url: generalFlagUrl.trim() || null,
+                        })
+                        .eq("id", country.id);
+                      if (error) setGeneralError(error.message);
+                      setGeneralSaving(false);
+                      if (!error) router.refresh();
+                    }}
+                    className="rounded py-2 px-4 text-sm font-medium disabled:opacity-50"
+                    style={{ background: "var(--accent)", color: "#0f1419" }}
+                  >
+                    {generalSaving ? "Enregistrement…" : "Enregistrer"}
+                  </button>
+                </div>
+              </div>
+            )}
+
             <hr className="my-8 border-0 border-t" style={{ borderColor: "var(--border)" }} />
             {effects.length === 0 ? (
               <p className="text-[var(--foreground-muted)]">Aucun effet en cours.</p>
@@ -289,7 +385,9 @@ export function CountryTabs({
                       <p
                         className={`text-sm ${isEffectDisplayPositive(e) ? "text-[var(--accent)]" : "text-[var(--danger)]"}`}
                       >
-                        {getEffectDescription(e)}
+                        {getEffectDescription(e, {
+                          rosterUnitName: (id) => rosterUnitsFlat.find((u) => u.id === id)?.name_fr ?? null,
+                        })}
                       </p>
                       <p className="text-xs text-[var(--foreground-muted)]">
                         Durée restante : {formatDurationRemaining(e)}
@@ -379,8 +477,18 @@ export function CountryTabs({
                         onChange={(e) => {
                           const c = e.target.value as EffectCategoryId;
                           setEffectCategory(c);
-                          setEffectSubChoice(c === "gdp_growth" || c === "population_growth" ? "base" : c === "budget_ministry" ? "min_pct" : null);
-                          setEffectTarget(c === "stat_delta" ? STAT_KEYS[0] : c === "budget_ministry" ? getBudgetMinistryOptions()[0].key : null);
+                          setEffectSubChoice(
+                            c === "gdp_growth" || c === "population_growth" ? "base"
+                              : c === "budget_ministry" ? "min_pct"
+                              : c === "military_unit" ? "unit_extra"
+                              : null
+                          );
+                          setEffectTarget(
+                            c === "stat_delta" ? STAT_KEYS[0]
+                              : c === "budget_ministry" ? getBudgetMinistryOptions()[0].key
+                              : c === "military_unit" && rosterUnitsFlat.length > 0 ? rosterUnitsFlat[0].id
+                              : null
+                          );
                           if (c === "budget_debt_surplus") setEffectValue("");
                         }}
                         className="rounded border bg-[var(--background)] px-2 py-1.5 text-sm text-[var(--foreground)]"
@@ -469,6 +577,32 @@ export function CountryTabs({
                         Positif = excédent (plafond d’allocation augmenté, ex. +20 → 120 % max). Négatif = dette (plafond réduit, ex. -20 → 80 % max).
                       </p>
                     )}
+                    {effectCategory === "military_unit" && (
+                      <div className="space-y-2">
+                        <label className="mb-1 block text-sm text-[var(--foreground-muted)]">Type</label>
+                        <select
+                          value={effectSubChoice ?? "unit_extra"}
+                          onChange={(e) => setEffectSubChoice(e.target.value)}
+                          className="rounded border bg-[var(--background)] px-2 py-1.5 text-sm text-[var(--foreground)]"
+                          style={{ borderColor: "var(--border)" }}
+                        >
+                          {MILITARY_UNIT_EFFECT_SUB_IDS.map((id) => (
+                            <option key={id} value={id}>{MILITARY_UNIT_EFFECT_SUB_LABELS[id]}</option>
+                          ))}
+                        </select>
+                        <label className="mb-1 block text-sm text-[var(--foreground-muted)]">Unité</label>
+                        <select
+                          value={effectTarget ?? ""}
+                          onChange={(e) => setEffectTarget(e.target.value || null)}
+                          className="rounded border bg-[var(--background)] px-2 py-1.5 text-sm text-[var(--foreground)]"
+                          style={{ borderColor: "var(--border)" }}
+                        >
+                          {rosterUnitsFlat.map((u) => (
+                            <option key={u.id} value={u.id}>{u.name_fr}</option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
                     <div>
                       <label className="mb-1 block text-sm text-[var(--foreground-muted)]">
                         {effectCategory === "budget_ministry" && effectSubChoice === "min_pct"
@@ -477,7 +611,9 @@ export function CountryTabs({
                             ? "Pourcentage (excédent + / dette −)"
                             : effectCategory === "gdp_growth" || effectCategory === "population_growth"
                               ? "Taux en % (ex: -95 pour -95 % de croissance)"
-                              : "Valeur (nombre, négatif = malus)"}
+                              : effectCategory === "military_unit"
+                                ? (effectSubChoice === "unit_tech_rate" ? "Points ajoutés par jour (entier)" : "Delta extra (entier, ex. +10 ou -5)")
+                                : "Valeur (nombre, négatif = malus)"}
                       </label>
                       <input
                         type="number"
@@ -543,7 +679,9 @@ export function CountryTabs({
                             effect_kind === "gdp_growth_per_stat" ||
                             effect_kind === "population_growth_base" ||
                             effect_kind === "population_growth_per_stat";
-                          const valueToStore = isGrowthEffect ? valueNum / 100 : valueNum;
+                          const isMilitaryUnitEffect =
+                            effect_kind === "military_unit_extra" || effect_kind === "military_unit_tech_rate";
+                          const valueToStore = isGrowthEffect ? valueNum / 100 : isMilitaryUnitEffect ? Math.floor(valueNum) : valueNum;
                           const supabase = createClient();
                           const row = {
                             name: effectName.trim(),
@@ -743,207 +881,258 @@ export function CountryTabs({
           )}
           {(["terre", "air", "mer", "strategique"] as const).map((branch) => {
             const rows = rosterByBranch[branch];
+            const groups = (() => {
+              const m = new Map<string | null, RosterRowByBranch[]>();
+              for (const row of rows) {
+                const k = row.unit.sub_type ?? null;
+                if (!m.has(k)) m.set(k, []);
+                m.get(k)!.push(row);
+              }
+              return Array.from(m.entries())
+                .sort((a, b) => {
+                  if (a[0] == null) return 1;
+                  if (b[0] == null) return -1;
+                  return (a[0] as string).localeCompare(b[0] as string);
+                })
+                .map(([subType, subRows]) => ({
+                  subType,
+                  label: subType ?? "Sans catégorie",
+                  rows: subRows,
+                }));
+            })();
+
             return (
               <section key={branch} className={panelClass} style={panelStyle}>
-                <h2 className="mb-4 text-lg font-semibold text-[var(--foreground)]">
+                <h2 className="mb-3 text-lg font-semibold text-[var(--foreground)]">
                   {BRANCH_LABELS[branch]}
                 </h2>
                 {rows.length === 0 ? (
                   <p className="text-[var(--foreground-muted)]">Aucune unité dans le roster.</p>
                 ) : (
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-sm table-fixed">
-                      <thead>
-                        <tr className="border-b border-[var(--border)]">
-                          <th className="w-16 pb-3 px-3 text-center font-medium text-[var(--foreground-muted)] text-sm">Icône</th>
-                          <th className="w-[20%] pb-3 px-3 text-center font-medium text-[var(--foreground-muted)] text-sm">Nom</th>
-                          <th className="w-[14%] pb-3 px-3 text-center font-medium text-[var(--foreground-muted)] text-sm">Nombre</th>
-                          <th className="w-[12%] pb-3 px-3 text-center font-medium text-[var(--foreground-muted)] text-sm">Personnel</th>
-                          <th className="pb-3 px-3 text-center font-medium text-[var(--foreground-muted)] text-sm">Niveaux</th>
-                          {isAdmin && <th className="w-20 pb-3 px-3 text-center font-medium text-[var(--foreground-muted)] text-sm" />}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {rows.map((row) => {
-                          const edit = militaryEdit[row.unit.id] ?? {
-                            current_level: Math.max(0, row.countryState?.current_level ?? 0),
-                            extra_count: Math.max(0, row.countryState?.extra_count ?? 0),
-                          };
-                          const totalCount = isAdmin
-                            ? row.unit.base_count + edit.extra_count
-                            : row.unit.base_count + (row.countryState?.extra_count ?? 0);
-                          const points = isAdmin
-                            ? Math.max(0, edit.current_level)
-                            : Math.max(0, row.countryState?.current_level ?? 0);
-                          const unlockedLevel = Math.max(
-                            0,
-                            Math.min(row.unit.level_count, Math.floor(points / 100))
-                          );
-                          const manpowerLevel =
-                            unlockedLevel > 0
-                              ? row.levels.find((l) => l.level === unlockedLevel)?.manpower ?? 0
-                              : 0;
-                          const personnel = totalCount * manpowerLevel;
-                          const isLocked = points < 100;
-                          const isSaving = militarySavingId === row.unit.id;
-
-                          return (
-                            <tr key={row.unit.id} className="border-b border-[var(--border-muted)]">
-                              <td className="w-16 py-2 px-3 align-middle text-center">
-                                <div className="inline-block h-14 w-14 overflow-hidden rounded border bg-[var(--background-elevated)]" style={{ borderColor: "var(--border)" }}>
-                                  {row.unit.icon_url ? (
-                                    // eslint-disable-next-line @next/next/no-img-element
-                                    <img src={row.unit.icon_url} alt="" className="h-full w-full object-contain" />
-                                  ) : (
-                                    <div className="h-full w-full text-center text-[10px] leading-[3.5rem] text-[var(--foreground-muted)]">—</div>
-                                  )}
-                                </div>
-                              </td>
-                              <td className="w-[20%] py-2 px-3 align-middle text-center">
-                                <span className="inline-block max-w-full truncate text-sm font-medium text-[var(--foreground)]" title={row.unit.name_fr}>
-                                  {row.unit.name_fr}
-                                </span>
-                              </td>
-                              <td className="w-[14%] py-2 px-3 align-middle text-center">
-                                {isAdmin ? (
-                                  <div className="flex flex-wrap items-center justify-center gap-0.5">
-                                    <span className="text-[10px] text-[var(--foreground-muted)]">{row.unit.base_count}+</span>
-                                    <input
-                                      type="number"
-                                      min={0}
-                                      className="w-10 rounded border bg-[var(--background)] px-0.5 py-0.5 text-[10px] font-mono text-[var(--foreground)]"
-                                      style={{ borderColor: "var(--border)" }}
-                                      value={edit.extra_count}
-                                      onChange={(e) => {
-                                        const n = Math.max(0, Math.floor(Number(e.target.value) || 0));
-                                        setMilitaryEdit((prev) => ({ ...prev, [row.unit.id]: { ...prev[row.unit.id] ?? edit, extra_count: n } }));
-                                      }}
-                                      disabled={isSaving}
-                                    />
-                                    <span className="text-[10px] text-[var(--foreground-muted)]">= {totalCount}</span>
-                                  </div>
-                                ) : (
-                                  <span
-                                    className="inline-block rounded border px-2.5 py-1 font-mono text-sm font-medium text-[var(--foreground)]"
-                                    style={{ borderColor: "var(--border)", background: "var(--background-elevated)" }}
-                                  >
-                                    {formatNumber(totalCount)}
-                                  </span>
-                                )}
-                              </td>
-                              <td className="w-[12%] py-2 px-3 font-mono text-sm text-[var(--foreground)] align-middle text-center">
-                                {formatNumber(personnel)}
-                              </td>
-                              <td className="py-2 px-3 align-middle">
-                                <div className="flex justify-center">
-                                {isAdmin ? (
-                                  <div className="flex items-center gap-1 flex-wrap justify-center">
-                                    <input
-                                      type="number"
-                                      min={0}
-                                      max={row.unit.level_count * 100}
-                                      className="w-14 rounded border bg-[var(--background)] px-1 py-0.5 text-xs font-mono text-[var(--foreground)]"
-                                      style={{ borderColor: "var(--border)" }}
-                                      value={edit.current_level}
-                                      onChange={(e) => {
-                                        const n = Math.max(
-                                          0,
-                                          Math.min(row.unit.level_count * 100, Math.floor(Number(e.target.value) || 0))
-                                        );
-                                        setMilitaryEdit((prev) => ({ ...prev, [row.unit.id]: { ...prev[row.unit.id] ?? edit, current_level: n } }));
-                                      }}
-                                      disabled={isSaving}
-                                    />
-                                    <span className="text-[10px] text-[var(--foreground-muted)]">
-                                      pts (0–{row.unit.level_count * 100})
-                                    </span>
-                                  </div>
-                                ) : (
-                                  <Tooltip
-                                    content={
-                                      unlockedLevel > 0
-                                        ? `Niveau actuel : ${(points / 100).toFixed(1).replace(".", ",")} / ${row.unit.level_count}`
-                                        : `Unité non débloquée (${(points / 100).toFixed(1).replace(".", ",")} / 1)`
-                                    }
-                                    side="top"
-                                  >
-                                    <div className="relative inline-flex w-full min-w-0 max-w-2xl mx-auto">
-                                      <div className={isLocked ? "blur-[1px] opacity-60" : ""}>
-                                        <div className="flex gap-1 flex-1">
-                                          {Array.from({ length: row.unit.level_count }, (_, i) => {
-                                            const start = i * 100;
-                                            const end = (i + 1) * 100;
-                                            const filled =
-                                              points <= start
-                                                ? 0
-                                                : points >= end
-                                                  ? 1
-                                                  : (points - start) / 100;
-                                            return (
-                                              <div
-                                                key={i}
-                                                className="relative h-[3.75rem] min-w-[3.75rem] flex-1 overflow-hidden rounded border"
-                                                style={{ borderColor: "var(--border)", background: "var(--background-elevated)" }}
-                                                aria-hidden
-                                              >
-                                                <div
-                                                  className="absolute inset-y-0 left-0"
-                                                  style={{
-                                                    width: `${filled * 100}%`,
-                                                    background: "var(--accent)",
-                                                  }}
-                                                />
-                                              </div>
-                                            );
-                                          })}
-                                        </div>
-                                      </div>
-                                      {isLocked && (
-                                        <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-                                          <span className="rounded bg-[var(--background-panel)]/90 px-2 py-1 text-sm text-[var(--danger)]">
-                                            🔒
-                                          </span>
-                                        </div>
-                                      )}
-                                    </div>
-                                  </Tooltip>
-                                )}
-                                </div>
-                              </td>
-                              {isAdmin && (
-                                <td className="w-20 py-2 px-3 align-middle text-center">
-                                  <button
-                                    type="button"
-                                    disabled={isSaving}
-                                    onClick={async () => {
-                                      setMilitaryError(null);
-                                      setMilitarySavingId(row.unit.id);
-                                      const supabase = createClient();
-                                      const { error } = await supabase.from("country_military_units").upsert(
-                                        {
-                                          country_id: country.id,
-                                          roster_unit_id: row.unit.id,
-                                          current_level: edit.current_level,
-                                          extra_count: edit.extra_count,
-                                        },
-                                        { onConflict: "country_id,roster_unit_id" }
+                  <div className="space-y-1">
+                    {groups.map(({ subType, label, rows: subRows }) => {
+                      const subKey = `${branch}_${subType ?? "__none__"}`;
+                      const isOpen = militarySubtypeOpen[subKey] !== false;
+                      return (
+                        <div key={subKey} className="rounded border" style={{ borderColor: "var(--border-muted)" }}>
+                          <button
+                            type="button"
+                            onClick={() => setMilitarySubtypeOpen((prev) => ({ ...prev, [subKey]: !prev[subKey] }))}
+                            className="flex w-full items-center gap-2 py-1.5 px-3 text-left text-sm font-medium text-[var(--foreground)] hover:bg-[var(--background-elevated)]"
+                            style={{ background: "var(--background-panel)" }}
+                          >
+                            <span
+                              className="inline-block transition-transform duration-200 ease-out"
+                              style={{ transform: isOpen ? "rotate(90deg)" : "rotate(0deg)" }}
+                            >
+                              ▶
+                            </span>
+                            <span>{label}</span>
+                            <span className="text-[var(--foreground-muted)]">({subRows.length})</span>
+                          </button>
+                          <div
+                            className="grid transition-[grid-template-rows] duration-200 ease-out"
+                            style={{ gridTemplateRows: isOpen ? "1fr" : "0fr" }}
+                          >
+                            <div className="overflow-hidden">
+                              <div className="overflow-x-auto">
+                                <table className="w-full text-sm table-fixed">
+                                  <thead>
+                                    <tr className="border-b border-[var(--border)]">
+                                      <th className="w-12 pb-1.5 pt-1 px-2 text-center font-medium text-[var(--foreground-muted)] text-xs">Icône</th>
+                                      <th className="w-[20%] pb-1.5 pt-1 px-2 text-center font-medium text-[var(--foreground-muted)] text-xs">Nom</th>
+                                      <th className="w-[14%] pb-1.5 pt-1 px-2 text-center font-medium text-[var(--foreground-muted)] text-xs">Nombre</th>
+                                      <th className="w-[12%] pb-1.5 pt-1 px-2 text-center font-medium text-[var(--foreground-muted)] text-xs">Personnel</th>
+                                      <th className="pb-1.5 pt-1 px-2 text-center font-medium text-[var(--foreground-muted)] text-xs">Niveaux</th>
+                                      {isAdmin && <th className="w-20 pb-1.5 pt-1 px-2 text-center font-medium text-[var(--foreground-muted)] text-xs" />}
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {subRows.map((row) => {
+                                      const edit = militaryEdit[row.unit.id] ?? {
+                                        current_level: Math.max(0, row.countryState?.current_level ?? 0),
+                                        extra_count: Math.max(0, row.countryState?.extra_count ?? 0),
+                                      };
+                                      const storedExtra = isAdmin ? edit.extra_count : (row.countryState?.extra_count ?? 0);
+                                      const effectExtraSum = getUnitExtraEffectSum(effects, row.unit.id);
+                                      const effectiveExtra = storedExtra + effectExtraSum;
+                                      const totalCount = row.unit.base_count + effectiveExtra;
+                                      const points = isAdmin
+                                        ? Math.max(0, edit.current_level)
+                                        : Math.max(0, row.countryState?.current_level ?? 0);
+                                      const unlockedLevel = Math.max(
+                                        0,
+                                        Math.min(row.unit.level_count, Math.floor(points / 100))
                                       );
-                                      setMilitarySavingId(null);
-                                      if (error) setMilitaryError(error.message);
-                                      else router.refresh();
-                                    }}
-                                    className="rounded border py-1 px-2 text-xs font-medium disabled:opacity-50"
-                                    style={{ borderColor: "var(--border)", background: "var(--accent)", color: "#0f1419" }}
-                                  >
-                                    {isSaving ? "…" : "Enregistrer"}
-                                  </button>
-                                </td>
-                              )}
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
+                                      const manpowerLevel =
+                                        unlockedLevel > 0
+                                          ? row.levels.find((l) => l.level === unlockedLevel)?.manpower ?? 0
+                                          : 0;
+                                      const personnel = totalCount * manpowerLevel;
+                                      const isLocked = points < 100;
+                                      const isSaving = militarySavingId === row.unit.id;
+
+                                      return (
+                                        <tr key={row.unit.id} className="border-b border-[var(--border-muted)]">
+                                          <td className="w-12 py-0.5 px-2 align-middle text-center">
+                                            <div className="inline-block h-9 w-9 overflow-hidden rounded border bg-[var(--background-elevated)]" style={{ borderColor: "var(--border)" }}>
+                                              {row.unit.icon_url ? (
+                                                // eslint-disable-next-line @next/next/no-img-element
+                                                <img src={row.unit.icon_url} alt="" className="h-full w-full object-contain" />
+                                              ) : (
+                                                <div className="flex h-full w-full items-center justify-center text-[8px] text-[var(--foreground-muted)]">—</div>
+                                              )}
+                                            </div>
+                                          </td>
+                                          <td className="w-[20%] py-0.5 px-2 align-middle text-center">
+                                            <span className="inline-block max-w-full truncate text-xs font-medium text-[var(--foreground)]" title={row.unit.name_fr}>
+                                              {row.unit.name_fr}
+                                            </span>
+                                          </td>
+                                          <td className="w-[14%] py-0.5 px-2 align-middle text-center">
+                                            {isAdmin ? (
+                                              <div className="flex flex-wrap items-center justify-center gap-0.5">
+                                                <span className="text-[10px] text-[var(--foreground-muted)]">{row.unit.base_count}+</span>
+                                                <input
+                                                  type="number"
+                                                  min={0}
+                                                  className="w-9 rounded border bg-[var(--background)] px-0.5 py-0.5 text-[10px] font-mono text-[var(--foreground)]"
+                                                  style={{ borderColor: "var(--border)" }}
+                                                  value={edit.extra_count}
+                                                  onChange={(e) => {
+                                                    const n = Math.max(0, Math.floor(Number(e.target.value) || 0));
+                                                    setMilitaryEdit((prev) => ({ ...prev, [row.unit.id]: { ...prev[row.unit.id] ?? edit, extra_count: n } }));
+                                                  }}
+                                                  disabled={isSaving}
+                                                />
+                                                <span className="text-[10px] text-[var(--foreground-muted)]">= {totalCount}</span>
+                                              </div>
+                                            ) : (
+                                              <span
+                                                className="inline-block rounded border px-1.5 py-0.5 font-mono text-xs font-medium text-[var(--foreground)]"
+                                                style={{ borderColor: "var(--border)", background: "var(--background-elevated)" }}
+                                              >
+                                                {formatNumber(totalCount)}
+                                              </span>
+                                            )}
+                                          </td>
+                                          <td className="w-[12%] py-0.5 px-2 font-mono text-xs text-[var(--foreground)] align-middle text-center">
+                                            {formatNumber(personnel)}
+                                          </td>
+                                          <td className="py-0.5 px-2 align-middle">
+                                            <div className="flex justify-center">
+                                              {isAdmin ? (
+                                                <div className="flex items-center gap-1 flex-wrap justify-center">
+                                                  <input
+                                                    type="number"
+                                                    min={0}
+                                                    max={row.unit.level_count * 100}
+                                                    className="w-12 rounded border bg-[var(--background)] px-1 py-0.5 text-[10px] font-mono text-[var(--foreground)]"
+                                                    style={{ borderColor: "var(--border)" }}
+                                                    value={edit.current_level}
+                                                    onChange={(e) => {
+                                                      const n = Math.max(
+                                                        0,
+                                                        Math.min(row.unit.level_count * 100, Math.floor(Number(e.target.value) || 0))
+                                                      );
+                                                      setMilitaryEdit((prev) => ({ ...prev, [row.unit.id]: { ...prev[row.unit.id] ?? edit, current_level: n } }));
+                                                    }}
+                                                    disabled={isSaving}
+                                                  />
+                                                  <span className="text-[10px] text-[var(--foreground-muted)]">pts</span>
+                                                </div>
+                                              ) : (
+                                                <Tooltip
+                                                  content={
+                                                    unlockedLevel > 0
+                                                      ? `Niveau actuel : ${(points / 100).toFixed(1).replace(".", ",")} / ${row.unit.level_count}`
+                                                      : `Unité non débloquée (${(points / 100).toFixed(1).replace(".", ",")} / 1)`
+                                                  }
+                                                  side="top"
+                                                >
+                                                  <div className="relative inline-flex w-full min-w-0 max-w-2xl mx-auto">
+                                                    <div className={isLocked ? "blur-[1px] opacity-60" : ""}>
+                                                      <div className="flex gap-0.5 flex-1">
+                                                        {Array.from({ length: row.unit.level_count }, (_, i) => {
+                                                          const start = i * 100;
+                                                          const end = (i + 1) * 100;
+                                                          const filled =
+                                                            points <= start
+                                                              ? 0
+                                                              : points >= end
+                                                                ? 1
+                                                                : (points - start) / 100;
+                                                          return (
+                                                            <div
+                                                              key={i}
+                                                              className="relative h-[2.25rem] min-w-[2.25rem] flex-1 overflow-hidden rounded border transition-colors"
+                                                              style={{ borderColor: "var(--border)", background: "var(--background-elevated)" }}
+                                                              aria-hidden
+                                                            >
+                                                              <div
+                                                                className="absolute inset-y-0 left-0"
+                                                                style={{
+                                                                  width: `${filled * 100}%`,
+                                                                  background: "var(--accent)",
+                                                                }}
+                                                              />
+                                                            </div>
+                                                          );
+                                                        })}
+                                                      </div>
+                                                    </div>
+                                                    {isLocked && (
+                                                      <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+                                                        <span className="rounded bg-[var(--background-panel)]/90 px-1.5 py-0.5 text-xs text-[var(--danger)]">
+                                                          🔒
+                                                        </span>
+                                                      </div>
+                                                    )}
+                                                  </div>
+                                                </Tooltip>
+                                              )}
+                                            </div>
+                                          </td>
+                                          {isAdmin && (
+                                            <td className="w-20 py-0.5 px-2 align-middle text-center">
+                                              <button
+                                                type="button"
+                                                disabled={isSaving}
+                                                onClick={async () => {
+                                                  setMilitaryError(null);
+                                                  setMilitarySavingId(row.unit.id);
+                                                  const supabase = createClient();
+                                                  const { error } = await supabase.from("country_military_units").upsert(
+                                                    {
+                                                      country_id: country.id,
+                                                      roster_unit_id: row.unit.id,
+                                                      current_level: edit.current_level,
+                                                      extra_count: edit.extra_count,
+                                                    },
+                                                    { onConflict: "country_id,roster_unit_id" }
+                                                  );
+                                                  setMilitarySavingId(null);
+                                                  if (error) setMilitaryError(error.message);
+                                                  else router.refresh();
+                                                }}
+                                                className="rounded border py-0.5 px-1.5 text-[10px] font-medium disabled:opacity-50"
+                                                style={{ borderColor: "var(--border)", background: "var(--accent)", color: "#0f1419" }}
+                                              >
+                                                {isSaving ? "…" : "Enregistrer"}
+                                              </button>
+                                            </td>
+                                          )}
+                                        </tr>
+                                      );
+                                    })}
+                                  </tbody>
+                                </table>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
               </section>
@@ -1054,9 +1243,9 @@ export function CountryTabs({
                   {totalBudgetMonthlyBn >= 0.01 ? `${totalBudgetMonthlyBn.toLocaleString("fr-FR", { minimumFractionDigits: 0, maximumFractionDigits: 2 })} Bn $ / Mois` : "—"}
                 </span>
               </div>
-              {!isAdmin && (
+              {!isAdmin && canEditCountry && (
                 <span className="text-xs text-[var(--foreground-muted)]">
-                  (La fraction n'est modifiable que par un administrateur.)
+                  (La fraction du PIB n'est modifiable que par un administrateur.)
                 </span>
               )}
             </div>
@@ -1111,7 +1300,8 @@ export function CountryTabs({
                               step={0.5}
                               value={value}
                               onChange={(e) => setPcts((prev) => ({ ...prev, [key]: Math.max(forcedMin, Number(e.target.value)) }))}
-                              className="h-2 w-full accent-[var(--accent)]"
+                              disabled={!canEditCountry}
+                              className="h-2 w-full accent-[var(--accent)] disabled:opacity-60"
                             />
                           </div>
                           <span className="w-12 shrink-0 text-right text-sm font-mono text-[var(--foreground-muted)]">
@@ -1156,7 +1346,7 @@ export function CountryTabs({
               <div className="flex justify-end">
                 <button
                   type="button"
-                  disabled={budgetSaving || totalPct > allocationCap}
+                  disabled={!canEditCountry || budgetSaving || totalPct > allocationCap}
                   onClick={async () => {
                     if (totalPct > allocationCap) {
                       setBudgetError(`La somme des allocations ne doit pas dépasser ${allocationCap} %.`);
@@ -1314,7 +1504,9 @@ export function CountryTabs({
                         <ul className="space-y-0.5 text-[var(--foreground-muted)]">
                           {effects.map((e, i) => (
                             <li key={i}>
-                              {getEffectDescription(e)}
+                              {getEffectDescription(e, {
+                                rosterUnitName: (id) => rosterUnitsFlat.find((u) => u.id === id)?.name_fr ?? null,
+                              })}
                             </li>
                           ))}
                         </ul>

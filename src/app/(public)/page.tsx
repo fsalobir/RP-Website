@@ -5,7 +5,13 @@ import { CountriesTable } from "@/components/countries/CountriesTable";
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
-export default async function HomePage() {
+export default async function HomePage({
+  searchParams,
+}: {
+  searchParams: Promise<{ error?: string }>;
+}) {
+  const params = await searchParams;
+  const showUnauthorized = params.error === "non-autorise";
   const supabase = await createClient();
 
   const { data: countries, error } = await supabase
@@ -56,6 +62,14 @@ export default async function HomePage() {
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-10">
+      {showUnauthorized && (
+        <div
+          className="mb-6 rounded-lg border px-4 py-3"
+          style={{ borderColor: "var(--danger)", background: "var(--background-panel)" }}
+        >
+          <p className="text-[var(--danger)]">Compte non autorisé. Seuls les administrateurs et les joueurs assignés à un pays peuvent se connecter.</p>
+        </div>
+      )}
       <div className="mb-8">
         <h1 className="text-2xl font-bold text-[var(--foreground)]">
           Nations

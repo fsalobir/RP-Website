@@ -24,6 +24,7 @@ export const EFFECT_CATEGORY_IDS = [
   "stat_delta",
   "budget_ministry",
   "budget_debt_surplus",
+  "military_unit",
 ] as const;
 export type EffectCategoryId = (typeof EFFECT_CATEGORY_IDS)[number];
 
@@ -33,6 +34,7 @@ export const EFFECT_CATEGORY_LABELS: Record<EffectCategoryId, string> = {
   stat_delta: "Stats (société)",
   budget_ministry: "Budget ministère",
   budget_debt_surplus: "Allocation de Budget Maximum",
+  military_unit: "Unité militaire",
 };
 
 /** Sous-type Croissance PIB / Population : base ou par stat. */
@@ -47,6 +49,13 @@ export const BUDGET_EFFECT_SUB_IDS = ["min_pct", "effect_multiplier"] as const;
 export const BUDGET_EFFECT_SUB_LABELS: Record<string, string> = {
   min_pct: "Budget minimum forcé",
   effect_multiplier: "Bonus/Malus d'effet",
+};
+
+/** Sous-type Unité militaire. */
+export const MILITARY_UNIT_EFFECT_SUB_IDS = ["unit_extra", "unit_tech_rate"] as const;
+export const MILITARY_UNIT_EFFECT_SUB_LABELS: Record<string, string> = {
+  unit_extra: "Bonus/Malus extra (nombre d'unités)",
+  unit_tech_rate: "Bonus points technologie (par jour)",
 };
 
 /** Construire effect_kind + effect_target + effect_subtype à partir des choix du formulaire. */
@@ -73,6 +82,10 @@ export function buildEffectKeys(
   if (category === "budget_debt_surplus") {
     return { effect_kind: "budget_allocation_cap", effect_target: null, effect_subtype: null };
   }
+  if (category === "military_unit") {
+    const effect_kind = subChoice === "unit_tech_rate" ? "military_unit_tech_rate" : "military_unit_extra";
+    return { effect_kind, effect_target: target, effect_subtype: null };
+  }
   return { effect_kind: "", effect_target: null, effect_subtype: null };
 }
 
@@ -86,14 +99,22 @@ export const EFFECT_KIND_LABELS: Record<string, string> = {
   budget_ministry_min_pct: "Budget ministère (minimum forcé)",
   budget_ministry_effect_multiplier: "Budget ministère (bonus/malus d’effet)",
   budget_allocation_cap: "Allocation de Budget Maximum",
+  military_unit_extra: "Unité militaire (bonus/malus extra)",
+  military_unit_tech_rate: "Unité militaire (bonus points tech/jour)",
 };
 
 /** Description élégante et lisible pour l’admin et le joueur. */
-export function getEffectDescription(e: CountryEffect): string {
+export type GetEffectDescriptionOptions = { rosterUnitName?: (id: string) => string | null };
+
+export function getEffectDescription(e: CountryEffect, options?: GetEffectDescriptionOptions): string {
   const valueStr = formatEffectValue(e.effect_kind, e.value);
-  const targetLabel = e.effect_target
-    ? STAT_LABELS[e.effect_target as StatKey] ?? BUDGET_MINISTRY_LABELS[e.effect_target] ?? e.effect_target
-    : null;
+  let targetLabel: string | null = null;
+  if (e.effect_target) {
+    if (e.effect_kind === "military_unit_extra" || e.effect_kind === "military_unit_tech_rate")
+      targetLabel = options?.rosterUnitName?.(e.effect_target) ?? e.effect_target;
+    else
+      targetLabel = STAT_LABELS[e.effect_target as StatKey] ?? BUDGET_MINISTRY_LABELS[e.effect_target] ?? e.effect_target;
+  }
 
   if (e.effect_kind === "budget_ministry_min_pct" && targetLabel) {
     return `Minimum forcé — ${targetLabel} : ${valueStr}`;
@@ -109,6 +130,8 @@ export function getEffectDescription(e: CountryEffect): string {
   if (e.effect_kind === "population_growth_base") return `Croissance population (base) : ${valueStr}`;
   if (e.effect_kind === "population_growth_per_stat" && targetLabel) return `Croissance population — ${targetLabel} : ${valueStr}`;
   if (e.effect_kind === "stat_delta" && targetLabel) return `Stat — ${targetLabel} : ${valueStr}`;
+  if (e.effect_kind === "military_unit_extra" && targetLabel) return `Extra unité — ${targetLabel} : ${valueStr}`;
+  if (e.effect_kind === "military_unit_tech_rate" && targetLabel) return `Tech unité — ${targetLabel} : ${valueStr}`;
 
   const kindLabel = EFFECT_KIND_LABELS[e.effect_kind] ?? e.effect_kind;
   if (targetLabel) return `${kindLabel} — ${targetLabel} : ${valueStr}`;
@@ -123,6 +146,8 @@ function formatEffectValue(effectKind: string | null | undefined, value: number)
   if (kind.startsWith("gdp_growth") || kind.startsWith("population_growth")) {
     return (value * 100).toFixed(2) + " %";
   }
+  if (kind === "military_unit_tech_rate") return `${Number(value)} pts/jour`;
+  if (kind === "military_unit_extra") return (Number(value) >= 0 ? "+" : "") + String(Number(value));
   return String(value);
 }
 
@@ -169,6 +194,8 @@ export function parseEffectToForm(e: CountryEffect): {
   if (e.effect_kind === "budget_ministry_min_pct") return { category: "budget_ministry", subChoice: "min_pct", target: e.effect_target };
   if (e.effect_kind === "budget_ministry_effect_multiplier") return { category: "budget_ministry", subChoice: "effect_multiplier", target: e.effect_target };
   if (e.effect_kind === "budget_allocation_cap") return { category: "budget_debt_surplus", subChoice: null, target: null };
+  if (e.effect_kind === "military_unit_extra") return { category: "military_unit", subChoice: "unit_extra", target: e.effect_target };
+  if (e.effect_kind === "military_unit_tech_rate") return { category: "military_unit", subChoice: "unit_tech_rate", target: e.effect_target };
   return { category: "gdp_growth", subChoice: "base", target: null };
 }
 
@@ -191,4 +218,15 @@ export function getAllocationCapPercent(effects: CountryEffect[]): number {
     if (e.effect_kind === "budget_allocation_cap") sum += Number(e.value);
   }
   return 100 + sum;
+}
+
+/** Somme des bonus/malus extra pour une unité (effets actifs military_unit_extra). */
+export function getUnitExtraEffectSum(effects: CountryEffect[], rosterUnitId: string): number {
+  let sum = 0;
+  for (const e of effects) {
+    if (e.effect_kind === "military_unit_extra" && e.effect_target === rosterUnitId && e.duration_remaining > 0) {
+      sum += Number(e.value);
+    }
+  }
+  return sum;
 }
