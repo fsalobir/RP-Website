@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { notFound } from "next/navigation";
 import { CountryForm } from "@/components/admin/CountryForm";
+import { MobilisationAdminBlock } from "./MobilisationAdminBlock";
 
 export default async function AdminPaysEditPage({
   params,
@@ -9,13 +10,17 @@ export default async function AdminPaysEditPage({
 }) {
   const { id } = await params;
   const supabase = await createClient();
-  const { data: country, error } = await supabase
-    .from("countries")
-    .select("*")
-    .eq("id", id)
-    .single();
+  const [{ data: country, error }, mobilisationRes, configRes] = await Promise.all([
+    supabase.from("countries").select("*").eq("id", id).single(),
+    supabase.from("country_mobilisation").select("score, target_score").eq("country_id", id).maybeSingle(),
+    supabase.from("rule_parameters").select("value").eq("key", "mobilisation_config").maybeSingle(),
+  ]);
 
   if (error || !country) notFound();
+
+  const mobilisation = mobilisationRes.data ?? null;
+  const config = configRes.data?.value as { level_thresholds?: Record<string, number> } | undefined;
+  const levelThresholds = config?.level_thresholds;
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-10">
@@ -26,6 +31,14 @@ export default async function AdminPaysEditPage({
         Généralités, société, macros, militaire et avantages.
       </p>
       <CountryForm country={country} />
+      <div className="mt-8">
+        <MobilisationAdminBlock
+          countryId={id}
+          initialScore={mobilisation?.score ?? 0}
+          initialTargetScore={mobilisation?.target_score ?? 0}
+          levelThresholds={levelThresholds}
+        />
+      </div>
     </div>
   );
 }

@@ -164,32 +164,24 @@ export function CountryForm({ country }: { country?: Country }) {
           <div>
             <label className="mb-1 block text-sm text-[var(--foreground-muted)]">Drapeau</label>
             <div className="space-y-2">
-              <div>
-                <label className="mb-1 block text-xs text-[var(--foreground-muted)]">Téléverser une image</label>
-                <input
-                  type="file"
-                  accept="image/jpeg,image/png,image/gif,image/webp"
-                  onChange={(e) => setFlagFile(e.target.files?.[0] ?? null)}
-                  className="block w-full text-sm text-[var(--foreground-muted)] file:mr-2 file:rounded file:border-0 file:bg-[var(--accent)] file:px-3 file:py-1.5 file:text-[#0f1419] file:font-medium"
-                />
-                {flagFile && (
-                  <p className="mt-1 text-xs text-[var(--foreground-muted)]">
-                    Fichier sélectionné : {flagFile.name}
-                  </p>
-                )}
-              </div>
-              <div>
-                <label className="mb-1 block text-xs text-[var(--foreground-muted)]">Ou URL du drapeau</label>
-                <input
-                  type="url"
-                  value={form.flag_url}
-                  onChange={(e) => update("flag_url", e.target.value)}
-                  className={inputClass}
-                  style={inputStyle}
-                  placeholder="https://…"
-                  disabled={!!flagFile}
-                />
-              </div>
+              <input
+                type="file"
+                accept="image/jpeg,image/png,image/gif,image/webp"
+                onChange={(e) => setFlagFile(e.target.files?.[0] ?? null)}
+                className="hidden"
+                id="admin-country-flag-upload"
+              />
+              <label
+                htmlFor="admin-country-flag-upload"
+                className="inline-block cursor-pointer rounded border border-[var(--border)] bg-[var(--accent)] px-3 py-1.5 text-sm font-medium text-[#0f1419] hover:opacity-90"
+              >
+                Upload
+              </label>
+              {flagFile && (
+                <p className="text-xs text-[var(--foreground-muted)]">
+                  Fichier sélectionné : {flagFile.name}
+                </p>
+              )}
               {(form.flag_url || flagPreviewUrl) && (
                 <div className="mt-2">
                   <span className="text-xs text-[var(--foreground-muted)]">Aperçu : </span>

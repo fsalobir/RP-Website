@@ -11,6 +11,14 @@ import {
   BUDGET_MINISTRY_EFFECTS,
   type BudgetMinistryValue,
 } from "@/lib/ruleParameters";
+import {
+  EFFECT_KIND_LABELS,
+  STAT_KEYS,
+  STAT_LABELS,
+  MILITARY_BRANCH_EFFECT_IDS,
+  MILITARY_BRANCH_EFFECT_LABELS,
+  getBudgetMinistryOptions,
+} from "@/lib/countryEffects";
 
 function CollapsibleBlock({
   title,
@@ -57,10 +65,37 @@ function CollapsibleBlock({
   );
 }
 
+/** Effets dont la cible est une stat (militarism, industry, etc.). */
+const EFFECT_KINDS_WITH_STAT_TARGET = new Set([
+  "stat_delta",
+  "gdp_growth_per_stat",
+  "population_growth_per_stat",
+]);
+/** Effets dont la cible est un ministère budget. */
+const EFFECT_KINDS_WITH_BUDGET_TARGET = new Set([
+  "budget_ministry_min_pct",
+  "budget_ministry_effect_multiplier",
+]);
+/** Effets sans cible (ou cible implicite). */
+const EFFECT_KINDS_NO_TARGET = new Set([
+  "gdp_growth_base",
+  "population_growth_base",
+  "budget_allocation_cap",
+]);
+/** Effets dont la cible est une branche militaire. */
+const EFFECT_KINDS_WITH_BRANCH_TARGET = new Set(["military_unit_limit_modifier"]);
+/** Effets dont la cible est une unité du roster. */
+const EFFECT_KINDS_WITH_ROSTER_UNIT_TARGET = new Set([
+  "military_unit_extra",
+  "military_unit_tech_rate",
+]);
+
 export function ReglesForm({
   rules,
+  rosterUnits = [],
 }: {
   rules: RuleParameter[];
+  rosterUnits?: { id: string; name_fr: string }[];
 }) {
   const [items, setItems] = useState(rules);
   const [saving, setSaving] = useState(false);
@@ -76,6 +111,7 @@ export function ReglesForm({
   const [simulatorBase, setSimulatorBase] = useState<string>("5");
   const [simulatorWorldAvg, setSimulatorWorldAvg] = useState<string>("5");
   const [simulatorAllocationPct, setSimulatorAllocationPct] = useState<number>(10);
+  const [mobilisationOpen, setMobilisationOpen] = useState(false);
 
   const supabase = createClient();
 
@@ -107,10 +143,96 @@ export function ReglesForm({
     () => new Set(RULE_SECTIONS.flatMap((s) => s.keys)),
     []
   );
+  const mobilisationConfigKey = "mobilisation_config";
+  const mobilisationEffectsKey = "mobilisation_level_effects";
   const otherRules = useMemo(
-    () => items.filter((r) => !allSectionKeys.has(r.key)),
+    () => items.filter(
+      (r) => !allSectionKeys.has(r.key) && r.key !== mobilisationConfigKey && r.key !== mobilisationEffectsKey
+    ),
     [items, allSectionKeys]
   );
+
+  const mobilisationConfigRule = useMemo(() => items.find((r) => r.key === mobilisationConfigKey), [items]);
+  const mobilisationEffectsRule = useMemo(() => items.find((r) => r.key === mobilisationEffectsKey), [items]);
+
+  type MobilisationConfigValue = {
+    level_thresholds?: Record<string, number>;
+    daily_step?: number;
+  };
+  function getMobilisationConfig(): MobilisationConfigValue {
+    if (mobilisationConfigRule?.value && typeof mobilisationConfigRule.value === "object" && mobilisationConfigRule.value !== null) {
+      return mobilisationConfigRule.value as MobilisationConfigValue;
+    }
+    return {
+      level_thresholds: {
+        demobilisation: 0,
+        reserve_active: 200,
+        mobilisation_partielle: 300,
+        mobilisation_generale: 400,
+        guerre_patriotique: 500,
+      },
+      daily_step: 20,
+    };
+  }
+
+  const MOBILISATION_LEVEL_KEYS = [
+    "demobilisation",
+    "reserve_active",
+    "mobilisation_partielle",
+    "mobilisation_generale",
+    "guerre_patriotique",
+  ] as const;
+  const MOBILISATION_LEVEL_LABELS: Record<string, string> = {
+    demobilisation: "Démobilisation",
+    reserve_active: "Réserve Active",
+    mobilisation_partielle: "Mobilisation Partielle",
+    mobilisation_generale: "Mobilisation Générale",
+    guerre_patriotique: "Guerre Patriotique",
+  };
+
+  function updateMobilisationConfig(updates: Partial<MobilisationConfigValue>) {
+    if (!mobilisationConfigRule) return;
+    const current = getMobilisationConfig();
+    updateValue(mobilisationConfigRule.id, { ...current, ...updates });
+  }
+
+  type MobilisationLevelEffect = { level: string; effect_kind: string; effect_target: string | null; value: number };
+  function getMobilisationLevelEffects(): MobilisationLevelEffect[] {
+    if (mobilisationEffectsRule?.value && Array.isArray(mobilisationEffectsRule.value)) {
+      return mobilisationEffectsRule.value as MobilisationLevelEffect[];
+    }
+    return [];
+  }
+  function setMobilisationLevelEffects(arr: MobilisationLevelEffect[]) {
+    if (!mobilisationEffectsRule) return;
+    updateValue(mobilisationEffectsRule.id, arr);
+  }
+  function getDefaultTargetForKind(effectKind: string): string | null {
+    if (EFFECT_KINDS_WITH_STAT_TARGET.has(effectKind)) return STAT_KEYS[0];
+    if (EFFECT_KINDS_WITH_BUDGET_TARGET.has(effectKind)) return getBudgetMinistryOptions()[0]?.key ?? BUDGET_MINISTRY_KEYS[0];
+    if (EFFECT_KINDS_WITH_BRANCH_TARGET.has(effectKind)) return MILITARY_BRANCH_EFFECT_IDS[0];
+    if (EFFECT_KINDS_WITH_ROSTER_UNIT_TARGET.has(effectKind)) return rosterUnits[0]?.id ?? null;
+    return null;
+  }
+  function addMobilisationEffect(level: string) {
+    setMobilisationLevelEffects([...getMobilisationLevelEffects(), { level, effect_kind: "stat_delta", effect_target: "militarism", value: 0 }]);
+  }
+  function removeMobilisationEffect(index: number) {
+    const arr = getMobilisationLevelEffects().filter((_, i) => i !== index);
+    setMobilisationLevelEffects(arr);
+  }
+  function updateMobilisationEffect(index: number, patch: Partial<MobilisationLevelEffect>) {
+    const arr = getMobilisationLevelEffects();
+    const next = arr.map((e, i) => {
+      if (i !== index) return e;
+      const merged = { ...e, ...patch };
+      if (patch.effect_kind != null && patch.effect_kind !== e.effect_kind) {
+        merged.effect_target = getDefaultTargetForKind(patch.effect_kind);
+      }
+      return merged;
+    });
+    setMobilisationLevelEffects(next);
+  }
 
   function getBudgetValue(r: RuleParameter): BudgetMinistryValue {
     if (typeof r.value === "object" && r.value !== null && !Array.isArray(r.value)) {
@@ -436,6 +558,199 @@ export function ReglesForm({
               </div>
             </div>
           </CollapsibleBlock>
+
+          {mobilisationConfigRule && mobilisationEffectsRule && (
+            <CollapsibleBlock title="Mobilisation" open={mobilisationOpen} onToggle={() => setMobilisationOpen((o) => !o)}>
+              <div className="p-3 space-y-4">
+                <p className="text-xs text-[var(--foreground-muted)]">
+                  Les paramètres et effets de mobilisation sont lus par le cron à chaque exécution. Toute modification enregistrée ici sera prise en compte à la prochaine mise à jour quotidienne.
+                </p>
+                <div>
+                  <div className="text-xs font-medium text-[var(--foreground-muted)] mb-2">Seuils par palier (score 0–500)</div>
+                  <div className="grid gap-2 grid-cols-2 sm:grid-cols-3 lg:grid-cols-5">
+                    {MOBILISATION_LEVEL_KEYS.map((key) => {
+                      const config = getMobilisationConfig();
+                      const thresholds = config.level_thresholds ?? {};
+                      const val = thresholds[key] ?? 0;
+                      return (
+                        <div key={key} className="flex flex-col gap-0.5">
+                          <label className="text-xs text-[var(--foreground-muted)]">{MOBILISATION_LEVEL_LABELS[key]}</label>
+                          <input
+                            type="number"
+                            min={0}
+                            max={500}
+                            value={val}
+                            onChange={(e) =>
+                              updateMobilisationConfig({
+                                level_thresholds: {
+                                  ...(getMobilisationConfig().level_thresholds ?? {}),
+                                  [key]: Number(e.target.value) || 0,
+                                },
+                              })
+                            }
+                            className={inputClassNarrow}
+                            style={inputStyle}
+                          />
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-[var(--foreground-muted)]">Évolution quotidienne du score (points/jour)</label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={500}
+                    value={getMobilisationConfig().daily_step ?? 20}
+                    onChange={(e) => updateMobilisationConfig({ daily_step: Number(e.target.value) || 20 })}
+                    className={inputClassNarrow}
+                    style={inputStyle}
+                  />
+                </div>
+                <div>
+                  <div className="text-xs font-medium text-[var(--foreground-muted)] mb-2">Effets par palier</div>
+                  <div className="space-y-4">
+                    {MOBILISATION_LEVEL_KEYS.map((levelKey) => {
+                      const effectsForLevel = getMobilisationLevelEffects().filter((e) => e.level === levelKey);
+                      return (
+                        <div key={levelKey} className="rounded border p-2" style={{ borderColor: "var(--border-muted)" }}>
+                          <div className="text-sm font-medium text-[var(--foreground)] mb-2">{MOBILISATION_LEVEL_LABELS[levelKey]}</div>
+                          <ul className="space-y-2">
+                            {(getMobilisationLevelEffects()
+                              .map((e, idx) => (e.level === levelKey ? { e, idx } : null))
+                              .filter((x): x is { e: MobilisationLevelEffect; idx: number } => x !== null))
+                              .map(({ e, idx }) => {
+                                const kind = e.effect_kind;
+                                const needsStatTarget = EFFECT_KINDS_WITH_STAT_TARGET.has(kind);
+                                const needsBudgetTarget = EFFECT_KINDS_WITH_BUDGET_TARGET.has(kind);
+                                const needsBranchTarget = EFFECT_KINDS_WITH_BRANCH_TARGET.has(kind);
+                                const needsRosterTarget = EFFECT_KINDS_WITH_ROSTER_UNIT_TARGET.has(kind);
+                                const noTarget = EFFECT_KINDS_NO_TARGET.has(kind);
+                                const valueLabel =
+                                  kind.startsWith("gdp_growth") || kind.startsWith("population_growth")
+                                    ? "Taux (%)"
+                                    : kind === "stat_delta"
+                                      ? "Delta"
+                                      : kind === "budget_ministry_min_pct"
+                                        ? "Min. %"
+                                        : kind === "budget_ministry_effect_multiplier"
+                                          ? "Mult."
+                                          : kind === "budget_allocation_cap"
+                                            ? "% (+/-)"
+                                            : kind === "military_unit_extra"
+                                              ? "Extra"
+                                              : kind === "military_unit_tech_rate"
+                                                ? "Pts/jour"
+                                                : kind === "military_unit_limit_modifier"
+                                                  ? "%"
+                                                  : "Valeur";
+                                const valueStep =
+                                  kind === "military_unit_extra" || kind === "military_unit_tech_rate" ? 1 : 0.01;
+                                const isGrowth = kind.startsWith("gdp_growth") || kind.startsWith("population_growth");
+                                const inputValue = isGrowth ? Number(e.value) * 100 : Number(e.value);
+                                const onValueChange = (val: number) =>
+                                  updateMobilisationEffect(idx, {
+                                    value: isGrowth ? val / 100 : val,
+                                  });
+                                return (
+                                  <li key={idx} className="flex flex-wrap items-center gap-2 text-xs">
+                                    <select
+                                      value={kind}
+                                      onChange={(ev) => updateMobilisationEffect(idx, { effect_kind: ev.target.value })}
+                                      className="min-w-0 rounded border bg-[var(--background)] px-1.5 py-1 text-[var(--foreground)]"
+                                      style={{ borderColor: "var(--border)", maxWidth: "240px" }}
+                                    >
+                                      {Object.entries(EFFECT_KIND_LABELS).map(([k, label]) => (
+                                        <option key={k} value={k}>{label}</option>
+                                      ))}
+                                    </select>
+                                    {noTarget && <span className="text-[var(--foreground-muted)]">—</span>}
+                                    {needsStatTarget && (
+                                      <select
+                                        value={e.effect_target ?? STAT_KEYS[0]}
+                                        onChange={(ev) => updateMobilisationEffect(idx, { effect_target: ev.target.value || null })}
+                                        className="rounded border bg-[var(--background)] px-1.5 py-1 text-[var(--foreground)]"
+                                        style={{ borderColor: "var(--border)", minWidth: "100px" }}
+                                      >
+                                        {STAT_KEYS.map((k) => (
+                                          <option key={k} value={k}>{STAT_LABELS[k]}</option>
+                                        ))}
+                                      </select>
+                                    )}
+                                    {needsBudgetTarget && (
+                                      <select
+                                        value={e.effect_target ?? getBudgetMinistryOptions()[0]?.key ?? ""}
+                                        onChange={(ev) => updateMobilisationEffect(idx, { effect_target: ev.target.value || null })}
+                                        className="rounded border bg-[var(--background)] px-1.5 py-1 text-[var(--foreground)]"
+                                        style={{ borderColor: "var(--border)", minWidth: "140px" }}
+                                      >
+                                        {getBudgetMinistryOptions().map(({ key, label }) => (
+                                          <option key={key} value={key}>{label}</option>
+                                        ))}
+                                      </select>
+                                    )}
+                                    {needsBranchTarget && (
+                                      <select
+                                        value={e.effect_target ?? MILITARY_BRANCH_EFFECT_IDS[0]}
+                                        onChange={(ev) => updateMobilisationEffect(idx, { effect_target: ev.target.value || null })}
+                                        className="rounded border bg-[var(--background)] px-1.5 py-1 text-[var(--foreground)]"
+                                        style={{ borderColor: "var(--border)" }}
+                                      >
+                                        {MILITARY_BRANCH_EFFECT_IDS.map((b) => (
+                                          <option key={b} value={b}>{MILITARY_BRANCH_EFFECT_LABELS[b]}</option>
+                                        ))}
+                                      </select>
+                                    )}
+                                    {needsRosterTarget && (
+                                      <select
+                                        value={e.effect_target ?? rosterUnits[0]?.id ?? ""}
+                                        onChange={(ev) => updateMobilisationEffect(idx, { effect_target: ev.target.value || null })}
+                                        className="rounded border bg-[var(--background)] px-1.5 py-1 text-[var(--foreground)]"
+                                        style={{ borderColor: "var(--border)", minWidth: "140px" }}
+                                      >
+                                        {rosterUnits.map((u) => (
+                                          <option key={u.id} value={u.id}>{u.name_fr}</option>
+                                        ))}
+                                      </select>
+                                    )}
+                                    <label className="flex items-center gap-1">
+                                      <span className="text-[var(--foreground-muted)] shrink-0">{valueLabel}</span>
+                                      <input
+                                        type="number"
+                                        step={valueStep}
+                                        value={inputValue}
+                                        onChange={(ev) => onValueChange(Number(ev.target.value) || 0)}
+                                        className="w-20 rounded border bg-[var(--background)] px-1.5 py-1 font-mono text-[var(--foreground)]"
+                                        style={{ borderColor: "var(--border)" }}
+                                      />
+                                    </label>
+                                    <button
+                                      type="button"
+                                      onClick={() => removeMobilisationEffect(idx)}
+                                      className="text-[var(--danger)] hover:underline"
+                                    >
+                                      Supprimer
+                                    </button>
+                                  </li>
+                                );
+                              })}
+                          </ul>
+                          <button
+                            type="button"
+                            onClick={() => addMobilisationEffect(levelKey)}
+                            className="mt-1 text-xs text-[var(--accent)] hover:underline"
+                          >
+                            Ajouter un effet
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            </CollapsibleBlock>
+          )}
 
           {otherRules.length > 0 && (
             <div className="border-t" style={{ borderColor: "var(--border-muted)" }}>

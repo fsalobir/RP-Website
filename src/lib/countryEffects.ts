@@ -52,10 +52,20 @@ export const BUDGET_EFFECT_SUB_LABELS: Record<string, string> = {
 };
 
 /** Sous-type Unité militaire. */
-export const MILITARY_UNIT_EFFECT_SUB_IDS = ["unit_extra", "unit_tech_rate"] as const;
+export const MILITARY_UNIT_EFFECT_SUB_IDS = ["unit_extra", "unit_tech_rate", "limit_modifier"] as const;
 export const MILITARY_UNIT_EFFECT_SUB_LABELS: Record<string, string> = {
   unit_extra: "Bonus/Malus extra (nombre d'unités)",
   unit_tech_rate: "Bonus points technologie (par jour)",
+  limit_modifier: "Modificateur de limites (%)",
+};
+
+/** Branches militaires pour effect_target du modificateur de limites. */
+export const MILITARY_BRANCH_EFFECT_IDS = ["terre", "air", "mer", "strategique"] as const;
+export const MILITARY_BRANCH_EFFECT_LABELS: Record<string, string> = {
+  terre: "Terre",
+  air: "Air",
+  mer: "Mer",
+  strategique: "Stratégique",
 };
 
 /** Construire effect_kind + effect_target + effect_subtype à partir des choix du formulaire. */
@@ -83,8 +93,9 @@ export function buildEffectKeys(
     return { effect_kind: "budget_allocation_cap", effect_target: null, effect_subtype: null };
   }
   if (category === "military_unit") {
-    const effect_kind = subChoice === "unit_tech_rate" ? "military_unit_tech_rate" : "military_unit_extra";
-    return { effect_kind, effect_target: target, effect_subtype: null };
+    if (subChoice === "unit_tech_rate") return { effect_kind: "military_unit_tech_rate", effect_target: target, effect_subtype: null };
+    if (subChoice === "limit_modifier") return { effect_kind: "military_unit_limit_modifier", effect_target: target, effect_subtype: null };
+    return { effect_kind: "military_unit_extra", effect_target: target, effect_subtype: null };
   }
   return { effect_kind: "", effect_target: null, effect_subtype: null };
 }
@@ -101,6 +112,7 @@ export const EFFECT_KIND_LABELS: Record<string, string> = {
   budget_allocation_cap: "Allocation de Budget Maximum",
   military_unit_extra: "Unité militaire (bonus/malus extra)",
   military_unit_tech_rate: "Unité militaire (bonus points tech/jour)",
+  military_unit_limit_modifier: "Unité militaire (modificateur de limites %)",
 };
 
 /** Description élégante et lisible pour l’admin et le joueur. */
@@ -112,6 +124,8 @@ export function getEffectDescription(e: CountryEffect, options?: GetEffectDescri
   if (e.effect_target) {
     if (e.effect_kind === "military_unit_extra" || e.effect_kind === "military_unit_tech_rate")
       targetLabel = options?.rosterUnitName?.(e.effect_target) ?? e.effect_target;
+    else if (e.effect_kind === "military_unit_limit_modifier")
+      targetLabel = MILITARY_BRANCH_EFFECT_LABELS[e.effect_target] ?? e.effect_target;
     else
       targetLabel = STAT_LABELS[e.effect_target as StatKey] ?? BUDGET_MINISTRY_LABELS[e.effect_target] ?? e.effect_target;
   }
@@ -132,6 +146,7 @@ export function getEffectDescription(e: CountryEffect, options?: GetEffectDescri
   if (e.effect_kind === "stat_delta" && targetLabel) return `Stat — ${targetLabel} : ${valueStr}`;
   if (e.effect_kind === "military_unit_extra" && targetLabel) return `Extra unité — ${targetLabel} : ${valueStr}`;
   if (e.effect_kind === "military_unit_tech_rate" && targetLabel) return `Tech unité — ${targetLabel} : ${valueStr}`;
+  if (e.effect_kind === "military_unit_limit_modifier" && targetLabel) return `Limites — ${targetLabel} : ${valueStr}`;
 
   const kindLabel = EFFECT_KIND_LABELS[e.effect_kind] ?? e.effect_kind;
   if (targetLabel) return `${kindLabel} — ${targetLabel} : ${valueStr}`;
@@ -148,6 +163,7 @@ function formatEffectValue(effectKind: string | null | undefined, value: number)
   }
   if (kind === "military_unit_tech_rate") return `${Number(value)} pts/jour`;
   if (kind === "military_unit_extra") return (Number(value) >= 0 ? "+" : "") + String(Number(value));
+  if (kind === "military_unit_limit_modifier") return `${Number(value) >= 0 ? "+" : ""}${Number(value)} %`;
   return String(value);
 }
 
@@ -196,6 +212,7 @@ export function parseEffectToForm(e: CountryEffect): {
   if (e.effect_kind === "budget_allocation_cap") return { category: "budget_debt_surplus", subChoice: null, target: null };
   if (e.effect_kind === "military_unit_extra") return { category: "military_unit", subChoice: "unit_extra", target: e.effect_target };
   if (e.effect_kind === "military_unit_tech_rate") return { category: "military_unit", subChoice: "unit_tech_rate", target: e.effect_target };
+  if (e.effect_kind === "military_unit_limit_modifier") return { category: "military_unit", subChoice: "limit_modifier", target: e.effect_target };
   return { category: "gdp_growth", subChoice: "base", target: null };
 }
 
@@ -225,6 +242,17 @@ export function getUnitExtraEffectSum(effects: CountryEffect[], rosterUnitId: st
   let sum = 0;
   for (const e of effects) {
     if (e.effect_kind === "military_unit_extra" && e.effect_target === rosterUnitId && e.duration_remaining > 0) {
+      sum += Number(e.value);
+    }
+  }
+  return sum;
+}
+
+/** Somme des modificateurs de limite (%) pour une branche (effets military_unit_limit_modifier). */
+export function getLimitModifierPercent(effects: CountryEffect[], branch: string): number {
+  let sum = 0;
+  for (const e of effects) {
+    if (e.effect_kind === "military_unit_limit_modifier" && e.effect_target === branch && e.duration_remaining > 0) {
       sum += Number(e.value);
     }
   }

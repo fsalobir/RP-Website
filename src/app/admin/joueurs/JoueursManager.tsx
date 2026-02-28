@@ -24,7 +24,7 @@ export function JoueursManager({
 }) {
   const router = useRouter();
   const [createError, setCreateError] = useState<string | null>(null);
-  const [createSuccess, setCreateSuccess] = useState(false);
+  const [createSuccess, setCreateSuccess] = useState<boolean | string>(false);
   const [assigningId, setAssigningId] = useState<string | null>(null);
   const [assignError, setAssignError] = useState<string | null>(null);
   const [editingNameId, setEditingNameId] = useState<string | null>(null);

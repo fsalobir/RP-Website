@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { CountryTabs } from "./CountryTabs";
+import type { RosterRowByBranch } from "./countryTabsTypes";
 import type {
   CountryUpdateLog,
   MilitaryBranch,
@@ -10,11 +11,7 @@ import type {
   CountryMilitaryUnit,
 } from "@/types/database";
 
-export type RosterRowByBranch = {
-  unit: MilitaryRosterUnit;
-  countryState: CountryMilitaryUnit | null;
-  levels: { level: number; manpower: number }[];
-};
+export type { RosterRowByBranch };
 
 export default async function CountryPage({
   params,
@@ -70,7 +67,7 @@ export default async function CountryPage({
     "budget_affaires_etrangeres",
   ];
 
-  const [macrosRes, limitsRes, perksDefRes, countryPerksRes, budgetRes, effectsRes, countriesRes, updateLogsRes, ruleParamsRes, rosterUnitsRes, rosterLevelsRes, countryMilitaryUnitsRes] = await Promise.all([
+  const [macrosRes, limitsRes, perksDefRes, countryPerksRes, budgetRes, effectsRes, countriesRes, updateLogsRes, ruleParamsRes, ruleMobilisationRes, mobilisationRes, rosterUnitsRes, rosterLevelsRes, countryMilitaryUnitsRes] = await Promise.all([
     supabase.from("country_macros").select("*").eq("country_id", country.id),
     supabase
       .from("country_military_limits")
@@ -85,6 +82,8 @@ export default async function CountryPage({
       ? supabase.from("country_update_logs").select("*").eq("country_id", country.id).order("run_at", { ascending: false }).limit(10)
       : Promise.resolve({ data: [] as CountryUpdateLog[] }),
     isAdmin ? supabase.from("rule_parameters").select("key, value").in("key", ruleKeys) : Promise.resolve({ data: null }),
+    supabase.from("rule_parameters").select("key, value").eq("key", "mobilisation_config").maybeSingle(),
+    supabase.from("country_mobilisation").select("score, target_score").eq("country_id", country.id).maybeSingle(),
     supabase.from("military_roster_units").select("*").order("branch").order("sort_order").order("name_fr"),
     supabase.from("military_roster_unit_levels").select("*").order("unit_id").order("level"),
     supabase.from("country_military_units").select("*").eq("country_id", country.id),
@@ -113,6 +112,16 @@ export default async function CountryPage({
       ruleParametersByKey[r.key] = { value: r.value };
     }
   }
+  if (ruleMobilisationRes.data) {
+    ruleParametersByKey[ruleMobilisationRes.data.key] = { value: ruleMobilisationRes.data.value };
+  }
+
+  const mobilisationConfig = ruleParametersByKey.mobilisation_config?.value as
+    | { level_thresholds?: Record<string, number>; daily_step?: number }
+    | undefined;
+  const mobilisationState = mobilisationRes.data
+    ? { score: mobilisationRes.data.score, target_score: mobilisationRes.data.target_score }
+    : null;
 
   const worldAverages = isAdmin && countries.length > 0
     ? {
@@ -156,38 +165,6 @@ export default async function CountryPage({
         ← Retour aux nations
       </Link>
 
-      <div className="mb-8 flex flex-wrap items-center gap-6">
-        {country.flag_url ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={country.flag_url}
-            alt=""
-            width={80}
-            height={53}
-            className="h-[53px] w-20 rounded border border-[var(--border)] object-cover"
-            style={{ borderColor: "var(--border)" }}
-          />
-        ) : (
-          <div
-            className="h-[53px] w-20 rounded border border-[var(--border)] bg-[var(--background-elevated)]"
-            style={{ borderColor: "var(--border)" }}
-          />
-        )}
-        <div>
-          <h1 className="text-2xl font-bold text-[var(--foreground)]">
-            {country.name}
-          </h1>
-          {country.regime && (
-            <p className="text-[var(--foreground-muted)]">{country.regime}</p>
-          )}
-          {assignedPlayerEmail && (
-            <p className="mt-1 text-sm text-[var(--foreground-muted)]">
-              Joueur : {assignedPlayerEmail}
-            </p>
-          )}
-        </div>
-      </div>
-
       <CountryTabs
         country={country}
         macros={macros}
@@ -205,6 +182,8 @@ export default async function CountryPage({
         ruleParametersByKey={ruleParametersByKey}
         worldAverages={worldAverages}
         rosterByBranch={rosterByBranch}
+        mobilisationConfig={mobilisationConfig}
+        mobilisationState={mobilisationState}
       />
     </div>
   );

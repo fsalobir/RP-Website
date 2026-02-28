@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { getRedirectPathAfterLogin } from "./actions";
 
@@ -11,7 +10,6 @@ export default function AdminConnexionPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const router = useRouter();
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -22,15 +20,17 @@ export default function AdminConnexionPage() {
       email,
       password,
     });
-    setLoading(false);
     if (signError) {
+      setLoading(false);
       setError(signError.message === "Invalid login credentials" ? "Identifiants incorrects." : signError.message);
       return;
     }
     const { path, error: redirectError } = await getRedirectPathAfterLogin();
     if (redirectError) setError(redirectError);
-    router.push(path === "/" && redirectError ? "/?error=non-autorise" : path);
-    router.refresh();
+    const targetPath = path === "/" && redirectError ? "/?error=non-autorise" : path;
+    setLoading(false);
+    // Navigation complète pour que la nouvelle session soit bien prise en compte (évite "rendering" infini)
+    window.location.assign(targetPath);
   }
 
   return (

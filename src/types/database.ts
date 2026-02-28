@@ -112,6 +112,13 @@ export interface CountryBudget {
   updated_at: string
 }
 
+export interface CountryMobilisation {
+  country_id: string
+  score: number
+  target_score: number
+  updated_at: string
+}
+
 export interface CountryEffect {
   id: string
   country_id: string
