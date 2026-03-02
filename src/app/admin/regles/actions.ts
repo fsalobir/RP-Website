@@ -1,12 +1,14 @@
 "use server";
 
-import { revalidateTag } from "next/cache";
+import { revalidateTag, revalidatePath } from "next/cache";
 
 /**
- * Invalide le cache des règles/globals utilisé par les fiches pays.
- * À appeler après sauvegarde des rule_parameters pour que les changements
- * (effets globaux, paramètres des ministères, etc.) soient visibles immédiatement.
+ * Invalide les caches impactés par la modification des règles.
+ * - Fiches pays : tag country-page-globals
+ * - Classement et liste des nations : dépendent de influence_config et autres règles → revalidation immédiate pour l'équilibrage
  */
 export async function revalidateCountryPageGlobals() {
-  revalidateTag("country-page-globals");
+  revalidateTag("country-page-globals", "max");
+  revalidatePath("/classement");
+  revalidatePath("/");
 }

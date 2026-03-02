@@ -2,7 +2,7 @@
 
 import { useState, useMemo } from "react";
 import Link from "next/link";
-import { formatNumber } from "@/lib/format";
+import { formatNumber, formatGdp, formatPopulation } from "@/lib/format";
 
 type CountryForClassement = {
   id: string;
@@ -26,7 +26,16 @@ type PrevSnapshot = {
   stability?: number | string | null;
 };
 
-type Row = { country: CountryForClassement; prev: PrevSnapshot | null };
+type Row = {
+  country: CountryForClassement;
+  prev: PrevSnapshot | null;
+  influence?: number | null;
+  hard_power_terre?: number;
+  hard_power_air?: number;
+  hard_power_mer?: number;
+  hard_power_strategique?: number;
+  hard_power_total?: number;
+};
 
 const panelStyle = {
   background: "var(--background-panel)",
@@ -40,13 +49,19 @@ function getNum(v: number | string | null | undefined): number {
   return Number.isNaN(n) ? 0 : n;
 }
 
-type MetricKey = keyof CountryForClassement | "global";
+type MetricKey = keyof CountryForClassement | "global" | "influence" | "hard_power_terre" | "hard_power_air" | "hard_power_mer" | "hard_power_strategique" | "hard_power_total";
 
 function getRowValue(r: Row, key: MetricKey): number {
   if (key === "global") {
     return (r.country.population ?? 0) + getNum(r.country.gdp) / 1e9;
   }
-  const v = r.country[key];
+  if (key === "influence") return r.influence != null && !Number.isNaN(r.influence) ? r.influence : 0;
+  if (key === "hard_power_terre") return r.hard_power_terre ?? 0;
+  if (key === "hard_power_air") return r.hard_power_air ?? 0;
+  if (key === "hard_power_mer") return r.hard_power_mer ?? 0;
+  if (key === "hard_power_strategique") return r.hard_power_strategique ?? 0;
+  if (key === "hard_power_total") return r.hard_power_total ?? 0;
+  const v = r.country[key as keyof CountryForClassement];
   return v != null && typeof v === "number" ? v : 0;
 }
 
@@ -55,6 +70,7 @@ function getRowPrevValue(r: Row, key: MetricKey): number | null {
   if (key === "global") {
     return getNum(r.prev.population) + getNum(r.prev.gdp) / 1e9;
   }
+  if (key === "influence" || key.startsWith("hard_power_")) return null;
   const v = r.prev[key as keyof PrevSnapshot];
   return v != null && v !== "" ? getNum(v) : null;
 }
@@ -103,19 +119,25 @@ function EvolutionCell({ rank, prev_rank }: { rank: number; prev_rank: number | 
   );
 }
 
+type MilitaireSubKey = "militarism" | "terre" | "air" | "mer" | "strategique";
+
 export function ClassementContent({ rows }: { rows: Row[] }) {
   const [mainTab, setMainTab] = useState<"global" | "militaire" | "economique">("global");
-  const [militaireSub, setMilitaireSub] = useState<"terre" | "air" | "mer">("terre");
-  const [economiqueSub, setEconomiqueSub] = useState<"industrie" | "science" | "population">("industrie");
+  const [militaireSub, setMilitaireSub] = useState<MilitaireSubKey>("militarism");
+  const [economiqueSub, setEconomiqueSub] = useState<"population" | "gdp">("population");
 
-  const rankedGlobal = useRanked(rows, "global");
-  const top3 = rankedGlobal.slice(0, 3);
-  const rest = rankedGlobal.slice(3);
+  const rankedInfluence = useRanked(rows, "influence");
+  const top3 = rankedInfluence.slice(0, 3);
+  const rest = rankedInfluence.slice(3);
 
   const rankedMilitaire = useRanked(rows, "militarism");
-  const rankedIndustry = useRanked(rows, "industry");
-  const rankedScience = useRanked(rows, "science");
+  const rankedHPTerre = useRanked(rows, "hard_power_terre");
+  const rankedHPAir = useRanked(rows, "hard_power_air");
+  const rankedHPMer = useRanked(rows, "hard_power_mer");
+  const rankedHPStrategique = useRanked(rows, "hard_power_strategique");
+  const rankedHPTotal = useRanked(rows, "hard_power_total");
   const rankedPopulation = useRanked(rows, "population");
+  const rankedGdp = useRanked(rows, "gdp");
 
   const tabClass = (active: boolean) =>
     `tab ${active ? "tab-active" : ""}`;
@@ -132,7 +154,7 @@ export function ClassementContent({ rows }: { rows: Row[] }) {
           onClick={() => setMainTab("global")}
           style={tabStyle(mainTab === "global")}
         >
-          Global
+          Classement
         </button>
         <button
           type="button"
@@ -189,7 +211,14 @@ export function ClassementContent({ rows }: { rows: Row[] }) {
                     ) : (
                       <div className="h-8 w-12 rounded bg-[var(--background-elevated)]" />
                     )}
-                    <span className="font-medium text-[var(--foreground)]">{row.country.name}</span>
+                    <div className="min-w-0 flex-1">
+                      <span className="font-medium text-[var(--foreground)]">{row.country.name}</span>
+                      {row.influence != null && !Number.isNaN(row.influence) && (
+                        <p className="text-xs text-[var(--foreground-muted)]">
+                          Influence : {Number(row.influence).toLocaleString("fr-FR", { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
+                        </p>
+                      )}
+                    </div>
                   </Link>
                 ))
               )}
@@ -209,6 +238,7 @@ export function ClassementContent({ rows }: { rows: Row[] }) {
                       <th className="p-3 font-medium text-[var(--foreground-muted)]">Rang</th>
                       <th className="p-3 font-medium text-[var(--foreground-muted)]"></th>
                       <th className="p-3 font-medium text-[var(--foreground-muted)]">Pays</th>
+                      <th className="p-3 font-medium text-[var(--foreground-muted)]">Influence</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -242,6 +272,9 @@ export function ClassementContent({ rows }: { rows: Row[] }) {
                             {row.country.name}
                           </Link>
                         </td>
+                        <td className="p-3 font-mono text-[var(--foreground-muted)]">
+                          {row.influence != null && !Number.isNaN(row.influence) ? Number(row.influence).toLocaleString("fr-FR", { minimumFractionDigits: 0, maximumFractionDigits: 2 }) : "—"}
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -255,18 +288,24 @@ export function ClassementContent({ rows }: { rows: Row[] }) {
       {mainTab === "militaire" && (
         <div>
           <div className="mb-4 flex gap-2 border-b pb-2" style={{ borderColor: "var(--border-muted)" }}>
-            {(["terre", "air", "mer"] as const).map((branch) => (
+            {([
+              { key: "militarism" as const, label: "Militarisme" },
+              { key: "terre" as const, label: "Terrestre (HP)" },
+              { key: "air" as const, label: "Aérien (HP)" },
+              { key: "mer" as const, label: "Naval (HP)" },
+              { key: "strategique" as const, label: "Stratégique (HP)" },
+            ]).map(({ key, label }) => (
               <button
-                key={branch}
+                key={key}
                 type="button"
-                onClick={() => setMilitaireSub(branch)}
+                onClick={() => setMilitaireSub(key)}
                 className="rounded px-3 py-1.5 text-sm font-medium transition-colors"
                 style={{
-                  background: militaireSub === branch ? "var(--accent)" : "var(--background-elevated)",
-                  color: militaireSub === branch ? "#0f1419" : "var(--foreground-muted)",
+                  background: militaireSub === key ? "var(--accent)" : "var(--background-elevated)",
+                  color: militaireSub === key ? "#0f1419" : "var(--foreground-muted)",
                 }}
               >
-                {branch === "terre" ? "Terrestre" : branch === "air" ? "Aérien" : "Naval"}
+                {label}
               </button>
             ))}
           </div>
@@ -281,7 +320,7 @@ export function ClassementContent({ rows }: { rows: Row[] }) {
                 </tr>
               </thead>
               <tbody>
-                {rankedMilitaire.map(({ row, rank, prev_rank }) => (
+                {(militaireSub === "militarism" ? rankedMilitaire : militaireSub === "terre" ? rankedHPTerre : militaireSub === "air" ? rankedHPAir : militaireSub === "mer" ? rankedHPMer : rankedHPStrategique).map(({ row, rank, prev_rank }) => (
                   <tr key={row.country.id} className="border-b" style={{ borderColor: "var(--border-muted)" }}>
                     <td className="p-3 font-mono text-[var(--foreground-muted)]">{rank}</td>
                     <EvolutionCell rank={rank} prev_rank={prev_rank} />
@@ -296,7 +335,11 @@ export function ClassementContent({ rows }: { rows: Row[] }) {
                         {row.country.name}
                       </Link>
                     </td>
-                    <td className="p-3 font-mono text-[var(--foreground-muted)]">{row.country.militarism != null ? Number(row.country.militarism).toFixed(2) : "—"}</td>
+                    <td className="p-3 font-mono text-[var(--foreground-muted)]">
+                      {militaireSub === "militarism"
+                        ? (row.country.militarism != null ? Number(row.country.militarism).toFixed(2) : "—")
+                        : (militaireSub === "terre" ? (row.hard_power_terre ?? 0) : militaireSub === "air" ? (row.hard_power_air ?? 0) : militaireSub === "mer" ? (row.hard_power_mer ?? 0) : (row.hard_power_strategique ?? 0)).toLocaleString("fr-FR")}
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -311,7 +354,7 @@ export function ClassementContent({ rows }: { rows: Row[] }) {
       {mainTab === "economique" && (
         <div>
           <div className="mb-4 flex gap-2 border-b pb-2" style={{ borderColor: "var(--border-muted)" }}>
-            {(["industrie", "science", "population"] as const).map((cat) => (
+            {(["population", "gdp"] as const).map((cat) => (
               <button
                 key={cat}
                 type="button"
@@ -322,7 +365,7 @@ export function ClassementContent({ rows }: { rows: Row[] }) {
                   color: economiqueSub === cat ? "#0f1419" : "var(--foreground-muted)",
                 }}
               >
-                {cat === "industrie" ? "Industriel" : cat === "science" ? "Scientifique" : "Population"}
+                {cat === "gdp" ? "PIB" : "Population"}
               </button>
             ))}
           </div>
@@ -337,44 +380,6 @@ export function ClassementContent({ rows }: { rows: Row[] }) {
                 </tr>
               </thead>
               <tbody>
-                {economiqueSub === "industrie" &&
-                  rankedIndustry.map(({ row, rank, prev_rank }) => (
-                    <tr key={row.country.id} className="border-b" style={{ borderColor: "var(--border-muted)" }}>
-                      <td className="p-3 font-mono text-[var(--foreground-muted)]">{rank}</td>
-                      <EvolutionCell rank={rank} prev_rank={prev_rank} />
-                      <td className="p-3">
-                        <Link href={`/pays/${row.country.slug}`} className="flex items-center gap-2 text-[var(--foreground)] hover:text-[var(--accent)]">
-                          {row.country.flag_url ? (
-                            // eslint-disable-next-line @next/next/no-img-element
-                            <img src={row.country.flag_url} alt="" width={24} height={16} className="h-4 w-6 rounded object-cover" />
-                          ) : (
-                            <div className="h-4 w-6 rounded bg-[var(--background-elevated)]" />
-                          )}
-                          {row.country.name}
-                        </Link>
-                      </td>
-                      <td className="p-3 font-mono text-[var(--foreground-muted)]">{row.country.industry != null ? Number(row.country.industry).toFixed(2) : "—"}</td>
-                    </tr>
-                  ))}
-                {economiqueSub === "science" &&
-                  rankedScience.map(({ row, rank, prev_rank }) => (
-                    <tr key={row.country.id} className="border-b" style={{ borderColor: "var(--border-muted)" }}>
-                      <td className="p-3 font-mono text-[var(--foreground-muted)]">{rank}</td>
-                      <EvolutionCell rank={rank} prev_rank={prev_rank} />
-                      <td className="p-3">
-                        <Link href={`/pays/${row.country.slug}`} className="flex items-center gap-2 text-[var(--foreground)] hover:text-[var(--accent)]">
-                          {row.country.flag_url ? (
-                            // eslint-disable-next-line @next/next/no-img-element
-                            <img src={row.country.flag_url} alt="" width={24} height={16} className="h-4 w-6 rounded object-cover" />
-                          ) : (
-                            <div className="h-4 w-6 rounded bg-[var(--background-elevated)]" />
-                          )}
-                          {row.country.name}
-                        </Link>
-                      </td>
-                      <td className="p-3 font-mono text-[var(--foreground-muted)]">{row.country.science != null ? Number(row.country.science).toFixed(2) : "—"}</td>
-                    </tr>
-                  ))}
                 {economiqueSub === "population" &&
                   rankedPopulation.map(({ row, rank, prev_rank }) => {
                     const pop = row.country.population ?? 0;
@@ -399,7 +404,7 @@ export function ClassementContent({ rows }: { rows: Row[] }) {
                         </td>
                         <td className="p-3 font-mono">
                           <span className="tabular-nums text-[var(--foreground)]">
-                            {pop ? formatNumber(pop) : "—"}
+                            {pop ? formatPopulation(pop) : "—"}
                           </span>
                           {diff != null && diff !== 0 && (
                             <span
@@ -409,13 +414,34 @@ export function ClassementContent({ rows }: { rows: Row[] }) {
                               }}
                               title={isUp ? "En hausse" : "En baisse"}
                             >
-                              ({isUp ? "+" : ""}{formatNumber(diff)})
+                              ({isUp ? "+" : ""}{formatPopulation(diff)})
                             </span>
                           )}
                         </td>
                       </tr>
                     );
                   })}
+                {economiqueSub === "gdp" &&
+                  rankedGdp.map(({ row, rank, prev_rank }) => (
+                    <tr key={row.country.id} className="border-b" style={{ borderColor: "var(--border-muted)" }}>
+                      <td className="p-3 font-mono text-[var(--foreground-muted)]">{rank}</td>
+                      <EvolutionCell rank={rank} prev_rank={prev_rank} />
+                      <td className="p-3">
+                        <Link href={`/pays/${row.country.slug}`} className="flex items-center gap-2 text-[var(--foreground)] hover:text-[var(--accent)]">
+                          {row.country.flag_url ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img src={row.country.flag_url} alt="" width={24} height={16} className="h-4 w-6 rounded object-cover" />
+                          ) : (
+                            <div className="h-4 w-6 rounded bg-[var(--background-elevated)]" />
+                          )}
+                          {row.country.name}
+                        </Link>
+                      </td>
+                      <td className="p-3 font-mono text-[var(--foreground-muted)]">
+                        {formatGdp(row.country.gdp)}
+                      </td>
+                    </tr>
+                  ))}
               </tbody>
             </table>
             {rows.length === 0 && (

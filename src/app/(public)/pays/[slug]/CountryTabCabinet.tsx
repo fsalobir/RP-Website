@@ -1,6 +1,6 @@
 "use client";
 
-import { formatNumber, formatGdp } from "@/lib/format";
+import { formatNumber, formatGdp, formatPopulation } from "@/lib/format";
 import { formatWorldDate } from "@/lib/worldDate";
 import { getCabinetPhrases } from "@/lib/cabinetReport";
 import type { TickBreakdown } from "@/lib/tickBreakdown";
@@ -118,9 +118,9 @@ export function CountryTabCabinet({
             <div className="grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-3">
               <div>
                 <span className="text-[var(--foreground-muted)]">Population : </span>
-                <span>{formatNumber(Number(lastUpdateLog.population_before ?? 0))}</span>
+                <span>{formatPopulation(Number(lastUpdateLog.population_before ?? 0))}</span>
                 <span className="mx-1 text-[var(--foreground-muted)]">→</span>
-                <span>{formatNumber(Number(lastUpdateLog.population_after ?? 0))}</span>
+                <span>{formatPopulation(Number(lastUpdateLog.population_after ?? 0))}</span>
               </div>
               <div>
                 <span className="text-[var(--foreground-muted)]">PIB : </span>

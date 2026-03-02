@@ -2,7 +2,7 @@
 
 import type { Country } from "@/types/database";
 import type { CountryUpdateLog } from "@/types/database";
-import { formatNumber, formatGdp } from "@/lib/format";
+import { formatNumber, formatGdp, formatPopulation } from "@/lib/format";
 import { Tooltip } from "@/components/ui/Tooltip";
 import { getExpectedNextTick } from "@/lib/expectedNextTick";
 import { getEffectDescription, type ResolvedEffect } from "@/lib/countryEffects";
@@ -39,6 +39,8 @@ type CountryTabBudgetProps = {
   updateLogs: CountryUpdateLog[];
   ruleParametersByKey: Record<string, { value: unknown }>;
   worldAverages: { pop_avg: number; gdp_avg: number; mil_avg: number; ind_avg: number; sci_avg: number; stab_avg: number } | null;
+  /** Effets pour le calcul de l’attendu (sans globaux, pour alignement cron). Si absent, on utilise effects. */
+  effectsForTick?: ResolvedEffect[];
 };
 
 export function CountryTabBudget({
@@ -66,6 +68,7 @@ export function CountryTabBudget({
   updateLogs,
   ruleParametersByKey,
   worldAverages,
+  effectsForTick,
 }: CountryTabBudgetProps) {
   return (
     <div className="space-y-6">
@@ -274,7 +277,7 @@ export function CountryTabBudget({
           budgetPcts,
           ruleParametersByKey,
           worldAverages,
-          effects,
+          effectsForTick ?? effects,
         );
         return (
           <section className={panelClass} style={panelStyle}>
@@ -288,7 +291,7 @@ export function CountryTabBudget({
               <div>
                 <div className="mb-1 text-xs font-semibold uppercase text-[var(--foreground-muted)]">Actuel</div>
                 <ul className="space-y-0.5 font-mono text-sm text-[var(--foreground)]">
-                  <li>Population : {formatNumber(snapshot.population)}</li>
+                  <li>Population : {formatPopulation(snapshot.population)}</li>
                   <li>PIB : {formatGdp(snapshot.gdp)}</li>
                   <li>Militarisme : {Number(snapshot.militarism).toFixed(2)}</li>
                   <li>Industrie : {Number(snapshot.industry).toFixed(2)}</li>
@@ -299,7 +302,7 @@ export function CountryTabBudget({
               <div>
                 <div className="mb-1 text-xs font-semibold uppercase text-[var(--foreground-muted)]">Moyenne mondiale</div>
                 <ul className="space-y-0.5 font-mono text-sm text-[var(--foreground)]">
-                  <li>Population : {formatNumber(worldAverages.pop_avg)}</li>
+                  <li>Population : {formatPopulation(worldAverages.pop_avg)}</li>
                   <li>PIB : {formatGdp(worldAverages.gdp_avg)}</li>
                   <li>Militarisme : {worldAverages.mil_avg.toFixed(2)}</li>
                   <li>Industrie : {worldAverages.ind_avg.toFixed(2)}</li>
@@ -310,7 +313,7 @@ export function CountryTabBudget({
               <div>
                 <div className="mb-1 text-xs font-semibold uppercase text-[var(--accent)]">Attendu (1 tick)</div>
                 <ul className="space-y-0.5 font-mono text-sm text-[var(--foreground)]">
-                  <li>Population : {formatNumber(expected.population)}</li>
+                  <li>Population : {formatPopulation(expected.population)}</li>
                   <li>PIB : {formatGdp(expected.gdp)}</li>
                   <li>Militarisme : {Number(expected.militarism).toFixed(2)}</li>
                   <li>Industrie : {Number(expected.industry).toFixed(2)}</li>
@@ -455,7 +458,7 @@ export function CountryTabBudget({
                     <div>
                       <div className="mb-1 font-semibold text-[var(--foreground-muted)]">Avant</div>
                       <ul className="space-y-0.5 text-xs">
-                        <li>Population: {formatNumber(log.population_before ?? 0)}</li>
+                        <li>Population: {formatPopulation(log.population_before ?? 0)}</li>
                         <li>PIB: {formatGdp(log.gdp_before ?? 0)}</li>
                         <li>Militarisme: {log.militarism_before ?? "—"}</li>
                         <li>Industrie: {log.industry_before ?? "—"}</li>
@@ -466,7 +469,7 @@ export function CountryTabBudget({
                     <div>
                       <div className="mb-1 font-semibold text-[var(--foreground-muted)]">Après</div>
                       <ul className="space-y-0.5 text-xs">
-                        <li>Population: {formatNumber(log.population_after ?? 0)}</li>
+                        <li>Population: {formatPopulation(log.population_after ?? 0)}</li>
                         <li>PIB: {formatGdp(log.gdp_after ?? 0)}</li>
                         <li>Militarisme: {log.militarism_after ?? "—"}</li>
                         <li>Industrie: {log.industry_after ?? "—"}</li>
@@ -481,9 +484,9 @@ export function CountryTabBudget({
                       <li>
                         <span className="text-[var(--foreground-muted)]">Population:</span>{" "}
                         max(0, arrondi(avant × (1 + pop_total_rate))) →{" "}
-                        {formatNumber(log.population_before ?? 0)} × (1 + {Number(log.inputs?.pop_total_rate ?? 0).toFixed(4)}) ≈{" "}
-                        {formatNumber(Math.max(0, Math.round(Number(log.population_before ?? 0) * (1 + Number(log.inputs?.pop_total_rate ?? 0)))))}
-                        {log.population_after != null && ` (réel: ${formatNumber(log.population_after)})`}
+                        {formatPopulation(log.population_before ?? 0)} × (1 + {Number(log.inputs?.pop_total_rate ?? 0).toFixed(4)}) ≈{" "}
+                        {formatPopulation(Math.max(0, Math.round(Number(log.population_before ?? 0) * (1 + Number(log.inputs?.pop_total_rate ?? 0)))))}
+                        {log.population_after != null && ` (réel: ${formatPopulation(log.population_after)})`}
                       </li>
                       <li>
                         <span className="text-[var(--foreground-muted)]">PIB:</span>{" "}

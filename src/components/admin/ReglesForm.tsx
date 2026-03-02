@@ -107,6 +107,7 @@ export function ReglesForm({
   const [simulatorAllocationPct, setSimulatorAllocationPct] = useState<number>(10);
   const [mobilisationOpen, setMobilisationOpen] = useState(false);
   const [worldDateOpen, setWorldDateOpen] = useState(false);
+  const [influenceOpen, setInfluenceOpen] = useState(false);
 
   const supabase = createClient();
 
@@ -148,9 +149,10 @@ export function ReglesForm({
   const globalGrowthEffectsKey = "global_growth_effects";
   const worldDateKey = "world_date";
   const worldDateAdvanceKey = "world_date_advance_months";
+  const influenceConfigKey = "influence_config";
   const otherRules = useMemo(
     () => items.filter(
-      (r) => !allSectionKeys.has(r.key) && r.key !== mobilisationConfigKey && r.key !== mobilisationEffectsKey && r.key !== globalGrowthEffectsKey && r.key !== worldDateKey && r.key !== worldDateAdvanceKey
+      (r) => !allSectionKeys.has(r.key) && r.key !== mobilisationConfigKey && r.key !== mobilisationEffectsKey && r.key !== globalGrowthEffectsKey && r.key !== worldDateKey && r.key !== worldDateAdvanceKey && r.key !== influenceConfigKey
     ),
     [items, allSectionKeys]
   );
@@ -158,6 +160,29 @@ export function ReglesForm({
   const globalGrowthEffectsRule = useMemo(() => items.find((r) => r.key === globalGrowthEffectsKey), [items]);
   const worldDateRule = useMemo(() => items.find((r) => r.key === worldDateKey), [items]);
   const worldDateAdvanceRule = useMemo(() => items.find((r) => r.key === worldDateAdvanceKey), [items]);
+  const influenceConfigRule = useMemo(() => items.find((r) => r.key === influenceConfigKey), [items]);
+
+  type InfluenceConfigValue = {
+    mult_gdp?: number;
+    mult_population?: number;
+    mult_military?: number;
+    stability_modifier_min?: number;
+    stability_modifier_max?: number;
+    gravity_pct_gdp?: number;
+    gravity_pct_population?: number;
+    gravity_pct_military?: number;
+  };
+  function getInfluenceConfig(): InfluenceConfigValue {
+    if (!influenceConfigRule?.value || typeof influenceConfigRule.value !== "object") {
+      return { mult_gdp: 1e-9, mult_population: 1e-7, mult_military: 0.01, stability_modifier_min: 0, stability_modifier_max: 1, gravity_pct_gdp: 50, gravity_pct_population: 50, gravity_pct_military: 50 };
+    }
+    return influenceConfigRule.value as InfluenceConfigValue;
+  }
+  function updateInfluenceConfig(patch: Partial<InfluenceConfigValue>) {
+    if (!influenceConfigRule) return;
+    updateValue(influenceConfigRule.id, { ...getInfluenceConfig(), ...patch });
+  }
+
   function getGlobalGrowthEffects(): GlobalGrowthEffectEntry[] {
     if (!globalGrowthEffectsRule?.value || !Array.isArray(globalGrowthEffectsRule.value)) return [];
     return (globalGrowthEffectsRule.value as GlobalGrowthEffectEntry[]).filter(
@@ -589,10 +614,10 @@ export function ReglesForm({
           )}
 
           {worldDateRule && worldDateAdvanceRule && (
-            <CollapsibleBlock title="Date du monde" open={worldDateOpen} onToggle={() => setWorldDateOpen((o) => !o)}>
+            <CollapsibleBlock title="Date" open={worldDateOpen} onToggle={() => setWorldDateOpen((o) => !o)}>
               <div className="p-3 space-y-3">
                 <p className="text-xs text-[var(--foreground-muted)]">
-                  Date du monde affichée sur le site (ex. Rapport du Cabinet). Avance automatiquement à chaque passage du cron selon la temporalité ci‑dessous.
+                  Date du monde affichée aux joueurs (ex. Rapport du Cabinet). À chaque passage du cron, la date avance du nombre de mois indiqué dans la temporalité (0 = date figée).
                 </p>
                 <div className="flex flex-wrap items-end gap-x-6 gap-y-2">
                   <div className="flex flex-col gap-0.5">
@@ -629,19 +654,67 @@ export function ReglesForm({
                     />
                   </div>
                   <div className="flex flex-col gap-0.5">
-                    <label className="text-xs text-[var(--foreground-muted)]">Mois par mise à jour (temporalité)</label>
+                    <label className="text-xs text-[var(--foreground-muted)]">Temporalité (mois par mise à jour cron)</label>
                     <input
                       type="number"
-                      min={1}
+                      min={0}
                       max={12}
                       value={typeof worldDateAdvanceRule.value === "number" ? worldDateAdvanceRule.value : (worldDateAdvanceRule.value as unknown as number) ?? 1}
                       onChange={(e) => {
-                        const v = Math.max(1, Math.min(12, Math.round(Number(e.target.value)) || 1));
+                        const v = Math.max(0, Math.min(12, Math.round(Number(e.target.value)) ?? 0));
                         updateValue(worldDateAdvanceRule.id, v);
                       }}
                       className="rounded border py-1.5 px-2 text-sm w-16"
                       style={{ borderColor: "var(--border)", background: "var(--background)" }}
                     />
+                  </div>
+                </div>
+              </div>
+            </CollapsibleBlock>
+          )}
+
+          {influenceConfigRule && (
+            <CollapsibleBlock title="Influence" open={influenceOpen} onToggle={() => setInfluenceOpen((o) => !o)}>
+              <div className="p-3 space-y-3">
+                <p className="text-xs text-[var(--foreground-muted)]">
+                  Score Influence (type Diplomatic Weight) : multiplicateurs des contributions PIB, Population, Hard Power ; stabilité en intervalle (-3 à +3) ; gravité par paramètre.
+                </p>
+                <div className="flex flex-wrap gap-x-6 gap-y-3">
+                  <div className="flex flex-col gap-0.5">
+                    <label className="text-xs text-[var(--foreground-muted)]">Mult. PIB</label>
+                    <input type="number" step="any" value={getInfluenceConfig().mult_gdp ?? 1e-9} onChange={(e) => updateInfluenceConfig({ mult_gdp: Number(e.target.value) || 0 })} className="rounded border py-1.5 px-2 text-sm w-28 font-mono" style={{ borderColor: "var(--border)", background: "var(--background)" }} />
+                  </div>
+                  <div className="flex flex-col gap-0.5">
+                    <label className="text-xs text-[var(--foreground-muted)]">Mult. Population</label>
+                    <input type="number" step="any" value={getInfluenceConfig().mult_population ?? 1e-7} onChange={(e) => updateInfluenceConfig({ mult_population: Number(e.target.value) || 0 })} className="rounded border py-1.5 px-2 text-sm w-28 font-mono" style={{ borderColor: "var(--border)", background: "var(--background)" }} />
+                  </div>
+                  <div className="flex flex-col gap-0.5">
+                    <label className="text-xs text-[var(--foreground-muted)]">Mult. Hard Power</label>
+                    <input type="number" step="any" value={getInfluenceConfig().mult_military ?? 0.01} onChange={(e) => updateInfluenceConfig({ mult_military: Number(e.target.value) || 0 })} className="rounded border py-1.5 px-2 text-sm w-28 font-mono" style={{ borderColor: "var(--border)", background: "var(--background)" }} />
+                  </div>
+                </div>
+                <div className="flex flex-wrap gap-x-6 gap-y-3">
+                  <div className="flex flex-col gap-0.5">
+                    <label className="text-xs text-[var(--foreground-muted)]">Stabilité : modif. à min (-3)</label>
+                    <input type="number" step="any" value={getInfluenceConfig().stability_modifier_min ?? 0} onChange={(e) => updateInfluenceConfig({ stability_modifier_min: Number(e.target.value) ?? 0 })} className="rounded border py-1.5 px-2 text-sm w-24 font-mono" style={{ borderColor: "var(--border)", background: "var(--background)" }} />
+                  </div>
+                  <div className="flex flex-col gap-0.5">
+                    <label className="text-xs text-[var(--foreground-muted)]">Stabilité : modif. à max (+3)</label>
+                    <input type="number" step="any" value={getInfluenceConfig().stability_modifier_max ?? 1} onChange={(e) => updateInfluenceConfig({ stability_modifier_max: Number(e.target.value) ?? 1 })} className="rounded border py-1.5 px-2 text-sm w-24 font-mono" style={{ borderColor: "var(--border)", background: "var(--background)" }} />
+                  </div>
+                </div>
+                <div className="flex flex-wrap gap-x-6 gap-y-3">
+                  <div className="flex flex-col gap-0.5">
+                    <label className="text-xs text-[var(--foreground-muted)]">Gravité PIB %</label>
+                    <input type="number" min={0} max={100} value={getInfluenceConfig().gravity_pct_gdp ?? 50} onChange={(e) => updateInfluenceConfig({ gravity_pct_gdp: Math.max(0, Math.min(100, Number(e.target.value) || 0)) })} className="rounded border py-1.5 px-2 text-sm w-16 font-mono" style={{ borderColor: "var(--border)", background: "var(--background)" }} />
+                  </div>
+                  <div className="flex flex-col gap-0.5">
+                    <label className="text-xs text-[var(--foreground-muted)]">Gravité Population %</label>
+                    <input type="number" min={0} max={100} value={getInfluenceConfig().gravity_pct_population ?? 50} onChange={(e) => updateInfluenceConfig({ gravity_pct_population: Math.max(0, Math.min(100, Number(e.target.value) || 0)) })} className="rounded border py-1.5 px-2 text-sm w-16 font-mono" style={{ borderColor: "var(--border)", background: "var(--background)" }} />
+                  </div>
+                  <div className="flex flex-col gap-0.5">
+                    <label className="text-xs text-[var(--foreground-muted)]">Gravité Hard Power %</label>
+                    <input type="number" min={0} max={100} value={getInfluenceConfig().gravity_pct_military ?? 50} onChange={(e) => updateInfluenceConfig({ gravity_pct_military: Math.max(0, Math.min(100, Number(e.target.value) || 0)) })} className="rounded border py-1.5 px-2 text-sm w-16 font-mono" style={{ borderColor: "var(--border)", background: "var(--background)" }} />
                   </div>
                 </div>
               </div>

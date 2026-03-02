@@ -41,8 +41,8 @@ export default async function AdminLayout({
   if (!auth.isAdmin) {
     if (auth.playerCountryId) {
       const supabase = await createClient();
-      const { data: country } = await supabase.from("countries").select("slug").eq("id", auth.playerCountryId).single();
-      if (country?.slug) redirect(`/pays/${country.slug}`);
+      const { data: country, error } = await supabase.from("countries").select("slug").eq("id", auth.playerCountryId).single();
+      if (!error && country?.slug) redirect(`/pays/${country.slug}`);
     }
     redirect("/admin/connexion?error=non-admin");
   }

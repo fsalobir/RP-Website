@@ -93,8 +93,11 @@ export async function deletePlayer(user_id: string) {
   if (!adminRow) return { error: "Réservé aux admins." };
 
   const admin = createServiceRoleClient();
-  await admin.from("country_players").delete().eq("user_id", user_id);
-  await admin.auth.admin.deleteUser(user_id);
+  const { error: deleteRowError } = await admin.from("country_players").delete().eq("user_id", user_id);
+  if (deleteRowError) return { error: deleteRowError.message };
+
+  const { error: deleteUserError } = await admin.auth.admin.deleteUser(user_id);
+  if (deleteUserError) return { error: deleteUserError.message };
 
   revalidatePath("/admin/joueurs");
   return { error: null };

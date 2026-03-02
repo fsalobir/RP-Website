@@ -16,12 +16,15 @@ import {
   budgetKeyToPctKey,
   getLimitModifierPercent,
   getEffectsForCountry,
+  getEffectsForCountryTickRates,
   getMobilisationLevelLabel,
   type EffectCategoryId,
 } from "@/lib/countryEffects";
 import { getTickBreakdown } from "@/lib/tickBreakdown";
 import { setMobilisationTarget } from "./actions";
 import type { RosterRowByBranch } from "./countryTabsTypes";
+import type { InfluenceResult } from "@/lib/influence";
+import type { HardPowerByBranch } from "@/lib/hardPower";
 import { CountryTabGeneral } from "./CountryTabGeneral";
 import { CountryTabMilitary } from "./CountryTabMilitary";
 import { CountryTabPerks } from "./CountryTabPerks";
@@ -79,6 +82,8 @@ export function CountryTabs({
   mobilisationConfig,
   mobilisationState,
   worldDate,
+  influenceResult = null,
+  hardPowerByBranch = null,
 }: {
   country: Country;
   macros: { key: string; value: number }[];
@@ -99,6 +104,8 @@ export function CountryTabs({
   mobilisationConfig?: { level_thresholds?: Record<string, number>; daily_step?: number };
   mobilisationState?: { score: number; target_score: number } | null;
   worldDate?: { month: number; year: number };
+  influenceResult?: InfluenceResult | null;
+  hardPowerByBranch?: HardPowerByBranch | null;
 }) {
   const canEditCountry = isAdmin || isPlayerForThisCountry;
   const rankEmoji = (r: number) => (r === 1 ? "👑" : r === 2 ? "🥈" : r === 3 ? "🥉" : null);
@@ -196,6 +203,17 @@ export function CountryTabs({
   const resolvedEffects = useMemo(
     () =>
       getEffectsForCountry({
+        countryId: country.id,
+        countryEffects: effects,
+        mobilisationLevelEffects,
+        globalGrowthEffects,
+      }),
+    [country.id, effects, mobilisationLevelEffects, globalGrowthEffects]
+  );
+
+  const effectsForTick = useMemo(
+    () =>
+      getEffectsForCountryTickRates({
         countryId: country.id,
         countryEffects: effects,
         mobilisationLevelEffects,
@@ -787,6 +805,8 @@ export function CountryTabs({
           onOpenNewEffect={handleOpenNewEffect}
           onSaveEffect={handleSaveEffect}
           onCloseEffectForm={handleCloseEffectForm}
+          influenceResult={influenceResult}
+          hardPowerByBranch={hardPowerByBranch}
         />
       )}
 
@@ -851,6 +871,7 @@ export function CountryTabs({
           updateLogs={updateLogs}
           ruleParametersByKey={ruleParametersByKey}
           worldAverages={worldAverages}
+          effectsForTick={effectsForTick}
         />
       )}
 

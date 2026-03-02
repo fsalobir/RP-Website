@@ -2,7 +2,7 @@
 
 import { useState, useMemo } from "react";
 import Link from "next/link";
-import { formatNumber, formatGdp } from "@/lib/format";
+import { formatNumber, formatGdp, formatPopulation } from "@/lib/format";
 
 export type SortKey =
   | "name"
@@ -12,7 +12,8 @@ export type SortKey =
   | "militarism"
   | "industry"
   | "science"
-  | "stability";
+  | "stability"
+  | "influence";
 
 type CountryRow = {
   id: string;
@@ -37,7 +38,7 @@ type HistoryRow = {
   stability?: number | string | null;
 };
 
-export type Row = { country: CountryRow; prev?: HistoryRow | null };
+export type Row = { country: CountryRow; prev?: HistoryRow | null; influence?: number | null };
 
 const COLUMNS: { key: SortKey; label: string }[] = [
   { key: "name", label: "Pays" },
@@ -48,12 +49,14 @@ const COLUMNS: { key: SortKey; label: string }[] = [
   { key: "industry", label: "Industrie" },
   { key: "science", label: "Science" },
   { key: "stability", label: "Stabilité" },
+  { key: "influence", label: "Influence" },
 ];
 
 function getSortValue(row: Row, key: SortKey): number | string | null {
   const c = row.country;
   if (key === "name") return (c.name ?? "").toLowerCase() || null;
   if (key === "regime") return (c.regime ?? "").toLowerCase() || null;
+  if (key === "influence") return row.influence ?? null;
   const n =
     key === "population"
       ? c.population
@@ -189,7 +192,8 @@ export function CountriesTable({
               <NumericVariationCell
                 current={c.population}
                 previous={prev?.population}
-                formatValue={formatNumber}
+                formatValue={formatPopulation}
+                formatDiff={formatPopulation}
               />
               <NumericVariationCell
                 current={c.gdp}
@@ -201,6 +205,11 @@ export function CountriesTable({
               <StatCell current={c.industry} previous={prev?.industry} />
               <StatCell current={c.science} previous={prev?.science} />
               <StatCell current={c.stability} previous={prev?.stability} />
+              <td className="p-3">
+                <span className="font-mono tabular-nums text-[var(--foreground)]">
+                  {row.influence != null && !Number.isNaN(row.influence) ? Number(row.influence).toLocaleString("fr-FR", { minimumFractionDigits: 0, maximumFractionDigits: 2 }) : "—"}
+                </span>
+              </td>
               {showModifierButton && (
                 <td className="p-3">
                   <Link

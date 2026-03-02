@@ -424,6 +424,14 @@ export function getEffectsForCountry(context: EffectResolutionContext): Resolved
   return out;
 }
 
+/** Effets à passer à getExpectedNextTick uniquement (country_effects + mobilisation). Exclut global_growth_effects pour éviter de les compter deux fois (déjà dans getGlobalGrowthRates). */
+export function getEffectsForCountryTickRates(context: EffectResolutionContext): ResolvedEffect[] {
+  return [
+    ...countryEffectsSource(context),
+    ...mobilisationEffectsSource(context),
+  ];
+}
+
 /** Minimum forcé par ministère (pct_*) à partir des effets actifs. */
 export function getForcedMinPcts(effects: Array<{ effect_kind: string; effect_target: string | null; value: number }>): Record<string, number> {
   const out: Record<string, number> = {};

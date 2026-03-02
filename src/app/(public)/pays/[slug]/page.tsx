@@ -5,6 +5,8 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import { CountryTabs } from "./CountryTabs";
 import type { RosterRowByBranch } from "./countryTabsTypes";
+import { computeHardPowerByCountry } from "@/lib/hardPower";
+import { computeInfluenceForAll } from "@/lib/influence";
 import type {
   CountryUpdateLog,
   MilitaryBranch,
@@ -31,7 +33,7 @@ async function fetchCountryPageGlobals() {
     supabase
       .from("rule_parameters")
       .select("key, value")
-      .in("key", [...RULE_KEYS, "mobilisation_config", "mobilisation_level_effects", "world_date"]),
+      .in("key", [...RULE_KEYS, "mobilisation_config", "mobilisation_level_effects", "world_date", "influence_config"]),
     supabase
       .from("military_roster_units")
       .select("*")
@@ -82,7 +84,7 @@ export default async function CountryPage({
   const isPlayerForThisCountry = auth.playerCountryId === country.id;
   const backHref = isAdmin ? "/admin/pays" : "/";
 
-  const [cachedGlobals, macrosRes, limitsRes, countryPerksRes, budgetRes, effectsRes, countriesRes, updateLogsRes, mobilisationRes, countryMilitaryUnitsRes, assignedPlayerRes] = await Promise.all([
+  const [cachedGlobals, macrosRes, limitsRes, countryPerksRes, budgetRes, effectsRes, countriesRes, updateLogsRes, mobilisationRes, countryMilitaryUnitsRes, countryMilitaryUnitsAllRes, assignedPlayerRes] = await Promise.all([
     getCachedCountryPageGlobals(),
     supabase.from("country_macros").select("*").eq("country_id", country.id),
     supabase
@@ -98,6 +100,7 @@ export default async function CountryPage({
       : Promise.resolve({ data: [] as CountryUpdateLog[] }),
     supabase.from("country_mobilisation").select("score, target_score").eq("country_id", country.id).maybeSingle(),
     supabase.from("country_military_units").select("*").eq("country_id", country.id),
+    supabase.from("country_military_units").select("country_id, roster_unit_id, current_level, extra_count"),
     supabase.from("country_players").select("email, name").eq("country_id", country.id).maybeSingle(),
   ]);
 
@@ -124,6 +127,18 @@ export default async function CountryPage({
   for (const r of ruleParamsData) {
     ruleParametersByKey[r.key] = { value: r.value };
   }
+
+  const countryMilitaryUnitsAll = (countryMilitaryUnitsAllRes.data ?? []) as Array<{ country_id: string; roster_unit_id: string; current_level: number; extra_count: number }>;
+  const rosterUnitsForInfluence = rosterUnits as Array<{ id: string; branch: MilitaryBranch; base_count: number }>;
+  const rosterLevelsForInfluence = rosterLevels as Array<{ unit_id: string; level: number; hard_power: number }>;
+  const hardPowerByCountry = computeHardPowerByCountry(countryMilitaryUnitsAll, rosterUnitsForInfluence, rosterLevelsForInfluence);
+  const influenceConfig = ruleParametersByKey.influence_config?.value as Record<string, unknown> | undefined;
+  const { byCountry: influenceByCountry } = computeInfluenceForAll(
+    countries,
+    hardPowerByCountry,
+    (influenceConfig ?? {}) as Parameters<typeof computeInfluenceForAll>[2]
+  );
+  const influenceResult = influenceByCountry.get(country.id) ?? null;
 
   const mobilisationConfig = ruleParametersByKey.mobilisation_config?.value as
     | { level_thresholds?: Record<string, number>; daily_step?: number }
@@ -156,7 +171,7 @@ export default async function CountryPage({
     const levels = rosterLevels
       .filter((l) => l.unit_id === unit.id)
       .sort((a, b) => a.level - b.level)
-      .map((l) => ({ level: l.level, manpower: l.manpower }));
+      .map((l) => ({ level: l.level, manpower: l.manpower, hard_power: (l as { hard_power?: number }).hard_power ?? 0 }));
     rosterByBranch[unit.branch].push({ unit, countryState, levels });
   }
   for (const b of branches) {
@@ -194,6 +209,8 @@ export default async function CountryPage({
         mobilisationConfig={mobilisationConfig}
         mobilisationState={mobilisationState}
         worldDate={ruleParametersByKey.world_date?.value as { month: number; year: number } | undefined}
+        influenceResult={influenceResult}
+        hardPowerByBranch={hardPowerByCountry.get(country.id) ?? null}
       />
     </div>
   );

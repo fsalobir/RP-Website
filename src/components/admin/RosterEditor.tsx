@@ -84,12 +84,12 @@ export function RosterEditor({
     setUnits((prev) => prev.map((u) => (u.id === id ? { ...u, ...patch } : u)));
   }
 
-  function updateLevel(unitId: string, levelNum: number, manpower: number) {
+  function updateLevel(unitId: string, levelNum: number, manpower: number, hard_power: number = 0) {
     setLevels((prev) => {
       const next = [...prev];
       const idx = next.findIndex((l) => l.unit_id === unitId && l.level === levelNum);
       if (idx >= 0) {
-        next[idx] = { ...next[idx], manpower };
+        next[idx] = { ...next[idx], manpower, hard_power };
         return next;
       }
       next.push({
@@ -97,6 +97,7 @@ export function RosterEditor({
         unit_id: unitId,
         level: levelNum,
         manpower,
+        hard_power,
         created_at: new Date().toISOString(),
       });
       return next;
@@ -107,7 +108,7 @@ export function RosterEditor({
     const arr = levelsByUnitId.get(unit.id) ?? [];
     const existing = new Set(arr.map((l) => l.level));
     for (let i = 1; i <= unit.level_count; i++) {
-      if (!existing.has(i)) updateLevel(unit.id, i, 0);
+      if (!existing.has(i)) updateLevel(unit.id, i, 0, 0);
     }
   }
 
@@ -178,6 +179,7 @@ export function RosterEditor({
           unit_id: unitId,
           level: lvl,
           manpower: Math.max(0, Number(row?.manpower ?? 0) || 0),
+          hard_power: Math.max(0, Number((row as { hard_power?: number })?.hard_power ?? 0) || 0),
         });
       }
 
@@ -525,6 +527,7 @@ export function RosterEditor({
                               {Array.from({ length: u.level_count }, (_, i) => i + 1).map((lvl) => {
                                 const row = unitLevels.find((l) => l.level === lvl);
                                 const manpower = Number(row?.manpower ?? 0);
+                                const hardPower = Number((row as { hard_power?: number })?.hard_power ?? 0);
                                 return (
                                   <div key={lvl}>
                                     <label className="mb-0.5 block text-[10px] text-[var(--foreground-muted)]">
@@ -536,7 +539,38 @@ export function RosterEditor({
                                       className={`${inputClass} font-mono w-24`}
                                       style={inputStyle}
                                       value={manpower}
-                                      onChange={(e) => updateLevel(u.id, lvl, Math.max(0, toInt(e.target.value, 0)))}
+                                      onChange={(e) => updateLevel(u.id, lvl, Math.max(0, toInt(e.target.value, 0)), hardPower)}
+                                      disabled={isSaving}
+                                    />
+                                  </div>
+                                );
+                              })}
+                            </div>
+                            <div className="mt-2">
+                              <div className="mb-1 text-[10px] font-medium text-[var(--foreground-muted)]">
+                                Hard Power par niveau
+                              </div>
+                              <div className="text-[10px] text-[var(--foreground-muted)]">
+                                Utilisé pour l’Influence et les classements militaires.
+                              </div>
+                            </div>
+                            <div className="grid gap-2 sm:grid-cols-3 lg:grid-cols-6">
+                              {Array.from({ length: u.level_count }, (_, i) => i + 1).map((lvl) => {
+                                const row = unitLevels.find((l) => l.level === lvl);
+                                const manpower = Number(row?.manpower ?? 0);
+                                const hardPower = Number((row as { hard_power?: number })?.hard_power ?? 0);
+                                return (
+                                  <div key={`hp-${lvl}`}>
+                                    <label className="mb-0.5 block text-[10px] text-[var(--foreground-muted)]">
+                                      Niv. {lvl}
+                                    </label>
+                                    <input
+                                      type="number"
+                                      min={0}
+                                      className={`${inputClass} font-mono w-24`}
+                                      style={inputStyle}
+                                      value={hardPower}
+                                      onChange={(e) => updateLevel(u.id, lvl, manpower, Math.max(0, toInt(e.target.value, 0)))}
                                       disabled={isSaving}
                                     />
                                   </div>

@@ -56,6 +56,7 @@ export interface MilitaryRosterUnitLevel {
   unit_id: string
   level: number
   manpower: number
+  hard_power: number
   created_at: string
 }
 

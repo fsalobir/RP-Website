@@ -1,6 +1,9 @@
 import { createClient } from "@/lib/supabase/server";
 import Link from "next/link";
 import { CountriesTable } from "@/components/countries/CountriesTable";
+import { ResetStatsButton } from "./ResetStatsButton";
+import { AdvanceDayButton } from "./AdvanceDayButton";
+import { RandomizeBudgetsButton } from "./RandomizeBudgetsButton";
 
 function normId(id: string | null | undefined): string {
   return String(id ?? "").trim().toLowerCase();
@@ -36,7 +39,7 @@ export default async function AdminPaysListPage() {
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-10">
-      <div className="mb-8 flex items-center justify-between">
+      <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold text-[var(--foreground)]">
             Pays
@@ -45,13 +48,18 @@ export default async function AdminPaysListPage() {
             Modifier les nations et leurs indicateurs.
           </p>
         </div>
-        <Link
-          href="/admin/pays/nouveau"
-          className="btn-primary rounded py-2 px-4"
-          style={{ background: "var(--accent)", color: "#0f1419", fontWeight: 600 }}
-        >
-          Nouveau pays
-        </Link>
+        <div className="flex flex-col items-start gap-3 sm:items-end">
+          <Link
+            href="/admin/pays/nouveau"
+            className="btn-primary rounded py-2 px-4"
+            style={{ background: "var(--accent)", color: "#0f1419", fontWeight: 600 }}
+          >
+            Nouveau pays
+          </Link>
+          <ResetStatsButton />
+          <AdvanceDayButton />
+          <RandomizeBudgetsButton />
+        </div>
       </div>
 
       {!countries?.length ? (

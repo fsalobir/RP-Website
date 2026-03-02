@@ -2,7 +2,7 @@
 
 import type { Country } from "@/types/database";
 import type { CountryEffect } from "@/types/database";
-import { formatNumber, formatGdp } from "@/lib/format";
+import { formatNumber, formatGdp, formatPopulation } from "@/lib/format";
 import { Tooltip } from "@/components/ui/Tooltip";
 import {
   getEffectDescription,
@@ -75,6 +75,8 @@ type CountryTabGeneralProps = {
   onOpenNewEffect: () => void;
   onSaveEffect: () => Promise<void>;
   onCloseEffectForm: () => void;
+  influenceResult?: import("@/lib/influence").InfluenceResult | null;
+  hardPowerByBranch?: import("@/lib/hardPower").HardPowerByBranch | null;
 };
 
 export function CountryTabGeneral({
@@ -128,6 +130,8 @@ export function CountryTabGeneral({
   onOpenNewEffect,
   onSaveEffect,
   onCloseEffectForm,
+  influenceResult = null,
+  hardPowerByBranch = null,
 }: CountryTabGeneralProps) {
   return (
     <div className="space-y-8">
@@ -138,7 +142,7 @@ export function CountryTabGeneral({
               <strong className="text-[var(--foreground)]">Population</strong>
               {rankPopulation > 0 && ` — ${rankEmoji(rankPopulation) ? `${rankEmoji(rankPopulation)} ` : ""}#${rankPopulation}`}
             </dt>
-            <dd className="stat-value mt-0.5 text-2xl font-bold text-[var(--foreground)]">{formatNumber(country.population)}</dd>
+            <dd className="stat-value mt-0.5 text-2xl font-bold text-[var(--foreground)]">{formatPopulation(country.population)}</dd>
           </div>
           <div className="text-center">
             <dt className="text-sm font-semibold text-[var(--foreground-muted)]">
@@ -147,7 +151,29 @@ export function CountryTabGeneral({
             </dt>
             <dd className="stat-value mt-0.5 text-2xl font-bold text-[var(--foreground)]">{formatGdp(country.gdp)}</dd>
           </div>
+          {influenceResult != null && (
+            <div className="text-center">
+              <dt className="text-sm font-semibold text-[var(--foreground-muted)]">
+                <strong className="text-[var(--foreground)]">Influence</strong>
+              </dt>
+              <dd className="stat-value mt-0.5 text-2xl font-bold text-[var(--accent)]">{formatNumber(Math.round(influenceResult.influence))}</dd>
+              <dl className="mt-2 flex flex-wrap justify-center gap-x-4 gap-y-1 text-xs text-[var(--foreground-muted)]">
+                <span>PIB : {formatNumber(Math.round(influenceResult.componentsAfterGravity.gdp))}</span>
+                <span>Population : {formatNumber(Math.round(influenceResult.componentsAfterGravity.population))}</span>
+                <span>Stabilité : ×{Number(influenceResult.componentsAfterGravity.stabilityMultiplier).toLocaleString("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                <span>Hard Power : {formatNumber(Math.round(influenceResult.componentsAfterGravity.military))}</span>
+              </dl>
+            </div>
+          )}
         </div>
+        {hardPowerByBranch != null && (
+          <div className="mb-6 rounded border py-2 px-3 text-sm" style={{ borderColor: "var(--border-muted)", background: "var(--background-elevated)" }}>
+            <span className="font-medium text-[var(--foreground-muted)]">Hard Power par branche : </span>
+            <span className="text-[var(--foreground)]">
+              Terrestre {formatNumber(hardPowerByBranch.terre)} · Aérien {formatNumber(hardPowerByBranch.air)} · Naval {formatNumber(hardPowerByBranch.mer)} · Stratégique {formatNumber(hardPowerByBranch.strategique)} — Total {formatNumber(hardPowerByBranch.total)}
+            </span>
+          </div>
+        )}
 
         {canEditCountry && generalEditMode && (
           <div className="mb-8 mt-6 rounded-lg border p-4" style={{ borderColor: "var(--border-muted)", background: "var(--background-elevated)" }}>

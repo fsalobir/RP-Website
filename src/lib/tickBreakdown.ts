@@ -7,6 +7,7 @@ import type { CountryEffect } from "@/types/database";
 import {
   getEffectDescription,
   getEffectsForCountry,
+  getEffectsForCountryTickRates,
   getForcedMinPcts,
   getAllocationCapPercent,
   getLimitModifierPercent,
@@ -164,12 +165,19 @@ export function getTickBreakdown(
     globalGrowthEffects: context.globalGrowthEffects,
   });
 
+  const effectsForTick = getEffectsForCountryTickRates({
+    countryId: "",
+    countryEffects: context.countryEffects,
+    mobilisationLevelEffects: context.mobilisationLevelEffects,
+    globalGrowthEffects: context.globalGrowthEffects,
+  });
+
   const expected = getExpectedNextTick(
     country,
     pcts,
     rulesByKey,
     worldAvgs,
-    resolvedEffects
+    effectsForTick
   );
 
   const popContributions: TickBreakdownContribution[] = [];

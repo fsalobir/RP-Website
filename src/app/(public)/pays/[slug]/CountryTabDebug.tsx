@@ -89,6 +89,9 @@ function RateSection({
           ))
         )}
       </ul>
+      <p className="mb-2 text-xs text-[var(--foreground-muted)]">
+        Somme des lignes ci-dessus = taux total (base + par stat + effets + budget).
+      </p>
       <div className="border-t pt-2 text-sm" style={{ borderColor: "var(--border)" }}>
         <span className="text-[var(--foreground-muted)]">Taux total = </span>
         <span className="font-medium text-[var(--accent)]">{formatRate(cat.totalRate)}</span>

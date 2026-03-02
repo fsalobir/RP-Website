@@ -23,3 +23,15 @@ export function formatGdp(value: number | string | null | undefined): string {
   }
   return `${billions.toLocaleString("fr-FR", { minimumFractionDigits: 0, maximumFractionDigits: 2 })} Bn`;
 }
+
+/**
+ * Population en millions (Mio) : ex. 32_500_000 → "32,5 Mio"
+ * Utiliser pour l’affichage et les évolutions (delta aussi en Mio).
+ */
+export function formatPopulation(value: number | string | null | undefined): string {
+  if (value == null || value === "") return "—";
+  const n = typeof value === "string" ? Number(value) : value;
+  if (Number.isNaN(n)) return "—";
+  const millions = n / 1_000_000;
+  return `${millions.toLocaleString("fr-FR", { minimumFractionDigits: 0, maximumFractionDigits: 2 })} Mio`;
+}
