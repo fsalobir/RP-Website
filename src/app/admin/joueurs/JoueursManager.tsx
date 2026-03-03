@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { createPlayer, assignPlayer, deletePlayer, updatePlayerName } from "./actions";
+import { createPlayer, assignPlayer, deletePlayer, updatePlayerName, addStateActions } from "./actions";
 
 type PlayerRow = {
   user_id: string;
@@ -29,6 +29,8 @@ export function JoueursManager({
   const [assignError, setAssignError] = useState<string | null>(null);
   const [editingNameId, setEditingNameId] = useState<string | null>(null);
   const [nameError, setNameError] = useState<string | null>(null);
+  const [addingActionsCountryId, setAddingActionsCountryId] = useState<string | null>(null);
+  const [addActionsError, setAddActionsError] = useState<string | null>(null);
 
   return (
     <div className="space-y-8">
@@ -121,7 +123,9 @@ export function JoueursManager({
         <h2 className="mb-4 text-lg font-semibold text-[var(--foreground)]">
           Joueurs assignés
         </h2>
-        {(assignError || nameError) && <p className="mb-2 text-sm text-[var(--danger)]">{assignError || nameError}</p>}
+        {(assignError || nameError || addActionsError) && (
+          <p className="mb-2 text-sm text-[var(--danger)]">{assignError || nameError || addActionsError}</p>
+        )}
         {players.length === 0 ? (
           <p className="text-[var(--foreground-muted)]">Aucun joueur.</p>
         ) : (
@@ -194,6 +198,21 @@ export function JoueursManager({
                   </select>
                   {assigningId === p.user_id && <span className="text-xs text-[var(--foreground-muted)]">…</span>}
                 </form>
+                <button
+                  type="button"
+                  disabled={addingActionsCountryId !== null}
+                  onClick={async () => {
+                    setAddActionsError(null);
+                    setAddingActionsCountryId(p.country_id);
+                    const result = await addStateActions(p.country_id, 25);
+                    setAddingActionsCountryId(null);
+                    if (result.error) setAddActionsError(result.error);
+                    else router.refresh();
+                  }}
+                  className="text-sm text-[var(--accent)] hover:underline disabled:opacity-50"
+                >
+                  {addingActionsCountryId === p.country_id ? "…" : "Ajouter actions"}
+                </button>
                 <form
                   action={async () => {
                     if (!confirm("Supprimer ce joueur ? Son compte sera supprimé.")) return;

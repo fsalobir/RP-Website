@@ -1,4 +1,4 @@
-import { unstable_cache } from "next/cache";
+import { unstable_cache, unstable_noStore } from "next/cache";
 import { createClient, createAnonClientForCache } from "@/lib/supabase/server";
 import { getCachedAuth } from "@/lib/auth-server";
 import { notFound } from "next/navigation";
@@ -62,6 +62,8 @@ const getCachedCountryPageGlobals = unstable_cache(
   { revalidate: 60, tags: ["country-page-globals"] }
 );
 
+export const dynamic = "force-dynamic";
+
 export type { RosterRowByBranch };
 
 export default async function CountryPage({
@@ -69,6 +71,7 @@ export default async function CountryPage({
 }: {
   params: Promise<{ slug: string }>;
 }) {
+  unstable_noStore();
   const { slug } = await params;
   const supabase = await createClient();
 
@@ -117,6 +120,27 @@ export default async function CountryPage({
     totalGdp: sphereCountries.reduce((s, c) => s + Number(c.gdp ?? 0), 0),
     countries: sphereCountries as Array<{ id: string; name: string; slug: string; population: number | null; gdp: number | null }>,
   };
+
+  let stateActionTypes: Array<{ id: string; key: string; label_fr: string; cost: number; params_schema: Record<string, unknown> | null }> = [];
+  let stateActionBalance: number = 0;
+  let stateActionRequests: Array<{ id: string; action_type_id: string; status: string; payload: Record<string, unknown> | null; created_at: string; refusal_message: string | null; state_action_types?: { key: string; label_fr: string } | null }> = [];
+  let countriesForTarget: Array<{ id: string; name: string; flag_url: string | null; regime: string | null; influence: number }> = [];
+  if (isPlayerForThisCountry) {
+    const [typesRes, balanceRes, requestsRes, countriesTargetRes] = await Promise.all([
+      supabase.from("state_action_types").select("id, key, label_fr, cost, params_schema").order("sort_order"),
+      supabase.from("country_state_action_balance").select("balance").eq("country_id", country.id).maybeSingle(),
+      supabase.from("state_action_requests").select("id, action_type_id, status, payload, created_at, refusal_message, state_action_types:state_action_types(key, label_fr)").eq("country_id", country.id).order("created_at", { ascending: false }),
+      supabase.from("countries").select("id, name, flag_url, regime").neq("id", country.id).order("name"),
+    ]);
+    stateActionTypes = (typesRes.data ?? []) as Array<{ id: string; key: string; label_fr: string; cost: number; params_schema: Record<string, unknown> | null }>;
+    stateActionBalance = (balanceRes.data?.balance ?? 0) as number;
+    const rawReqs = requestsRes.data ?? [];
+    stateActionRequests = rawReqs.map((r: Record<string, unknown>) => ({
+      ...r,
+      state_action_types: Array.isArray(r.state_action_types) ? r.state_action_types[0] : r.state_action_types,
+    })) as typeof stateActionRequests;
+    countriesForTarget = (countriesTargetRes.data ?? []) as Array<{ id: string; name: string; flag_url: string | null; regime: string | null }>;
+  }
 
   const { ruleParamsData, rosterUnits, rosterLevels, perksDef } = cachedGlobals;
 
@@ -190,6 +214,12 @@ export default async function CountryPage({
   if (influenceResult && (influenceMods.global !== 1 || influenceMods.gdp !== 1 || influenceMods.population !== 1 || influenceMods.hard_power !== 1)) {
     influenceResult = applyInfluenceModifiers(influenceResult, influenceMods);
   }
+  if (countriesForTarget.length > 0) {
+    countriesForTarget = countriesForTarget.map((c) => ({
+      ...c,
+      influence: Math.round(influenceByCountry.get(c.id)?.influence ?? 0),
+    }));
+  }
 
   const worldAverages = countries.length > 0
     ? {
@@ -259,6 +289,16 @@ export default async function CountryPage({
         aiMajorEffects={aiMajorEffects}
         aiMinorEffects={aiMinorEffects}
         sphereData={sphereData}
+        stateActionTypes={stateActionTypes}
+        stateActionBalance={stateActionBalance}
+        stateActionRequests={stateActionRequests}
+        countriesForTarget={countriesForTarget}
+        emitterCountry={{
+          name: country.name ?? "",
+          flag_url: country.flag_url ?? null,
+          regime: country.regime ?? null,
+          influence: influenceResult != null ? Math.round(influenceResult.influence) : null,
+        }}
       />
     </div>
   );

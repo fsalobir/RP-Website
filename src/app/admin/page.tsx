@@ -91,6 +91,36 @@ export default async function AdminDashboardPage() {
           </p>
         </Link>
         <Link
+          href="/admin/actions-etat"
+          className="rounded-lg border p-6 transition-colors hover:border-[var(--accent-muted)]"
+          style={{
+            background: "var(--background-panel)",
+            borderColor: "var(--border)",
+          }}
+        >
+          <h2 className="text-lg font-semibold text-[var(--foreground)]">
+            Actions d'État
+          </h2>
+          <p className="mt-2 text-sm text-[var(--foreground-muted)]">
+            Types d'actions, coûts et paramètres (Insulte diplomatique, Prise d'influence, Demande d'up)
+          </p>
+        </Link>
+        <Link
+          href="/admin/demandes"
+          className="rounded-lg border p-6 transition-colors hover:border-[var(--accent-muted)]"
+          style={{
+            background: "var(--background-panel)",
+            borderColor: "var(--border)",
+          }}
+        >
+          <h2 className="text-lg font-semibold text-[var(--foreground)]">
+            Demandes
+          </h2>
+          <p className="mt-2 text-sm text-[var(--foreground-muted)]">
+            Tickets des joueurs (actions d'État en attente, à accepter ou refuser)
+          </p>
+        </Link>
+        <Link
           href="/admin/regles"
           className="rounded-lg border p-6 transition-colors hover:border-[var(--accent-muted)]"
           style={{

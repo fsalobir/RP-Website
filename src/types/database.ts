@@ -168,3 +168,52 @@ export interface CountryUpdateLog {
   stability_after: number | null
   created_at: string
 }
+
+/** Type d'action d'État (Insulte diplomatique, Prise d'influence, Demande d'up, etc.). */
+export interface StateActionType {
+  id: string
+  key: string
+  label_fr: string
+  cost: number
+  params_schema: Record<string, unknown> | null
+  sort_order: number
+  created_at: string
+  updated_at: string
+}
+
+/** Solde d'actions d'État par pays. */
+export interface CountryStateActionBalance {
+  country_id: string
+  balance: number
+  updated_at: string
+}
+
+/** Statut d'une demande d'action d'État. */
+export type StateActionRequestStatus = "pending" | "accepted" | "refused"
+
+/** Demande d'action d'État (ticket). */
+export interface StateActionRequest {
+  id: string
+  country_id: string
+  user_id: string
+  action_type_id: string
+  status: StateActionRequestStatus
+  payload: Record<string, unknown> | null
+  admin_effect_added: Record<string, unknown> | null
+  refund_actions: boolean
+  refusal_message: string | null
+  created_at: string
+  resolved_at: string | null
+  resolved_by: string | null
+}
+
+/** Effet à appliquer à l'acceptation (sans country_id). */
+export interface AdminEffectAdded {
+  name: string
+  effect_kind: string
+  effect_target: string | null
+  effect_subtype: string | null
+  value: number
+  duration_kind: string
+  duration_remaining: number
+}

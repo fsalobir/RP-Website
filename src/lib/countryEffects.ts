@@ -187,6 +187,7 @@ export const ALL_EFFECT_KIND_IDS = [
   "influence_modifier_gdp",
   "influence_modifier_population",
   "influence_modifier_hard_power",
+  "state_actions_grant",
 ] as const;
 
 export type EffectKindId = (typeof ALL_EFFECT_KIND_IDS)[number];
@@ -208,6 +209,7 @@ export const EFFECT_KIND_META: Record<EffectKindId, EffectKindMeta> = {
   influence_modifier_gdp: { targetType: "none", valueFormat: "multiplier", label: "Modificateur d'influence (PIB)" },
   influence_modifier_population: { targetType: "none", valueFormat: "multiplier", label: "Modificateur d'influence (population)" },
   influence_modifier_hard_power: { targetType: "none", valueFormat: "multiplier", label: "Modificateur d'influence (Hard Power)" },
+  state_actions_grant: { targetType: "none", valueFormat: "integer", label: "Actions d'État (octroi par tick)" },
 };
 
 /** Libellé court pour effect_kind (affichage liste). Dérivé des métadonnées, avec fallback. */
@@ -222,6 +224,7 @@ const _NONE = new Set<string>([
   "gdp_growth_base",
   "population_growth_base",
   "budget_allocation_cap",
+  "state_actions_grant",
   "influence_modifier_global",
   "influence_modifier_gdp",
   "influence_modifier_population",

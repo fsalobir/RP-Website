@@ -63,8 +63,8 @@ export function computeHardPowerByCountry(
       const levels = levelsByUnit.get(cmu.roster_unit_id);
       if (!levels || levels.length === 0) continue;
 
-      const levelIndex = unlockedLevelFromPoints(cmu.current_level);
-      const levelRow = levels[levelIndex];
+      const unlockedLevel = unlockedLevelFromPoints(cmu.current_level);
+      const levelRow = levels.find((l) => l.level === unlockedLevel) ?? null;
       const hardPowerPerUnit = levelRow ? Number(levelRow.hard_power) || 0 : 0;
       const count = (rosterUnit.base_count ?? 0) + (cmu.extra_count ?? 0);
       const contrib = count * hardPowerPerUnit;

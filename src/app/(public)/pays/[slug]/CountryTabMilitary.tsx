@@ -211,13 +211,11 @@ export function CountryTabMilitary({
                                     current_level: Math.max(0, row.countryState?.current_level ?? 0),
                                     extra_count: Math.max(0, row.countryState?.extra_count ?? 0),
                                   };
-                                  const storedExtra = isAdmin ? edit.extra_count : (row.countryState?.extra_count ?? 0);
+                                  const storedExtra = edit.extra_count;
                                   const effectExtraSum = getUnitExtraEffectSum(effects, row.unit.id);
                                   const effectiveExtra = storedExtra + effectExtraSum;
                                   const totalCount = row.unit.base_count + effectiveExtra;
-                                  const points = isAdmin
-                                    ? Math.max(0, edit.current_level)
-                                    : Math.max(0, row.countryState?.current_level ?? 0);
+                                  const points = Math.max(0, edit.current_level);
                                   const unlockedLevel = Math.max(
                                     0,
                                     Math.min(row.unit.level_count, Math.floor(points / 100))
