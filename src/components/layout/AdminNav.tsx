@@ -19,16 +19,9 @@ export function AdminNav() {
           Tableau de bord
         </Link>
         <nav className="flex items-center gap-5">
-          <Link href="/admin/pays" className={navLinkClass}>
-            <span aria-hidden className="mr-1.5">🌍</span>Pays
+          <Link href="/" className={navLinkClass}>
+            <span aria-hidden className="mr-1.5">👁️</span>Accès Joueur
           </Link>
-          <Link href="/admin/roster" className={navLinkClass}>
-            <span aria-hidden className="mr-1.5">🪖</span>Roster
-          </Link>
-          <Link href="/classement" className={navLinkClass}>
-            <span aria-hidden className="mr-1.5">📊</span>Classement
-          </Link>
-          <div className={separatorClass} role="separator" />
           <Link href="/admin/regles" className={navLinkClass}>
             <span aria-hidden className="mr-1.5">⚙️</span>Règles
           </Link>

@@ -4,6 +4,13 @@
  * Utilisé pour l’admin / debug sur la fiche pays, onglet Budget.
  */
 
+import {
+  BUDGET_MINISTRY_KEYS,
+  BUDGET_MINISTRY_LABELS,
+  getEffectsListForMinistry,
+  type BudgetMinistryValue,
+} from "@/lib/ruleParameters";
+
 export type WorldAverages = {
   pop_avg: number;
   gdp_avg: number;
@@ -40,6 +47,8 @@ export type CountryEffectInput = {
   value: number;
   /** If omitted, effect is treated as still active (e.g. global/mobilisation effects). */
   duration_remaining?: number;
+  /** When 'permanent', effect is always active (cron does not decrement). */
+  duration_kind?: string;
 };
 
 /** rule_parameters.value peut être un nombre ou un objet (budget_* = objet). */
@@ -226,7 +235,7 @@ export function getExpectedNextTick(
   let delta_stab = 0;
 
   for (const e of effects) {
-    if (e.duration_remaining != null && e.duration_remaining <= 0) continue;
+    if (e.duration_kind !== "permanent" && e.duration_remaining != null && e.duration_remaining <= 0) continue;
     const val = Math.abs(e.value) > 1 ? e.value / 100 : e.value;
     if (e.effect_kind === "population_growth_base" || e.effect_kind === "population_growth_per_stat") {
       pop_effect_rate += val;
@@ -242,106 +251,108 @@ export function getExpectedNextTick(
 
   const wa = worldAvgs;
   const c = country;
+  const pctsRecord = pcts as Record<string, number>;
 
-  const sante = getBudgetVal(rulesByKey, "budget_sante");
-  const budget_pop_rate_base =
-    ministryContribution(
-      pcts.pct_sante,
-      sante.min_pct,
-      sante.bonuses.population ?? 0,
-      sante.maluses.population ?? -0.05,
-    );
-  const budget_pop_rate = budget_pop_rate_base;
+  const budget_pop_sources: Record<string, number> = {};
+  const budget_gdp_sources: Record<string, number> = {};
+  const budget_mil_sources: Record<string, number> = {};
+  const budget_ind_sources: Record<string, number> = {};
+  const budget_sci_sources: Record<string, number> = {};
+  const budget_stab_sources: Record<string, number> = {};
+  const budget_mil_gravity_info: Record<string, { base: number; worldAvg: number; countryVal: number; gravityPct: number }> = {};
+  const budget_ind_gravity_info: Record<string, { base: number; worldAvg: number; countryVal: number; gravityPct: number }> = {};
+  const budget_sci_gravity_info: Record<string, { base: number; worldAvg: number; countryVal: number; gravityPct: number }> = {};
 
-  const infra = getBudgetVal(rulesByKey, "budget_infrastructure");
-  const ae = getBudgetVal(rulesByKey, "budget_affaires_etrangeres");
-  const rawGdpInfra = ministryContribution(
-    pcts.pct_infrastructure,
-    infra.min_pct,
-    infra.bonuses.gdp ?? 0,
-    infra.maluses.gdp ?? -0.05,
-  );
-  const rawGdpAe = ministryContribution(
-    pcts.pct_affaires_etrangeres,
-    ae.min_pct,
-    ae.bonuses.gdp ?? 0,
-    ae.maluses.gdp ?? -0.05,
-  );
-  const budget_gdp_rate_base = rawGdpInfra + rawGdpAe;
-  const budget_gdp_rate = budget_gdp_rate_base;
+  let budget_pop_rate_base = 0;
+  let budget_gdp_rate_base = 0;
+  let budget_mil_base = 0;
+  let budget_ind_base = 0;
+  let budget_sci_base = 0;
+  let budget_stab_base = 0;
 
-  const defense = getBudgetVal(rulesByKey, "budget_defense");
-  const budget_mil_base = ministryContribution(
-    pcts.pct_defense,
-    defense.min_pct,
-    defense.bonuses.militarism ?? 0,
-    defense.maluses.militarism ?? -0.05,
-  );
-  const budget_mil_gravity = gravityFactorForContribution(wa.mil_avg, c.militarism, defense.gravity_pct, budget_mil_base);
-  const budget_mil = budget_mil_base * budget_mil_gravity;
+  for (const ministryKey of BUDGET_MINISTRY_KEYS) {
+    const pctKey = ministryKey.replace(/^budget_/, "pct_");
+    const pct = pctsRecord[pctKey] ?? 0;
+    const rawVal = rulesByKey[ministryKey]?.value as BudgetMinistryValue | undefined;
+    const budgetVal = getBudgetVal(rulesByKey, ministryKey);
+    const effectsList = getEffectsListForMinistry(ministryKey, rawVal);
+    const ministryLabel = BUDGET_MINISTRY_LABELS[ministryKey] ?? ministryKey;
 
-  const industrie = getBudgetVal(rulesByKey, "budget_industrie");
-  const rawIndInfra = ministryContribution(
-    pcts.pct_infrastructure,
-    infra.min_pct,
-    infra.bonuses.industry ?? 0,
-    infra.maluses.industry ?? -0.05,
-  );
-  const rawIndInd = ministryContribution(
-    pcts.pct_industrie,
-    industrie.min_pct,
-    industrie.bonuses.industry ?? 0,
-    industrie.maluses.industry ?? -0.05,
-  );
-  const budget_ind_base = rawIndInfra + rawIndInd;
-  const indInfraGravity = gravityFactorForContribution(wa.ind_avg, c.industry, infra.gravity_pct, rawIndInfra);
-  const indIndGravity = gravityFactorForContribution(wa.ind_avg, c.industry, industrie.gravity_pct, rawIndInd);
-  const budget_ind_infra = rawIndInfra * indInfraGravity;
-  const budget_ind_ind = rawIndInd * indIndGravity;
-  const budget_ind = budget_ind_infra + budget_ind_ind;
+    for (const effect of effectsList) {
+      const contrib = ministryContribution(pct, budgetVal.min_pct, effect.bonus, effect.malus);
+      const gravityPct = budgetVal.gravity_pct;
+      const applyGravity = effect.gravity_applies ?? false;
 
-  const education = getBudgetVal(rulesByKey, "budget_education");
-  const recherche = getBudgetVal(rulesByKey, "budget_recherche");
-  const rawSciEdu = ministryContribution(
-    pcts.pct_education,
-    education.min_pct,
-    education.bonuses.science ?? 0,
-    education.maluses.science ?? -0.05,
-  );
-  const rawSciRech = ministryContribution(
-    pcts.pct_recherche,
-    recherche.min_pct,
-    recherche.bonuses.science ?? 0,
-    recherche.maluses.science ?? -0.05,
-  );
-  const budget_sci_base = rawSciEdu + rawSciRech;
-  const sciEduGravity = gravityFactorForContribution(wa.sci_avg, c.science, education.gravity_pct, rawSciEdu);
-  const sciRechGravity = gravityFactorForContribution(wa.sci_avg, c.science, recherche.gravity_pct, rawSciRech);
-  const budget_sci_edu = rawSciEdu * sciEduGravity;
-  const budget_sci_rech = rawSciRech * sciRechGravity;
-  const budget_sci = budget_sci_edu + budget_sci_rech;
+      switch (effect.effect_type) {
+        case "population": {
+          const worldAvg = wa.pop_avg;
+          const countryVal = c.population;
+          const final = applyGravity ? contrib * gravityFactorForContribution(worldAvg, countryVal, gravityPct, contrib) : contrib;
+          budget_pop_rate_base += contrib;
+          budget_pop_sources[ministryLabel] = (budget_pop_sources[ministryLabel] ?? 0) + final;
+          break;
+        }
+        case "gdp": {
+          const worldAvg = wa.gdp_avg;
+          const countryVal = c.gdp;
+          const final = applyGravity ? contrib * gravityFactorForContribution(worldAvg, countryVal, gravityPct, contrib) : contrib;
+          budget_gdp_rate_base += contrib;
+          budget_gdp_sources[ministryLabel] = (budget_gdp_sources[ministryLabel] ?? 0) + final;
+          break;
+        }
+        case "militarism": {
+          const worldAvg = wa.mil_avg;
+          const countryVal = c.militarism;
+          const final = applyGravity ? contrib * gravityFactorForContribution(worldAvg, countryVal, gravityPct, contrib) : contrib;
+          budget_mil_base += contrib;
+          budget_mil_sources[ministryLabel] = (budget_mil_sources[ministryLabel] ?? 0) + final;
+          if (applyGravity) {
+            budget_mil_gravity_info[ministryLabel] = { base: contrib, worldAvg, countryVal, gravityPct };
+          }
+          break;
+        }
+        case "industry": {
+          const worldAvg = wa.ind_avg;
+          const countryVal = c.industry;
+          const final = applyGravity ? contrib * gravityFactorForContribution(worldAvg, countryVal, gravityPct, contrib) : contrib;
+          budget_ind_base += contrib;
+          budget_ind_sources[ministryLabel] = (budget_ind_sources[ministryLabel] ?? 0) + final;
+          if (applyGravity) {
+            budget_ind_gravity_info[ministryLabel] = { base: contrib, worldAvg, countryVal, gravityPct };
+          }
+          break;
+        }
+        case "science": {
+          const worldAvg = wa.sci_avg;
+          const countryVal = c.science;
+          const final = applyGravity ? contrib * gravityFactorForContribution(worldAvg, countryVal, gravityPct, contrib) : contrib;
+          budget_sci_base += contrib;
+          budget_sci_sources[ministryLabel] = (budget_sci_sources[ministryLabel] ?? 0) + final;
+          if (applyGravity) {
+            budget_sci_gravity_info[ministryLabel] = { base: contrib, worldAvg, countryVal, gravityPct };
+          }
+          break;
+        }
+        case "stability": {
+          const worldAvg = wa.stab_avg;
+          const countryVal = c.stability;
+          const final = applyGravity ? contrib * gravityFactorForContribution(worldAvg, countryVal, gravityPct, contrib) : contrib;
+          budget_stab_base += contrib;
+          budget_stab_sources[ministryLabel] = (budget_stab_sources[ministryLabel] ?? 0) + final;
+          break;
+        }
+        default:
+          break;
+      }
+    }
+  }
 
-  const interieur = getBudgetVal(rulesByKey, "budget_interieur");
-  const rawStabEdu = ministryContribution(
-    pcts.pct_education,
-    education.min_pct,
-    education.bonuses.stability ?? 0,
-    education.maluses.stability ?? -0.05,
-  );
-  const rawStabInt = ministryContribution(
-    pcts.pct_interieur,
-    interieur.min_pct,
-    interieur.bonuses.stability ?? 0,
-    interieur.maluses.stability ?? -0.05,
-  );
-  const rawStabAe = ministryContribution(
-    pcts.pct_affaires_etrangeres,
-    ae.min_pct,
-    ae.bonuses.stability ?? 0,
-    ae.maluses.stability ?? -0.05,
-  );
-  const budget_stab_base = rawStabEdu + rawStabInt + rawStabAe;
-  const budget_stab = budget_stab_base;
+  const budget_pop_rate = Object.values(budget_pop_sources).reduce((a, b) => a + b, 0);
+  const budget_gdp_rate = Object.values(budget_gdp_sources).reduce((a, b) => a + b, 0);
+  const budget_mil = Object.values(budget_mil_sources).reduce((a, b) => a + b, 0);
+  const budget_ind = Object.values(budget_ind_sources).reduce((a, b) => a + b, 0);
+  const budget_sci = Object.values(budget_sci_sources).reduce((a, b) => a + b, 0);
+  const budget_stab = Object.values(budget_stab_sources).reduce((a, b) => a + b, 0);
 
   const pop_total_rate =
     pop_base + pop_from_stats + pop_effect_rate + budget_pop_rate;
@@ -402,51 +413,15 @@ export function getExpectedNextTick(
       budget_sci,
       budget_stab_base,
       budget_stab,
-      budget_pop_sources: { Santé: budget_pop_rate_base },
-      budget_gdp_sources: { Infrastructure: rawGdpInfra, "Affaires étrangères": rawGdpAe },
-      /** Valeurs réellement ajoutées (après gravité) pour que la somme = budget_mil. */
-      budget_mil_sources: { Défense: budget_mil },
-      /** Valeurs réellement ajoutées (après gravité) pour que la somme = budget_ind. */
-      budget_ind_sources: { Infrastructure: budget_ind_infra, Industrie: budget_ind_ind },
-      /** Valeurs réellement ajoutées (après gravité) pour que la somme = budget_sci. */
-      budget_sci_sources: { Éducation: budget_sci_edu, Recherche: budget_sci_rech },
-      budget_stab_sources: { Éducation: rawStabEdu, Intérieur: rawStabInt, "Affaires étrangères": rawStabAe },
-      budget_mil_gravity_info: {
-        Défense: {
-          base: budget_mil_base,
-          worldAvg: wa.mil_avg,
-          countryVal: c.militarism,
-          gravityPct: defense.gravity_pct,
-        },
-      },
-      budget_ind_gravity_info: {
-        Infrastructure: {
-          base: rawIndInfra,
-          worldAvg: wa.ind_avg,
-          countryVal: c.industry,
-          gravityPct: infra.gravity_pct,
-        },
-        Industrie: {
-          base: rawIndInd,
-          worldAvg: wa.ind_avg,
-          countryVal: c.industry,
-          gravityPct: industrie.gravity_pct,
-        },
-      },
-      budget_sci_gravity_info: {
-        Éducation: {
-          base: rawSciEdu,
-          worldAvg: wa.sci_avg,
-          countryVal: c.science,
-          gravityPct: education.gravity_pct,
-        },
-        Recherche: {
-          base: rawSciRech,
-          worldAvg: wa.sci_avg,
-          countryVal: c.science,
-          gravityPct: recherche.gravity_pct,
-        },
-      },
+      budget_pop_sources,
+      budget_gdp_sources,
+      budget_mil_sources,
+      budget_ind_sources,
+      budget_sci_sources,
+      budget_stab_sources,
+      budget_mil_gravity_info: Object.keys(budget_mil_gravity_info).length > 0 ? budget_mil_gravity_info : undefined,
+      budget_ind_gravity_info: Object.keys(budget_ind_gravity_info).length > 0 ? budget_ind_gravity_info : undefined,
+      budget_sci_gravity_info: Object.keys(budget_sci_gravity_info).length > 0 ? budget_sci_gravity_info : undefined,
     },
   };
 }

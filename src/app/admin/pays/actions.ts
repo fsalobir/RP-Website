@@ -73,6 +73,10 @@ function buildGlobalGrowthEffects(raw: unknown): Array<{ effect_kind: string; ef
     }));
 }
 
+function buildAiEffects(raw: unknown): Array<{ effect_kind: string; effect_target: string | null; value: number }> {
+  return buildGlobalGrowthEffects(raw);
+}
+
 /** Génère des pcts aléatoires respectant mins et cap (somme <= effectiveCap, chaque pct >= min). */
 function randomizeBudgetPcts(forcedMinPcts: Record<string, number>, allocationCap: number): BudgetPcts {
   const effectiveCap = Math.min(100, Math.max(0, allocationCap));
@@ -195,7 +199,7 @@ export async function runDailyCountryUpdate(): Promise<{ error?: string }> {
   revalidatePath("/admin/pays");
   revalidatePath("/");
   revalidatePath("/classement");
-  revalidateTag("country-page-globals");
+  revalidateTag("country-page-globals", "max");
   return {};
 }
 
@@ -213,10 +217,10 @@ export async function randomizeNationalBudgets(): Promise<{ error?: string; upda
   if (!adminRow) return { error: "Réservé aux admins." };
 
   const [countriesRes, effectsRes, mobilisationRes, rulesRes, budgetsRes] = await Promise.all([
-    supabase.from("countries").select("id"),
-    supabase.from("country_effects").select("country_id, effect_kind, effect_target, value, duration_remaining").gt("duration_remaining", 0),
+    supabase.from("countries").select("id, ai_status"),
+    supabase.from("country_effects").select("country_id, effect_kind, effect_target, value, duration_remaining, duration_kind").or("duration_remaining.gt.0,duration_kind.eq.permanent"),
     supabase.from("country_mobilisation").select("country_id, score"),
-    supabase.from("rule_parameters").select("key, value").in("key", ["mobilisation_config", "mobilisation_level_effects", "global_growth_effects"]),
+    supabase.from("rule_parameters").select("key, value").in("key", ["mobilisation_config", "mobilisation_level_effects", "global_growth_effects", "ai_major_effects", "ai_minor_effects"]),
     supabase.from("country_budget").select("id, country_id, budget_fraction"),
   ]);
 
@@ -233,6 +237,8 @@ export async function randomizeNationalBudgets(): Promise<{ error?: string; upda
   const mobilisationLevelEffectsRaw = rulesByKey.mobilisation_level_effects?.value;
   const globalGrowthEffectsRaw = rulesByKey.global_growth_effects?.value;
   const globalGrowthEffects = buildGlobalGrowthEffects(globalGrowthEffectsRaw);
+  const aiMajorEffects = buildAiEffects(rulesByKey.ai_major_effects?.value);
+  const aiMinorEffects = buildAiEffects(rulesByKey.ai_minor_effects?.value);
 
   const effectsByCountry = new Map<string, Array<{ effect_kind: string; effect_target: string | null; value: number; duration_remaining?: number }>>();
   (effectsRes.data ?? []).forEach((e: { country_id: string; effect_kind: string; effect_target: string | null; value: number; duration_remaining?: number }) => {
@@ -270,6 +276,9 @@ export async function randomizeNationalBudgets(): Promise<{ error?: string; upda
       countryEffects: countryEffects as Parameters<typeof getEffectsForCountry>[0]["countryEffects"],
       mobilisationLevelEffects,
       globalGrowthEffects,
+      ai_status: (country as { ai_status?: string | null }).ai_status ?? null,
+      aiMajorEffects,
+      aiMinorEffects,
     };
     const resolvedEffects: ResolvedEffect[] = getEffectsForCountry(ctx);
     const forcedMinPcts = getForcedMinPcts(resolvedEffects);
@@ -298,4 +307,24 @@ export async function randomizeNationalBudgets(): Promise<{ error?: string; upda
   revalidatePath("/admin/pays");
   revalidatePath("/");
   return { updated };
+}
+
+/** Met à jour le statut IA d'un pays (admin uniquement). */
+export async function updateCountryAiStatus(
+  countryId: string,
+  aiStatus: string | null
+): Promise<{ error?: string }> {
+  const supabase = await createClient();
+  const { data: adminRow } = await supabase.from("admins").select("id").limit(1).single();
+  if (!adminRow) return { error: "Non autorisé." };
+
+  const value = aiStatus === "major" || aiStatus === "minor" ? aiStatus : null;
+  const { error } = await supabase
+    .from("countries")
+    .update({ ai_status: value, updated_at: new Date().toISOString() })
+    .eq("id", countryId);
+  if (error) return { error: error.message };
+  revalidatePath("/admin/pays");
+  revalidatePath("/");
+  return {};
 }

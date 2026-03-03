@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import type { Country } from "@/types/database";
 import type { CountryEffect } from "@/types/database";
 import { formatNumber, formatGdp, formatPopulation } from "@/lib/format";
@@ -8,20 +9,19 @@ import {
   getEffectDescription,
   isEffectDisplayPositive,
   formatDurationRemaining,
-  EFFECT_CATEGORY_IDS,
-  EFFECT_CATEGORY_LABELS,
-  GROWTH_SUB_IDS,
-  GROWTH_SUB_LABELS,
+  ALL_EFFECT_KIND_IDS,
+  EFFECT_KIND_LABELS,
+  getDefaultTargetForKind,
+  getEffectKindValueHelper,
   STAT_KEYS,
   STAT_LABELS,
-  BUDGET_EFFECT_SUB_IDS,
-  BUDGET_EFFECT_SUB_LABELS,
   getBudgetMinistryOptions,
-  MILITARY_UNIT_EFFECT_SUB_IDS,
-  MILITARY_UNIT_EFFECT_SUB_LABELS,
   MILITARY_BRANCH_EFFECT_IDS,
   MILITARY_BRANCH_EFFECT_LABELS,
-  type EffectCategoryId,
+  EFFECT_KINDS_WITH_STAT_TARGET,
+  EFFECT_KINDS_WITH_BUDGET_TARGET,
+  EFFECT_KINDS_WITH_BRANCH_TARGET,
+  EFFECT_KINDS_WITH_ROSTER_UNIT_TARGET,
 } from "@/lib/countryEffects";
 
 type CountryTabGeneralProps = {
@@ -55,16 +55,14 @@ type CountryTabGeneralProps = {
   setEditingEffect: (e: CountryEffect | null) => void;
   effectName: string;
   setEffectName: (v: string) => void;
-  effectCategory: EffectCategoryId;
-  setEffectCategory: (v: EffectCategoryId) => void;
-  effectSubChoice: string | null;
-  setEffectSubChoice: (v: string | null) => void;
+  effectKind: string;
+  setEffectKind: (v: string) => void;
   effectTarget: string | null;
   setEffectTarget: (v: string | null) => void;
   effectValue: string;
   setEffectValue: (v: string) => void;
-  effectDurationKind: "days" | "updates";
-  setEffectDurationKind: (v: "days" | "updates") => void;
+  effectDurationKind: "days" | "updates" | "permanent";
+  setEffectDurationKind: (v: "days" | "updates" | "permanent") => void;
   effectDurationRemaining: string;
   setEffectDurationRemaining: (v: string) => void;
   effectError: string | null;
@@ -77,6 +75,7 @@ type CountryTabGeneralProps = {
   onCloseEffectForm: () => void;
   influenceResult?: import("@/lib/influence").InfluenceResult | null;
   hardPowerByBranch?: import("@/lib/hardPower").HardPowerByBranch | null;
+  sphereData?: { totalPopulation: number; totalGdp: number; countries: Array<{ id: string; name: string; slug: string; population: number | null; gdp: number | null }> };
 };
 
 export function CountryTabGeneral({
@@ -110,10 +109,8 @@ export function CountryTabGeneral({
   setEditingEffect,
   effectName,
   setEffectName,
-  effectCategory,
-  setEffectCategory,
-  effectSubChoice,
-  setEffectSubChoice,
+  effectKind,
+  setEffectKind,
   effectTarget,
   setEffectTarget,
   effectValue,
@@ -132,6 +129,7 @@ export function CountryTabGeneral({
   onCloseEffectForm,
   influenceResult = null,
   hardPowerByBranch = null,
+  sphereData = { totalPopulation: 0, totalGdp: 0, countries: [] },
 }: CountryTabGeneralProps) {
   return (
     <div className="space-y-8">
@@ -325,67 +323,23 @@ export function CountryTabGeneral({
                   />
                 </div>
                 <div>
-                  <label className="mb-1 block text-sm text-[var(--foreground-muted)]">Catégorie</label>
+                  <label className="mb-1 block text-sm text-[var(--foreground-muted)]">Type d'effet</label>
                   <select
-                    value={effectCategory}
+                    value={effectKind}
                     onChange={(e) => {
-                      const c = e.target.value as EffectCategoryId;
-                      setEffectCategory(c);
-                      setEffectSubChoice(
-                        c === "gdp_growth" || c === "population_growth" ? "base"
-                          : c === "budget_ministry" ? "min_pct"
-                          : c === "military_unit" ? "unit_extra"
-                          : null
-                      );
-                      setEffectTarget(
-                        c === "stat_delta" ? STAT_KEYS[0]
-                          : c === "budget_ministry" ? getBudgetMinistryOptions()[0].key
-                          : c === "military_unit" && rosterUnitsFlat.length > 0 ? rosterUnitsFlat[0].id
-                          : null
-                      );
-                      if (c === "budget_debt_surplus") setEffectValue("");
+                      const k = e.target.value;
+                      setEffectKind(k);
+                      setEffectTarget(getDefaultTargetForKind(k, rosterUnitsFlat.map((u) => u.id)));
                     }}
                     className="rounded border bg-[var(--background)] px-2 py-1.5 text-sm text-[var(--foreground)]"
                     style={{ borderColor: "var(--border)" }}
                   >
-                    {EFFECT_CATEGORY_IDS.map((id) => (
-                      <option key={id} value={id}>{EFFECT_CATEGORY_LABELS[id]}</option>
+                    {ALL_EFFECT_KIND_IDS.map((id) => (
+                      <option key={id} value={id}>{EFFECT_KIND_LABELS[id] ?? id}</option>
                     ))}
                   </select>
                 </div>
-                {(effectCategory === "gdp_growth" || effectCategory === "population_growth") && (
-                  <div className="space-y-2">
-                    <label className="mb-1 block text-sm text-[var(--foreground-muted)]">Type</label>
-                    <select
-                      value={effectSubChoice ?? "base"}
-                      onChange={(e) => {
-                        const v = e.target.value as string;
-                        setEffectSubChoice(v);
-                        if (v === "per_stat") setEffectTarget(STAT_KEYS[0]);
-                        else setEffectTarget(null);
-                      }}
-                      className="rounded border bg-[var(--background)] px-2 py-1.5 text-sm text-[var(--foreground)]"
-                      style={{ borderColor: "var(--border)" }}
-                    >
-                      {GROWTH_SUB_IDS.map((id) => (
-                        <option key={id} value={id}>{GROWTH_SUB_LABELS[id]}</option>
-                      ))}
-                    </select>
-                    {effectSubChoice === "per_stat" && (
-                      <select
-                        value={effectTarget ?? ""}
-                        onChange={(e) => setEffectTarget(e.target.value || null)}
-                        className="ml-2 rounded border bg-[var(--background)] px-2 py-1.5 text-sm text-[var(--foreground)]"
-                        style={{ borderColor: "var(--border)" }}
-                      >
-                        {STAT_KEYS.map((k) => (
-                          <option key={k} value={k}>{STAT_LABELS[k]}</option>
-                        ))}
-                      </select>
-                    )}
-                  </div>
-                )}
-                {effectCategory === "stat_delta" && (
+                {EFFECT_KINDS_WITH_STAT_TARGET.has(effectKind) && (
                   <div>
                     <label className="mb-1 block text-sm text-[var(--foreground-muted)]">Stat</label>
                     <select
@@ -400,8 +354,8 @@ export function CountryTabGeneral({
                     </select>
                   </div>
                 )}
-                {effectCategory === "budget_ministry" && (
-                  <div className="space-y-2">
+                {EFFECT_KINDS_WITH_BUDGET_TARGET.has(effectKind) && (
+                  <div>
                     <label className="mb-1 block text-sm text-[var(--foreground-muted)]">Ministère</label>
                     <select
                       value={effectTarget ?? ""}
@@ -413,93 +367,52 @@ export function CountryTabGeneral({
                         <option key={key} value={key}>{label}</option>
                       ))}
                     </select>
-                    <label className="mb-1 block text-sm text-[var(--foreground-muted)]">Type d'effet</label>
+                  </div>
+                )}
+                {EFFECT_KINDS_WITH_BRANCH_TARGET.has(effectKind) && (
+                  <div>
+                    <label className="mb-1 block text-sm text-[var(--foreground-muted)]">Branche</label>
                     <select
-                      value={effectSubChoice ?? "min_pct"}
-                      onChange={(e) => setEffectSubChoice(e.target.value)}
+                      value={effectTarget ?? "terre"}
+                      onChange={(e) => setEffectTarget(e.target.value || null)}
                       className="rounded border bg-[var(--background)] px-2 py-1.5 text-sm text-[var(--foreground)]"
                       style={{ borderColor: "var(--border)" }}
                     >
-                      {BUDGET_EFFECT_SUB_IDS.map((id) => (
-                        <option key={id} value={id}>{BUDGET_EFFECT_SUB_LABELS[id]}</option>
+                      {MILITARY_BRANCH_EFFECT_IDS.map((b) => (
+                        <option key={b} value={b}>{MILITARY_BRANCH_EFFECT_LABELS[b]}</option>
                       ))}
                     </select>
                   </div>
                 )}
-                {effectCategory === "budget_debt_surplus" && (
+                {EFFECT_KINDS_WITH_ROSTER_UNIT_TARGET.has(effectKind) && (
+                  <div>
+                    <label className="mb-1 block text-sm text-[var(--foreground-muted)]">Unité</label>
+                    <select
+                      value={effectTarget ?? ""}
+                      onChange={(e) => setEffectTarget(e.target.value || null)}
+                      className="rounded border bg-[var(--background)] px-2 py-1.5 text-sm text-[var(--foreground)]"
+                      style={{ borderColor: "var(--border)" }}
+                    >
+                      {rosterUnitsFlat.map((u) => (
+                        <option key={u.id} value={u.id}>{u.name_fr}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+                {effectKind === "budget_allocation_cap" && (
                   <p className="text-sm text-[var(--foreground-muted)]">
                     Positif = excédent (plafond d'allocation augmenté, ex. +20 → 120 % max). Négatif = dette (plafond réduit, ex. -20 → 80 % max).
                   </p>
                 )}
-                {effectCategory === "military_unit" && (
-                  <div className="space-y-2">
-                    <label className="mb-1 block text-sm text-[var(--foreground-muted)]">Type</label>
-                    <select
-                      value={effectSubChoice ?? "unit_extra"}
-                      onChange={(e) => {
-                        const v = e.target.value;
-                        setEffectSubChoice(v);
-                        if (v === "limit_modifier") setEffectTarget("terre");
-                        else if (rosterUnitsFlat.length > 0 && !effectTarget) setEffectTarget(rosterUnitsFlat[0].id);
-                      }}
-                      className="rounded border bg-[var(--background)] px-2 py-1.5 text-sm text-[var(--foreground)]"
-                      style={{ borderColor: "var(--border)" }}
-                    >
-                      {MILITARY_UNIT_EFFECT_SUB_IDS.map((id) => (
-                        <option key={id} value={id}>{MILITARY_UNIT_EFFECT_SUB_LABELS[id]}</option>
-                      ))}
-                    </select>
-                    {effectSubChoice === "limit_modifier" ? (
-                      <>
-                        <label className="mb-1 block text-sm text-[var(--foreground-muted)]">Branche</label>
-                        <select
-                          value={effectTarget ?? "terre"}
-                          onChange={(e) => setEffectTarget(e.target.value || null)}
-                          className="rounded border bg-[var(--background)] px-2 py-1.5 text-sm text-[var(--foreground)]"
-                          style={{ borderColor: "var(--border)" }}
-                        >
-                          {MILITARY_BRANCH_EFFECT_IDS.map((b) => (
-                            <option key={b} value={b}>{MILITARY_BRANCH_EFFECT_LABELS[b]}</option>
-                          ))}
-                        </select>
-                      </>
-                    ) : (
-                      <>
-                        <label className="mb-1 block text-sm text-[var(--foreground-muted)]">Unité</label>
-                        <select
-                          value={effectTarget ?? ""}
-                          onChange={(e) => setEffectTarget(e.target.value || null)}
-                          className="rounded border bg-[var(--background)] px-2 py-1.5 text-sm text-[var(--foreground)]"
-                          style={{ borderColor: "var(--border)" }}
-                        >
-                          {rosterUnitsFlat.map((u) => (
-                            <option key={u.id} value={u.id}>{u.name_fr}</option>
-                          ))}
-                        </select>
-                      </>
-                    )}
-                  </div>
-                )}
                 <div>
                   <label className="mb-1 block text-sm text-[var(--foreground-muted)]">
-                    {effectCategory === "budget_ministry" && effectSubChoice === "min_pct"
-                      ? "Pourcentage minimum (dépense forcée, valeur positive uniquement)"
-                      : effectCategory === "budget_debt_surplus"
-                        ? "Pourcentage (excédent + / dette −)"
-                        : effectCategory === "gdp_growth" || effectCategory === "population_growth"
-                          ? "Taux en % (ex: -95 pour -95 % de croissance)"
-                          : effectCategory === "military_unit"
-                            ? effectSubChoice === "limit_modifier"
-                              ? "Pourcentage (ex. +10 ou -5)"
-                              : effectSubChoice === "unit_tech_rate"
-                                ? "Points ajoutés par jour (entier)"
-                                : "Delta extra (entier, ex. +10 ou -5)"
-                            : "Valeur (nombre, négatif = malus)"}
+                    {getEffectKindValueHelper(effectKind).valueLabel}
+                    {effectKind === "budget_ministry_min_pct" ? " (dépense forcée, valeur positive uniquement)" : ""}
                   </label>
                   <input
                     type="number"
-                    step={effectCategory === "budget_debt_surplus" ? 1 : "any"}
-                    min={effectCategory === "budget_ministry" && effectSubChoice === "min_pct" ? 0 : undefined}
+                    step={effectKind === "budget_allocation_cap" ? 1 : getEffectKindValueHelper(effectKind).valueStep}
+                    min={effectKind === "budget_ministry_min_pct" ? 0 : undefined}
                     value={effectValue}
                     onChange={(e) => setEffectValue(e.target.value)}
                     className="w-32 rounded border bg-[var(--background)] px-2 py-1.5 text-sm font-mono text-[var(--foreground)]"
@@ -511,14 +424,16 @@ export function CountryTabGeneral({
                     <label className="mb-1 block text-sm text-[var(--foreground-muted)]">Durée</label>
                     <select
                       value={effectDurationKind}
-                      onChange={(e) => setEffectDurationKind(e.target.value as "days" | "updates")}
+                      onChange={(e) => setEffectDurationKind(e.target.value as "days" | "updates" | "permanent")}
                       className="rounded border bg-[var(--background)] px-2 py-1.5 text-sm text-[var(--foreground)]"
                       style={{ borderColor: "var(--border)" }}
                     >
                       <option value="days">Jours</option>
                       <option value="updates">Mises à jour</option>
+                      <option value="permanent">Permanent (n&apos;expire jamais)</option>
                     </select>
                   </div>
+                  {effectDurationKind !== "permanent" && (
                   <div>
                     <label className="mb-1 block text-sm text-[var(--foreground-muted)]">Nombre</label>
                     <input
@@ -530,6 +445,7 @@ export function CountryTabGeneral({
                       style={{ borderColor: "var(--border)" }}
                     />
                   </div>
+                  )}
                 </div>
                 <div className="flex gap-2 pt-2">
                   <button
@@ -632,6 +548,52 @@ export function CountryTabGeneral({
           </div>
         </div>
       </section>
+
+      {(sphereData.countries.length > 0) && (
+        <section className={panelClass} style={panelStyle}>
+          <h3 className="mb-4 text-lg font-semibold text-[var(--foreground)]">
+            Sphère
+          </h3>
+          <div
+            className="mb-6 rounded-lg border p-4"
+            style={{ borderColor: "var(--border)", background: "var(--background-elevated)" }}
+          >
+            <span className="block text-sm font-semibold text-[var(--foreground-muted)] mb-2">
+              Notre Sphère
+            </span>
+            <div className="flex flex-wrap gap-x-6 gap-y-1 text-[var(--foreground)]">
+              <span>
+                <strong>Population :</strong> {formatNumber(sphereData.totalPopulation)}
+              </span>
+              <span>
+                <strong>PIB :</strong> {formatGdp(sphereData.totalGdp)}
+              </span>
+            </div>
+          </div>
+          <ul className="space-y-3">
+            {sphereData.countries.map((c) => (
+              <li
+                key={c.id}
+                className="flex flex-wrap items-center gap-x-4 gap-y-1 rounded border py-2 px-3"
+                style={{ borderColor: "var(--border-muted)" }}
+              >
+                <Link
+                  href={`/pays/${c.slug}`}
+                  className="font-medium text-[var(--accent)] hover:underline"
+                >
+                  {c.name}
+                </Link>
+                <span className="text-sm text-[var(--foreground-muted)]">
+                  Population : {formatNumber(c.population ?? 0)}
+                </span>
+                <span className="text-sm text-[var(--foreground-muted)]">
+                  PIB : {formatGdp(c.gdp ?? 0)}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
     </div>
   );
 }

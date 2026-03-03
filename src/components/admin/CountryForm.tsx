@@ -211,6 +211,7 @@ export function CountryForm({ country }: { country?: Country }) {
                 type="number"
                 min={0}
                 max={10}
+                step={0.01}
                 value={form[key]}
                 onChange={(e) => update(key, e.target.valueAsNumber || 0)}
                 className={inputClass}
@@ -224,6 +225,7 @@ export function CountryForm({ country }: { country?: Country }) {
               type="number"
               min={-3}
               max={3}
+              step={0.01}
               value={form.stability}
               onChange={(e) => update("stability", e.target.valueAsNumber ?? 0)}
               className={inputClass}

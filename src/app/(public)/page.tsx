@@ -2,7 +2,8 @@ import { createClient } from "@/lib/supabase/server";
 import Link from "next/link";
 import { CountriesTable } from "@/components/countries/CountriesTable";
 import { computeHardPowerByCountry } from "@/lib/hardPower";
-import { computeInfluenceForAll } from "@/lib/influence";
+import { computeInfluenceForAll, applyInfluenceModifiers } from "@/lib/influence";
+import { getInfluenceModifiersByCountry } from "@/lib/countryEffects";
 import type { MilitaryBranch } from "@/types/database";
 
 export const revalidate = 3600;
@@ -16,7 +17,7 @@ export default async function HomePage({
   const showUnauthorized = params.error === "non-autorise";
   const supabase = await createClient();
 
-  const [countriesResult, historyResult, rulesRes, rosterUnitsRes, rosterLevelsRes, countryMilitaryRes] = await Promise.all([
+  const [countriesResult, historyResult, rulesRes, rosterUnitsRes, rosterLevelsRes, countryMilitaryRes, effectsRes, mobilisationRes, controlRes] = await Promise.all([
     supabase
       .from("countries")
       .select("id, name, slug, flag_url, regime, population, gdp, militarism, industry, science, stability")
@@ -25,18 +26,43 @@ export default async function HomePage({
       .from("country_history")
       .select("country_id, date, population, gdp, militarism, industry, science, stability")
       .order("date", { ascending: false }),
-    supabase.from("rule_parameters").select("key, value").eq("key", "influence_config"),
+    supabase.from("rule_parameters").select("key, value").in("key", ["influence_config", "global_growth_effects", "mobilisation_config", "mobilisation_level_effects"]),
     supabase.from("military_roster_units").select("id, branch, base_count"),
     supabase.from("military_roster_unit_levels").select("unit_id, level, hard_power"),
     supabase.from("country_military_units").select("country_id, roster_unit_id, current_level, extra_count"),
+    supabase.from("country_effects").select("country_id, effect_kind, effect_target, value, duration_remaining, duration_kind").or("duration_remaining.gt.0,duration_kind.eq.permanent"),
+    supabase.from("country_mobilisation").select("country_id, score"),
+    supabase.from("country_control").select("country_id, controller_country_id, share_pct, is_annexed"),
   ]);
 
   const { data: countries, error } = countriesResult;
   const { data: historyRows, error: historyError } = historyResult;
-  const influenceConfig = (rulesRes.data ?? []).find((r) => r.key === "influence_config")?.value as Record<string, unknown> | undefined;
+  const rulesByKey = Object.fromEntries((rulesRes.data ?? []).map((r) => [r.key, r.value]));
+  const influenceConfig = rulesByKey.influence_config as Record<string, unknown> | undefined;
+  const globalGrowthEffects = (Array.isArray(rulesByKey.global_growth_effects) ? rulesByKey.global_growth_effects : []) as Array<{ effect_kind: string; effect_target: string | null; value: number }>;
+  const mobilisationConfig = rulesByKey.mobilisation_config as { level_thresholds?: Record<string, number> } | undefined;
+  const mobilisationLevelEffects = (Array.isArray(rulesByKey.mobilisation_level_effects) ? rulesByKey.mobilisation_level_effects : []) as Array<{ level: string; effect_kind: string; effect_target: string | null; value: number }>;
   const rosterUnits = (rosterUnitsRes.data ?? []) as Array<{ id: string; branch: MilitaryBranch; base_count: number }>;
   const rosterLevels = (rosterLevelsRes.data ?? []) as Array<{ unit_id: string; level: number; hard_power: number }>;
   const countryMilitaryUnits = (countryMilitaryRes.data ?? []) as Array<{ country_id: string; roster_unit_id: string; current_level: number; extra_count: number }>;
+  const countryEffectsRows = (effectsRes.data ?? []) as Array<{ country_id: string; effect_kind: string; effect_target: string | null; value: number; duration_remaining?: number }>;
+  const countryMobilisationRows = (mobilisationRes.data ?? []) as Array<{ country_id: string; score: number | null }>;
+  const controlRows = (controlRes.data ?? []) as Array<{ country_id: string; controller_country_id: string; share_pct: number; is_annexed: boolean }>;
+  const countryById = new Map((countries ?? []).map((c) => [c.id, c]));
+  const sphereByControllerId = new Map<string, Array<{ slug: string; flag_url: string | null; name: string; share_pct: number; is_annexed: boolean }>>();
+  for (const r of controlRows) {
+    const controlled = countryById.get(r.country_id);
+    if (!controlled) continue;
+    const list = sphereByControllerId.get(r.controller_country_id) ?? [];
+    list.push({
+      slug: controlled.slug,
+      flag_url: controlled.flag_url,
+      name: controlled.name,
+      share_pct: Number(r.share_pct),
+      is_annexed: !!r.is_annexed,
+    });
+    sphereByControllerId.set(r.controller_country_id, list);
+  }
 
   if (error) {
     return (
@@ -63,10 +89,28 @@ export default async function HomePage({
   }
 
   const hardPowerByCountry = computeHardPowerByCountry(countryMilitaryUnits, rosterUnits, rosterLevels);
-  const { byCountry: influenceByCountry } = computeInfluenceForAll(
+  const { byCountry: influenceByCountryRaw } = computeInfluenceForAll(
     countries ?? [],
     hardPowerByCountry,
     (influenceConfig ?? {}) as Parameters<typeof computeInfluenceForAll>[2]
+  );
+  const countryIds = (countries ?? []).map((c) => c.id);
+  const influenceModifiersByCountry = getInfluenceModifiersByCountry(
+    countryIds,
+    countryEffectsRows,
+    countryMobilisationRows,
+    mobilisationConfig ?? null,
+    mobilisationLevelEffects,
+    globalGrowthEffects
+  );
+  const influenceByCountry = new Map(
+    countryIds.map((id) => {
+      const raw = influenceByCountryRaw.get(id);
+      const mods = influenceModifiersByCountry.get(id);
+      if (!raw) return [id, null] as const;
+      const result = mods ? applyInfluenceModifiers(raw, mods) : raw;
+      return [id, result] as const;
+    })
   );
 
   const rows =
@@ -74,6 +118,7 @@ export default async function HomePage({
       country: c,
       prev: latestByCountry.get(normId(c.id)) ?? null,
       influence: influenceByCountry.get(c.id)?.influence ?? null,
+      sphere: sphereByControllerId.get(c.id) ?? [],
     })) ?? [];
 
   const panelStyle = {

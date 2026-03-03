@@ -61,6 +61,36 @@ export default async function AdminDashboardPage() {
           </p>
         </Link>
         <Link
+          href="/admin/matrice-diplomatique"
+          className="rounded-lg border p-6 transition-colors hover:border-[var(--accent-muted)]"
+          style={{
+            background: "var(--background-panel)",
+            borderColor: "var(--border)",
+          }}
+        >
+          <h2 className="text-lg font-semibold text-[var(--foreground)]">
+            Matrice Diplomatique
+          </h2>
+          <p className="mt-2 text-sm text-[var(--foreground-muted)]">
+            Configurer les relations diplomatiques entre pays
+          </p>
+        </Link>
+        <Link
+          href="/admin/regions-carte"
+          className="rounded-lg border p-6 transition-colors hover:border-[var(--accent-muted)]"
+          style={{
+            background: "var(--background-panel)",
+            borderColor: "var(--border)",
+          }}
+        >
+          <h2 className="text-lg font-semibold text-[var(--foreground)]">
+            Régions carte
+          </h2>
+          <p className="mt-2 text-sm text-[var(--foreground-muted)]">
+            Gérer les régions de la carte (liste, réinitialisation)
+          </p>
+        </Link>
+        <Link
           href="/admin/regles"
           className="rounded-lg border p-6 transition-colors hover:border-[var(--accent-muted)]"
           style={{

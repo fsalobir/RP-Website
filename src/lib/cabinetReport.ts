@@ -6,7 +6,7 @@
 import type { TickBreakdown } from "@/lib/tickBreakdown";
 import type { ExpectedNextTickResult, WorldAverages } from "@/lib/expectedNextTick";
 import type { CountrySnapshot } from "@/lib/expectedNextTick";
-import { BUDGET_MINISTRY_EFFECTS, BUDGET_MINISTRY_LABELS } from "@/lib/ruleParameters";
+import { BUDGET_MINISTRY_LABELS } from "@/lib/ruleParameters";
 
 /** Seuils de magnitude pour les deltas (stats) : |delta| < weak = faible, < moderate = modéré, sinon fort. */
 const MAGNITUDE_DELTA_WEAK = 0.02;
@@ -28,7 +28,7 @@ const MINISTRY_TO_SOURCE_LABEL: Record<string, string> = {
   budget_affaires_etrangeres: "Affaires étrangères",
 };
 
-/** Stat key (BUDGET_MINISTRY_EFFECTS) → clé sources et optionnellement gravity_info dans expected.inputs. */
+/** Stat key → clé sources et optionnellement gravity_info dans expected.inputs. */
 const STAT_TO_INPUTS_KEY: Record<string, { sources: keyof ExpectedNextTickResult["inputs"]; gravity?: keyof ExpectedNextTickResult["inputs"] }> = {
   population: { sources: "budget_pop_sources" },
   gdp: { sources: "budget_gdp_sources" },
@@ -219,6 +219,27 @@ const STAT_LABELS_FR: Record<string, string> = {
   stability: "Stabilité",
 };
 
+/** Liste d’effets (stat key + label) par ministère, dérivée des contributions dans expected.inputs. */
+function getEffectsPerMinistryFromInputs(inputs: ExpectedNextTickResult["inputs"]): Record<string, { key: string; label: string }[]> {
+  const byMinistry: Record<string, { key: string; label: string }[]> = {};
+  const statKeys = Object.keys(STAT_TO_INPUTS_KEY) as string[];
+  for (const ministryKey of Object.keys(MINISTRY_TO_SOURCE_LABEL)) {
+    const sourceLabel = MINISTRY_TO_SOURCE_LABEL[ministryKey];
+    const effects: { key: string; label: string }[] = [];
+    for (const statKey of statKeys) {
+      const conf = STAT_TO_INPUTS_KEY[statKey];
+      const sources = inputs[conf.sources] as Record<string, number> | undefined;
+      if (sources && sourceLabel in sources) {
+        effects.push({ key: statKey, label: STAT_LABELS_FR[statKey] ?? statKey });
+      }
+    }
+    if (effects.length > 0) {
+      byMinistry[ministryKey] = effects;
+    }
+  }
+  return byMinistry;
+}
+
 /** Hash simple pour tirage déterministe (graine + clé + index). */
 function simpleHash(seed: number, key: string, index: number): number {
   let h = seed;
@@ -262,10 +283,11 @@ export function getCabinetPhrases(
   const inputs = expected.inputs;
   const seedNum = seed ?? 0;
   const blocks: CabinetMinistryBlock[] = [];
+  const effectsByMinistry = getEffectsPerMinistryFromInputs(inputs);
 
   const ministryKeys = Object.keys(MINISTRY_TO_SOURCE_LABEL) as string[];
   for (const ministryKey of ministryKeys) {
-    const effects = BUDGET_MINISTRY_EFFECTS[ministryKey];
+    const effects = effectsByMinistry[ministryKey];
     if (!effects?.length) continue;
 
     const sourceLabel = MINISTRY_TO_SOURCE_LABEL[ministryKey];

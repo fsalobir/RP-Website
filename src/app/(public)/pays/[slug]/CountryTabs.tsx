@@ -9,8 +9,8 @@ import type { CountryEffect } from "@/types/database";
 import type { CountryUpdateLog } from "@/types/database";
 import { createClient } from "@/lib/supabase/client";
 import {
-  buildEffectKeys,
-  parseEffectToForm,
+  ALL_EFFECT_KIND_IDS,
+  getDefaultTargetForKind,
   getForcedMinPcts,
   getAllocationCapPercent,
   budgetKeyToPctKey,
@@ -18,7 +18,6 @@ import {
   getEffectsForCountry,
   getEffectsForCountryTickRates,
   getMobilisationLevelLabel,
-  type EffectCategoryId,
 } from "@/lib/countryEffects";
 import { getTickBreakdown } from "@/lib/tickBreakdown";
 import { setMobilisationTarget } from "./actions";
@@ -84,6 +83,10 @@ export function CountryTabs({
   worldDate,
   influenceResult = null,
   hardPowerByBranch = null,
+  ai_status = null,
+  aiMajorEffects = [],
+  aiMinorEffects = [],
+  sphereData = { totalPopulation: 0, totalGdp: 0, countries: [] },
 }: {
   country: Country;
   macros: { key: string; value: number }[];
@@ -106,6 +109,10 @@ export function CountryTabs({
   worldDate?: { month: number; year: number };
   influenceResult?: InfluenceResult | null;
   hardPowerByBranch?: HardPowerByBranch | null;
+  ai_status?: string | null;
+  aiMajorEffects?: Array<{ effect_kind: string; effect_target: string | null; value: number }>;
+  aiMinorEffects?: Array<{ effect_kind: string; effect_target: string | null; value: number }>;
+  sphereData?: { totalPopulation: number; totalGdp: number; countries: Array<{ id: string; name: string; slug: string; population: number | null; gdp: number | null }> };
 }) {
   const canEditCountry = isAdmin || isPlayerForThisCountry;
   const rankEmoji = (r: number) => (r === 1 ? "👑" : r === 2 ? "🥈" : r === 3 ? "🥉" : null);
@@ -118,11 +125,10 @@ export function CountryTabs({
   const [effectsFormOpen, setEffectsFormOpen] = useState(false);
   const [editingEffect, setEditingEffect] = useState<CountryEffect | null>(null);
   const [effectName, setEffectName] = useState("");
-  const [effectCategory, setEffectCategory] = useState<EffectCategoryId>("gdp_growth");
-  const [effectSubChoice, setEffectSubChoice] = useState<string | null>("base");
+  const [effectKind, setEffectKind] = useState<string>(ALL_EFFECT_KIND_IDS[0]);
   const [effectTarget, setEffectTarget] = useState<string | null>(null);
   const [effectValue, setEffectValue] = useState("");
-  const [effectDurationKind, setEffectDurationKind] = useState<"days" | "updates">("days");
+  const [effectDurationKind, setEffectDurationKind] = useState<"days" | "updates" | "permanent">("days");
   const [effectDurationRemaining, setEffectDurationRemaining] = useState("7");
   const [effectSaving, setEffectSaving] = useState(false);
   const [effectError, setEffectError] = useState<string | null>(null);
@@ -207,8 +213,11 @@ export function CountryTabs({
         countryEffects: effects,
         mobilisationLevelEffects,
         globalGrowthEffects,
+        ai_status,
+        aiMajorEffects,
+        aiMinorEffects,
       }),
-    [country.id, effects, mobilisationLevelEffects, globalGrowthEffects]
+    [country.id, effects, mobilisationLevelEffects, globalGrowthEffects, ai_status, aiMajorEffects, aiMinorEffects]
   );
 
   const effectsForTick = useMemo(
@@ -218,8 +227,11 @@ export function CountryTabs({
         countryEffects: effects,
         mobilisationLevelEffects,
         globalGrowthEffects,
+        ai_status,
+        aiMajorEffects,
+        aiMinorEffects,
       }),
-    [country.id, effects, mobilisationLevelEffects, globalGrowthEffects]
+    [country.id, effects, mobilisationLevelEffects, globalGrowthEffects, ai_status, aiMajorEffects, aiMinorEffects]
   );
 
   const tickBreakdownResult = useMemo(() => {
@@ -247,7 +259,7 @@ export function CountryTabs({
       budgetPcts,
       ruleParametersByKey,
       worldAverages,
-      { countryEffects: effects, mobilisationLevelEffects, globalGrowthEffects },
+      { countryEffects: effects, mobilisationLevelEffects, globalGrowthEffects, ai_status, aiMajorEffects, aiMinorEffects },
       {
         mobilisationLevelName: getMobilisationLevelLabel(mobilisationLevelKey),
         rosterUnitName: (id) => rosterUnitsFlat.find((u) => u.id === id)?.name_fr ?? null,
@@ -267,6 +279,9 @@ export function CountryTabs({
     effects,
     mobilisationLevelEffects,
     globalGrowthEffects,
+    ai_status,
+    aiMajorEffects,
+    aiMinorEffects,
     mobilisationLevelKey,
     rosterUnitsFlat,
   ]);
@@ -413,17 +428,19 @@ export function CountryTabs({
 
   const handleEditEffect = (e: CountryEffect) => {
     setEditingEffect(e);
-    const { category, subChoice, target } = parseEffectToForm(e);
-    setEffectCategory(category);
-    setEffectSubChoice(subChoice);
-    setEffectTarget(target);
+    setEffectKind(e.effect_kind);
+    setEffectTarget(e.effect_target);
     setEffectName(e.name);
     setEffectValue(
       e.effect_kind.startsWith("gdp_growth") || e.effect_kind.startsWith("population_growth")
         ? String(Number(e.value) * 100)
-        : String(e.value)
+        : e.effect_kind.startsWith("influence_modifier_")
+          ? String(Number(e.value) * 100 - 100)
+          : e.effect_kind === "budget_ministry_effect_multiplier"
+            ? String(Number(e.value) * 100 - 100)
+            : String(e.value)
     );
-    setEffectDurationKind(e.duration_kind as "days" | "updates");
+    setEffectDurationKind(e.duration_kind as "days" | "updates" | "permanent");
     setEffectDurationRemaining(String(e.duration_remaining));
     setEffectsFormOpen(true);
   };
@@ -438,9 +455,9 @@ export function CountryTabs({
   const handleOpenNewEffect = () => {
     setEditingEffect(null);
     setEffectName("");
-    setEffectCategory("gdp_growth");
-    setEffectSubChoice("base");
-    setEffectTarget(null);
+    const firstKind = ALL_EFFECT_KIND_IDS[0];
+    setEffectKind(firstKind);
+    setEffectTarget(getDefaultTargetForKind(firstKind, rosterUnitsFlat.map((u) => u.id)));
     setEffectValue("");
     setEffectDurationKind("days");
     setEffectDurationRemaining("7");
@@ -457,17 +474,15 @@ export function CountryTabs({
       setEffectSaving(false);
       return;
     }
-    const { effect_kind, effect_target, effect_subtype } = buildEffectKeys(
-      effectCategory,
-      effectSubChoice,
-      effectTarget
-    );
+    const effect_kind = effectKind;
+    const effect_target = effectTarget;
     if (effect_kind === "budget_ministry_min_pct" && valueNum < 0) {
       setEffectError("Le minimum forcé doit être une valeur positive.");
       setEffectSaving(false);
       return;
     }
-    const durationNum = Math.max(0, Math.floor(Number(effectDurationRemaining) || 0));
+    const isPermanent = effectDurationKind === "permanent";
+    const durationNum = isPermanent ? 0 : Math.max(0, Math.floor(Number(effectDurationRemaining) || 0));
     const isGrowthEffect =
       effect_kind === "gdp_growth_base" ||
       effect_kind === "gdp_growth_per_stat" ||
@@ -475,21 +490,25 @@ export function CountryTabs({
       effect_kind === "population_growth_per_stat";
     const isMilitaryUnitEffect =
       effect_kind === "military_unit_extra" || effect_kind === "military_unit_tech_rate" || effect_kind === "military_unit_limit_modifier";
+    const isInfluenceModifier = effect_kind.startsWith("influence_modifier_");
+    const isMultiplierEffect = isInfluenceModifier || effect_kind === "budget_ministry_effect_multiplier";
     const valueToStore = isGrowthEffect
       ? valueNum / 100
       : effect_kind === "military_unit_limit_modifier"
         ? valueNum
         : isMilitaryUnitEffect
           ? Math.floor(valueNum)
-          : valueNum;
+          : isMultiplierEffect
+            ? (100 + valueNum) / 100
+            : valueNum;
     const supabase = createClient();
     const row = {
       name: effectName.trim(),
       effect_kind,
       effect_target: effect_target || null,
-      effect_subtype: effect_subtype || null,
+      effect_subtype: null,
       value: valueToStore,
-      duration_kind: effectDurationKind,
+      duration_kind: isPermanent ? "permanent" : effectDurationKind,
       duration_remaining: durationNum,
     };
     let err: string | null = null;
@@ -785,10 +804,8 @@ export function CountryTabs({
           setEditingEffect={setEditingEffect}
           effectName={effectName}
           setEffectName={setEffectName}
-          effectCategory={effectCategory}
-          setEffectCategory={setEffectCategory}
-          effectSubChoice={effectSubChoice}
-          setEffectSubChoice={setEffectSubChoice}
+          effectKind={effectKind}
+          setEffectKind={setEffectKind}
           effectTarget={effectTarget}
           setEffectTarget={setEffectTarget}
           effectValue={effectValue}
@@ -807,6 +824,7 @@ export function CountryTabs({
           onCloseEffectForm={handleCloseEffectForm}
           influenceResult={influenceResult}
           hardPowerByBranch={hardPowerByBranch}
+          sphereData={sphereData}
         />
       )}
 

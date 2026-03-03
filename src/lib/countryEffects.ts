@@ -29,6 +29,15 @@ export const STAT_LABELS: Record<StatKey, string> = {
   stability: "Stabilité",
 };
 
+/** Sous-types Modificateur d'influence (Global / PIB / Population / Hard Power). */
+export const INFLUENCE_MODIFIER_SUB_IDS = ["global", "gdp", "population", "hard_power"] as const;
+export const INFLUENCE_MODIFIER_SUB_LABELS: Record<string, string> = {
+  global: "Global (toute l'influence)",
+  gdp: "PIB (influence économie)",
+  population: "Population",
+  hard_power: "Hard Power (militaire)",
+};
+
 /** Catégories pour le premier dropdown (libellé FR). */
 export const EFFECT_CATEGORY_IDS = [
   "gdp_growth",
@@ -37,6 +46,7 @@ export const EFFECT_CATEGORY_IDS = [
   "budget_ministry",
   "budget_debt_surplus",
   "military_unit",
+  "influence_modifier",
 ] as const;
 export type EffectCategoryId = (typeof EFFECT_CATEGORY_IDS)[number];
 
@@ -47,6 +57,7 @@ export const EFFECT_CATEGORY_LABELS: Record<EffectCategoryId, string> = {
   budget_ministry: "Budget ministère",
   budget_debt_surplus: "Allocation de Budget Maximum",
   military_unit: "Unité militaire",
+  influence_modifier: "Modificateur d'influence",
 };
 
 /** Sous-type Croissance PIB / Population : base ou par stat. */
@@ -124,6 +135,19 @@ export function buildEffectKeys(
     if (subChoice === "limit_modifier") return { effect_kind: "military_unit_limit_modifier", effect_target: target, effect_subtype: null };
     return { effect_kind: "military_unit_extra", effect_target: target, effect_subtype: null };
   }
+  if (category === "influence_modifier") {
+    const kind =
+      subChoice === "global"
+        ? "influence_modifier_global"
+        : subChoice === "gdp"
+          ? "influence_modifier_gdp"
+          : subChoice === "population"
+            ? "influence_modifier_population"
+            : subChoice === "hard_power"
+              ? "influence_modifier_hard_power"
+              : "influence_modifier_global";
+    return { effect_kind: kind, effect_target: null, effect_subtype: null };
+  }
   return { effect_kind: "", effect_target: null, effect_subtype: null };
 }
 
@@ -159,6 +183,10 @@ export const ALL_EFFECT_KIND_IDS = [
   "military_unit_extra",
   "military_unit_tech_rate",
   "military_unit_limit_modifier",
+  "influence_modifier_global",
+  "influence_modifier_gdp",
+  "influence_modifier_population",
+  "influence_modifier_hard_power",
 ] as const;
 
 export type EffectKindId = (typeof ALL_EFFECT_KIND_IDS)[number];
@@ -176,6 +204,10 @@ export const EFFECT_KIND_META: Record<EffectKindId, EffectKindMeta> = {
   military_unit_extra: { targetType: "roster_unit", valueFormat: "integer", label: "Unité militaire (bonus/malus extra)" },
   military_unit_tech_rate: { targetType: "roster_unit", valueFormat: "integer", label: "Unité militaire (bonus points tech/jour)" },
   military_unit_limit_modifier: { targetType: "military_branch", valueFormat: "integer_percent", label: "Unité militaire (modificateur de limites %)" },
+  influence_modifier_global: { targetType: "none", valueFormat: "multiplier", label: "Modificateur d'influence (global)" },
+  influence_modifier_gdp: { targetType: "none", valueFormat: "multiplier", label: "Modificateur d'influence (PIB)" },
+  influence_modifier_population: { targetType: "none", valueFormat: "multiplier", label: "Modificateur d'influence (population)" },
+  influence_modifier_hard_power: { targetType: "none", valueFormat: "multiplier", label: "Modificateur d'influence (Hard Power)" },
 };
 
 /** Libellé court pour effect_kind (affichage liste). Dérivé des métadonnées, avec fallback. */
@@ -186,7 +218,15 @@ export const EFFECT_KIND_LABELS: Record<string, string> = Object.fromEntries(
 /** Sets dérivés pour les formulaires (cible selon le kind). */
 const _STAT = new Set<string>(["stat_delta", "gdp_growth_per_stat", "population_growth_per_stat"]);
 const _BUDGET = new Set<string>(["budget_ministry_min_pct", "budget_ministry_effect_multiplier"]);
-const _NONE = new Set<string>(["gdp_growth_base", "population_growth_base", "budget_allocation_cap"]);
+const _NONE = new Set<string>([
+  "gdp_growth_base",
+  "population_growth_base",
+  "budget_allocation_cap",
+  "influence_modifier_global",
+  "influence_modifier_gdp",
+  "influence_modifier_population",
+  "influence_modifier_hard_power",
+]);
 const _BRANCH = new Set<string>(["military_unit_limit_modifier"]);
 const _ROSTER = new Set<string>(["military_unit_extra", "military_unit_tech_rate"]);
 
@@ -293,6 +333,10 @@ export function getEffectDescription(e: CountryEffect | ResolvedEffect, options?
   if (e.effect_kind === "military_unit_extra" && targetLabel) return `Extra unité — ${targetLabel} : ${valueStr}`;
   if (e.effect_kind === "military_unit_tech_rate" && targetLabel) return `Tech unité — ${targetLabel} : ${valueStr}`;
   if (e.effect_kind === "military_unit_limit_modifier" && targetLabel) return `Limites — ${targetLabel} : ${valueStr}`;
+  if (e.effect_kind === "influence_modifier_global") return `Modificateur influence (global) : ${valueStr}`;
+  if (e.effect_kind === "influence_modifier_gdp") return `Modificateur influence (PIB) : ${valueStr}`;
+  if (e.effect_kind === "influence_modifier_population") return `Modificateur influence (population) : ${valueStr}`;
+  if (e.effect_kind === "influence_modifier_hard_power") return `Modificateur influence (Hard Power) : ${valueStr}`;
 
   const kindLabel = EFFECT_KIND_LABELS[e.effect_kind] ?? e.effect_kind;
   if (targetLabel) return `${kindLabel} — ${targetLabel} : ${valueStr}`;
@@ -310,6 +354,7 @@ export function formatEffectValue(effectKind: string | null | undefined, value: 
   if (kind === "military_unit_tech_rate") return `${Number(value)} pts/jour`;
   if (kind === "military_unit_extra") return (Number(value) >= 0 ? "+" : "") + String(Number(value));
   if (kind === "military_unit_limit_modifier") return `${Number(value) >= 0 ? "+" : ""}${Number(value)} %`;
+  if (kind.startsWith("influence_modifier_")) return `${(value * 100 - 100).toFixed(0)} %`;
   return String(value);
 }
 
@@ -329,8 +374,9 @@ export function budgetKeyToPctKey(budgetKey: string): string {
   return budgetKey.replace(/^budget_/, "pct_");
 }
 
-/** Durée restante affichée (jours ou mises à jour). */
+/** Durée restante affichée (jours, mises à jour ou permanent). */
 export function formatDurationRemaining(e: CountryEffect): string {
+  if (e.duration_kind === "permanent") return "Permanent";
   const n = e.duration_remaining;
   return e.duration_kind === "updates"
     ? `${n} mise${n > 1 ? "s" : ""} à jour`
@@ -340,6 +386,15 @@ export function formatDurationRemaining(e: CountryEffect): string {
 /** Liste des ministères pour les dropdowns (clé + libellé). */
 export function getBudgetMinistryOptions(): { key: string; label: string }[] {
   return BUDGET_MINISTRY_KEYS.map((key) => ({ key, label: BUDGET_MINISTRY_LABELS[key] ?? key }));
+}
+
+/** Cible par défaut pour un effect_kind (pour formulaire unifié par kind). */
+export function getDefaultTargetForKind(effectKind: string, rosterUnitIds?: string[]): string | null {
+  if (EFFECT_KINDS_WITH_STAT_TARGET.has(effectKind)) return STAT_KEYS[0];
+  if (EFFECT_KINDS_WITH_BUDGET_TARGET.has(effectKind)) return getBudgetMinistryOptions()[0]?.key ?? BUDGET_MINISTRY_KEYS[0];
+  if (EFFECT_KINDS_WITH_BRANCH_TARGET.has(effectKind)) return MILITARY_BRANCH_EFFECT_IDS[0];
+  if (EFFECT_KINDS_WITH_ROSTER_UNIT_TARGET.has(effectKind)) return rosterUnitIds?.[0] ?? null;
+  return null;
 }
 
 /** Pour pré-remplir le formulaire d’édition à partir d’un effet existant. */
@@ -359,6 +414,10 @@ export function parseEffectToForm(e: CountryEffect): {
   if (e.effect_kind === "military_unit_extra") return { category: "military_unit", subChoice: "unit_extra", target: e.effect_target };
   if (e.effect_kind === "military_unit_tech_rate") return { category: "military_unit", subChoice: "unit_tech_rate", target: e.effect_target };
   if (e.effect_kind === "military_unit_limit_modifier") return { category: "military_unit", subChoice: "limit_modifier", target: e.effect_target };
+  if (e.effect_kind === "influence_modifier_global") return { category: "influence_modifier", subChoice: "global", target: null };
+  if (e.effect_kind === "influence_modifier_gdp") return { category: "influence_modifier", subChoice: "gdp", target: null };
+  if (e.effect_kind === "influence_modifier_population") return { category: "influence_modifier", subChoice: "population", target: null };
+  if (e.effect_kind === "influence_modifier_hard_power") return { category: "influence_modifier", subChoice: "hard_power", target: null };
   return { category: "gdp_growth", subChoice: "base", target: null };
 }
 
@@ -368,6 +427,8 @@ export type ResolvedEffect = {
   effect_target: string | null;
   value: number;
   duration_remaining?: number;
+  /** Présent pour les effets issus de country_effects ; 'permanent' = n'expire jamais. */
+  duration_kind?: string;
 };
 
 /** Contexte pour résoudre les effets applicables à un pays (sources enregistrées). */
@@ -376,6 +437,12 @@ export type EffectResolutionContext = {
   countryEffects: CountryEffect[];
   mobilisationLevelEffects: Array<{ effect_kind: string; effect_target: string | null; value: number }>;
   globalGrowthEffects: Array<{ effect_kind: string; effect_target: string | null; value: number }>;
+  /** Statut IA du pays : 'major' | 'minor' | null. Si fourni, les effets IA correspondants sont inclus. */
+  ai_status?: string | null;
+  /** Effets appliqués aux pays IA majeurs (règle ai_major_effects). */
+  aiMajorEffects?: Array<{ effect_kind: string; effect_target: string | null; value: number }>;
+  /** Effets appliqués aux pays IA mineurs (règle ai_minor_effects). */
+  aiMinorEffects?: Array<{ effect_kind: string; effect_target: string | null; value: number }>;
 };
 
 /** Pseudo-durée pour les effets globaux/mobilisation (toujours actifs). */
@@ -387,6 +454,7 @@ function countryEffectsSource(ctx: EffectResolutionContext): ResolvedEffect[] {
     effect_target: e.effect_target,
     value: Number(e.value),
     duration_remaining: e.duration_remaining,
+    duration_kind: e.duration_kind,
   }));
 }
 
@@ -408,11 +476,32 @@ function globalEffectsSource(ctx: EffectResolutionContext): ResolvedEffect[] {
   }));
 }
 
+function aiEffectsSource(ctx: EffectResolutionContext): ResolvedEffect[] {
+  if (ctx.ai_status === "major" && ctx.aiMajorEffects?.length) {
+    return ctx.aiMajorEffects.map((e) => ({
+      effect_kind: e.effect_kind,
+      effect_target: e.effect_target ?? null,
+      value: Number(e.value),
+      duration_remaining: PERMANENT_DURATION,
+    }));
+  }
+  if (ctx.ai_status === "minor" && ctx.aiMinorEffects?.length) {
+    return ctx.aiMinorEffects.map((e) => ({
+      effect_kind: e.effect_kind,
+      effect_target: e.effect_target ?? null,
+      value: Number(e.value),
+      duration_remaining: PERMANENT_DURATION,
+    }));
+  }
+  return [];
+}
+
 /** Registry de sources d'effets. Ajouter une source ici pour un nouvel « endroit » sans toucher aux consommateurs. */
 export const EFFECT_SOURCES: Array<(ctx: EffectResolutionContext) => ResolvedEffect[]> = [
   countryEffectsSource,
   mobilisationEffectsSource,
   globalEffectsSource,
+  aiEffectsSource,
 ];
 
 /** Agrège les effets de toutes les sources pour un pays. Utiliser cette liste pour getForcedMinPcts, getAllocationCapPercent, getUnitExtraEffectSum, getLimitModifierPercent, expectedNextTick. */
@@ -453,14 +542,18 @@ export function getAllocationCapPercent(effects: Array<{ effect_kind: string; va
   return 100 + sum;
 }
 
+function isEffectActiveByDuration(e: { duration_remaining?: number; duration_kind?: string }): boolean {
+  return e.duration_kind === "permanent" || (e.duration_remaining ?? 0) > 0;
+}
+
 /** Somme des bonus/malus extra pour une unité (effets actifs military_unit_extra). */
 export function getUnitExtraEffectSum(
-  effects: Array<{ effect_kind: string; effect_target: string | null; value: number; duration_remaining?: number }>,
+  effects: Array<{ effect_kind: string; effect_target: string | null; value: number; duration_remaining?: number; duration_kind?: string }>,
   rosterUnitId: string
 ): number {
   let sum = 0;
   for (const e of effects) {
-    if (e.effect_kind === "military_unit_extra" && e.effect_target === rosterUnitId && (e.duration_remaining ?? 0) > 0) {
+    if (e.effect_kind === "military_unit_extra" && e.effect_target === rosterUnitId && isEffectActiveByDuration(e)) {
       sum += Number(e.value);
     }
   }
@@ -469,14 +562,125 @@ export function getUnitExtraEffectSum(
 
 /** Somme des modificateurs de limite (%) pour une branche (effets military_unit_limit_modifier). */
 export function getLimitModifierPercent(
-  effects: Array<{ effect_kind: string; effect_target: string | null; value: number; duration_remaining?: number }>,
+  effects: Array<{ effect_kind: string; effect_target: string | null; value: number; duration_remaining?: number; duration_kind?: string }>,
   branch: string
 ): number {
   let sum = 0;
   for (const e of effects) {
-    if (e.effect_kind === "military_unit_limit_modifier" && e.effect_target === branch && (e.duration_remaining ?? 0) > 0) {
+    if (e.effect_kind === "military_unit_limit_modifier" && e.effect_target === branch && isEffectActiveByDuration(e)) {
       sum += Number(e.value);
     }
   }
   return sum;
+}
+
+/** Modificateurs d'influence (multiplier stocké : 1 = 100 %, 1.2 = 120 %). Pour application dans computeInfluence. */
+export type InfluenceModifiers = {
+  global: number;
+  gdp: number;
+  population: number;
+  hard_power: number;
+};
+
+const DEFAULT_INFLUENCE_MODIFIERS: InfluenceModifiers = {
+  global: 1,
+  gdp: 1,
+  population: 1,
+  hard_power: 1,
+};
+
+/** Produit des multiplicateurs d'influence à partir des effets (value = multiplicateur stocké). */
+export function getInfluenceModifiersFromEffects(
+  effects: Array<{ effect_kind: string; value: number; duration_remaining?: number; duration_kind?: string }>,
+  isEffectActive: (e: { duration_remaining?: number; duration_kind?: string }) => boolean
+): InfluenceModifiers {
+  const out = { ...DEFAULT_INFLUENCE_MODIFIERS };
+  for (const e of effects) {
+    if (!isEffectActive(e)) continue;
+    const mult = Number(e.value);
+    if (e.effect_kind === "influence_modifier_global") out.global *= mult;
+    else if (e.effect_kind === "influence_modifier_gdp") out.gdp *= mult;
+    else if (e.effect_kind === "influence_modifier_population") out.population *= mult;
+    else if (e.effect_kind === "influence_modifier_hard_power") out.hard_power *= mult;
+  }
+  return out;
+}
+
+type CountryEffectRow = {
+  country_id: string;
+  effect_kind: string;
+  effect_target: string | null;
+  value: number;
+  duration_remaining?: number;
+  duration_kind?: string;
+};
+type MobilisationRow = { country_id: string; score: number | null };
+type MobilisationConfig = { level_thresholds?: Record<string, number> };
+type LevelEffect = { level: string; effect_kind: string; effect_target: string | null; value: number };
+
+/** Dérive le niveau de mobilisation à partir du score (même logique que dans l'app). */
+function getMobilisationLevelKey(score: number, config: MobilisationConfig | null): string | null {
+  if (!config?.level_thresholds) return null;
+  const entries = Object.entries(config.level_thresholds)
+    .filter(([, val]) => typeof val === "number")
+    .sort(([, a], [, b]) => (b as number) - (a as number));
+  const found = entries.find(([, val]) => (val as number) <= score);
+  return found?.[0] ?? null;
+}
+
+/**
+ * Construit la map countryId → InfluenceModifiers pour une liste de pays.
+ * Utilisé par les pages liste/classement pour appliquer les modificateurs d'influence après computeInfluenceForAll.
+ */
+export function getInfluenceModifiersByCountry(
+  countryIds: string[],
+  countryEffectsRows: CountryEffectRow[],
+  countryMobilisationRows: MobilisationRow[],
+  mobilisationConfig: MobilisationConfig | null,
+  mobilisationLevelEffects: LevelEffect[],
+  globalGrowthEffects: Array<{ effect_kind: string; effect_target: string | null; value: number }>
+): Map<string, InfluenceModifiers> {
+  const mobilisationByCountry = new Map<string, number>();
+  for (const r of countryMobilisationRows) {
+    mobilisationByCountry.set(r.country_id, r.score ?? 0);
+  }
+  const effectsByCountry = new Map<string, CountryEffectRow[]>();
+  for (const r of countryEffectsRows) {
+    const list = effectsByCountry.get(r.country_id) ?? [];
+    list.push(r);
+    effectsByCountry.set(r.country_id, list);
+  }
+  const out = new Map<string, InfluenceModifiers>();
+  const isActive = (e: { duration_remaining?: number; duration_kind?: string }) =>
+    e.duration_kind === "permanent" || (e.duration_remaining ?? 0) > 0;
+  for (const countryId of countryIds) {
+    const score = mobilisationByCountry.get(countryId) ?? 0;
+    const levelKey = getMobilisationLevelKey(score, mobilisationConfig);
+    const mobilisationLevelEffectsForCountry = levelKey
+      ? mobilisationLevelEffects.filter((e) => e.level === levelKey)
+      : [];
+    const countryEffects = (effectsByCountry.get(countryId) ?? []).map((e) => ({
+      ...e,
+      id: "",
+      name: "",
+      effect_subtype: null,
+      duration_kind: (e.duration_kind ?? "days") as "days" | "updates" | "permanent",
+      created_at: "",
+      updated_at: "",
+    })) as CountryEffect[];
+    const context: EffectResolutionContext = {
+      countryId,
+      countryEffects,
+      mobilisationLevelEffects: mobilisationLevelEffectsForCountry.map((e) => ({
+        effect_kind: e.effect_kind,
+        effect_target: e.effect_target,
+        value: e.value,
+      })),
+      globalGrowthEffects,
+    };
+    const effects = getEffectsForCountry(context);
+    const mods = getInfluenceModifiersFromEffects(effects, isActive);
+    out.set(countryId, mods);
+  }
+  return out;
 }

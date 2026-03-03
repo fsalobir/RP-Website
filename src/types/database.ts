@@ -13,6 +13,8 @@ export interface Country {
   population: number
   gdp: number
   growth: number
+  /** Pays IA Majeur (major) ou Mineur (minor) pour les pays sans joueur. Null = pas IA. */
+  ai_status?: string | null
   created_at: string
   updated_at: string
 }
@@ -130,6 +132,17 @@ export interface CountryEffect {
   value: number
   duration_kind: string
   duration_remaining: number
+  created_at: string
+  updated_at: string
+}
+
+/** Part de contrôle d'un pays par un autre (sphère). country_id = pays contrôlé, controller_country_id = détenteur. */
+export interface CountryControl {
+  id: string
+  country_id: string
+  controller_country_id: string
+  share_pct: number
+  is_annexed: boolean
   created_at: string
   updated_at: string
 }

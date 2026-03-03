@@ -78,7 +78,7 @@ export type TickBreakdown = {
   mobilisationEffectsExhaustive: TickBreakdownMobilisationEffectLine[];
 };
 
-type EffectLike = { effect_kind: string; effect_target: string | null; value: number; duration_remaining?: number };
+type EffectLike = { effect_kind: string; effect_target: string | null; value: number; duration_remaining?: number; duration_kind?: string };
 
 function growthValue(val: number): number {
   return Math.abs(val) > 1 ? val / 100 : val;
@@ -126,6 +126,9 @@ export type TickBreakdownContext = {
   countryEffects: CountryEffect[];
   mobilisationLevelEffects: Array<{ effect_kind: string; effect_target: string | null; value: number }>;
   globalGrowthEffects: Array<{ effect_kind: string; effect_target: string | null; value: number }>;
+  ai_status?: string | null;
+  aiMajorEffects?: Array<{ effect_kind: string; effect_target: string | null; value: number }>;
+  aiMinorEffects?: Array<{ effect_kind: string; effect_target: string | null; value: number }>;
 };
 
 export type GetTickBreakdownOptions = {
@@ -163,6 +166,9 @@ export function getTickBreakdown(
     countryEffects: context.countryEffects,
     mobilisationLevelEffects: context.mobilisationLevelEffects,
     globalGrowthEffects: context.globalGrowthEffects,
+    ai_status: context.ai_status,
+    aiMajorEffects: context.aiMajorEffects,
+    aiMinorEffects: context.aiMinorEffects,
   });
 
   const effectsForTick = getEffectsForCountryTickRates({
@@ -170,6 +176,9 @@ export function getTickBreakdown(
     countryEffects: context.countryEffects,
     mobilisationLevelEffects: context.mobilisationLevelEffects,
     globalGrowthEffects: context.globalGrowthEffects,
+    ai_status: context.ai_status,
+    aiMajorEffects: context.aiMajorEffects,
+    aiMinorEffects: context.aiMinorEffects,
   });
 
   const expected = getExpectedNextTick(
@@ -218,7 +227,7 @@ export function getTickBreakdown(
   // 2) Country effects (effets actifs)
   const effectDescOpts = rosterUnitName ? { rosterUnitName } : undefined;
   for (const e of context.countryEffects) {
-    if (e.duration_remaining != null && e.duration_remaining <= 0) continue;
+    if (e.duration_kind !== "permanent" && e.duration_remaining != null && e.duration_remaining <= 0) continue;
     const label = `Effet actif : ${getEffectDescription(e, effectDescOpts)}`;
     addEffectContributions(e, label, mil, ind, sci, stab, popContributions, gdpContributions, milContributions, indContributions, sciContributions, stabContributions);
   }
@@ -307,7 +316,7 @@ export function getTickBreakdown(
     });
 
   const activeEffectsExhaustive: TickBreakdownActiveEffectLine[] = context.countryEffects
-    .filter((e) => e.duration_remaining != null && e.duration_remaining > 0 && !effectKindsAlreadyInBreakdown.has(e.effect_kind))
+    .filter((e) => (e.duration_kind === "permanent" || (e.duration_remaining != null && e.duration_remaining > 0)) && !effectKindsAlreadyInBreakdown.has(e.effect_kind))
     .map((e) => ({ description: getEffectDescription(e, effectDescOpts) }));
 
   const mobilisationEffectsExhaustive: TickBreakdownMobilisationEffectLine[] = context.mobilisationLevelEffects

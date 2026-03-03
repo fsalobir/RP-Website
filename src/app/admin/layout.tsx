@@ -17,7 +17,7 @@ export default async function AdminLayout({
         <header className="sticky top-0 z-50 border-b bg-[var(--background-elevated)]" style={{ borderColor: "var(--border)" }}>
           <div className="mx-auto flex h-14 max-w-6xl items-center justify-between px-4">
             <Link href="/" className="text-lg font-semibold text-[var(--foreground)] hover:text-[var(--accent)] transition-colors">
-              Simulateur de nations
+              Roleplay
             </Link>
             <nav className="flex items-center gap-5">
               <Link href="/" className="text-sm text-[var(--foreground-muted)] hover:text-[var(--foreground)] transition-colors whitespace-nowrap">

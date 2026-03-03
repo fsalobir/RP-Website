@@ -5,6 +5,7 @@
  */
 
 import type { HardPowerByBranch } from "./hardPower";
+import type { InfluenceModifiers } from "./countryEffects";
 
 const STABILITY_SCALE_MIN = -3;
 const STABILITY_SCALE_MAX = 3;
@@ -154,4 +155,30 @@ export function computeInfluenceForAll(
   }
 
   return { byCountry, worldAverages };
+}
+
+/**
+ * Applique les modificateurs d'effets (influence_modifier_*) à un résultat Influence.
+ * Modificateurs sur les parts PIB / population / Hard Power (après gravité), puis global sur le total.
+ */
+export function applyInfluenceModifiers(
+  result: InfluenceResult,
+  mods: InfluenceModifiers
+): InfluenceResult {
+  const ag = result.componentsAfterGravity;
+  const gdp = ag.gdp * mods.gdp;
+  const population = ag.population * mods.population;
+  const military = ag.military * mods.hard_power;
+  const baseInfluence = gdp + population + military;
+  const influence = baseInfluence * ag.stabilityMultiplier * mods.global;
+  return {
+    influence,
+    components: result.components,
+    componentsAfterGravity: {
+      gdp,
+      population,
+      stabilityMultiplier: ag.stabilityMultiplier,
+      military,
+    },
+  };
 }

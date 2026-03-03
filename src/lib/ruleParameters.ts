@@ -67,10 +67,42 @@ export const BUDGET_MINISTRY_LABELS: Record<string, string> = {
   budget_affaires_etrangeres: "Ministère des Affaires étrangères",
 };
 
+/** Types d’effet budget (agrégats : population, PIB, stats). */
+export const BUDGET_EFFECT_TYPE_IDS = [
+  "population",
+  "gdp",
+  "militarism",
+  "industry",
+  "science",
+  "stability",
+] as const;
+export type BudgetMinistryEffectType = (typeof BUDGET_EFFECT_TYPE_IDS)[number];
+
+/** Un type d’effet avec libellé FR et défaut pour gravity_applies (true pour stats, false pour pop/gdp). */
+export const BUDGET_EFFECT_TYPES: { id: BudgetMinistryEffectType; label: string; defaultGravityApplies: boolean }[] = [
+  { id: "population", label: "Population", defaultGravityApplies: false },
+  { id: "gdp", label: "PIB", defaultGravityApplies: false },
+  { id: "militarism", label: "Militarisme", defaultGravityApplies: true },
+  { id: "industry", label: "Industrie", defaultGravityApplies: true },
+  { id: "science", label: "Science", defaultGravityApplies: true },
+  { id: "stability", label: "Stabilité", defaultGravityApplies: true },
+];
+
+export const BUDGET_EFFECT_TYPE_LABELS: Record<string, string> = Object.fromEntries(
+  BUDGET_EFFECT_TYPES.map((t) => [t.id, t.label])
+);
+
+/** Une ligne d’effet configurable par ministère (stockée dans rule_parameters.value.effects). */
+export type BudgetMinistryEffectDef = {
+  effect_type: BudgetMinistryEffectType;
+  bonus: number;
+  malus: number;
+  /** Si true, appliquer le facteur gravité (moyenne mondiale vs pays). Défaut selon le type. */
+  gravity_applies?: boolean;
+};
+
 /**
- * Pour chaque ministère, liste des effets (bonus max/jour).
- * Unité des bonuses : pour les stats (science, industrie, militarism, stabilité) c'est un delta par jour
- * sur l'échelle de la stat ; pour PIB et population c'est un taux ou delta par jour (à aligner avec le cron).
+ * Pour chaque ministère, liste des effets (bonus max/jour). Fallback pour rétrocompat quand value.effects est absent.
  */
 export const BUDGET_MINISTRY_EFFECTS: Record<string, { key: string; label: string }[]> = {
   budget_etat: [{ key: "actions", label: "Actions d'état" }],
@@ -98,11 +130,41 @@ export type BudgetMinistryValue = {
   /** @deprecated Utiliser maluses par effet à la place. Conservé pour affichage / rétrocompat. */
   max_malus?: number;
   gravity_pct?: number;
-  /** Bonus / jour par effet quand allocation >= min_pct. */
+  /** Bonus / jour par effet quand allocation >= min_pct. Rétrocompat si effects absent. */
   bonuses?: Record<string, number>;
-  /** Malus / jour par effet quand allocation < min_pct (même clés que bonuses). */
+  /** Malus / jour par effet quand allocation < min_pct. Rétrocompat si effects absent. */
   maluses?: Record<string, number>;
+  /** Liste d’effets configurables (prioritaire sur bonuses/maluses). */
+  effects?: BudgetMinistryEffectDef[];
 };
+
+/**
+ * Retourne la liste d’effets pour un ministère : value.effects si présent, sinon dérivée de bonuses / BUDGET_MINISTRY_EFFECTS.
+ */
+export function getEffectsListForMinistry(
+  ministryKey: string,
+  value: BudgetMinistryValue | null | undefined
+): BudgetMinistryEffectDef[] {
+  if (value?.effects && value.effects.length > 0) {
+    return value.effects.map((e) => ({
+      effect_type: e.effect_type,
+      bonus: Number(e.bonus) || 0,
+      malus: Number(e.malus) ?? -0.05,
+      gravity_applies: e.gravity_applies ?? BUDGET_EFFECT_TYPES.find((t) => t.id === e.effect_type)?.defaultGravityApplies ?? false,
+    }));
+  }
+  const fallbackList = BUDGET_MINISTRY_EFFECTS[ministryKey] ?? [];
+  const bonuses = value?.bonuses ?? {};
+  const maluses = value?.maluses ?? {};
+  return fallbackList
+    .filter(({ key }) => BUDGET_EFFECT_TYPE_IDS.includes(key as BudgetMinistryEffectType))
+    .map(({ key }) => ({
+      effect_type: key as BudgetMinistryEffectType,
+      bonus: Number(bonuses[key]) || 0,
+      malus: Number(maluses[key]) ?? -0.05,
+      gravity_applies: BUDGET_EFFECT_TYPES.find((t) => t.id === key)?.defaultGravityApplies ?? false,
+    }));
+}
 
 export function getRuleLabel(key: string): string {
   return RULE_KEY_LABELS[key] ?? key;

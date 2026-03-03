@@ -9,8 +9,11 @@ import {
   getRuleLabel,
   BUDGET_MINISTRY_KEYS,
   BUDGET_MINISTRY_LABELS,
-  BUDGET_MINISTRY_EFFECTS,
+  BUDGET_EFFECT_TYPES,
+  BUDGET_EFFECT_TYPE_LABELS,
+  getEffectsListForMinistry,
   type BudgetMinistryValue,
+  type BudgetMinistryEffectDef,
 } from "@/lib/ruleParameters";
 import { MOIS_LABELS } from "@/lib/worldDate";
 import {
@@ -108,6 +111,18 @@ export function ReglesForm({
   const [mobilisationOpen, setMobilisationOpen] = useState(false);
   const [worldDateOpen, setWorldDateOpen] = useState(false);
   const [influenceOpen, setInfluenceOpen] = useState(false);
+  const [sphereOpen, setSphereOpen] = useState(false);
+  const [aiOpen, setAiOpen] = useState(false);
+  const [aiMajorFormOpen, setAiMajorFormOpen] = useState(false);
+  const [aiMajorEditIndex, setAiMajorEditIndex] = useState<number | null>(null);
+  const [aiMajorEffectKind, setAiMajorEffectKind] = useState<string>("gdp_growth_base");
+  const [aiMajorEffectTarget, setAiMajorEffectTarget] = useState<string | null>(null);
+  const [aiMajorEffectValue, setAiMajorEffectValue] = useState<string>("");
+  const [aiMinorFormOpen, setAiMinorFormOpen] = useState(false);
+  const [aiMinorEditIndex, setAiMinorEditIndex] = useState<number | null>(null);
+  const [aiMinorEffectKind, setAiMinorEffectKind] = useState<string>("gdp_growth_base");
+  const [aiMinorEffectTarget, setAiMinorEffectTarget] = useState<string | null>(null);
+  const [aiMinorEffectValue, setAiMinorEffectValue] = useState<string>("");
 
   const supabase = createClient();
 
@@ -147,12 +162,15 @@ export function ReglesForm({
   const mobilisationConfigKey = "mobilisation_config";
   const mobilisationEffectsKey = "mobilisation_level_effects";
   const globalGrowthEffectsKey = "global_growth_effects";
+  const aiMajorEffectsKey = "ai_major_effects";
+  const aiMinorEffectsKey = "ai_minor_effects";
   const worldDateKey = "world_date";
   const worldDateAdvanceKey = "world_date_advance_months";
   const influenceConfigKey = "influence_config";
+  const sphereInfluencePctKey = "sphere_influence_pct";
   const otherRules = useMemo(
     () => items.filter(
-      (r) => !allSectionKeys.has(r.key) && r.key !== mobilisationConfigKey && r.key !== mobilisationEffectsKey && r.key !== globalGrowthEffectsKey && r.key !== worldDateKey && r.key !== worldDateAdvanceKey && r.key !== influenceConfigKey
+      (r) => !allSectionKeys.has(r.key) && r.key !== mobilisationConfigKey && r.key !== mobilisationEffectsKey && r.key !== globalGrowthEffectsKey && r.key !== aiMajorEffectsKey && r.key !== aiMinorEffectsKey && r.key !== worldDateKey && r.key !== worldDateAdvanceKey && r.key !== influenceConfigKey && r.key !== sphereInfluencePctKey
     ),
     [items, allSectionKeys]
   );
@@ -161,6 +179,19 @@ export function ReglesForm({
   const worldDateRule = useMemo(() => items.find((r) => r.key === worldDateKey), [items]);
   const worldDateAdvanceRule = useMemo(() => items.find((r) => r.key === worldDateAdvanceKey), [items]);
   const influenceConfigRule = useMemo(() => items.find((r) => r.key === influenceConfigKey), [items]);
+  const sphereInfluencePctRule = useMemo(() => items.find((r) => r.key === sphereInfluencePctKey), [items]);
+
+  type SphereInfluencePctValue = { contested?: number; occupied?: number; annexed?: number };
+  function getSphereInfluencePct(): SphereInfluencePctValue {
+    if (sphereInfluencePctRule?.value && typeof sphereInfluencePctRule.value === "object" && sphereInfluencePctRule.value !== null) {
+      return sphereInfluencePctRule.value as SphereInfluencePctValue;
+    }
+    return { contested: 50, occupied: 80, annexed: 100 };
+  }
+  function updateSphereInfluencePct(patch: Partial<SphereInfluencePctValue>) {
+    if (!sphereInfluencePctRule) return;
+    updateValue(sphereInfluencePctRule.id, { ...getSphereInfluencePct(), ...patch });
+  }
 
   type InfluenceConfigValue = {
     mult_gdp?: number;
@@ -270,6 +301,95 @@ export function ReglesForm({
     return targetLabel ? `${kindLabel} — ${targetLabel} : ${valueStr}` : `${kindLabel} : ${valueStr}`;
   }
 
+  const aiMajorEffectsRule = useMemo(() => items.find((r) => r.key === aiMajorEffectsKey), [items]);
+  const aiMinorEffectsRule = useMemo(() => items.find((r) => r.key === aiMinorEffectsKey), [items]);
+  function getAiEffects(rule: RuleParameter | undefined): GlobalGrowthEffectEntry[] {
+    if (!rule?.value || !Array.isArray(rule.value)) return [];
+    return (rule.value as GlobalGrowthEffectEntry[]).filter(
+      (e) => e && typeof e.effect_kind === "string" && typeof e.value === "number"
+    );
+  }
+  function setAiEffects(rule: RuleParameter | undefined, arr: GlobalGrowthEffectEntry[]) {
+    if (!rule) return;
+    updateValue(rule.id, arr);
+  }
+  function openAddAiEffect(which: "major" | "minor") {
+    const firstKind = ALL_EFFECT_KIND_IDS[0];
+    const defTarget = getDefaultTargetForKindGlobal(firstKind);
+    if (which === "major") {
+      setAiMajorEffectKind(firstKind);
+      setAiMajorEffectTarget(defTarget);
+      setAiMajorEffectValue("");
+      setAiMajorEditIndex(null);
+      setAiMajorFormOpen(true);
+    } else {
+      setAiMinorEffectKind(firstKind);
+      setAiMinorEffectTarget(defTarget);
+      setAiMinorEffectValue("");
+      setAiMinorEditIndex(null);
+      setAiMinorFormOpen(true);
+    }
+  }
+  function openEditAiEffect(which: "major" | "minor", index: number) {
+    const rule = which === "major" ? aiMajorEffectsRule : aiMinorEffectsRule;
+    const arr = getAiEffects(rule);
+    const e = arr[index];
+    if (!e) return;
+    const helper = getEffectKindValueHelper(e.effect_kind);
+    if (which === "major") {
+      setAiMajorEffectKind(e.effect_kind);
+      setAiMajorEffectTarget(e.effect_target);
+      setAiMajorEffectValue(String(helper.storedToDisplay(Number(e.value))));
+      setAiMajorEditIndex(index);
+      setAiMajorFormOpen(true);
+    } else {
+      setAiMinorEffectKind(e.effect_kind);
+      setAiMinorEffectTarget(e.effect_target);
+      setAiMinorEffectValue(String(helper.storedToDisplay(Number(e.value))));
+      setAiMinorEditIndex(index);
+      setAiMinorFormOpen(true);
+    }
+  }
+  function saveAiEffectForm(which: "major" | "minor") {
+    const rule = which === "major" ? aiMajorEffectsRule : aiMinorEffectsRule;
+    if (!rule) return;
+    const kind = which === "major" ? aiMajorEffectKind : aiMinorEffectKind;
+    const target = which === "major" ? aiMajorEffectTarget : aiMinorEffectTarget;
+    const valueStr = which === "major" ? aiMajorEffectValue : aiMinorEffectValue;
+    const valueNum = Number(valueStr);
+    if (Number.isNaN(valueNum)) return;
+    const helper = getEffectKindValueHelper(kind);
+    const valueStored = helper.displayToStored(valueNum);
+    const needsTarget =
+      EFFECT_KINDS_WITH_STAT_TARGET.has(kind) ||
+      EFFECT_KINDS_WITH_BUDGET_TARGET.has(kind) ||
+      EFFECT_KINDS_WITH_BRANCH_TARGET.has(kind) ||
+      EFFECT_KINDS_WITH_ROSTER_UNIT_TARGET.has(kind);
+    const entry: GlobalGrowthEffectEntry = {
+      effect_kind: kind,
+      effect_target: needsTarget ? target : null,
+      value: valueStored,
+    };
+    const arr = getAiEffects(rule);
+    const editIndex = which === "major" ? aiMajorEditIndex : aiMinorEditIndex;
+    if (editIndex !== null) {
+      const next = arr.map((elem, i) => (i === editIndex ? entry : elem));
+      setAiEffects(rule, next);
+    } else {
+      setAiEffects(rule, [...arr, entry]);
+    }
+    if (which === "major") {
+      setAiMajorFormOpen(false);
+    } else {
+      setAiMinorFormOpen(false);
+    }
+  }
+  function removeAiEffect(which: "major" | "minor", index: number) {
+    const rule = which === "major" ? aiMajorEffectsRule : aiMinorEffectsRule;
+    if (!rule) return;
+    setAiEffects(rule, getAiEffects(rule).filter((_, i) => i !== index));
+  }
+
   const mobilisationConfigRule = useMemo(() => items.find((r) => r.key === mobilisationConfigKey), [items]);
   const mobilisationEffectsRule = useMemo(() => items.find((r) => r.key === mobilisationEffectsKey), [items]);
 
@@ -377,6 +497,41 @@ export function ReglesForm({
     }
   }
 
+  function updateBudgetEffects(r: RuleParameter, effects: BudgetMinistryEffectDef[]) {
+    const current = getBudgetValue(r);
+    updateValue(r.id, { ...current, effects });
+  }
+
+  function addBudgetEffect(r: RuleParameter) {
+    const current = getBudgetValue(r);
+    const next: BudgetMinistryEffectDef = {
+      effect_type: "population",
+      bonus: 0,
+      malus: -0.05,
+      gravity_applies: BUDGET_EFFECT_TYPES.find((t) => t.id === "population")?.defaultGravityApplies ?? false,
+    };
+    const effects = [...(current.effects ?? []), next];
+    updateValue(r.id, { ...current, effects });
+  }
+
+  function removeBudgetEffect(r: RuleParameter, index: number) {
+    const current = getBudgetValue(r);
+    const effects = (current.effects ?? []).filter((_, i) => i !== index);
+    updateValue(r.id, { ...current, effects });
+  }
+
+  function updateBudgetEffectAt(
+    r: RuleParameter,
+    index: number,
+    patch: Partial<BudgetMinistryEffectDef>
+  ) {
+    const current = getBudgetValue(r);
+    const effects = [...(current.effects ?? [])];
+    if (!effects[index]) return;
+    effects[index] = { ...effects[index], ...patch };
+    updateValue(r.id, { ...current, effects });
+  }
+
   function parseRuleValueAndUpdate(id: string, v: string) {
     let parsed: unknown = v;
     if (new RegExp("^-?\\d+(\\.\\d+)?$").test(v)) parsed = Number(v);
@@ -405,7 +560,7 @@ export function ReglesForm({
     ? 1 + ((simulatorParams.gravity_pct ?? 50) / 100) * (worldAvgNum - baseNum) / Math.max(worldAvgNum, 0.01)
     : 1;
   const minPct = simulatorParams?.min_pct ?? 5;
-  const effects = (simulatorParams && BUDGET_MINISTRY_EFFECTS[simulatorMinistry]) ?? [];
+  const effectsResolved = (simulatorParams && getEffectsListForMinistry(simulatorMinistry, simulatorParams)) ?? [];
   const allocationBelowMin = simulatorAllocationPct < minPct;
   const malusScale = allocationBelowMin && minPct > 0
     ? (minPct - simulatorAllocationPct) / minPct
@@ -413,11 +568,11 @@ export function ReglesForm({
   const bonusScale = !allocationBelowMin && minPct < 100
     ? (simulatorAllocationPct - minPct) / (100 - minPct)
     : 0;
-  const bonusesPerDay = effects.map(({ key: effectKey, label: effectLabel }) => {
-    const rawMalus = simulatorParams?.maluses?.[effectKey] ?? -0.05;
-    const malus = malusScale * rawMalus;
-    const bonus = !allocationBelowMin ? (simulatorParams?.bonuses?.[effectKey] ?? 0) * bonusScale * catchUpFactor : 0;
-    return { label: effectLabel, perDay: bonus, malusPerDay: malus };
+  const bonusesPerDay = effectsResolved.map((eff) => {
+    const label = BUDGET_EFFECT_TYPE_LABELS[eff.effect_type] ?? eff.effect_type;
+    const malus = malusScale * eff.malus;
+    const bonus = !allocationBelowMin ? eff.bonus * bonusScale * catchUpFactor : 0;
+    return { label, perDay: bonus, malusPerDay: malus };
   });
 
   return (
@@ -458,6 +613,247 @@ export function ReglesForm({
         >
           {globalGrowthEffectsRule && (
             <CollapsibleBlock title="Global [Appliqué à tous les pays]" open={globalGrowthOpen} onToggle={() => setGlobalGrowthOpen((o) => !o)}>
+              <div className="p-3 space-y-3">
+                <p className="text-xs text-[var(--foreground-muted)]">
+                  Effets de croissance PIB et population appliqués à tous les pays à chaque passage du cron.
+                </p>
+                <ul className="space-y-2">
+                  {getGlobalGrowthEffects().map((e, idx) => (
+                    <li
+                      key={idx}
+                      className="flex flex-wrap items-center justify-between gap-2 rounded border py-2 px-3"
+                      style={{ borderColor: "var(--border-muted)" }}
+                    >
+                      <span className="text-sm text-[var(--foreground)]">{labelForGlobalEffect(e)}</span>
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          onClick={() => openEditGlobalEffect(idx)}
+                          className="text-xs text-[var(--accent)] hover:underline"
+                        >
+                          Modifier
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => removeGlobalEffect(idx)}
+                          className="text-xs text-[var(--danger)] hover:underline"
+                        >
+                          Supprimer
+                        </button>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+                {!globalEffectFormOpen ? (
+                  <button
+                    type="button"
+                    onClick={openAddGlobalEffect}
+                    className="text-sm text-[var(--accent)] hover:underline"
+                  >
+                    Ajouter un effet
+                  </button>
+                ) : (
+                  <div className="rounded border p-3 space-y-2" style={{ borderColor: "var(--border-muted)" }}>
+                    <div>
+                      <label className="mb-0.5 block text-xs text-[var(--foreground-muted)]">Type d'effet</label>
+                      <select
+                        value={globalEffectKind}
+                        onChange={(ev) => {
+                          const k = ev.target.value;
+                          setGlobalEffectKind(k);
+                          setGlobalEffectTarget(getDefaultTargetForKindGlobal(k));
+                        }}
+                        className={inputClass}
+                        style={inputStyle}
+                      >
+                        {ALL_EFFECT_KIND_IDS.map((k) => (
+                          <option key={k} value={k}>{EFFECT_KIND_LABELS[k] ?? k}</option>
+                        ))}
+                      </select>
+                    </div>
+                    {EFFECT_KINDS_WITH_STAT_TARGET.has(globalEffectKind) && (
+                      <div>
+                        <label className="mb-0.5 block text-xs text-[var(--foreground-muted)]">Stat</label>
+                        <select
+                          value={globalEffectTarget ?? STAT_KEYS[0]}
+                          onChange={(ev) => setGlobalEffectTarget(ev.target.value || null)}
+                          className={inputClass}
+                          style={inputStyle}
+                        >
+                          {STAT_KEYS.map((k) => (
+                            <option key={k} value={k}>{STAT_LABELS[k]}</option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+                    {EFFECT_KINDS_WITH_BUDGET_TARGET.has(globalEffectKind) && (
+                      <div>
+                        <label className="mb-0.5 block text-xs text-[var(--foreground-muted)]">Ministère</label>
+                        <select
+                          value={globalEffectTarget ?? getBudgetMinistryOptions()[0]?.key ?? ""}
+                          onChange={(ev) => setGlobalEffectTarget(ev.target.value || null)}
+                          className={inputClass}
+                          style={inputStyle}
+                        >
+                          {getBudgetMinistryOptions().map(({ key, label }) => (
+                            <option key={key} value={key}>{label}</option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+                    {EFFECT_KINDS_WITH_BRANCH_TARGET.has(globalEffectKind) && (
+                      <div>
+                        <label className="mb-0.5 block text-xs text-[var(--foreground-muted)]">Branche</label>
+                        <select
+                          value={globalEffectTarget ?? MILITARY_BRANCH_EFFECT_IDS[0]}
+                          onChange={(ev) => setGlobalEffectTarget(ev.target.value || null)}
+                          className={inputClass}
+                          style={inputStyle}
+                        >
+                          {MILITARY_BRANCH_EFFECT_IDS.map((b) => (
+                            <option key={b} value={b}>{MILITARY_BRANCH_EFFECT_LABELS[b]}</option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+                    {EFFECT_KINDS_WITH_ROSTER_UNIT_TARGET.has(globalEffectKind) && (
+                      <div>
+                        <label className="mb-0.5 block text-xs text-[var(--foreground-muted)]">Unité</label>
+                        <select
+                          value={globalEffectTarget ?? rosterUnits[0]?.id ?? ""}
+                          onChange={(ev) => setGlobalEffectTarget(ev.target.value || null)}
+                          className={inputClass}
+                          style={inputStyle}
+                        >
+                          {rosterUnits.map((u) => (
+                            <option key={u.id} value={u.id}>{u.name_fr}</option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+                    <div>
+                      <label className="mb-0.5 block text-xs text-[var(--foreground-muted)]">
+                        {getEffectKindValueHelper(globalEffectKind).valueLabel}
+                      </label>
+                      <input
+                        type="number"
+                        step={getEffectKindValueHelper(globalEffectKind).valueStep}
+                        value={globalEffectValue}
+                        onChange={(e) => setGlobalEffectValue(e.target.value)}
+                        className={inputClassNarrow}
+                        style={inputStyle}
+                      />
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={saveGlobalEffectForm}
+                        className="rounded py-1.5 px-3 text-sm font-medium"
+                        style={{ background: "var(--accent)", color: "#0f1419" }}
+                      >
+                        Enregistrer
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setGlobalEffectFormOpen(false)}
+                        className="rounded border py-1.5 px-3 text-sm"
+                        style={{ borderColor: "var(--border)" }}
+                      >
+                        Annuler
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </CollapsibleBlock>
+          )}
+
+          {aiMajorEffectsRule && aiMinorEffectsRule && (
+            <CollapsibleBlock title="Intelligence Artificielle" open={aiOpen} onToggle={() => setAiOpen((o) => !o)}>
+              <div className="p-3 space-y-4">
+                <p className="text-xs text-[var(--foreground-muted)]">
+                  Effets appliqués aux pays sans joueur selon leur statut IA (Majeur / Mineur) défini dans la liste admin des pays.
+                </p>
+                <div className="space-y-3">
+                  <div>
+                    <h4 className="mb-2 text-sm font-medium text-[var(--foreground)]">IA majeure</h4>
+                    <ul className="space-y-2">
+                      {getAiEffects(aiMajorEffectsRule).map((e, idx) => (
+                        <li
+                          key={idx}
+                          className="flex flex-wrap items-center justify-between gap-2 rounded border py-2 px-3"
+                          style={{ borderColor: "var(--border-muted)" }}
+                        >
+                          <span className="text-sm text-[var(--foreground)]">{labelForGlobalEffect(e)}</span>
+                          <div className="flex gap-2">
+                            <button type="button" onClick={() => openEditAiEffect("major", idx)} className="text-xs text-[var(--accent)] hover:underline">Modifier</button>
+                            <button type="button" onClick={() => removeAiEffect("major", idx)} className="text-xs text-[var(--danger)] hover:underline">Supprimer</button>
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                    {!aiMajorFormOpen ? (
+                      <button type="button" onClick={() => openAddAiEffect("major")} className="text-sm text-[var(--accent)] hover:underline">Ajouter un effet</button>
+                    ) : (
+                      <div className="rounded border p-3 space-y-2" style={{ borderColor: "var(--border-muted)" }}>
+                        <div>
+                          <label className="mb-0.5 block text-xs text-[var(--foreground-muted)]">Type d'effet</label>
+                          <select value={aiMajorEffectKind} onChange={(ev) => { const k = ev.target.value; setAiMajorEffectKind(k); setAiMajorEffectTarget(getDefaultTargetForKindGlobal(k)); }} className={inputClass} style={inputStyle}>
+                            {ALL_EFFECT_KIND_IDS.map((k) => (<option key={k} value={k}>{EFFECT_KIND_LABELS[k] ?? k}</option>))}
+                          </select>
+                        </div>
+                        {EFFECT_KINDS_WITH_STAT_TARGET.has(aiMajorEffectKind) && (<div><label className="mb-0.5 block text-xs text-[var(--foreground-muted)]">Stat</label><select value={aiMajorEffectTarget ?? STAT_KEYS[0]} onChange={(ev) => setAiMajorEffectTarget(ev.target.value || null)} className={inputClass} style={inputStyle}>{STAT_KEYS.map((k) => (<option key={k} value={k}>{STAT_LABELS[k]}</option>))}</select></div>)}
+                        {EFFECT_KINDS_WITH_BUDGET_TARGET.has(aiMajorEffectKind) && (<div><label className="mb-0.5 block text-xs text-[var(--foreground-muted)]">Ministère</label><select value={aiMajorEffectTarget ?? getBudgetMinistryOptions()[0]?.key ?? ""} onChange={(ev) => setAiMajorEffectTarget(ev.target.value || null)} className={inputClass} style={inputStyle}>{getBudgetMinistryOptions().map(({ key, label }) => (<option key={key} value={key}>{label}</option>))}</select></div>)}
+                        {EFFECT_KINDS_WITH_BRANCH_TARGET.has(aiMajorEffectKind) && (<div><label className="mb-0.5 block text-xs text-[var(--foreground-muted)]">Branche</label><select value={aiMajorEffectTarget ?? MILITARY_BRANCH_EFFECT_IDS[0]} onChange={(ev) => setAiMajorEffectTarget(ev.target.value || null)} className={inputClass} style={inputStyle}>{MILITARY_BRANCH_EFFECT_IDS.map((b) => (<option key={b} value={b}>{MILITARY_BRANCH_EFFECT_LABELS[b]}</option>))}</select></div>)}
+                        {EFFECT_KINDS_WITH_ROSTER_UNIT_TARGET.has(aiMajorEffectKind) && (<div><label className="mb-0.5 block text-xs text-[var(--foreground-muted)]">Unité</label><select value={aiMajorEffectTarget ?? rosterUnits[0]?.id ?? ""} onChange={(ev) => setAiMajorEffectTarget(ev.target.value || null)} className={inputClass} style={inputStyle}>{rosterUnits.map((u) => (<option key={u.id} value={u.id}>{u.name_fr}</option>))}</select></div>)}
+                        <div><label className="mb-0.5 block text-xs text-[var(--foreground-muted)]">{getEffectKindValueHelper(aiMajorEffectKind).valueLabel}</label><input type="number" step={getEffectKindValueHelper(aiMajorEffectKind).valueStep} value={aiMajorEffectValue} onChange={(e) => setAiMajorEffectValue(e.target.value)} className={inputClassNarrow} style={inputStyle} /></div>
+                        <div className="flex gap-2"><button type="button" onClick={() => saveAiEffectForm("major")} className="rounded py-1.5 px-3 text-sm font-medium" style={{ background: "var(--accent)", color: "#0f1419" }}>Enregistrer</button><button type="button" onClick={() => setAiMajorFormOpen(false)} className="rounded border py-1.5 px-3 text-sm" style={{ borderColor: "var(--border)" }}>Annuler</button></div>
+                      </div>
+                    )}
+                  </div>
+                  <div>
+                    <h4 className="mb-2 text-sm font-medium text-[var(--foreground)]">IA mineure</h4>
+                    <ul className="space-y-2">
+                      {getAiEffects(aiMinorEffectsRule).map((e, idx) => (
+                        <li
+                          key={idx}
+                          className="flex flex-wrap items-center justify-between gap-2 rounded border py-2 px-3"
+                          style={{ borderColor: "var(--border-muted)" }}
+                        >
+                          <span className="text-sm text-[var(--foreground)]">{labelForGlobalEffect(e)}</span>
+                          <div className="flex gap-2">
+                            <button type="button" onClick={() => openEditAiEffect("minor", idx)} className="text-xs text-[var(--accent)] hover:underline">Modifier</button>
+                            <button type="button" onClick={() => removeAiEffect("minor", idx)} className="text-xs text-[var(--danger)] hover:underline">Supprimer</button>
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                    {!aiMinorFormOpen ? (
+                      <button type="button" onClick={() => openAddAiEffect("minor")} className="text-sm text-[var(--accent)] hover:underline">Ajouter un effet</button>
+                    ) : (
+                      <div className="rounded border p-3 space-y-2" style={{ borderColor: "var(--border-muted)" }}>
+                        <div>
+                          <label className="mb-0.5 block text-xs text-[var(--foreground-muted)]">Type d'effet</label>
+                          <select value={aiMinorEffectKind} onChange={(ev) => { const k = ev.target.value; setAiMinorEffectKind(k); setAiMinorEffectTarget(getDefaultTargetForKindGlobal(k)); }} className={inputClass} style={inputStyle}>
+                            {ALL_EFFECT_KIND_IDS.map((k) => (<option key={k} value={k}>{EFFECT_KIND_LABELS[k] ?? k}</option>))}
+                          </select>
+                        </div>
+                        {EFFECT_KINDS_WITH_STAT_TARGET.has(aiMinorEffectKind) && (<div><label className="mb-0.5 block text-xs text-[var(--foreground-muted)]">Stat</label><select value={aiMinorEffectTarget ?? STAT_KEYS[0]} onChange={(ev) => setAiMinorEffectTarget(ev.target.value || null)} className={inputClass} style={inputStyle}>{STAT_KEYS.map((k) => (<option key={k} value={k}>{STAT_LABELS[k]}</option>))}</select></div>)}
+                        {EFFECT_KINDS_WITH_BUDGET_TARGET.has(aiMinorEffectKind) && (<div><label className="mb-0.5 block text-xs text-[var(--foreground-muted)]">Ministère</label><select value={aiMinorEffectTarget ?? getBudgetMinistryOptions()[0]?.key ?? ""} onChange={(ev) => setAiMinorEffectTarget(ev.target.value || null)} className={inputClass} style={inputStyle}>{getBudgetMinistryOptions().map(({ key, label }) => (<option key={key} value={key}>{label}</option>))}</select></div>)}
+                        {EFFECT_KINDS_WITH_BRANCH_TARGET.has(aiMinorEffectKind) && (<div><label className="mb-0.5 block text-xs text-[var(--foreground-muted)]">Branche</label><select value={aiMinorEffectTarget ?? MILITARY_BRANCH_EFFECT_IDS[0]} onChange={(ev) => setAiMinorEffectTarget(ev.target.value || null)} className={inputClass} style={inputStyle}>{MILITARY_BRANCH_EFFECT_IDS.map((b) => (<option key={b} value={b}>{MILITARY_BRANCH_EFFECT_LABELS[b]}</option>))}</select></div>)}
+                        {EFFECT_KINDS_WITH_ROSTER_UNIT_TARGET.has(aiMinorEffectKind) && (<div><label className="mb-0.5 block text-xs text-[var(--foreground-muted)]">Unité</label><select value={aiMinorEffectTarget ?? rosterUnits[0]?.id ?? ""} onChange={(ev) => setAiMinorEffectTarget(ev.target.value || null)} className={inputClass} style={inputStyle}>{rosterUnits.map((u) => (<option key={u.id} value={u.id}>{u.name_fr}</option>))}</select></div>)}
+                        <div><label className="mb-0.5 block text-xs text-[var(--foreground-muted)]">{getEffectKindValueHelper(aiMinorEffectKind).valueLabel}</label><input type="number" step={getEffectKindValueHelper(aiMinorEffectKind).valueStep} value={aiMinorEffectValue} onChange={(e) => setAiMinorEffectValue(e.target.value)} className={inputClassNarrow} style={inputStyle} /></div>
+                        <div className="flex gap-2"><button type="button" onClick={() => saveAiEffectForm("minor")} className="rounded py-1.5 px-3 text-sm font-medium" style={{ background: "var(--accent)", color: "#0f1419" }}>Enregistrer</button><button type="button" onClick={() => setAiMinorFormOpen(false)} className="rounded border py-1.5 px-3 text-sm" style={{ borderColor: "var(--border)" }}>Annuler</button></div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </CollapsibleBlock>
+          )}
+
+          {false && globalGrowthEffectsRule && (
+            <CollapsibleBlock title="Global [REMOVED DUPLICATE]" open={globalGrowthOpen} onToggle={() => setGlobalGrowthOpen((o) => !o)}>
               <div className="p-3 space-y-3">
                 <p className="text-xs text-[var(--foreground-muted)]">
                   Effets de croissance PIB et population appliqués à tous les pays à chaque passage du cron.
@@ -721,13 +1117,61 @@ export function ReglesForm({
             </CollapsibleBlock>
           )}
 
+          {sphereInfluencePctRule && (
+            <CollapsibleBlock title="Sphère" open={sphereOpen} onToggle={() => setSphereOpen((o) => !o)}>
+              <div className="p-3 space-y-3">
+                <p className="text-xs text-[var(--foreground-muted)]">
+                  Pour chaque statut de contrôle, le % de l&apos;influence du pays sous emprise qui est attribué à l&apos;overlord.
+                </p>
+                <div className="flex flex-wrap gap-x-6 gap-y-3">
+                  <div className="flex flex-col gap-0.5">
+                    <label className="text-xs text-[var(--foreground-muted)]">Contesté %</label>
+                    <input
+                      type="number"
+                      min={0}
+                      max={100}
+                      value={getSphereInfluencePct().contested ?? 50}
+                      onChange={(e) => updateSphereInfluencePct({ contested: Math.max(0, Math.min(100, Number(e.target.value) || 0)) })}
+                      className="rounded border py-1.5 px-2 text-sm w-20 font-mono"
+                      style={{ borderColor: "var(--border)", background: "var(--background)" }}
+                    />
+                  </div>
+                  <div className="flex flex-col gap-0.5">
+                    <label className="text-xs text-[var(--foreground-muted)]">Occupé %</label>
+                    <input
+                      type="number"
+                      min={0}
+                      max={100}
+                      value={getSphereInfluencePct().occupied ?? 80}
+                      onChange={(e) => updateSphereInfluencePct({ occupied: Math.max(0, Math.min(100, Number(e.target.value) || 0)) })}
+                      className="rounded border py-1.5 px-2 text-sm w-20 font-mono"
+                      style={{ borderColor: "var(--border)", background: "var(--background)" }}
+                    />
+                  </div>
+                  <div className="flex flex-col gap-0.5">
+                    <label className="text-xs text-[var(--foreground-muted)]">Annexé %</label>
+                    <input
+                      type="number"
+                      min={0}
+                      max={100}
+                      value={getSphereInfluencePct().annexed ?? 100}
+                      onChange={(e) => updateSphereInfluencePct({ annexed: Math.max(0, Math.min(100, Number(e.target.value) || 0)) })}
+                      className="rounded border py-1.5 px-2 text-sm w-20 font-mono"
+                      style={{ borderColor: "var(--border)", background: "var(--background)" }}
+                    />
+                  </div>
+                </div>
+              </div>
+            </CollapsibleBlock>
+          )}
+
           <CollapsibleBlock title="Paramètres Budget" open={budgetOpen} onToggle={() => setBudgetOpen((o) => !o)}>
             <div className="pl-4 ml-2 border-l-2" style={{ borderColor: "var(--border-muted)" }}>
             {BUDGET_MINISTRY_KEYS.map((key) => {
               const r = rulesByKey.get(key);
               if (!r) return null;
               const val = getBudgetValue(r);
-              const effectsList = BUDGET_MINISTRY_EFFECTS[key] ?? [];
+              const effectsList = val.effects ?? [];
               const isOpen = budgetMinistryOpen[key] ?? true;
               return (
                 <CollapsibleBlock
@@ -738,7 +1182,7 @@ export function ReglesForm({
                     setBudgetMinistryOpen((prev) => ({ ...prev, [key]: !(prev[key] ?? true) }))
                   }
                 >
-                  <div className="p-3" style={{ borderColor: "var(--border-muted)" }}>
+                  <div className="p-3 space-y-3" style={{ borderColor: "var(--border-muted)" }}>
                     <div className="flex flex-wrap items-end gap-x-4 gap-y-2">
                       <div className="flex flex-col gap-0.5">
                         <label className="text-xs text-[var(--foreground-muted)]">% min</label>
@@ -766,34 +1210,89 @@ export function ReglesForm({
                           style={inputStyle}
                         />
                       </div>
-                      {effectsList.map(({ key: effectKey, label: effectLabel }) => (
-                        <div key={effectKey} className="flex items-end gap-x-2">
-                          <div className="flex flex-col gap-0.5">
-                            <label className="text-xs text-[var(--foreground-muted)]">Bonus max {effectLabel}</label>
-                            <input
-                              type="number"
-                              min={0}
-                              step={0.001}
-                              value={val.bonuses?.[effectKey] ?? 0}
-                              onChange={(e) => updateBudgetField(r, "bonuses", effectKey, Number(e.target.value))}
-                              className={`${inputClassNarrow} w-14`}
-                              style={inputStyle}
-                            />
-                          </div>
-                          <div className="flex flex-col gap-0.5">
-                            <label className="text-xs text-[var(--foreground-muted)]">Malus max {effectLabel}</label>
-                            <input
-                              type="number"
-                              max={0}
-                              step={0.001}
-                              value={val.maluses?.[effectKey] ?? -0.05}
-                              onChange={(e) => updateBudgetField(r, "maluses", effectKey, Number(e.target.value))}
-                              className={`${inputClassNarrow} w-14`}
-                              style={inputStyle}
-                            />
-                          </div>
-                        </div>
-                      ))}
+                    </div>
+                    <div>
+                      <div className="mb-1 flex items-center justify-between">
+                        <span className="text-xs text-[var(--foreground-muted)]">Effets (type, bonus, malus, gravité)</span>
+                        <button
+                          type="button"
+                          onClick={() => addBudgetEffect(r)}
+                          className="rounded px-2 py-1 text-xs font-medium"
+                          style={{ background: "var(--accent)", color: "#0f1419" }}
+                        >
+                          Ajouter un effet
+                        </button>
+                      </div>
+                      {effectsList.length === 0 ? (
+                        <p className="text-xs text-[var(--foreground-muted)]">
+                          Aucun effet configuré (valeurs par défaut utilisées).
+                        </p>
+                      ) : (
+                        <ul className="space-y-2">
+                          {effectsList.map((effect, idx) => (
+                            <li
+                              key={idx}
+                              className="flex flex-wrap items-end gap-x-2 gap-y-1 rounded border py-2 px-2"
+                              style={{ borderColor: "var(--border-muted)" }}
+                            >
+                              <div className="flex flex-col gap-0.5">
+                                <label className="text-xs text-[var(--foreground-muted)]">Type</label>
+                                <select
+                                  value={effect.effect_type}
+                                  onChange={(e) => updateBudgetEffectAt(r, idx, { effect_type: e.target.value as BudgetMinistryEffectDef["effect_type"] })}
+                                  className={`${inputClassNarrow} min-w-28`}
+                                  style={inputStyle}
+                                >
+                                  {BUDGET_EFFECT_TYPES.map((t) => (
+                                    <option key={t.id} value={t.id}>{t.label}</option>
+                                  ))}
+                                </select>
+                              </div>
+                              <div className="flex flex-col gap-0.5">
+                                <label className="text-xs text-[var(--foreground-muted)]">Bonus</label>
+                                <input
+                                  type="number"
+                                  min={0}
+                                  step={0.001}
+                                  value={effect.bonus}
+                                  onChange={(e) => updateBudgetEffectAt(r, idx, { bonus: Number(e.target.value) })}
+                                  className={`${inputClassNarrow} w-14`}
+                                  style={inputStyle}
+                                />
+                              </div>
+                              <div className="flex flex-col gap-0.5">
+                                <label className="text-xs text-[var(--foreground-muted)]">Malus</label>
+                                <input
+                                  type="number"
+                                  max={0}
+                                  step={0.001}
+                                  value={effect.malus}
+                                  onChange={(e) => updateBudgetEffectAt(r, idx, { malus: Number(e.target.value) })}
+                                  className={`${inputClassNarrow} w-14`}
+                                  style={inputStyle}
+                                />
+                              </div>
+                              <div className="flex items-center gap-1">
+                                <input
+                                  type="checkbox"
+                                  id={`gravity-${r.id}-${idx}`}
+                                  checked={effect.gravity_applies ?? (BUDGET_EFFECT_TYPES.find((t) => t.id === effect.effect_type)?.defaultGravityApplies ?? false)}
+                                  onChange={(e) => updateBudgetEffectAt(r, idx, { gravity_applies: e.target.checked })}
+                                  className="rounded"
+                                />
+                                <label htmlFor={`gravity-${r.id}-${idx}`} className="text-xs text-[var(--foreground-muted)]">Gravité</label>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => removeBudgetEffect(r, idx)}
+                                className="rounded px-2 py-1 text-xs text-[var(--danger)] hover:bg-[var(--danger)]/10"
+                              >
+                                Supprimer
+                              </button>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
                     </div>
                   </div>
                 </CollapsibleBlock>

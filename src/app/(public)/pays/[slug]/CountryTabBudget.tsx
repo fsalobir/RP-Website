@@ -399,7 +399,7 @@ export function CountryTabBudget({
             <strong>Stats / Stabilité :</strong> <code className="rounded bg-black/20 px-1">budget_*</code> = somme des (pct_ministère/100 × bonus) depuis les règles globales. La formule est <strong>avant + delta_effets + budget</strong> (pas de multiplicateur) ; la magnitude vient des règles. Bornes : stabilité -3..3, mil/ind/sci 0..10.
           </p>
           <ul className="space-y-6">
-            {updateLogs.map((log) => {
+            {updateLogs.map((log, index) => {
               const budgetStabRaw = Number(log.inputs?.budget_stab ?? 0);
               const hasLegacyScale = log.inputs?.budget_scale != null || log.inputs?.budget_stab_cap != null;
               const scaleStab = Number(log.inputs?.budget_scale ?? 50);
@@ -422,7 +422,7 @@ export function CountryTabBudget({
               const sciComputed = log.science_before != null ? Math.min(10, Math.max(0, Math.round(Number(log.science_before) + ds + (hasLegacyScale ? bs * legacyScale : bs)))) : null;
               return (
                 <li
-                  key={log.id}
+                  key={log.id ?? `log-${index}`}
                   className="rounded-lg border p-4 font-mono text-sm"
                   style={{ borderColor: "var(--border)", background: "var(--background-panel)" }}
                 >

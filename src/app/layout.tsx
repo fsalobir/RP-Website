@@ -13,7 +13,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Simulateur de nations",
+  title: "Roleplay",
   description: "Base de données des pays, règles et indicateurs – simulation de conflit moderne.",
 };
 

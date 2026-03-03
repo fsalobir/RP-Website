@@ -4,6 +4,7 @@ import { CountriesTable } from "@/components/countries/CountriesTable";
 import { ResetStatsButton } from "./ResetStatsButton";
 import { AdvanceDayButton } from "./AdvanceDayButton";
 import { RandomizeBudgetsButton } from "./RandomizeBudgetsButton";
+import { updateCountryAiStatus } from "./actions";
 
 function normId(id: string | null | undefined): string {
   return String(id ?? "").trim().toLowerCase();
@@ -13,7 +14,7 @@ export default async function AdminPaysListPage() {
   const supabase = await createClient();
   const { data: countries } = await supabase
     .from("countries")
-    .select("id, name, slug, flag_url, regime, population, gdp, militarism, industry, science, stability")
+    .select("id, name, slug, flag_url, regime, population, gdp, militarism, industry, science, stability, ai_status")
     .order("name");
 
   const { data: historyRows, error: historyError } = await supabase
@@ -76,7 +77,7 @@ export default async function AdminPaysListPage() {
           </Link>
         </div>
       ) : (
-        <CountriesTable rows={rows} showModifierButton />
+        <CountriesTable rows={rows} showModifierButton showAiStatusColumn updateAiStatusAction={updateCountryAiStatus} />
       )}
     </div>
   );
