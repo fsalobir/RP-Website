@@ -78,7 +78,7 @@ export async function dispatchToDiscord(
       .maybeSingle();
     const worldDate = (worldDateRow as { value?: { month?: number; year?: number } } | null)?.value;
     if (worldDate && typeof worldDate.month === "number" && typeof worldDate.year === "number") {
-      effectivePayload = { ...effectivePayload, date: formatWorldDateForDiscord(worldDate) };
+      effectivePayload = { ...effectivePayload, date: formatWorldDateForDiscord({ month: worldDate.month, year: worldDate.year }) };
     }
   }
 
