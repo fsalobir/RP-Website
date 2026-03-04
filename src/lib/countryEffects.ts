@@ -152,7 +152,7 @@ export function buildEffectKeys(
 }
 
 /** Types de cible pour un effect_kind. */
-export type EffectTargetType = "none" | "stat" | "budget_ministry" | "military_branch" | "roster_unit";
+export type EffectTargetType = "none" | "stat" | "budget_ministry" | "military_branch" | "roster_unit" | "country";
 
 /** Format de valeur pour affichage/saisie (formulaires Global, Mobilisation). */
 export type EffectValueFormat =
@@ -188,6 +188,7 @@ export const ALL_EFFECT_KIND_IDS = [
   "influence_modifier_population",
   "influence_modifier_hard_power",
   "state_actions_grant",
+  "relation_delta",
 ] as const;
 
 export type EffectKindId = (typeof ALL_EFFECT_KIND_IDS)[number];
@@ -210,6 +211,7 @@ export const EFFECT_KIND_META: Record<EffectKindId, EffectKindMeta> = {
   influence_modifier_population: { targetType: "none", valueFormat: "multiplier", label: "Modificateur d'influence (population)" },
   influence_modifier_hard_power: { targetType: "none", valueFormat: "multiplier", label: "Modificateur d'influence (Hard Power)" },
   state_actions_grant: { targetType: "none", valueFormat: "integer", label: "Actions d'État (octroi par tick)" },
+  relation_delta: { targetType: "country", valueFormat: "raw", label: "Évolution relation bilatérale" },
 };
 
 /** Libellé court pour effect_kind (affichage liste). Dérivé des métadonnées, avec fallback. */
@@ -232,12 +234,14 @@ const _NONE = new Set<string>([
 ]);
 const _BRANCH = new Set<string>(["military_unit_limit_modifier"]);
 const _ROSTER = new Set<string>(["military_unit_extra", "military_unit_tech_rate"]);
+const _COUNTRY = new Set<string>(["relation_delta"]);
 
 export const EFFECT_KINDS_WITH_STAT_TARGET: ReadonlySet<string> = _STAT;
 export const EFFECT_KINDS_WITH_BUDGET_TARGET: ReadonlySet<string> = _BUDGET;
 export const EFFECT_KINDS_NO_TARGET: ReadonlySet<string> = _NONE;
 export const EFFECT_KINDS_WITH_BRANCH_TARGET: ReadonlySet<string> = _BRANCH;
 export const EFFECT_KINDS_WITH_ROSTER_UNIT_TARGET: ReadonlySet<string> = _ROSTER;
+export const EFFECT_KINDS_WITH_COUNTRY_TARGET: ReadonlySet<string> = _COUNTRY;
 
 /** Helper valeur pour formulaires (Global, Mobilisation) : libellé, step, conversion affichage ↔ stocké. */
 export function getEffectKindValueHelper(effectKind: string): {
@@ -305,7 +309,10 @@ export function getEffectKindValueHelper(effectKind: string): {
 }
 
 /** Description élégante et lisible pour l’admin et le joueur. */
-export type GetEffectDescriptionOptions = { rosterUnitName?: (id: string) => string | null };
+export type GetEffectDescriptionOptions = {
+  rosterUnitName?: (id: string) => string | null;
+  countryName?: (id: string) => string | null;
+};
 
 export function getEffectDescription(e: CountryEffect | ResolvedEffect, options?: GetEffectDescriptionOptions): string {
   const valueStr = formatEffectValue(e.effect_kind, e.value);
@@ -340,6 +347,10 @@ export function getEffectDescription(e: CountryEffect | ResolvedEffect, options?
   if (e.effect_kind === "influence_modifier_gdp") return `Modificateur influence (PIB) : ${valueStr}`;
   if (e.effect_kind === "influence_modifier_population") return `Modificateur influence (population) : ${valueStr}`;
   if (e.effect_kind === "influence_modifier_hard_power") return `Modificateur influence (Hard Power) : ${valueStr}`;
+  if (e.effect_kind === "relation_delta" && e.effect_target) {
+    const otherName = options?.countryName?.(e.effect_target) ?? e.effect_target;
+    return `Relation bilatérale — ${otherName} : ${valueStr} par tick`;
+  }
 
   const kindLabel = EFFECT_KIND_LABELS[e.effect_kind] ?? e.effect_kind;
   if (targetLabel) return `${kindLabel} — ${targetLabel} : ${valueStr}`;
@@ -358,6 +369,7 @@ export function formatEffectValue(effectKind: string | null | undefined, value: 
   if (kind === "military_unit_extra") return (Number(value) >= 0 ? "+" : "") + String(Number(value));
   if (kind === "military_unit_limit_modifier") return `${Number(value) >= 0 ? "+" : ""}${Number(value)} %`;
   if (kind.startsWith("influence_modifier_")) return `${(value * 100 - 100).toFixed(0)} %`;
+  if (kind === "relation_delta") return `${Number(value) >= 0 ? "+" : ""}${Number(value)}`;
   return String(value);
 }
 
@@ -392,11 +404,12 @@ export function getBudgetMinistryOptions(): { key: string; label: string }[] {
 }
 
 /** Cible par défaut pour un effect_kind (pour formulaire unifié par kind). */
-export function getDefaultTargetForKind(effectKind: string, rosterUnitIds?: string[]): string | null {
+export function getDefaultTargetForKind(effectKind: string, rosterUnitIds?: string[], countryIds?: string[]): string | null {
   if (EFFECT_KINDS_WITH_STAT_TARGET.has(effectKind)) return STAT_KEYS[0];
   if (EFFECT_KINDS_WITH_BUDGET_TARGET.has(effectKind)) return getBudgetMinistryOptions()[0]?.key ?? BUDGET_MINISTRY_KEYS[0];
   if (EFFECT_KINDS_WITH_BRANCH_TARGET.has(effectKind)) return MILITARY_BRANCH_EFFECT_IDS[0];
   if (EFFECT_KINDS_WITH_ROSTER_UNIT_TARGET.has(effectKind)) return rosterUnitIds?.[0] ?? null;
+  if (EFFECT_KINDS_WITH_COUNTRY_TARGET.has(effectKind)) return countryIds?.[0] ?? null;
   return null;
 }
 
@@ -421,6 +434,7 @@ export function parseEffectToForm(e: CountryEffect): {
   if (e.effect_kind === "influence_modifier_gdp") return { category: "influence_modifier", subChoice: "gdp", target: null };
   if (e.effect_kind === "influence_modifier_population") return { category: "influence_modifier", subChoice: "population", target: null };
   if (e.effect_kind === "influence_modifier_hard_power") return { category: "influence_modifier", subChoice: "hard_power", target: null };
+  if (e.effect_kind === "relation_delta") return { category: "gdp_growth", subChoice: "base", target: e.effect_target };
   return { category: "gdp_growth", subChoice: "base", target: null };
 }
 

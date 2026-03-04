@@ -5,7 +5,6 @@ import { createClient } from "@/lib/supabase/client";
 import { revalidateCountryPageGlobals } from "@/app/admin/regles/actions";
 import type { RuleParameter } from "@/types/database";
 import {
-  RULE_SECTIONS,
   getRuleLabel,
   BUDGET_MINISTRY_KEYS,
   BUDGET_MINISTRY_LABELS,
@@ -112,6 +111,7 @@ export function ReglesForm({
   const [worldDateOpen, setWorldDateOpen] = useState(false);
   const [influenceOpen, setInfluenceOpen] = useState(false);
   const [sphereOpen, setSphereOpen] = useState(false);
+  const [statsOpen, setStatsOpen] = useState(false);
   const [aiOpen, setAiOpen] = useState(false);
   const [aiMajorFormOpen, setAiMajorFormOpen] = useState(false);
   const [aiMajorEditIndex, setAiMajorEditIndex] = useState<number | null>(null);
@@ -155,10 +155,6 @@ export function ReglesForm({
   }
 
   const rulesByKey = useMemo(() => new Map(items.map((r) => [r.key, r])), [items]);
-  const allSectionKeys = useMemo(
-    () => new Set(RULE_SECTIONS.flatMap((s) => s.keys)),
-    []
-  );
   const mobilisationConfigKey = "mobilisation_config";
   const mobilisationEffectsKey = "mobilisation_level_effects";
   const globalGrowthEffectsKey = "global_growth_effects";
@@ -168,12 +164,7 @@ export function ReglesForm({
   const worldDateAdvanceKey = "world_date_advance_months";
   const influenceConfigKey = "influence_config";
   const sphereInfluencePctKey = "sphere_influence_pct";
-  const otherRules = useMemo(
-    () => items.filter(
-      (r) => !allSectionKeys.has(r.key) && r.key !== mobilisationConfigKey && r.key !== mobilisationEffectsKey && r.key !== globalGrowthEffectsKey && r.key !== aiMajorEffectsKey && r.key !== aiMinorEffectsKey && r.key !== worldDateKey && r.key !== worldDateAdvanceKey && r.key !== influenceConfigKey && r.key !== sphereInfluencePctKey
-    ),
-    [items, allSectionKeys]
-  );
+  const statsDiceModifierRangesKey = "stats_dice_modifier_ranges";
 
   const globalGrowthEffectsRule = useMemo(() => items.find((r) => r.key === globalGrowthEffectsKey), [items]);
   const worldDateRule = useMemo(() => items.find((r) => r.key === worldDateKey), [items]);
@@ -392,6 +383,29 @@ export function ReglesForm({
 
   const mobilisationConfigRule = useMemo(() => items.find((r) => r.key === mobilisationConfigKey), [items]);
   const mobilisationEffectsRule = useMemo(() => items.find((r) => r.key === mobilisationEffectsKey), [items]);
+  const statsDiceModifierRangesRule = useMemo(() => items.find((r) => r.key === statsDiceModifierRangesKey), [items]);
+
+  type StatsDiceModifierRangesValue = Record<string, { min: number; max: number }>;
+  function getStatsDiceModifierRanges(): StatsDiceModifierRangesValue {
+    if (!statsDiceModifierRangesRule?.value || typeof statsDiceModifierRangesRule.value !== "object") {
+      return {
+        militarism: { min: -10, max: 20 },
+        industry: { min: -10, max: 20 },
+        science: { min: -10, max: 20 },
+        stability: { min: -10, max: 20 },
+      };
+    }
+    return statsDiceModifierRangesRule.value as StatsDiceModifierRangesValue;
+  }
+  function updateStatsDiceModifierRanges(statKey: string, field: "min" | "max", value: number) {
+    if (!statsDiceModifierRangesRule) return;
+    const current = getStatsDiceModifierRanges();
+    const stat = current[statKey] ?? { min: -10, max: 20 };
+    updateValue(statsDiceModifierRangesRule.id, {
+      ...current,
+      [statKey]: { ...stat, [field]: value },
+    });
+  }
 
   type MobilisationConfigValue = {
     level_thresholds?: Record<string, number>;
@@ -1545,50 +1559,48 @@ export function ReglesForm({
             </CollapsibleBlock>
           )}
 
-          {otherRules.length > 0 && (
-            <div className="border-t" style={{ borderColor: "var(--border-muted)" }}>
-              <div
-                className="px-4 py-2"
-                style={{ background: "var(--background-elevated)" }}
-              >
-                <span className="text-sm font-medium text-[var(--foreground-muted)]">Autres paramètres</span>
-              </div>
-              {otherRules.map((r) => (
-                <div key={r.id} className="flex flex-wrap items-center gap-2 p-3 sm:flex-nowrap">
-                  <div className="w-full min-w-0 sm:w-48">
-                    <span className="font-mono text-sm text-[var(--foreground)]">{r.key}</span>
-                    {r.description && (
-                      <p className="text-xs text-[var(--foreground-muted)]">{r.description}</p>
-                    )}
-                  </div>
-                  <div className="flex-1">
-                    <input
-                      type="text"
-                      value={
-                        typeof r.value === "object"
-                          ? JSON.stringify(r.value)
-                          : String(r.value ?? "")
-                      }
-                      onChange={(e) => {
-                        const v = e.target.value;
-                        let parsed: unknown = v;
-                        if (/^-?\d+(\.\d+)?$/.test(v)) parsed = Number(v);
-                        else if (v.startsWith("{") || v.startsWith("[")) {
-                          try {
-                            parsed = JSON.parse(v);
-                          } catch {
-                            parsed = v;
-                          }
-                        }
-                        updateValue(r.id, parsed);
-                      }}
-                      className={inputClass}
-                      style={inputStyle}
-                    />
-                  </div>
+          {statsDiceModifierRangesRule && (
+            <CollapsibleBlock title="Statistiques" open={statsOpen} onToggle={() => setStatsOpen((o) => !o)}>
+              <div className="p-3 space-y-4">
+                <p className="text-xs text-[var(--foreground-muted)]">
+                  Modificateur min/max pour les jets de dés (ex. -10 à +20). Ces bornes sont utilisées pour calculer le bonus ou malus proportionnel à la valeur de chaque stat du pays.
+                </p>
+                <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
+                  {STAT_KEYS.map((statKey) => {
+                    const ranges = getStatsDiceModifierRanges()[statKey] ?? { min: -10, max: 20 };
+                    return (
+                      <div key={statKey} className="rounded border p-3" style={{ borderColor: "var(--border-muted)" }}>
+                        <div className="text-sm font-medium text-[var(--foreground)] mb-2">
+                          {STAT_LABELS[statKey]}
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          <div className="flex flex-col gap-0.5">
+                            <label className="text-xs text-[var(--foreground-muted)]">Min</label>
+                            <input
+                              type="number"
+                              value={ranges.min}
+                              onChange={(e) => updateStatsDiceModifierRanges(statKey, "min", Number(e.target.value) ?? -10)}
+                              className={inputClassNarrow}
+                              style={inputStyle}
+                            />
+                          </div>
+                          <div className="flex flex-col gap-0.5">
+                            <label className="text-xs text-[var(--foreground-muted)]">Max</label>
+                            <input
+                              type="number"
+                              value={ranges.max}
+                              onChange={(e) => updateStatsDiceModifierRanges(statKey, "max", Number(e.target.value) ?? 20)}
+                              className={inputClassNarrow}
+                              style={inputStyle}
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
-              ))}
-            </div>
+              </div>
+            </CollapsibleBlock>
           )}
         </div>
       )}

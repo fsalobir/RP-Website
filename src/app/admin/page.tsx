@@ -157,6 +157,21 @@ export default async function AdminDashboardPage() {
           </p>
         </Link>
         <Link
+          href="/admin/bot-discord"
+          className="rounded-lg border p-6 transition-colors hover:border-[var(--accent-muted)]"
+          style={{
+            background: "var(--background-panel)",
+            borderColor: "var(--border)",
+          }}
+        >
+          <h2 className="text-lg font-semibold text-[var(--foreground)]">
+            Bot Discord
+          </h2>
+          <p className="mt-2 text-sm text-[var(--foreground-muted)]">
+            Types de dispatch, routage des canaux et templates de messages
+          </p>
+        </Link>
+        <Link
           href="/"
           className="rounded-lg border p-6 transition-colors hover:border-[var(--accent-muted)]"
           style={{

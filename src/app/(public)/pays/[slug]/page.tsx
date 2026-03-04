@@ -7,6 +7,7 @@ import { CountryTabs } from "./CountryTabs";
 import type { RosterRowByBranch } from "./countryTabsTypes";
 import { computeHardPowerByCountry } from "@/lib/hardPower";
 import { computeInfluenceForAll, applyInfluenceModifiers } from "@/lib/influence";
+import { getAllRelationRows, relationRowsToMap, getRelationFromMap } from "@/lib/relations";
 import { getEffectsForCountry, getInfluenceModifiersFromEffects } from "@/lib/countryEffects";
 import type {
   CountryUpdateLog,
@@ -88,7 +89,7 @@ export default async function CountryPage({
   const isPlayerForThisCountry = auth.playerCountryId === country.id;
   const backHref = isAdmin ? "/admin/pays" : "/";
 
-  const [cachedGlobals, macrosRes, limitsRes, countryPerksRes, budgetRes, effectsRes, countriesRes, updateLogsRes, mobilisationRes, countryMilitaryUnitsRes, countryMilitaryUnitsAllRes, assignedPlayerRes, controlRes] = await Promise.all([
+  const [cachedGlobals, macrosRes, limitsRes, countryPerksRes, budgetRes, effectsRes, countriesRes, updateLogsRes, mobilisationRes, countryMilitaryUnitsRes, countryMilitaryUnitsAllRes, assignedPlayerRes, controlRes, countriesListRes] = await Promise.all([
     getCachedCountryPageGlobals(),
     supabase.from("country_macros").select("*").eq("country_id", country.id),
     supabase
@@ -107,6 +108,7 @@ export default async function CountryPage({
     supabase.from("country_military_units").select("*").eq("country_id", country.id),
     supabase.from("country_military_units").select("country_id, roster_unit_id, current_level, extra_count"),
     supabase.from("country_players").select("email, name").eq("country_id", country.id).maybeSingle(),
+    isAdmin ? supabase.from("countries").select("id, name").order("name") : Promise.resolve({ data: [] as { id: string; name: string }[] }),
   ]);
 
   const controlRows = (Array.isArray(controlRes.data) ? controlRes.data : []) as { country_id: string }[];
@@ -123,13 +125,13 @@ export default async function CountryPage({
 
   let stateActionTypes: Array<{ id: string; key: string; label_fr: string; cost: number; params_schema: Record<string, unknown> | null }> = [];
   let stateActionBalance: number = 0;
-  let stateActionRequests: Array<{ id: string; action_type_id: string; status: string; payload: Record<string, unknown> | null; created_at: string; refusal_message: string | null; state_action_types?: { key: string; label_fr: string } | null }> = [];
-  let countriesForTarget: Array<{ id: string; name: string; flag_url: string | null; regime: string | null; influence: number }> = [];
+  let stateActionRequests: Array<{ id: string; action_type_id: string; status: string; payload: Record<string, unknown> | null; created_at: string; refusal_message: string | null; dice_results?: { success_roll?: { roll: number; modifier: number; total: number }; impact_roll?: { roll: number; modifier: number; total: number } } | null; state_action_types?: { key: string; label_fr: string } | null }> = [];
+  let countriesForTarget: Array<{ id: string; name: string; flag_url: string | null; regime: string | null; influence: number; relation: number }> = [];
   if (isPlayerForThisCountry) {
     const [typesRes, balanceRes, requestsRes, countriesTargetRes] = await Promise.all([
       supabase.from("state_action_types").select("id, key, label_fr, cost, params_schema").order("sort_order"),
       supabase.from("country_state_action_balance").select("balance").eq("country_id", country.id).maybeSingle(),
-      supabase.from("state_action_requests").select("id, action_type_id, status, payload, created_at, refusal_message, state_action_types:state_action_types(key, label_fr)").eq("country_id", country.id).order("created_at", { ascending: false }),
+      supabase.from("state_action_requests").select("id, action_type_id, status, payload, created_at, refusal_message, dice_results, state_action_types:state_action_types(key, label_fr)").eq("country_id", country.id).order("created_at", { ascending: false }),
       supabase.from("countries").select("id, name, flag_url, regime").neq("id", country.id).order("name"),
     ]);
     stateActionTypes = (typesRes.data ?? []) as Array<{ id: string; key: string; label_fr: string; cost: number; params_schema: Record<string, unknown> | null }>;
@@ -139,7 +141,11 @@ export default async function CountryPage({
       ...r,
       state_action_types: Array.isArray(r.state_action_types) ? r.state_action_types[0] : r.state_action_types,
     })) as typeof stateActionRequests;
-    countriesForTarget = (countriesTargetRes.data ?? []) as Array<{ id: string; name: string; flag_url: string | null; regime: string | null }>;
+    countriesForTarget = ((countriesTargetRes.data ?? []) as Array<{ id: string; name: string; flag_url: string | null; regime: string | null }>).map((c) => ({
+      ...c,
+      influence: 0,
+      relation: 0,
+    }));
   }
 
   const { ruleParamsData, rosterUnits, rosterLevels, perksDef } = cachedGlobals;
@@ -215,9 +221,12 @@ export default async function CountryPage({
     influenceResult = applyInfluenceModifiers(influenceResult, influenceMods);
   }
   if (countriesForTarget.length > 0) {
+    const relationRows = await getAllRelationRows(supabase);
+    const relationMap = relationRowsToMap(relationRows);
     countriesForTarget = countriesForTarget.map((c) => ({
       ...c,
       influence: Math.round(influenceByCountry.get(c.id)?.influence ?? 0),
+      relation: getRelationFromMap(relationMap, country.id, c.id),
     }));
   }
 
@@ -293,6 +302,7 @@ export default async function CountryPage({
         stateActionBalance={stateActionBalance}
         stateActionRequests={stateActionRequests}
         countriesForTarget={countriesForTarget}
+        countriesList={((countriesListRes as { data?: { id: string; name: string }[] })?.data ?? []) as Array<{ id: string; name: string }>}
         emitterCountry={{
           name: country.name ?? "",
           flag_url: country.flag_url ?? null,

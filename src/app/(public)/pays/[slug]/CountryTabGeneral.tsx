@@ -22,6 +22,7 @@ import {
   EFFECT_KINDS_WITH_BUDGET_TARGET,
   EFFECT_KINDS_WITH_BRANCH_TARGET,
   EFFECT_KINDS_WITH_ROSTER_UNIT_TARGET,
+  EFFECT_KINDS_WITH_COUNTRY_TARGET,
 } from "@/lib/countryEffects";
 
 type CountryTabGeneralProps = {
@@ -76,6 +77,7 @@ type CountryTabGeneralProps = {
   influenceResult?: import("@/lib/influence").InfluenceResult | null;
   hardPowerByBranch?: import("@/lib/hardPower").HardPowerByBranch | null;
   sphereData?: { totalPopulation: number; totalGdp: number; countries: Array<{ id: string; name: string; slug: string; population: number | null; gdp: number | null }> };
+  otherCountriesForRelation?: Array<{ id: string; name: string }>;
 };
 
 export function CountryTabGeneral({
@@ -130,6 +132,7 @@ export function CountryTabGeneral({
   influenceResult = null,
   hardPowerByBranch = null,
   sphereData = { totalPopulation: 0, totalGdp: 0, countries: [] },
+  otherCountriesForRelation = [],
 }: CountryTabGeneralProps) {
   return (
     <div className="space-y-8">
@@ -270,6 +273,7 @@ export function CountryTabGeneral({
                   >
                     {getEffectDescription(e, {
                       rosterUnitName: (id) => rosterUnitsFlat.find((u) => u.id === id)?.name_fr ?? null,
+                      countryName: (id) => (id === country.id ? country.name : otherCountriesForRelation.find((c) => c.id === id)?.name) ?? null,
                     })}
                   </p>
                   <p className="text-xs text-[var(--foreground-muted)]">
@@ -329,7 +333,7 @@ export function CountryTabGeneral({
                     onChange={(e) => {
                       const k = e.target.value;
                       setEffectKind(k);
-                      setEffectTarget(getDefaultTargetForKind(k, rosterUnitsFlat.map((u) => u.id)));
+                      setEffectTarget(getDefaultTargetForKind(k, rosterUnitsFlat.map((u) => u.id), otherCountriesForRelation.map((c) => c.id)));
                     }}
                     className="rounded border bg-[var(--background)] px-2 py-1.5 text-sm text-[var(--foreground)]"
                     style={{ borderColor: "var(--border)" }}
@@ -399,6 +403,23 @@ export function CountryTabGeneral({
                     </select>
                   </div>
                 )}
+                {EFFECT_KINDS_WITH_COUNTRY_TARGET.has(effectKind) && (
+                  <div>
+                    <label className="mb-1 block text-sm text-[var(--foreground-muted)]">Pays cible (relation bilatérale)</label>
+                    <select
+                      value={effectTarget ?? ""}
+                      onChange={(e) => setEffectTarget(e.target.value || null)}
+                      className="rounded border bg-[var(--background)] px-2 py-1.5 text-sm text-[var(--foreground)] min-w-[12rem]"
+                      style={{ borderColor: "var(--border)" }}
+                      title="L'autre pays (la relation est entre ce pays et le pays de la fiche)"
+                    >
+                      <option value="">— Choisir un pays —</option>
+                      {otherCountriesForRelation.map((c) => (
+                        <option key={c.id} value={c.id}>{c.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
                 {effectKind === "budget_allocation_cap" && (
                   <p className="text-sm text-[var(--foreground-muted)]">
                     Positif = excédent (plafond d'allocation augmenté, ex. +20 → 120 % max). Négatif = dette (plafond réduit, ex. -20 → 80 % max).
@@ -424,12 +445,11 @@ export function CountryTabGeneral({
                     <label className="mb-1 block text-sm text-[var(--foreground-muted)]">Durée</label>
                     <select
                       value={effectDurationKind}
-                      onChange={(e) => setEffectDurationKind(e.target.value as "days" | "updates" | "permanent")}
+                      onChange={(e) => setEffectDurationKind(e.target.value as "days" | "permanent")}
                       className="rounded border bg-[var(--background)] px-2 py-1.5 text-sm text-[var(--foreground)]"
                       style={{ borderColor: "var(--border)" }}
                     >
                       <option value="days">Jours</option>
-                      <option value="updates">Mises à jour</option>
                       <option value="permanent">Permanent (n&apos;expire jamais)</option>
                     </select>
                   </div>

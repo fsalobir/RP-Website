@@ -191,6 +191,29 @@ export interface CountryStateActionBalance {
 /** Statut d'une demande d'action d'État. */
 export type StateActionRequestStatus = "pending" | "accepted" | "refused"
 
+/** Résultat d'un jet d100 (succès ou impact). */
+export interface DiceRollResult {
+  roll: number
+  modifier: number
+  total: number
+  success?: boolean
+  /** Détail par stat (ex. militarism: 18, stability: 14). */
+  stat_modifiers?: Record<string, number>
+  /** Modificateur admin / ponctuel. */
+  admin_modifier?: number
+  /** Modificateur lié à la relation bilatérale (prise d'influence). */
+  relation_modifier?: number
+  /** Modificateur lié au rang d'influence du pays émetteur (prise d'influence). */
+  influence_modifier?: number
+}
+
+/** Résultats des jets de dés stockés sur une demande (insulte diplomatique, etc.). */
+export interface DiceResults {
+  success_roll?: DiceRollResult
+  impact_roll?: DiceRollResult
+  admin_modifiers?: Array<{ label: string; value: number }>
+}
+
 /** Demande d'action d'État (ticket). */
 export interface StateActionRequest {
   id: string
@@ -205,6 +228,7 @@ export interface StateActionRequest {
   created_at: string
   resolved_at: string | null
   resolved_by: string | null
+  dice_results?: DiceResults | null
 }
 
 /** Effet à appliquer à l'acceptation (sans country_id). */
@@ -216,4 +240,6 @@ export interface AdminEffectAdded {
   value: number
   duration_kind: string
   duration_remaining: number
+  /** "immediate" = appliqué une fois (Donner UP), sinon effet durable en country_effects */
+  application?: "duration" | "immediate"
 }

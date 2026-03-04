@@ -8,6 +8,8 @@ import type { ExpectedNextTickResult } from "@/lib/expectedNextTick";
 import type { Country } from "@/types/database";
 import type { CountryUpdateLog } from "@/types/database";
 
+type Trend = "up" | "down" | "stable";
+
 type CountryTabCabinetProps = {
   breakdown: TickBreakdown | null;
   expected: ExpectedNextTickResult | null;
@@ -15,6 +17,8 @@ type CountryTabCabinetProps = {
   worldDate: { month: number; year: number } | null;
   worldAverages: { pop_avg: number; gdp_avg: number; mil_avg: number; ind_avg: number; sci_avg: number; stab_avg: number } | null;
   lastUpdateLog: CountryUpdateLog | null;
+  /** Influence actuelle (affichée dans le résumé ; pas de tendance calculée). */
+  influenceValue?: number | null;
   panelClass: string;
   panelStyle: React.CSSProperties;
 };
@@ -28,6 +32,27 @@ function seedFromCountryAndDate(countryId: string, worldDate: { month: number; y
   return h;
 }
 
+const TREND_STABLE_REL = 0.005;
+const TREND_STABLE_ABS = 0.01;
+
+function getTrend(current: number, next: number, isRate = false): Trend {
+  if (isRate) {
+    const rel = current !== 0 ? Math.abs((next - current) / current) : 0;
+    return rel < TREND_STABLE_REL ? "stable" : next > current ? "up" : "down";
+  }
+  return Math.abs(next - current) < TREND_STABLE_ABS ? "stable" : next > current ? "up" : "down";
+}
+
+function TrendIcon({ trend }: { trend: Trend }) {
+  if (trend === "up") {
+    return <span className="ml-1 inline-block text-emerald-500 dark:text-emerald-400" aria-hidden>▲</span>;
+  }
+  if (trend === "down") {
+    return <span className="ml-1 inline-block text-red-500 dark:text-red-400" aria-hidden>▼</span>;
+  }
+  return <span className="ml-1 inline-block text-[var(--foreground-muted)]" aria-hidden>−</span>;
+}
+
 export function CountryTabCabinet({
   breakdown,
   expected,
@@ -35,6 +60,7 @@ export function CountryTabCabinet({
   worldDate,
   worldAverages,
   lastUpdateLog,
+  influenceValue = null,
   panelClass,
   panelStyle,
 }: CountryTabCabinetProps) {
@@ -53,6 +79,19 @@ export function CountryTabCabinet({
       : [];
 
   const reportTitleDate = worldDate ? formatWorldDate(worldDate) : "—";
+
+  const summaryTrends =
+    expected && breakdown
+      ? {
+          gdp: getTrend(snapshot.gdp, expected.gdp, true),
+          population: getTrend(snapshot.population, expected.population, true),
+          influence: "stable" as Trend,
+          militarism: getTrend(snapshot.militarism, expected.militarism),
+          science: getTrend(snapshot.science, expected.science),
+          industry: getTrend(snapshot.industry, expected.industry),
+          stability: getTrend(snapshot.stability, expected.stability),
+        }
+      : null;
 
   return (
     <div className="space-y-6">
@@ -80,20 +119,70 @@ export function CountryTabCabinet({
                   <h2 className="text-center text-xl font-semibold tracking-wide text-[var(--foreground)]">
                     Rapport Ministeriel pour {reportTitleDate}
                   </h2>
-                  <p className="mt-2 text-center text-sm italic text-[var(--foreground-muted)]">
-                    Synthèse des rapports ministériels — date d’avant la mise à jour
-                  </p>
                 </header>
+
+                {summaryTrends && (
+                  <div className="mb-6 flex flex-col items-center">
+                    <div className="mb-5 grid w-full max-w-2xl grid-cols-1 gap-5 text-center sm:grid-cols-3">
+                      <div className="flex flex-col items-center justify-center gap-1 sm:border-r sm:border-[var(--border)] sm:pr-6">
+                        <span className="text-lg font-medium text-[var(--foreground-muted)]">PIB</span>
+                        <TrendIcon trend={summaryTrends.gdp} />
+                      </div>
+                      <div className="flex flex-col items-center justify-center gap-1 sm:border-r sm:border-[var(--border)] sm:pr-6">
+                        <span className="text-lg font-medium text-[var(--foreground-muted)]">Population</span>
+                        <TrendIcon trend={summaryTrends.population} />
+                      </div>
+                      <div className="flex flex-col items-center justify-center gap-1 sm:pr-0">
+                        <span className="text-lg font-medium text-[var(--foreground-muted)]">Influence</span>
+                        <TrendIcon trend={summaryTrends.influence} />
+                      </div>
+                    </div>
+                    <div className="grid w-full max-w-2xl grid-cols-2 gap-4 text-center text-sm sm:grid-cols-4">
+                      <div className="flex flex-col items-center justify-center gap-1 sm:border-r sm:border-[var(--border)] sm:pr-6">
+                        <span className="text-[var(--foreground-muted)]">Militarisme</span>
+                        <TrendIcon trend={summaryTrends.militarism} />
+                      </div>
+                      <div className="flex flex-col items-center justify-center gap-1 sm:border-r sm:border-[var(--border)] sm:pr-6">
+                        <span className="text-[var(--foreground-muted)]">Science</span>
+                        <TrendIcon trend={summaryTrends.science} />
+                      </div>
+                      <div className="flex flex-col items-center justify-center gap-1 sm:border-r sm:border-[var(--border)] sm:pr-6">
+                        <span className="text-[var(--foreground-muted)]">Industrie</span>
+                        <TrendIcon trend={summaryTrends.industry} />
+                      </div>
+                      <div className="flex flex-col items-center justify-center gap-1 sm:pr-0">
+                        <span className="text-[var(--foreground-muted)]">Stabilité</span>
+                        <TrendIcon trend={summaryTrends.stability} />
+                      </div>
+                    </div>
+                    <div
+                      className="mt-2 w-full border-b pb-6"
+                      style={{ borderColor: "var(--border)" }}
+                      role="separator"
+                      aria-hidden
+                    />
+                  </div>
+                )}
+
                 <div className="space-y-6 text-[15px] leading-relaxed text-[var(--foreground)]">
                   {cabinetBlocks.map((block) => (
                     <section key={block.ministryKey} className="space-y-2">
                       <h3 className="text-base font-semibold text-[var(--foreground)]" style={{ fontFamily: "inherit" }}>
                         {block.ministryLabel}
                       </h3>
-                      <div className="space-y-2 pl-0 text-[var(--foreground-muted)]" style={{ textAlign: "justify" }}>
+                      <div className="space-y-2 pl-0" style={{ textAlign: "justify" }}>
                         {block.paragraphs.map((p, i) => (
-                          <p key={i} className="indent-0 first-letter:capitalize">
-                            {p}
+                          <p
+                            key={i}
+                            className={`indent-0 first-letter:capitalize ${
+                              p.tone === "positive"
+                                ? "text-emerald-400 dark:text-emerald-300"
+                                : p.tone === "negative"
+                                  ? "text-red-600 dark:text-red-400"
+                                  : "text-yellow-500 dark:text-yellow-400"
+                            }`}
+                          >
+                            {p.text}
                           </p>
                         ))}
                       </div>

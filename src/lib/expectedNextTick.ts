@@ -155,6 +155,10 @@ function ministryContribution(
   return scale * malus;
 }
 
+function safeNum(n: number): number {
+  return typeof n === "number" && !Number.isNaN(n) ? n : 0;
+}
+
 export type ExpectedNextTickResult = {
   population: number;
   gdp: number;
@@ -279,7 +283,7 @@ export function getExpectedNextTick(
     const ministryLabel = BUDGET_MINISTRY_LABELS[ministryKey] ?? ministryKey;
 
     for (const effect of effectsList) {
-      const contrib = ministryContribution(pct, budgetVal.min_pct, effect.bonus, effect.malus);
+      const contrib = safeNum(ministryContribution(pct, budgetVal.min_pct, effect.bonus, effect.malus));
       const gravityPct = budgetVal.gravity_pct;
       const applyGravity = effect.gravity_applies ?? false;
 
@@ -287,7 +291,7 @@ export function getExpectedNextTick(
         case "population": {
           const worldAvg = wa.pop_avg;
           const countryVal = c.population;
-          const final = applyGravity ? contrib * gravityFactorForContribution(worldAvg, countryVal, gravityPct, contrib) : contrib;
+          const final = safeNum(applyGravity ? contrib * gravityFactorForContribution(worldAvg, countryVal, gravityPct, contrib) : contrib);
           budget_pop_rate_base += contrib;
           budget_pop_sources[ministryLabel] = (budget_pop_sources[ministryLabel] ?? 0) + final;
           break;
@@ -295,7 +299,7 @@ export function getExpectedNextTick(
         case "gdp": {
           const worldAvg = wa.gdp_avg;
           const countryVal = c.gdp;
-          const final = applyGravity ? contrib * gravityFactorForContribution(worldAvg, countryVal, gravityPct, contrib) : contrib;
+          const final = safeNum(applyGravity ? contrib * gravityFactorForContribution(worldAvg, countryVal, gravityPct, contrib) : contrib);
           budget_gdp_rate_base += contrib;
           budget_gdp_sources[ministryLabel] = (budget_gdp_sources[ministryLabel] ?? 0) + final;
           break;
@@ -303,7 +307,7 @@ export function getExpectedNextTick(
         case "militarism": {
           const worldAvg = wa.mil_avg;
           const countryVal = c.militarism;
-          const final = applyGravity ? contrib * gravityFactorForContribution(worldAvg, countryVal, gravityPct, contrib) : contrib;
+          const final = safeNum(applyGravity ? contrib * gravityFactorForContribution(worldAvg, countryVal, gravityPct, contrib) : contrib);
           budget_mil_base += contrib;
           budget_mil_sources[ministryLabel] = (budget_mil_sources[ministryLabel] ?? 0) + final;
           if (applyGravity) {
@@ -314,7 +318,7 @@ export function getExpectedNextTick(
         case "industry": {
           const worldAvg = wa.ind_avg;
           const countryVal = c.industry;
-          const final = applyGravity ? contrib * gravityFactorForContribution(worldAvg, countryVal, gravityPct, contrib) : contrib;
+          const final = safeNum(applyGravity ? contrib * gravityFactorForContribution(worldAvg, countryVal, gravityPct, contrib) : contrib);
           budget_ind_base += contrib;
           budget_ind_sources[ministryLabel] = (budget_ind_sources[ministryLabel] ?? 0) + final;
           if (applyGravity) {
@@ -325,7 +329,7 @@ export function getExpectedNextTick(
         case "science": {
           const worldAvg = wa.sci_avg;
           const countryVal = c.science;
-          const final = applyGravity ? contrib * gravityFactorForContribution(worldAvg, countryVal, gravityPct, contrib) : contrib;
+          const final = safeNum(applyGravity ? contrib * gravityFactorForContribution(worldAvg, countryVal, gravityPct, contrib) : contrib);
           budget_sci_base += contrib;
           budget_sci_sources[ministryLabel] = (budget_sci_sources[ministryLabel] ?? 0) + final;
           if (applyGravity) {
@@ -336,7 +340,7 @@ export function getExpectedNextTick(
         case "stability": {
           const worldAvg = wa.stab_avg;
           const countryVal = c.stability;
-          const final = applyGravity ? contrib * gravityFactorForContribution(worldAvg, countryVal, gravityPct, contrib) : contrib;
+          const final = safeNum(applyGravity ? contrib * gravityFactorForContribution(worldAvg, countryVal, gravityPct, contrib) : contrib);
           budget_stab_base += contrib;
           budget_stab_sources[ministryLabel] = (budget_stab_sources[ministryLabel] ?? 0) + final;
           break;
@@ -347,17 +351,19 @@ export function getExpectedNextTick(
     }
   }
 
-  const budget_pop_rate = Object.values(budget_pop_sources).reduce((a, b) => a + b, 0);
-  const budget_gdp_rate = Object.values(budget_gdp_sources).reduce((a, b) => a + b, 0);
-  const budget_mil = Object.values(budget_mil_sources).reduce((a, b) => a + b, 0);
-  const budget_ind = Object.values(budget_ind_sources).reduce((a, b) => a + b, 0);
-  const budget_sci = Object.values(budget_sci_sources).reduce((a, b) => a + b, 0);
-  const budget_stab = Object.values(budget_stab_sources).reduce((a, b) => a + b, 0);
+  const budget_pop_rate = Object.values(budget_pop_sources).reduce((a, b) => safeNum(a) + safeNum(b), 0);
+  const budget_gdp_rate = Object.values(budget_gdp_sources).reduce((a, b) => safeNum(a) + safeNum(b), 0);
+  const budget_mil = Object.values(budget_mil_sources).reduce((a, b) => safeNum(a) + safeNum(b), 0);
+  const budget_ind = Object.values(budget_ind_sources).reduce((a, b) => safeNum(a) + safeNum(b), 0);
+  const budget_sci = Object.values(budget_sci_sources).reduce((a, b) => safeNum(a) + safeNum(b), 0);
+  const budget_stab = Object.values(budget_stab_sources).reduce((a, b) => safeNum(a) + safeNum(b), 0);
 
-  const pop_total_rate =
-    pop_base + pop_from_stats + pop_effect_rate + budget_pop_rate;
-  const gdp_total_rate =
-    gdp_base + gdp_from_stats + gdp_effect_rate + budget_gdp_rate;
+  const pop_total_rate = safeNum(
+    pop_base + pop_from_stats + pop_effect_rate + budget_pop_rate,
+  );
+  const gdp_total_rate = safeNum(
+    gdp_base + gdp_from_stats + gdp_effect_rate + budget_gdp_rate,
+  );
 
   const population = Math.max(
     0,
@@ -366,19 +372,19 @@ export function getExpectedNextTick(
   const gdp = Math.max(0, c.gdp + c.gdp * gdp_total_rate);
   const militarism = Math.min(
     10,
-    Math.max(0, Math.round((mil + delta_mil + budget_mil) * 100) / 100),
+    Math.max(0, Math.round((mil + safeNum(delta_mil) + budget_mil) * 100) / 100),
   );
   const industry = Math.min(
     10,
-    Math.max(0, Math.round((ind + delta_ind + budget_ind) * 100) / 100),
+    Math.max(0, Math.round((ind + safeNum(delta_ind) + budget_ind) * 100) / 100),
   );
   const science = Math.min(
     10,
-    Math.max(0, Math.round((sci + delta_sci + budget_sci) * 100) / 100),
+    Math.max(0, Math.round((sci + safeNum(delta_sci) + budget_sci) * 100) / 100),
   );
   const stability = Math.min(
     3,
-    Math.max(-3, Math.round((stab + delta_stab + budget_stab) * 100) / 100),
+    Math.max(-3, Math.round((stab + safeNum(delta_stab) + budget_stab) * 100) / 100),
   );
 
   return {

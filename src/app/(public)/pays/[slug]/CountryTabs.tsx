@@ -92,6 +92,7 @@ export function CountryTabs({
   stateActionBalance = 0,
   stateActionRequests = [],
   countriesForTarget = [],
+  countriesList = [],
   emitterCountry = { name: "", flag_url: null, regime: null, influence: null },
 }: {
   country: Country;
@@ -121,8 +122,9 @@ export function CountryTabs({
   sphereData?: { totalPopulation: number; totalGdp: number; countries: Array<{ id: string; name: string; slug: string; population: number | null; gdp: number | null }> };
   stateActionTypes?: Array<{ id: string; key: string; label_fr: string; cost: number; params_schema: Record<string, unknown> | null }>;
   stateActionBalance?: number;
-  stateActionRequests?: Array<{ id: string; action_type_id: string; status: string; payload: Record<string, unknown> | null; created_at: string; refusal_message: string | null; state_action_types?: { key: string; label_fr: string } | null }>;
-  countriesForTarget?: Array<{ id: string; name: string; flag_url: string | null; regime: string | null; influence: number }>;
+  stateActionRequests?: Array<{ id: string; action_type_id: string; status: string; payload: Record<string, unknown> | null; created_at: string; refusal_message: string | null; dice_results?: { success_roll?: { roll: number; modifier: number; total: number }; impact_roll?: { roll: number; modifier: number; total: number } } | null; state_action_types?: { key: string; label_fr: string } | null }>;
+  countriesForTarget?: Array<{ id: string; name: string; flag_url: string | null; regime: string | null; influence: number; relation: number }>;
+  countriesList?: Array<{ id: string; name: string }>;
   emitterCountry?: { name: string; flag_url: string | null; regime: string | null; influence: number | null };
 }) {
   const canEditCountry = isAdmin || isPlayerForThisCountry;
@@ -549,10 +551,12 @@ export function CountryTabs({
             ? String(Number(e.value) * 100 - 100)
             : String(e.value)
     );
-    setEffectDurationKind(e.duration_kind as "days" | "updates" | "permanent");
+    setEffectDurationKind((e.duration_kind === "updates" ? "days" : e.duration_kind) as "days" | "updates" | "permanent");
     setEffectDurationRemaining(String(e.duration_remaining));
     setEffectsFormOpen(true);
   };
+
+  const otherCountriesForRelation = countriesList.filter((c) => c.id !== country.id);
 
   const handleDeleteEffect = async (e: CountryEffect) => {
     if (!confirm("Supprimer cet effet ?")) return;
@@ -566,7 +570,8 @@ export function CountryTabs({
     setEffectName("");
     const firstKind = ALL_EFFECT_KIND_IDS[0];
     setEffectKind(firstKind);
-    setEffectTarget(getDefaultTargetForKind(firstKind, rosterUnitsFlat.map((u) => u.id)));
+    const otherCountryIds = countriesList.filter((c) => c.id !== country.id).map((c) => c.id);
+    setEffectTarget(getDefaultTargetForKind(firstKind, rosterUnitsFlat.map((u) => u.id), otherCountryIds));
     setEffectValue("");
     setEffectDurationKind("days");
     setEffectDurationRemaining("7");
@@ -947,6 +952,7 @@ export function CountryTabs({
           influenceResult={influenceResult}
           hardPowerByBranch={localHardPowerByBranch ?? hardPowerByBranch}
           sphereData={sphereData}
+          otherCountriesForRelation={otherCountriesForRelation}
         />
       )}
 
@@ -1036,6 +1042,7 @@ export function CountryTabs({
           worldDate={worldDate ?? null}
           worldAverages={worldAverages ?? null}
           lastUpdateLog={updateLogs[0] ?? null}
+          influenceValue={influenceResult?.influence ?? null}
           panelClass={panelClass}
           panelStyle={panelStyle}
         />

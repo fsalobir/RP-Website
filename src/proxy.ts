@@ -4,7 +4,7 @@ import { NextResponse, type NextRequest } from "next/server";
 // Exécuter sur toutes les routes pour rafraîchir la session à chaque requête (évite la déconnexion au changement de page)
 export const config = { matcher: ["/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)"] };
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   const path = request.nextUrl.pathname;
   const response = NextResponse.next();
 

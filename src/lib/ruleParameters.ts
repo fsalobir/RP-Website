@@ -145,11 +145,13 @@ export function getEffectsListForMinistry(
   ministryKey: string,
   value: BudgetMinistryValue | null | undefined
 ): BudgetMinistryEffectDef[] {
+  const numBonus = (v: unknown) => { const n = Number(v); return typeof n === "number" && !Number.isNaN(n) ? n : 0; };
+  const numMalus = (v: unknown) => { const n = Number(v); return typeof n === "number" && !Number.isNaN(n) ? n : -0.05; };
   if (value?.effects && value.effects.length > 0) {
     return value.effects.map((e) => ({
       effect_type: e.effect_type,
-      bonus: Number(e.bonus) || 0,
-      malus: Number(e.malus) ?? -0.05,
+      bonus: numBonus(e.bonus),
+      malus: numMalus(e.malus),
       gravity_applies: e.gravity_applies ?? BUDGET_EFFECT_TYPES.find((t) => t.id === e.effect_type)?.defaultGravityApplies ?? false,
     }));
   }
@@ -160,8 +162,8 @@ export function getEffectsListForMinistry(
     .filter(({ key }) => BUDGET_EFFECT_TYPE_IDS.includes(key as BudgetMinistryEffectType))
     .map(({ key }) => ({
       effect_type: key as BudgetMinistryEffectType,
-      bonus: Number(bonuses[key]) || 0,
-      malus: Number(maluses[key]) ?? -0.05,
+      bonus: numBonus(bonuses[key]),
+      malus: numMalus(maluses[key]),
       gravity_applies: BUDGET_EFFECT_TYPES.find((t) => t.id === key)?.defaultGravityApplies ?? false,
     }));
 }
