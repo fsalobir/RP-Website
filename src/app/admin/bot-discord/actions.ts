@@ -21,37 +21,44 @@ export async function setDispatchTypeEnabled(id: string, enabled: boolean): Prom
   return {};
 }
 
-export async function upsertChannelRoute(params: {
-  id?: string;
-  dispatch_type_id: string;
-  discord_channel_id: string;
-  country_id?: string | null;
-  region_id?: string | null;
-}): Promise<{ error?: string }> {
+export async function setDispatchTypeDestination(
+  id: string,
+  destination: "national" | "international"
+): Promise<{ error?: string }> {
   const { supabase, error: authError } = await ensureAdmin();
   if (authError || !supabase) return { error: authError ?? "Non autorisé." };
-  const row = {
-    dispatch_type_id: params.dispatch_type_id,
-    discord_channel_id: params.discord_channel_id.trim(),
-    country_id: params.country_id ?? null,
-    region_id: params.region_id ?? null,
-  };
-  if (params.id) {
-    const { error } = await supabase.from("discord_channel_routes").update(row).eq("id", params.id);
-    if (error) return { error: error.message };
-  } else {
-    const { error } = await supabase.from("discord_channel_routes").insert(row);
-    if (error) return { error: error.message };
-  }
+  const { error } = await supabase.from("discord_dispatch_types").update({ destination }).eq("id", id);
+  if (error) return { error: error.message };
   revalidatePath("/admin/bot-discord");
   return {};
 }
 
-export async function deleteChannelRoute(id: string): Promise<{ error?: string }> {
+export async function saveRegionChannel(params: {
+  continent_id: string;
+  channel_kind: "national" | "international";
+  discord_channel_id: string;
+}): Promise<{ error?: string }> {
   const { supabase, error: authError } = await ensureAdmin();
   if (authError || !supabase) return { error: authError ?? "Non autorisé." };
-  const { error } = await supabase.from("discord_channel_routes").delete().eq("id", id);
-  if (error) return { error: error.message };
+  const channelId = params.discord_channel_id.trim();
+  if (!channelId) {
+    const { error } = await supabase
+      .from("discord_region_channels")
+      .delete()
+      .eq("continent_id", params.continent_id)
+      .eq("channel_kind", params.channel_kind);
+    if (error) return { error: error.message };
+  } else {
+    const { error } = await supabase.from("discord_region_channels").upsert(
+      {
+        continent_id: params.continent_id,
+        channel_kind: params.channel_kind,
+        discord_channel_id: channelId,
+      },
+      { onConflict: "continent_id,channel_kind" }
+    );
+    if (error) return { error: error.message };
+  }
   revalidatePath("/admin/bot-discord");
   return {};
 }
@@ -91,7 +98,7 @@ export async function createTemplate(dispatch_type_id: string): Promise<{ error?
   const { error } = await supabase.from("discord_dispatch_templates").insert({
     dispatch_type_id,
     label_fr: label,
-    body_template: "Rapport : {country_name} — {action_label}. {date}",
+    body_template: "Selon nos sources, {country_name} et {target_country_name} : {action_label}. {date}",
     embed_color: "2e7d32",
     image_urls: [],
     sort_order: 999,
@@ -108,4 +115,58 @@ export async function deleteTemplate(id: string): Promise<{ error?: string }> {
   if (error) return { error: error.message };
   revalidatePath("/admin/bot-discord");
   return {};
+}
+
+/** Retourne une phrase de titre et une de description tirées au hasard pour l’aperçu (même logique que discord-dispatch). */
+export async function getPreviewSnippets(dispatch_type_id: string): Promise<{
+  error?: string;
+  titlePhrase: string | null;
+  descriptionPhrase: string | null;
+}> {
+  const { supabase, error: authError } = await ensureAdmin();
+  if (authError || !supabase) return { error: authError ?? "Non autorisé.", titlePhrase: null, descriptionPhrase: null };
+
+  const { data: dispatchType, error: typeErr } = await supabase
+    .from("discord_dispatch_types")
+    .select("state_action_type_id, outcome")
+    .eq("id", dispatch_type_id)
+    .single();
+  if (typeErr || !dispatchType) return { titlePhrase: null, descriptionPhrase: null };
+
+  const stateActionTypeId = (dispatchType as { state_action_type_id?: string | null }).state_action_type_id ?? null;
+  const outcome = (dispatchType as { outcome?: string | null }).outcome ?? null;
+  if (!outcome) return { titlePhrase: null, descriptionPhrase: null };
+
+  const diceResult =
+    outcome === "accepted"
+      ? (["success", "failure"] as const)[Math.floor(Math.random() * 2)]
+      : null;
+
+  const tryLoad = async (
+    typeId: string | null,
+    slot: "title" | "description"
+  ): Promise<string | null> => {
+    let q = supabase
+      .from("discord_dispatch_snippet_pools")
+      .select("phrases")
+      .eq("outcome", outcome)
+      .eq("slot", slot);
+    if (typeId) q = q.eq("state_action_type_id", typeId);
+    else q = q.is("state_action_type_id", null);
+    if (diceResult) q = q.eq("dice_result", diceResult);
+    else q = q.is("dice_result", null);
+    const { data: row } = await q.maybeSingle();
+    const phrases = (row as { phrases?: unknown } | null)?.phrases;
+    if (!Array.isArray(phrases) || phrases.length === 0) return null;
+    const str = phrases[Math.floor(Math.random() * phrases.length)];
+    return typeof str === "string" ? str : null;
+  };
+
+  let titlePhrase = await tryLoad(stateActionTypeId, "title");
+  if (!titlePhrase && stateActionTypeId) titlePhrase = await tryLoad(null, "title");
+
+  let descriptionPhrase = await tryLoad(stateActionTypeId, "description");
+  if (!descriptionPhrase && stateActionTypeId) descriptionPhrase = await tryLoad(null, "description");
+
+  return { titlePhrase, descriptionPhrase };
 }

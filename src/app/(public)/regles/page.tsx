@@ -53,6 +53,13 @@ export default async function ReglesPage() {
         Paramètres utilisés par le moteur de simulation (cron) pour l’évolution des indicateurs.
       </p>
 
+      <section className="mb-10 rounded-lg border p-6" style={{ borderColor: "var(--border)", background: "var(--background-panel)" }}>
+        <h2 className="mb-3 text-lg font-semibold text-[var(--foreground)]">Matrice diplomatique</h2>
+        <p className="text-sm text-[var(--foreground-muted)]">
+          Les relations bilatérales entre pays sont définies par une seule valeur par paire, de −100 (haine féroce) à +100 (loyauté absolue). Cette matrice alimente les modificateurs de jets (succès, impact), les effets d&apos;ouverture ou d&apos;insulte diplomatique et l&apos;affichage des relations sur la fiche pays et sur la carte.
+        </p>
+      </section>
+
       {!rules?.length ? (
         <div
           className="rounded-lg border p-8 text-center"

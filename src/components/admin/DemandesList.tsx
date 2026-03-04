@@ -85,7 +85,7 @@ type RequestRow = {
   resolved_by: string | null;
   dice_results?: DiceResultsRow | null;
   country?: { id: string; name: string; slug: string; flag_url: string | null; regime: string | null } | null;
-  state_action_types?: { key: string; label_fr: string; cost: number } | null;
+  state_action_types?: { key: string; label_fr: string; cost: number; params_schema?: Record<string, unknown> | null } | null;
 };
 
 type Props = {
@@ -533,41 +533,55 @@ function RequestDetail({
             </div>
           )}
           {request.dice_results?.impact_roll && (
-            <div className="mb-4 flex flex-wrap items-center justify-between gap-4 rounded-lg border p-4" style={{ borderColor: "var(--border)", background: "var(--background)" }}>
-              <div className="min-w-0">
-                <p className="mb-1 text-xs font-medium uppercase tracking-wider text-[var(--foreground-muted)]">Jet impact</p>
-                <p className="text-sm text-[var(--foreground)]">
-                  {formatRollFormula(request.dice_results.impact_roll, request.dice_results?.admin_modifiers?.[0]?.label)} = <strong className="text-lg">{request.dice_results.impact_roll.total}</strong>
-                </p>
-                {isPending && (
-                  <p className="mt-1 text-xs text-[var(--foreground-muted)]">
-                    {request.state_action_types?.key === "prise_influence"
-                      ? "Utilisé pour l'impact sur l'influence à l'acceptation."
-                      : "Utilisé pour le delta de relation à l'acceptation."}
+            <>
+              <div className="mb-4 flex flex-wrap items-center justify-between gap-4 rounded-lg border p-4" style={{ borderColor: "var(--border)", background: "var(--background)" }}>
+                <div className="min-w-0">
+                  <p className="mb-1 text-xs font-medium uppercase tracking-wider text-[var(--foreground-muted)]">Jet impact</p>
+                  <p className="text-sm text-[var(--foreground)]">
+                    {formatRollFormula(request.dice_results.impact_roll, request.dice_results?.admin_modifiers?.[0]?.label)} = <strong className="text-lg">{request.dice_results.impact_roll.total}</strong>
                   </p>
-                )}
+                  {isPending && (
+                    <p className="mt-1 text-xs text-[var(--foreground-muted)]">
+                      {request.state_action_types?.key === "prise_influence"
+                        ? "Utilisé pour l'impact sur l'influence à l'acceptation."
+                        : "Utilisé pour le delta de relation à l'acceptation."}
+                    </p>
+                  )}
+                </div>
+                <div className="flex shrink-0 items-center gap-3">
+                  <p className="text-base font-bold uppercase text-[var(--foreground)]">
+                    {getRollConclusion(request.dice_results.impact_roll.roll, request.dice_results.impact_roll.total)}
+                  </p>
+                  {isPending && (
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        const { error: err } = await removeImpactRoll(request.id);
+                        if (err) onError(err);
+                        else onRefresh();
+                      }}
+                      className="rounded border px-2 py-1 text-xs text-[var(--foreground-muted)] hover:bg-[var(--background)] hover:text-[var(--foreground)]"
+                      style={{ borderColor: "var(--border)" }}
+                      title="Supprimer le jet impact"
+                    >
+                      Supprimer
+                    </button>
+                  )}
+                </div>
               </div>
-              <div className="flex shrink-0 items-center gap-3">
-                <p className="text-base font-bold uppercase text-[var(--foreground)]">
-                  {getRollConclusion(request.dice_results.impact_roll.roll, request.dice_results.impact_roll.total)}
-                </p>
-                {isPending && (
-                  <button
-                    type="button"
-                    onClick={async () => {
-                      const { error: err } = await removeImpactRoll(request.id);
-                      if (err) onError(err);
-                      else onRefresh();
-                    }}
-                    className="rounded border px-2 py-1 text-xs text-[var(--foreground-muted)] hover:bg-[var(--background)] hover:text-[var(--foreground)]"
-                    style={{ borderColor: "var(--border)" }}
-                    title="Supprimer le jet impact"
-                  >
-                    Supprimer
-                  </button>
-                )}
-              </div>
-            </div>
+              {(request.state_action_types?.key === "prise_influence" || request.state_action_types?.key === "insulte_diplomatique" || request.state_action_types?.key === "ouverture_diplomatique") && (() => {
+                const impactMax = typeof request.state_action_types?.params_schema?.impact_maximum === "number" ? request.state_action_types.params_schema.impact_maximum : (request.state_action_types?.key === "prise_influence" ? 100 : 50);
+                const total = request.dice_results!.impact_roll!.total;
+                const impactPct = (total / 100) * impactMax;
+                const impactLabel = request.state_action_types?.key === "prise_influence" ? `${Math.round(impactPct)} %` : request.state_action_types?.key === "insulte_diplomatique" ? `−${Math.round(impactPct)}` : `+${Math.round(impactPct)}`;
+                return (
+                  <div className="mb-4 rounded-lg border p-4" style={{ borderColor: "var(--border)", background: "var(--background)" }}>
+                    <p className="text-xs font-medium uppercase tracking-wider text-[var(--foreground-muted)] mb-1">Impact</p>
+                    <p className="text-lg font-bold text-[var(--foreground)]">{impactLabel}</p>
+                  </div>
+                );
+              })()}
+            </>
           )}
         </div>
       )}
@@ -593,7 +607,7 @@ function RequestDetail({
                   className="rounded border px-3 py-1.5 text-sm"
                   style={{ borderColor: "var(--border)" }}
                 >
-                  {request.admin_effect_added && (request.admin_effect_added as AdminEffectAdded).application !== "immediate"
+                  {request.admin_effect_added && (request.admin_effect_added as unknown as AdminEffectAdded).application !== "immediate"
                     ? "Modifier l'effet actif" : "Effet Actif"}
                 </button>
                 <button
@@ -602,7 +616,7 @@ function RequestDetail({
                   className="rounded border px-3 py-1.5 text-sm"
                   style={{ borderColor: "var(--border)" }}
                 >
-                  {request.admin_effect_added && (request.admin_effect_added as AdminEffectAdded).application === "immediate"
+                  {request.admin_effect_added && (request.admin_effect_added as unknown as AdminEffectAdded).application === "immediate"
                     ? "Modifier l'effet one-shot" : "Effet One-Shot"}
                 </button>
               </div>

@@ -6,8 +6,9 @@ import { revalidatePath } from "next/cache";
 import { getRelation, normalizePair, RELATION_MIN, RELATION_MAX } from "@/lib/relations";
 import { computeHardPowerByCountry } from "@/lib/hardPower";
 import { computeInfluenceForAll } from "@/lib/influence";
-import type { AdminEffectAdded, DiceResults, DiceRollResult } from "@/types/database";
+import type { AdminEffectAdded, DiceResults, DiceRollResult, MilitaryBranch } from "@/types/database";
 import { dispatchToDiscord } from "@/lib/discord-dispatch";
+import { formatWorldDateForDiscord } from "@/lib/worldDate";
 
 async function ensureAdmin() {
   const supabase = await createClient();
@@ -211,7 +212,7 @@ export async function rollD100(
         supabase.from("rule_parameters").select("value").eq("key", "influence_config").maybeSingle(),
       ]);
       const countries = (countriesRes.data ?? []) as Array<{ id: string; population: number; gdp: number; stability: number }>;
-      const rosterUnits = (rosterRes.data ?? []) as Array<{ id: string; branch: string; base_count: number }>;
+      const rosterUnits = (rosterRes.data ?? []) as Array<{ id: string; branch: MilitaryBranch; base_count: number }>;
       const rosterLevels = (levelsRes.data ?? []) as Array<{ unit_id: string; level: number; hard_power: number }>;
       const influenceConfig = (influenceConfigRes.data?.value ?? {}) as Parameters<typeof computeInfluenceForAll>[2];
       const hardPowerByCountry = computeHardPowerByCountry(
@@ -356,6 +357,21 @@ export async function acceptRequest(requestId: string): Promise<{ error?: string
   const params = (actionType?.params_schema ?? {}) as Record<string, number>;
   const diceResults = req.dice_results as DiceResults | null;
 
+  const targetCountryId = typeof payload.target_country_id === "string" ? payload.target_country_id : undefined;
+  const diceSuccess = diceResults?.success_roll
+    ? diceResults.success_roll.total >= 50
+    : true;
+  let discordImpactValue: number | null = null;
+  let discordImpactMagnitude: string | null = null;
+  let discordImpactLabel: string = "Relations";
+
+  function magnitudeFromAbs(absVal: number): string {
+    if (absVal <= 10) return "faible";
+    if (absVal <= 25) return "modéré";
+    if (absVal <= 50) return "élevé";
+    return "massif";
+  }
+
   if (key === "insulte_diplomatique") {
     const targetCountryId = payload.target_country_id;
     if (!targetCountryId) return { error: "Pays cible manquant pour Insulte diplomatique." };
@@ -379,6 +395,8 @@ export async function acceptRequest(requestId: string): Promise<{ error?: string
         { onConflict: "country_a_id,country_b_id" }
       );
     if (relErr) return { error: relErr.message };
+    discordImpactValue = relationDelta;
+    discordImpactMagnitude = magnitudeFromAbs(Math.abs(relationDelta));
   }
 
   if (key === "ouverture_diplomatique") {
@@ -404,6 +422,44 @@ export async function acceptRequest(requestId: string): Promise<{ error?: string
         { onConflict: "country_a_id,country_b_id" }
       );
     if (relErr) return { error: relErr.message };
+    discordImpactValue = relationDelta;
+    discordImpactMagnitude = magnitudeFromAbs(Math.abs(relationDelta));
+  }
+
+  if (key === "prise_influence") {
+    const targetCountryId = payload.target_country_id;
+    if (!targetCountryId) return { error: "Pays cible manquant pour Prise d'influence." };
+    const impactMax = typeof params.impact_maximum === "number" ? params.impact_maximum : 100;
+    let impactPct = 0;
+    if (diceResults?.impact_roll != null) {
+      const total = diceResults.impact_roll.total;
+      impactPct = Math.round(impactMax * (total / 100));
+      impactPct = Math.max(0, Math.min(100, impactPct));
+    }
+    const { data: existingRow } = await supabase
+      .from("country_control")
+      .select("id, share_pct")
+      .eq("country_id", targetCountryId)
+      .eq("controller_country_id", req.country_id)
+      .maybeSingle();
+    const currentShare = existingRow != null ? Number(existingRow.share_pct) : 0;
+    const newShare = Math.min(100, currentShare + impactPct);
+    const { error: ctrlErr } = await supabase
+      .from("country_control")
+      .upsert(
+        {
+          country_id: targetCountryId,
+          controller_country_id: req.country_id,
+          share_pct: newShare,
+          is_annexed: false,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: "country_id,controller_country_id" }
+      );
+    if (ctrlErr) return { error: ctrlErr.message };
+    discordImpactValue = impactPct;
+    discordImpactMagnitude = magnitudeFromAbs(impactPct);
+    discordImpactLabel = "Influence";
   }
 
   const effect = req.admin_effect_added as AdminEffectAdded | null;
@@ -445,20 +501,43 @@ export async function acceptRequest(requestId: string): Promise<{ error?: string
 
   if (upErr) return { error: upErr.message };
 
-  const { data: country } = await supabase.from("countries").select("name").eq("id", req.country_id).single();
+  const [countryRes, targetCountryRes, worldDateRes] = await Promise.all([
+    supabase.from("countries").select("name").eq("id", req.country_id).single(),
+    targetCountryId
+      ? supabase.from("countries").select("name").eq("id", targetCountryId).single()
+      : Promise.resolve({ data: null }),
+    supabase.from("rule_parameters").select("value").eq("key", "world_date").maybeSingle(),
+  ]);
+  const countryName = (countryRes.data as { name?: string } | null)?.name ?? "";
+  const targetCountryName = (targetCountryRes.data as { name?: string } | null)?.name ?? "";
+  const worldDateVal = (worldDateRes.data as { value?: { month?: number; year?: number } } | null)?.value;
+  const resolutionDate =
+    worldDateVal && typeof worldDateVal.month === "number" && typeof worldDateVal.year === "number"
+      ? formatWorldDateForDiscord({ month: worldDateVal.month, year: worldDateVal.year })
+      : new Date().toLocaleDateString("fr-FR", { dateStyle: "medium" });
+
   dispatchToDiscord(
-    "state_action_accepted",
+    `${key}_accepted`,
     {
       country_id: req.country_id,
-      country_name: country?.name ?? "",
+      country_name: countryName,
+      target_country_id: targetCountryId ?? undefined,
+      target_country_name: targetCountryName,
       action_label: actionLabel,
-      resolution_date: new Date().toLocaleDateString("fr-FR", { dateStyle: "medium" }),
+      resolution_date: resolutionDate,
+      date: resolutionDate,
+      dice_success: diceSuccess ? "true" : "false",
+      dice_success_label: diceSuccess ? "Succès" : "Échec",
+      impact_magnitude_text: discordImpactMagnitude ?? undefined,
+      impact_value: discordImpactValue != null ? discordImpactValue : undefined,
+      impact_label: discordImpactLabel,
     },
     supabase
   ).catch(() => {});
 
   revalidatePath("/admin/demandes");
   revalidatePath("/pays");
+  revalidatePath("/");
   return {};
 }
 
@@ -472,12 +551,15 @@ export async function refuseRequest(
 
   const { data: req, error: fetchErr } = await supabase
     .from("state_action_requests")
-    .select("id, country_id, action_type_id, status")
+    .select("id, country_id, action_type_id, status, payload")
     .eq("id", requestId)
     .single();
 
   if (fetchErr || !req) return { error: fetchErr?.message ?? "Requête introuvable." };
   if (req.status !== "pending") return { error: "Cette demande a déjà été traitée." };
+
+  const refPayload = (req.payload ?? {}) as Record<string, string>;
+  const refTargetCountryId = typeof refPayload.target_country_id === "string" ? refPayload.target_country_id : undefined;
 
   if (refundActions) {
     const { data: actionType } = await supabase
@@ -516,25 +598,6 @@ export async function refuseRequest(
     .eq("id", requestId);
 
   if (upErr) return { error: upErr.message };
-
-  const { data: country } = await supabase.from("countries").select("name").eq("id", req.country_id).single();
-  const { data: actionType } = await supabase
-    .from("state_action_types")
-    .select("key, label_fr")
-    .eq("id", req.action_type_id)
-    .single();
-  const actionLabel = (actionType as { label_fr?: string } | null)?.label_fr ?? (actionType as { key?: string } | null)?.key ?? "";
-  dispatchToDiscord(
-    "state_action_refused",
-    {
-      country_id: req.country_id,
-      country_name: country?.name ?? "",
-      action_label: actionLabel,
-      refusal_message: refusalMessage.trim() || "",
-      resolution_date: new Date().toLocaleDateString("fr-FR", { dateStyle: "medium" }),
-    },
-    supabase
-  ).catch(() => {});
 
   revalidatePath("/admin/demandes");
   revalidatePath("/pays");

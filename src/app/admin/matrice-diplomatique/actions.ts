@@ -49,6 +49,7 @@ export async function setRelation(
 
   if (error) return { error: error.message };
   revalidatePath("/admin/matrice-diplomatique");
+  revalidatePath("/admin/regles");
   revalidatePath("/carte");
   return {};
 }
@@ -61,6 +62,7 @@ export async function resetAllRelations(): Promise<{ error?: string }> {
   const { error } = await supabase.from("country_relations").delete().gte("value", RELATION_MIN);
   if (error) return { error: error.message };
   revalidatePath("/admin/matrice-diplomatique");
+  revalidatePath("/admin/regles");
   revalidatePath("/carte");
   return {};
 }
@@ -94,6 +96,7 @@ export async function randomizeAllRelations(): Promise<{ error?: string }> {
 
   if (error) return { error: error.message };
   revalidatePath("/admin/matrice-diplomatique");
+  revalidatePath("/admin/regles");
   revalidatePath("/carte");
   return {};
 }

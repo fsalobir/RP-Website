@@ -28,7 +28,15 @@ const defaultCountry: Partial<Country> = {
   growth: 0,
 };
 
-export function CountryForm({ country }: { country?: Country }) {
+type Continent = { id: string; slug: string; label_fr: string };
+
+export function CountryForm({
+  country,
+  continents = [],
+}: {
+  country?: Country & { continent_id?: string | null };
+  continents?: Continent[];
+}) {
   const router = useRouter();
   const isEdit = !!country;
   const [form, setForm] = useState({
@@ -36,6 +44,7 @@ export function CountryForm({ country }: { country?: Country }) {
     slug: country?.slug ?? defaultCountry.slug ?? "",
     regime: country?.regime ?? defaultCountry.regime ?? "",
     flag_url: country?.flag_url ?? defaultCountry.flag_url ?? "",
+    continent_id: country?.continent_id ?? "",
     militarism: country?.militarism ?? defaultCountry.militarism ?? 5,
     industry: country?.industry ?? defaultCountry.industry ?? 5,
     science: country?.science ?? defaultCountry.science ?? 5,
@@ -89,6 +98,7 @@ export function CountryForm({ country }: { country?: Country }) {
       slug: form.slug || slugify(form.name),
       regime: form.regime || null,
       flag_url: flagUrl,
+      continent_id: form.continent_id || null,
       militarism: Number(form.militarism),
       industry: Number(form.industry),
       science: Number(form.science),
@@ -161,6 +171,22 @@ export function CountryForm({ country }: { country?: Country }) {
               placeholder="République, Monarchie…"
             />
           </div>
+          {continents.length > 0 && (
+            <div>
+              <label className="mb-1 block text-sm text-[var(--foreground-muted)]">Continent</label>
+              <select
+                value={form.continent_id}
+                onChange={(e) => update("continent_id", e.target.value)}
+                className={inputClass}
+                style={inputStyle}
+              >
+                <option value="">—</option>
+                {continents.map((c) => (
+                  <option key={c.id} value={c.id}>{c.label_fr}</option>
+                ))}
+              </select>
+            </div>
+          )}
           <div>
             <label className="mb-1 block text-sm text-[var(--foreground-muted)]">Drapeau</label>
             <div className="space-y-2">

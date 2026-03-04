@@ -178,10 +178,25 @@ export function CountryTabStateActions({
                               <p>Succès : jet {r.dice_results.success_roll.roll} + mod. {r.dice_results.success_roll.modifier} = <strong className="text-[var(--foreground)]">{r.dice_results.success_roll.total}</strong></p>
                             )}
                             {r.dice_results.impact_roll && (
-                              <p>Impact : jet {r.dice_results.impact_roll.roll} + mod. {r.dice_results.impact_roll.modifier} = <strong className="text-[var(--foreground)]">{r.dice_results.impact_roll.total}</strong></p>
+                              <p>Jet impact : {r.dice_results.impact_roll.roll} + mod. {r.dice_results.impact_roll.modifier} = <strong className="text-[var(--foreground)]">{r.dice_results.impact_roll.total}</strong></p>
                             )}
                           </div>
                         )}
+                        {r.dice_results?.impact_roll && (() => {
+                          const key = r.state_action_types?.key;
+                          if (key !== "prise_influence" && key !== "insulte_diplomatique" && key !== "ouverture_diplomatique") return null;
+                          const type = types.find((t) => t.id === r.action_type_id);
+                          const impactMax = type?.params_schema && typeof (type.params_schema as Record<string, unknown>).impact_maximum === "number" ? (type.params_schema as Record<string, number>).impact_maximum : (key === "prise_influence" ? 100 : 50);
+                          const total = r.dice_results.impact_roll.total;
+                          const impactPct = (total / 100) * impactMax;
+                          const impactLabel = key === "prise_influence" ? `${Math.round(impactPct)} %` : key === "insulte_diplomatique" ? `−${Math.round(impactPct)}` : `+${Math.round(impactPct)}`;
+                          return (
+                            <div className="mb-3 rounded border p-3" style={{ borderColor: "var(--border)", background: "var(--background)" }}>
+                              <p className="text-xs font-medium uppercase tracking-wider text-[var(--foreground-muted)] mb-1">Impact</p>
+                              <p className="font-bold text-[var(--foreground)]">{impactLabel}</p>
+                            </div>
+                          );
+                        })()}
                         {r.refusal_message && (
                           <p className="mt-2 text-red-400">Refus : {r.refusal_message}</p>
                         )}

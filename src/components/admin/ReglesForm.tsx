@@ -31,33 +31,47 @@ import {
   getEffectKindValueHelper,
   formatEffectValue,
 } from "@/lib/countryEffects";
+import { MatriceDiplomatiqueForm } from "@/app/admin/matrice-diplomatique/MatriceDiplomatiqueForm";
 
 function CollapsibleBlock({
   title,
   open,
   onToggle,
   children,
+  variant = "default",
 }: {
   title: string;
   open: boolean;
   onToggle: () => void;
   children: React.ReactNode;
+  variant?: "default" | "section";
 }) {
+  const isSection = variant === "section";
   return (
-    <div className="border-b" style={{ borderColor: "var(--border-muted)" }}>
+    <div
+      className={isSection ? "mb-8 rounded-lg border-2 last:mb-0" : "border-b"}
+      style={{
+        borderColor: isSection ? "var(--border)" : "var(--border-muted)",
+        background: isSection ? "var(--background-panel)" : undefined,
+      }}
+    >
       <button
         type="button"
         onClick={onToggle}
-        className="flex w-full items-center justify-between gap-2 px-4 py-2.5 text-left transition-colors hover:opacity-90"
-        style={{ background: "var(--background-elevated)" }}
+        className={`flex w-full items-center justify-between gap-2 text-left transition-colors hover:opacity-90 ${isSection ? "px-5 py-4" : "px-4 py-2.5"}`}
+        style={{ background: isSection ? "var(--background-elevated)" : "var(--background-elevated)" }}
       >
-        <span className="text-sm font-medium text-[var(--foreground)]">{title}</span>
+        <span
+          className={isSection ? "text-base font-semibold text-[var(--foreground)]" : "text-sm font-medium text-[var(--foreground)]"}
+        >
+          {title}
+        </span>
         <span
           className="block shrink-0 transition-transform duration-300 ease-out"
           style={{ transform: open ? "rotate(180deg)" : "rotate(0deg)" }}
           aria-hidden
         >
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <svg width={isSection ? 20 : 16} height={isSection ? 20 : 16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <path d="M6 9l6 6 6-6" />
           </svg>
         </span>
@@ -70,7 +84,12 @@ function CollapsibleBlock({
         }}
       >
         <div className="min-h-0 overflow-hidden">
-          <div className="divide-y" style={{ borderColor: "var(--border-muted)" }}>{children}</div>
+          <div
+            className={isSection ? "border-t py-1" : "divide-y"}
+            style={{ borderColor: "var(--border-muted)" }}
+          >
+            {children}
+          </div>
         </div>
       </div>
     </div>
@@ -83,12 +102,18 @@ type GlobalGrowthEffectEntry = {
   value: number;
 };
 
+type CountryForMatrice = { id: string; name: string; slug: string };
+
 export function ReglesForm({
   rules,
   rosterUnits = [],
+  countries: countriesForMatrice,
+  relationMap: relationMapForMatrice,
 }: {
   rules: RuleParameter[];
   rosterUnits?: { id: string; name_fr: string }[];
+  countries?: CountryForMatrice[];
+  relationMap?: Record<string, number>;
 }) {
   const [items, setItems] = useState(rules);
   const [saving, setSaving] = useState(false);
@@ -112,6 +137,10 @@ export function ReglesForm({
   const [influenceOpen, setInfluenceOpen] = useState(false);
   const [sphereOpen, setSphereOpen] = useState(false);
   const [statsOpen, setStatsOpen] = useState(false);
+  const [matriceOpen, setMatriceOpen] = useState(true);
+  const [diplomatieOpen, setDiplomatieOpen] = useState(true);
+  const [effetsGlobauxOpen, setEffetsGlobauxOpen] = useState(true);
+  const [loisOpen, setLoisOpen] = useState(true);
   const [aiOpen, setAiOpen] = useState(false);
   const [aiMajorFormOpen, setAiMajorFormOpen] = useState(false);
   const [aiMajorEditIndex, setAiMajorEditIndex] = useState<number | null>(null);
@@ -447,6 +476,11 @@ export function ReglesForm({
     const current = getMobilisationConfig();
     updateValue(mobilisationConfigRule.id, { ...current, ...updates });
   }
+  function updateMobilisationThreshold(key: string, value: number) {
+    const current = getMobilisationConfig();
+    const level_thresholds = { ...(current.level_thresholds ?? {}), [key]: value };
+    updateMobilisationConfig({ level_thresholds });
+  }
 
   type MobilisationLevelEffect = { level: string; effect_kind: string; effect_target: string | null; value: number };
   function getMobilisationLevelEffects(): MobilisationLevelEffect[] {
@@ -458,6 +492,10 @@ export function ReglesForm({
   function setMobilisationLevelEffects(arr: MobilisationLevelEffect[]) {
     if (!mobilisationEffectsRule) return;
     updateValue(mobilisationEffectsRule.id, arr);
+  }
+  function getMobilisationEffectsForLevel(levelKey: string): { effect: MobilisationLevelEffect; globalIndex: number }[] {
+    const all = getMobilisationLevelEffects();
+    return all.map((e, i) => ({ effect: e, globalIndex: i })).filter(({ effect }) => effect.level === levelKey);
   }
   function getDefaultTargetForKind(effectKind: string): string | null {
     if (EFFECT_KINDS_WITH_STAT_TARGET.has(effectKind)) return STAT_KEYS[0];
@@ -613,7 +651,7 @@ export function ReglesForm({
         )}
       </div>
       {error && <p className="text-[var(--danger)]">{error}</p>}
-      {items.length === 0 ? (
+      {!(items.length > 0 || (countriesForMatrice && relationMapForMatrice)) ? (
         <div
           className="rounded-lg border p-8 text-center"
           style={{ background: "var(--background-panel)", borderColor: "var(--border)" }}
@@ -622,10 +660,12 @@ export function ReglesForm({
         </div>
       ) : (
         <div
-          className="rounded-lg border overflow-hidden"
+          className="rounded-lg border overflow-hidden p-4"
           style={{ background: "var(--background-panel)", borderColor: "var(--border)" }}
         >
-          {globalGrowthEffectsRule && (
+          {items.length > 0 && (
+            <CollapsibleBlock title="Effets Globaux" open={effetsGlobauxOpen} onToggle={() => setEffetsGlobauxOpen((o) => !o)} variant="section">
+              {globalGrowthEffectsRule && (
             <CollapsibleBlock title="Global [Appliqué à tous les pays]" open={globalGrowthOpen} onToggle={() => setGlobalGrowthOpen((o) => !o)}>
               <div className="p-3 space-y-3">
                 <p className="text-xs text-[var(--foreground-muted)]">
@@ -781,404 +821,99 @@ export function ReglesForm({
               </div>
             </CollapsibleBlock>
           )}
-
-          {aiMajorEffectsRule && aiMinorEffectsRule && (
-            <CollapsibleBlock title="Intelligence Artificielle" open={aiOpen} onToggle={() => setAiOpen((o) => !o)}>
-              <div className="p-3 space-y-4">
-                <p className="text-xs text-[var(--foreground-muted)]">
-                  Effets appliqués aux pays sans joueur selon leur statut IA (Majeur / Mineur) défini dans la liste admin des pays.
-                </p>
-                <div className="space-y-3">
-                  <div>
-                    <h4 className="mb-2 text-sm font-medium text-[var(--foreground)]">IA majeure</h4>
-                    <ul className="space-y-2">
-                      {getAiEffects(aiMajorEffectsRule).map((e, idx) => (
-                        <li
-                          key={idx}
-                          className="flex flex-wrap items-center justify-between gap-2 rounded border py-2 px-3"
-                          style={{ borderColor: "var(--border-muted)" }}
-                        >
-                          <span className="text-sm text-[var(--foreground)]">{labelForGlobalEffect(e)}</span>
-                          <div className="flex gap-2">
-                            <button type="button" onClick={() => openEditAiEffect("major", idx)} className="text-xs text-[var(--accent)] hover:underline">Modifier</button>
-                            <button type="button" onClick={() => removeAiEffect("major", idx)} className="text-xs text-[var(--danger)] hover:underline">Supprimer</button>
+              {statsDiceModifierRangesRule && (
+                <CollapsibleBlock title="Statistiques" open={statsOpen} onToggle={() => setStatsOpen((o) => !o)}>
+                  <div className="p-3 space-y-4">
+                    <p className="text-xs text-[var(--foreground-muted)]">
+                      Modificateur min/max pour les jets de dés (ex. -10 à +20). Ces bornes sont utilisées pour calculer le bonus ou malus proportionnel à la valeur de chaque stat du pays.
+                    </p>
+                    <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
+                      {STAT_KEYS.map((statKey) => {
+                        const ranges = getStatsDiceModifierRanges()[statKey] ?? { min: -10, max: 20 };
+                        return (
+                          <div key={statKey} className="rounded border p-3" style={{ borderColor: "var(--border-muted)" }}>
+                            <div className="text-sm font-medium text-[var(--foreground)] mb-2">{STAT_LABELS[statKey]}</div>
+                            <div className="flex flex-wrap gap-2">
+                              <div className="flex flex-col gap-0.5">
+                                <label className="text-xs text-[var(--foreground-muted)]">Min</label>
+                                <input type="number" value={ranges.min} onChange={(e) => updateStatsDiceModifierRanges(statKey, "min", Number(e.target.value) ?? -10)} className={inputClassNarrow} style={inputStyle} />
+                              </div>
+                              <div className="flex flex-col gap-0.5">
+                                <label className="text-xs text-[var(--foreground-muted)]">Max</label>
+                                <input type="number" value={ranges.max} onChange={(e) => updateStatsDiceModifierRanges(statKey, "max", Number(e.target.value) ?? 20)} className={inputClassNarrow} style={inputStyle} />
+                              </div>
+                            </div>
                           </div>
-                        </li>
-                      ))}
-                    </ul>
-                    {!aiMajorFormOpen ? (
-                      <button type="button" onClick={() => openAddAiEffect("major")} className="text-sm text-[var(--accent)] hover:underline">Ajouter un effet</button>
-                    ) : (
-                      <div className="rounded border p-3 space-y-2" style={{ borderColor: "var(--border-muted)" }}>
-                        <div>
-                          <label className="mb-0.5 block text-xs text-[var(--foreground-muted)]">Type d'effet</label>
-                          <select value={aiMajorEffectKind} onChange={(ev) => { const k = ev.target.value; setAiMajorEffectKind(k); setAiMajorEffectTarget(getDefaultTargetForKindGlobal(k)); }} className={inputClass} style={inputStyle}>
-                            {ALL_EFFECT_KIND_IDS.map((k) => (<option key={k} value={k}>{EFFECT_KIND_LABELS[k] ?? k}</option>))}
-                          </select>
-                        </div>
-                        {EFFECT_KINDS_WITH_STAT_TARGET.has(aiMajorEffectKind) && (<div><label className="mb-0.5 block text-xs text-[var(--foreground-muted)]">Stat</label><select value={aiMajorEffectTarget ?? STAT_KEYS[0]} onChange={(ev) => setAiMajorEffectTarget(ev.target.value || null)} className={inputClass} style={inputStyle}>{STAT_KEYS.map((k) => (<option key={k} value={k}>{STAT_LABELS[k]}</option>))}</select></div>)}
-                        {EFFECT_KINDS_WITH_BUDGET_TARGET.has(aiMajorEffectKind) && (<div><label className="mb-0.5 block text-xs text-[var(--foreground-muted)]">Ministère</label><select value={aiMajorEffectTarget ?? getBudgetMinistryOptions()[0]?.key ?? ""} onChange={(ev) => setAiMajorEffectTarget(ev.target.value || null)} className={inputClass} style={inputStyle}>{getBudgetMinistryOptions().map(({ key, label }) => (<option key={key} value={key}>{label}</option>))}</select></div>)}
-                        {EFFECT_KINDS_WITH_BRANCH_TARGET.has(aiMajorEffectKind) && (<div><label className="mb-0.5 block text-xs text-[var(--foreground-muted)]">Branche</label><select value={aiMajorEffectTarget ?? MILITARY_BRANCH_EFFECT_IDS[0]} onChange={(ev) => setAiMajorEffectTarget(ev.target.value || null)} className={inputClass} style={inputStyle}>{MILITARY_BRANCH_EFFECT_IDS.map((b) => (<option key={b} value={b}>{MILITARY_BRANCH_EFFECT_LABELS[b]}</option>))}</select></div>)}
-                        {EFFECT_KINDS_WITH_ROSTER_UNIT_TARGET.has(aiMajorEffectKind) && (<div><label className="mb-0.5 block text-xs text-[var(--foreground-muted)]">Unité</label><select value={aiMajorEffectTarget ?? rosterUnits[0]?.id ?? ""} onChange={(ev) => setAiMajorEffectTarget(ev.target.value || null)} className={inputClass} style={inputStyle}>{rosterUnits.map((u) => (<option key={u.id} value={u.id}>{u.name_fr}</option>))}</select></div>)}
-                        <div><label className="mb-0.5 block text-xs text-[var(--foreground-muted)]">{getEffectKindValueHelper(aiMajorEffectKind).valueLabel}</label><input type="number" step={getEffectKindValueHelper(aiMajorEffectKind).valueStep} value={aiMajorEffectValue} onChange={(e) => setAiMajorEffectValue(e.target.value)} className={inputClassNarrow} style={inputStyle} /></div>
-                        <div className="flex gap-2"><button type="button" onClick={() => saveAiEffectForm("major")} className="rounded py-1.5 px-3 text-sm font-medium" style={{ background: "var(--accent)", color: "#0f1419" }}>Enregistrer</button><button type="button" onClick={() => setAiMajorFormOpen(false)} className="rounded border py-1.5 px-3 text-sm" style={{ borderColor: "var(--border)" }}>Annuler</button></div>
-                      </div>
-                    )}
-                  </div>
-                  <div>
-                    <h4 className="mb-2 text-sm font-medium text-[var(--foreground)]">IA mineure</h4>
-                    <ul className="space-y-2">
-                      {getAiEffects(aiMinorEffectsRule).map((e, idx) => (
-                        <li
-                          key={idx}
-                          className="flex flex-wrap items-center justify-between gap-2 rounded border py-2 px-3"
-                          style={{ borderColor: "var(--border-muted)" }}
-                        >
-                          <span className="text-sm text-[var(--foreground)]">{labelForGlobalEffect(e)}</span>
-                          <div className="flex gap-2">
-                            <button type="button" onClick={() => openEditAiEffect("minor", idx)} className="text-xs text-[var(--accent)] hover:underline">Modifier</button>
-                            <button type="button" onClick={() => removeAiEffect("minor", idx)} className="text-xs text-[var(--danger)] hover:underline">Supprimer</button>
-                          </div>
-                        </li>
-                      ))}
-                    </ul>
-                    {!aiMinorFormOpen ? (
-                      <button type="button" onClick={() => openAddAiEffect("minor")} className="text-sm text-[var(--accent)] hover:underline">Ajouter un effet</button>
-                    ) : (
-                      <div className="rounded border p-3 space-y-2" style={{ borderColor: "var(--border-muted)" }}>
-                        <div>
-                          <label className="mb-0.5 block text-xs text-[var(--foreground-muted)]">Type d'effet</label>
-                          <select value={aiMinorEffectKind} onChange={(ev) => { const k = ev.target.value; setAiMinorEffectKind(k); setAiMinorEffectTarget(getDefaultTargetForKindGlobal(k)); }} className={inputClass} style={inputStyle}>
-                            {ALL_EFFECT_KIND_IDS.map((k) => (<option key={k} value={k}>{EFFECT_KIND_LABELS[k] ?? k}</option>))}
-                          </select>
-                        </div>
-                        {EFFECT_KINDS_WITH_STAT_TARGET.has(aiMinorEffectKind) && (<div><label className="mb-0.5 block text-xs text-[var(--foreground-muted)]">Stat</label><select value={aiMinorEffectTarget ?? STAT_KEYS[0]} onChange={(ev) => setAiMinorEffectTarget(ev.target.value || null)} className={inputClass} style={inputStyle}>{STAT_KEYS.map((k) => (<option key={k} value={k}>{STAT_LABELS[k]}</option>))}</select></div>)}
-                        {EFFECT_KINDS_WITH_BUDGET_TARGET.has(aiMinorEffectKind) && (<div><label className="mb-0.5 block text-xs text-[var(--foreground-muted)]">Ministère</label><select value={aiMinorEffectTarget ?? getBudgetMinistryOptions()[0]?.key ?? ""} onChange={(ev) => setAiMinorEffectTarget(ev.target.value || null)} className={inputClass} style={inputStyle}>{getBudgetMinistryOptions().map(({ key, label }) => (<option key={key} value={key}>{label}</option>))}</select></div>)}
-                        {EFFECT_KINDS_WITH_BRANCH_TARGET.has(aiMinorEffectKind) && (<div><label className="mb-0.5 block text-xs text-[var(--foreground-muted)]">Branche</label><select value={aiMinorEffectTarget ?? MILITARY_BRANCH_EFFECT_IDS[0]} onChange={(ev) => setAiMinorEffectTarget(ev.target.value || null)} className={inputClass} style={inputStyle}>{MILITARY_BRANCH_EFFECT_IDS.map((b) => (<option key={b} value={b}>{MILITARY_BRANCH_EFFECT_LABELS[b]}</option>))}</select></div>)}
-                        {EFFECT_KINDS_WITH_ROSTER_UNIT_TARGET.has(aiMinorEffectKind) && (<div><label className="mb-0.5 block text-xs text-[var(--foreground-muted)]">Unité</label><select value={aiMinorEffectTarget ?? rosterUnits[0]?.id ?? ""} onChange={(ev) => setAiMinorEffectTarget(ev.target.value || null)} className={inputClass} style={inputStyle}>{rosterUnits.map((u) => (<option key={u.id} value={u.id}>{u.name_fr}</option>))}</select></div>)}
-                        <div><label className="mb-0.5 block text-xs text-[var(--foreground-muted)]">{getEffectKindValueHelper(aiMinorEffectKind).valueLabel}</label><input type="number" step={getEffectKindValueHelper(aiMinorEffectKind).valueStep} value={aiMinorEffectValue} onChange={(e) => setAiMinorEffectValue(e.target.value)} className={inputClassNarrow} style={inputStyle} /></div>
-                        <div className="flex gap-2"><button type="button" onClick={() => saveAiEffectForm("minor")} className="rounded py-1.5 px-3 text-sm font-medium" style={{ background: "var(--accent)", color: "#0f1419" }}>Enregistrer</button><button type="button" onClick={() => setAiMinorFormOpen(false)} className="rounded border py-1.5 px-3 text-sm" style={{ borderColor: "var(--border)" }}>Annuler</button></div>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-            </CollapsibleBlock>
-          )}
-
-          {false && globalGrowthEffectsRule && (
-            <CollapsibleBlock title="Global [REMOVED DUPLICATE]" open={globalGrowthOpen} onToggle={() => setGlobalGrowthOpen((o) => !o)}>
-              <div className="p-3 space-y-3">
-                <p className="text-xs text-[var(--foreground-muted)]">
-                  Effets de croissance PIB et population appliqués à tous les pays à chaque passage du cron.
-                </p>
-                <ul className="space-y-2">
-                  {getGlobalGrowthEffects().map((e, idx) => (
-                    <li
-                      key={idx}
-                      className="flex flex-wrap items-center justify-between gap-2 rounded border py-2 px-3"
-                      style={{ borderColor: "var(--border-muted)" }}
-                    >
-                      <span className="text-sm text-[var(--foreground)]">{labelForGlobalEffect(e)}</span>
-                      <div className="flex gap-2">
-                        <button
-                          type="button"
-                          onClick={() => openEditGlobalEffect(idx)}
-                          className="text-xs text-[var(--accent)] hover:underline"
-                        >
-                          Modifier
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => removeGlobalEffect(idx)}
-                          className="text-xs text-[var(--danger)] hover:underline"
-                        >
-                          Supprimer
-                        </button>
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-                {!globalEffectFormOpen ? (
-                  <button
-                    type="button"
-                    onClick={openAddGlobalEffect}
-                    className="text-sm text-[var(--accent)] hover:underline"
-                  >
-                    Ajouter un effet
-                  </button>
-                ) : (
-                  <div className="rounded border p-3 space-y-2" style={{ borderColor: "var(--border-muted)" }}>
-                    <div>
-                      <label className="mb-0.5 block text-xs text-[var(--foreground-muted)]">Type d’effet</label>
-                      <select
-                        value={globalEffectKind}
-                        onChange={(ev) => {
-                          const k = ev.target.value;
-                          setGlobalEffectKind(k);
-                          setGlobalEffectTarget(getDefaultTargetForKindGlobal(k));
-                        }}
-                        className={inputClass}
-                        style={inputStyle}
-                      >
-                        {ALL_EFFECT_KIND_IDS.map((k) => (
-                          <option key={k} value={k}>{EFFECT_KIND_LABELS[k] ?? k}</option>
-                        ))}
-                      </select>
-                    </div>
-                    {EFFECT_KINDS_WITH_STAT_TARGET.has(globalEffectKind) && (
-                      <div>
-                        <label className="mb-0.5 block text-xs text-[var(--foreground-muted)]">Stat</label>
-                        <select
-                          value={globalEffectTarget ?? STAT_KEYS[0]}
-                          onChange={(ev) => setGlobalEffectTarget(ev.target.value || null)}
-                          className={inputClass}
-                          style={inputStyle}
-                        >
-                          {STAT_KEYS.map((k) => (
-                            <option key={k} value={k}>{STAT_LABELS[k]}</option>
-                          ))}
-                        </select>
-                      </div>
-                    )}
-                    {EFFECT_KINDS_WITH_BUDGET_TARGET.has(globalEffectKind) && (
-                      <div>
-                        <label className="mb-0.5 block text-xs text-[var(--foreground-muted)]">Ministère</label>
-                        <select
-                          value={globalEffectTarget ?? getBudgetMinistryOptions()[0]?.key ?? ""}
-                          onChange={(ev) => setGlobalEffectTarget(ev.target.value || null)}
-                          className={inputClass}
-                          style={inputStyle}
-                        >
-                          {getBudgetMinistryOptions().map(({ key, label }) => (
-                            <option key={key} value={key}>{label}</option>
-                          ))}
-                        </select>
-                      </div>
-                    )}
-                    {EFFECT_KINDS_WITH_BRANCH_TARGET.has(globalEffectKind) && (
-                      <div>
-                        <label className="mb-0.5 block text-xs text-[var(--foreground-muted)]">Branche</label>
-                        <select
-                          value={globalEffectTarget ?? MILITARY_BRANCH_EFFECT_IDS[0]}
-                          onChange={(ev) => setGlobalEffectTarget(ev.target.value || null)}
-                          className={inputClass}
-                          style={inputStyle}
-                        >
-                          {MILITARY_BRANCH_EFFECT_IDS.map((b) => (
-                            <option key={b} value={b}>{MILITARY_BRANCH_EFFECT_LABELS[b]}</option>
-                          ))}
-                        </select>
-                      </div>
-                    )}
-                    {EFFECT_KINDS_WITH_ROSTER_UNIT_TARGET.has(globalEffectKind) && (
-                      <div>
-                        <label className="mb-0.5 block text-xs text-[var(--foreground-muted)]">Unité</label>
-                        <select
-                          value={globalEffectTarget ?? rosterUnits[0]?.id ?? ""}
-                          onChange={(ev) => setGlobalEffectTarget(ev.target.value || null)}
-                          className={inputClass}
-                          style={inputStyle}
-                        >
-                          {rosterUnits.map((u) => (
-                            <option key={u.id} value={u.id}>{u.name_fr}</option>
-                          ))}
-                        </select>
-                      </div>
-                    )}
-                    <div>
-                      <label className="mb-0.5 block text-xs text-[var(--foreground-muted)]">
-                        {getEffectKindValueHelper(globalEffectKind).valueLabel}
-                      </label>
-                      <input
-                        type="number"
-                        step={getEffectKindValueHelper(globalEffectKind).valueStep}
-                        value={globalEffectValue}
-                        onChange={(e) => setGlobalEffectValue(e.target.value)}
-                        className={inputClassNarrow}
-                        style={inputStyle}
-                      />
-                    </div>
-                    <div className="flex gap-2">
-                      <button
-                        type="button"
-                        onClick={saveGlobalEffectForm}
-                        className="rounded py-1.5 px-3 text-sm font-medium"
-                        style={{ background: "var(--accent)", color: "#0f1419" }}
-                      >
-                        Enregistrer
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setGlobalEffectFormOpen(false)}
-                        className="rounded border py-1.5 px-3 text-sm"
-                        style={{ borderColor: "var(--border)" }}
-                      >
-                        Annuler
-                      </button>
+                        );
+                      })}
                     </div>
                   </div>
-                )}
-              </div>
+                </CollapsibleBlock>
+              )}
+              {worldDateRule && worldDateAdvanceRule && (
+                <CollapsibleBlock title="Date" open={worldDateOpen} onToggle={() => setWorldDateOpen((o) => !o)}>
+                  <div className="p-3 space-y-3">
+                    <p className="text-xs text-[var(--foreground-muted)]">
+                      Date du monde affichée aux joueurs (ex. Rapport du Cabinet). À chaque passage du cron, la date avance du nombre de mois indiqué dans la temporalité (0 = date figée).
+                    </p>
+                    <div className="flex flex-wrap items-end gap-x-6 gap-y-2">
+                      <div className="flex flex-col gap-0.5">
+                        <label className="text-xs text-[var(--foreground-muted)]">Mois</label>
+                        <select
+                          value={typeof worldDateRule.value === "object" && worldDateRule.value !== null && "month" in worldDateRule.value ? Number((worldDateRule.value as { month?: number }).month) : 1}
+                          onChange={(e) => {
+                            const month = Number(e.target.value);
+                            const current = typeof worldDateRule.value === "object" && worldDateRule.value !== null && "year" in worldDateRule.value ? (worldDateRule.value as { year?: number }).year : 2025;
+                            updateValue(worldDateRule.id, { month, year: current });
+                          }}
+                          className="rounded border py-1.5 px-2 text-sm w-36"
+                          style={{ borderColor: "var(--border)", background: "var(--background)" }}
+                        >
+                          {MOIS_LABELS.map((label, i) => (
+                            <option key={i} value={i + 1}>{label}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="flex flex-col gap-0.5">
+                        <label className="text-xs text-[var(--foreground-muted)]">Année</label>
+                        <input
+                          type="number"
+                          min={1}
+                          max={9999}
+                          value={typeof worldDateRule.value === "object" && worldDateRule.value !== null && "year" in worldDateRule.value ? Number((worldDateRule.value as { year?: number }).year) : 2025}
+                          onChange={(e) => {
+                            const year = Math.max(1, Math.min(9999, Number(e.target.value) || 2025));
+                            const current = typeof worldDateRule.value === "object" && worldDateRule.value !== null && "month" in worldDateRule.value ? (worldDateRule.value as { month?: number }).month : 1;
+                            updateValue(worldDateRule.id, { month: current, year });
+                          }}
+                          className="rounded border py-1.5 px-2 text-sm w-20"
+                          style={{ borderColor: "var(--border)", background: "var(--background)" }}
+                        />
+                      </div>
+                      <div className="flex flex-col gap-0.5">
+                        <label className="text-xs text-[var(--foreground-muted)]">Temporalité (mois par mise à jour cron)</label>
+                        <input
+                          type="number"
+                          min={0}
+                          max={12}
+                          value={typeof worldDateAdvanceRule.value === "number" ? worldDateAdvanceRule.value : (worldDateAdvanceRule.value as unknown as number) ?? 1}
+                          onChange={(e) => {
+                            const v = Math.max(0, Math.min(12, Math.round(Number(e.target.value)) ?? 0));
+                            updateValue(worldDateAdvanceRule.id, v);
+                          }}
+                          className="rounded border py-1.5 px-2 text-sm w-16"
+                          style={{ borderColor: "var(--border)", background: "var(--background)" }}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </CollapsibleBlock>
+              )}
             </CollapsibleBlock>
           )}
 
-          {worldDateRule && worldDateAdvanceRule && (
-            <CollapsibleBlock title="Date" open={worldDateOpen} onToggle={() => setWorldDateOpen((o) => !o)}>
-              <div className="p-3 space-y-3">
-                <p className="text-xs text-[var(--foreground-muted)]">
-                  Date du monde affichée aux joueurs (ex. Rapport du Cabinet). À chaque passage du cron, la date avance du nombre de mois indiqué dans la temporalité (0 = date figée).
-                </p>
-                <div className="flex flex-wrap items-end gap-x-6 gap-y-2">
-                  <div className="flex flex-col gap-0.5">
-                    <label className="text-xs text-[var(--foreground-muted)]">Mois</label>
-                    <select
-                      value={typeof worldDateRule.value === "object" && worldDateRule.value !== null && "month" in worldDateRule.value ? Number((worldDateRule.value as { month?: number }).month) : 1}
-                      onChange={(e) => {
-                        const month = Number(e.target.value);
-                        const current = typeof worldDateRule.value === "object" && worldDateRule.value !== null && "year" in worldDateRule.value ? (worldDateRule.value as { year?: number }).year : 2025;
-                        updateValue(worldDateRule.id, { month, year: current });
-                      }}
-                      className="rounded border py-1.5 px-2 text-sm w-36"
-                      style={{ borderColor: "var(--border)", background: "var(--background)" }}
-                    >
-                      {MOIS_LABELS.map((label, i) => (
-                        <option key={i} value={i + 1}>{label}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div className="flex flex-col gap-0.5">
-                    <label className="text-xs text-[var(--foreground-muted)]">Année</label>
-                    <input
-                      type="number"
-                      min={1}
-                      max={9999}
-                      value={typeof worldDateRule.value === "object" && worldDateRule.value !== null && "year" in worldDateRule.value ? Number((worldDateRule.value as { year?: number }).year) : 2025}
-                      onChange={(e) => {
-                        const year = Math.max(1, Math.min(9999, Number(e.target.value) || 2025));
-                        const current = typeof worldDateRule.value === "object" && worldDateRule.value !== null && "month" in worldDateRule.value ? (worldDateRule.value as { month?: number }).month : 1;
-                        updateValue(worldDateRule.id, { month: current, year });
-                      }}
-                      className="rounded border py-1.5 px-2 text-sm w-20"
-                      style={{ borderColor: "var(--border)", background: "var(--background)" }}
-                    />
-                  </div>
-                  <div className="flex flex-col gap-0.5">
-                    <label className="text-xs text-[var(--foreground-muted)]">Temporalité (mois par mise à jour cron)</label>
-                    <input
-                      type="number"
-                      min={0}
-                      max={12}
-                      value={typeof worldDateAdvanceRule.value === "number" ? worldDateAdvanceRule.value : (worldDateAdvanceRule.value as unknown as number) ?? 1}
-                      onChange={(e) => {
-                        const v = Math.max(0, Math.min(12, Math.round(Number(e.target.value)) ?? 0));
-                        updateValue(worldDateAdvanceRule.id, v);
-                      }}
-                      className="rounded border py-1.5 px-2 text-sm w-16"
-                      style={{ borderColor: "var(--border)", background: "var(--background)" }}
-                    />
-                  </div>
-                </div>
-              </div>
-            </CollapsibleBlock>
-          )}
-
-          {influenceConfigRule && (
-            <CollapsibleBlock title="Influence" open={influenceOpen} onToggle={() => setInfluenceOpen((o) => !o)}>
-              <div className="p-3 space-y-3">
-                <p className="text-xs text-[var(--foreground-muted)]">
-                  Score Influence (type Diplomatic Weight) : multiplicateurs des contributions PIB, Population, Hard Power ; stabilité en intervalle (-3 à +3) ; gravité par paramètre.
-                </p>
-                <div className="flex flex-wrap gap-x-6 gap-y-3">
-                  <div className="flex flex-col gap-0.5">
-                    <label className="text-xs text-[var(--foreground-muted)]">Mult. PIB</label>
-                    <input type="number" step="any" value={getInfluenceConfig().mult_gdp ?? 1e-9} onChange={(e) => updateInfluenceConfig({ mult_gdp: Number(e.target.value) || 0 })} className="rounded border py-1.5 px-2 text-sm w-28 font-mono" style={{ borderColor: "var(--border)", background: "var(--background)" }} />
-                  </div>
-                  <div className="flex flex-col gap-0.5">
-                    <label className="text-xs text-[var(--foreground-muted)]">Mult. Population</label>
-                    <input type="number" step="any" value={getInfluenceConfig().mult_population ?? 1e-7} onChange={(e) => updateInfluenceConfig({ mult_population: Number(e.target.value) || 0 })} className="rounded border py-1.5 px-2 text-sm w-28 font-mono" style={{ borderColor: "var(--border)", background: "var(--background)" }} />
-                  </div>
-                  <div className="flex flex-col gap-0.5">
-                    <label className="text-xs text-[var(--foreground-muted)]">Mult. Hard Power</label>
-                    <input type="number" step="any" value={getInfluenceConfig().mult_military ?? 0.01} onChange={(e) => updateInfluenceConfig({ mult_military: Number(e.target.value) || 0 })} className="rounded border py-1.5 px-2 text-sm w-28 font-mono" style={{ borderColor: "var(--border)", background: "var(--background)" }} />
-                  </div>
-                </div>
-                <div className="flex flex-wrap gap-x-6 gap-y-3">
-                  <div className="flex flex-col gap-0.5">
-                    <label className="text-xs text-[var(--foreground-muted)]">Stabilité : modif. à min (-3)</label>
-                    <input type="number" step="any" value={getInfluenceConfig().stability_modifier_min ?? 0} onChange={(e) => updateInfluenceConfig({ stability_modifier_min: Number(e.target.value) ?? 0 })} className="rounded border py-1.5 px-2 text-sm w-24 font-mono" style={{ borderColor: "var(--border)", background: "var(--background)" }} />
-                  </div>
-                  <div className="flex flex-col gap-0.5">
-                    <label className="text-xs text-[var(--foreground-muted)]">Stabilité : modif. à max (+3)</label>
-                    <input type="number" step="any" value={getInfluenceConfig().stability_modifier_max ?? 1} onChange={(e) => updateInfluenceConfig({ stability_modifier_max: Number(e.target.value) ?? 1 })} className="rounded border py-1.5 px-2 text-sm w-24 font-mono" style={{ borderColor: "var(--border)", background: "var(--background)" }} />
-                  </div>
-                </div>
-                <div className="flex flex-wrap gap-x-6 gap-y-3">
-                  <div className="flex flex-col gap-0.5">
-                    <label className="text-xs text-[var(--foreground-muted)]">Gravité PIB %</label>
-                    <input type="number" min={0} max={100} value={getInfluenceConfig().gravity_pct_gdp ?? 50} onChange={(e) => updateInfluenceConfig({ gravity_pct_gdp: Math.max(0, Math.min(100, Number(e.target.value) || 0)) })} className="rounded border py-1.5 px-2 text-sm w-16 font-mono" style={{ borderColor: "var(--border)", background: "var(--background)" }} />
-                  </div>
-                  <div className="flex flex-col gap-0.5">
-                    <label className="text-xs text-[var(--foreground-muted)]">Gravité Population %</label>
-                    <input type="number" min={0} max={100} value={getInfluenceConfig().gravity_pct_population ?? 50} onChange={(e) => updateInfluenceConfig({ gravity_pct_population: Math.max(0, Math.min(100, Number(e.target.value) || 0)) })} className="rounded border py-1.5 px-2 text-sm w-16 font-mono" style={{ borderColor: "var(--border)", background: "var(--background)" }} />
-                  </div>
-                  <div className="flex flex-col gap-0.5">
-                    <label className="text-xs text-[var(--foreground-muted)]">Gravité Hard Power %</label>
-                    <input type="number" min={0} max={100} value={getInfluenceConfig().gravity_pct_military ?? 50} onChange={(e) => updateInfluenceConfig({ gravity_pct_military: Math.max(0, Math.min(100, Number(e.target.value) || 0)) })} className="rounded border py-1.5 px-2 text-sm w-16 font-mono" style={{ borderColor: "var(--border)", background: "var(--background)" }} />
-                  </div>
-                </div>
-              </div>
-            </CollapsibleBlock>
-          )}
-
-          {sphereInfluencePctRule && (
-            <CollapsibleBlock title="Sphère" open={sphereOpen} onToggle={() => setSphereOpen((o) => !o)}>
-              <div className="p-3 space-y-3">
-                <p className="text-xs text-[var(--foreground-muted)]">
-                  Pour chaque statut de contrôle, le % de l&apos;influence du pays sous emprise qui est attribué à l&apos;overlord.
-                </p>
-                <div className="flex flex-wrap gap-x-6 gap-y-3">
-                  <div className="flex flex-col gap-0.5">
-                    <label className="text-xs text-[var(--foreground-muted)]">Contesté %</label>
-                    <input
-                      type="number"
-                      min={0}
-                      max={100}
-                      value={getSphereInfluencePct().contested ?? 50}
-                      onChange={(e) => updateSphereInfluencePct({ contested: Math.max(0, Math.min(100, Number(e.target.value) || 0)) })}
-                      className="rounded border py-1.5 px-2 text-sm w-20 font-mono"
-                      style={{ borderColor: "var(--border)", background: "var(--background)" }}
-                    />
-                  </div>
-                  <div className="flex flex-col gap-0.5">
-                    <label className="text-xs text-[var(--foreground-muted)]">Occupé %</label>
-                    <input
-                      type="number"
-                      min={0}
-                      max={100}
-                      value={getSphereInfluencePct().occupied ?? 80}
-                      onChange={(e) => updateSphereInfluencePct({ occupied: Math.max(0, Math.min(100, Number(e.target.value) || 0)) })}
-                      className="rounded border py-1.5 px-2 text-sm w-20 font-mono"
-                      style={{ borderColor: "var(--border)", background: "var(--background)" }}
-                    />
-                  </div>
-                  <div className="flex flex-col gap-0.5">
-                    <label className="text-xs text-[var(--foreground-muted)]">Annexé %</label>
-                    <input
-                      type="number"
-                      min={0}
-                      max={100}
-                      value={getSphereInfluencePct().annexed ?? 100}
-                      onChange={(e) => updateSphereInfluencePct({ annexed: Math.max(0, Math.min(100, Number(e.target.value) || 0)) })}
-                      className="rounded border py-1.5 px-2 text-sm w-20 font-mono"
-                      style={{ borderColor: "var(--border)", background: "var(--background)" }}
-                    />
-                  </div>
-                </div>
-              </div>
-            </CollapsibleBlock>
-          )}
-
+          {items.length > 0 && (
+          <CollapsibleBlock title="Lois" open={loisOpen} onToggle={() => setLoisOpen((o) => !o)} variant="section">
           <CollapsibleBlock title="Paramètres Budget" open={budgetOpen} onToggle={() => setBudgetOpen((o) => !o)}>
             <div className="pl-4 ml-2 border-l-2" style={{ borderColor: "var(--border-muted)" }}>
             {BUDGET_MINISTRY_KEYS.map((key) => {
@@ -1407,194 +1142,109 @@ export function ReglesForm({
                             min={0}
                             max={500}
                             value={val}
-                            onChange={(e) =>
-                              updateMobilisationConfig({
-                                level_thresholds: {
-                                  ...(getMobilisationConfig().level_thresholds ?? {}),
-                                  [key]: Number(e.target.value) || 0,
-                                },
-                              })
-                            }
-                            className={inputClassNarrow}
-                            style={inputStyle}
+                            onChange={(e) => updateMobilisationThreshold(key, Math.max(0, Math.min(500, Number(e.target.value) || 0)))}
+                            className="rounded border py-1.5 px-2 text-sm w-20 font-mono"
+                            style={{ borderColor: "var(--border)", background: "var(--background)" }}
                           />
                         </div>
                       );
                     })}
                   </div>
                 </div>
-                <div>
-                  <label className="text-xs font-medium text-[var(--foreground-muted)]">Évolution quotidienne du score (points/jour)</label>
-                  <input
-                    type="number"
-                    min={1}
-                    max={500}
-                    value={getMobilisationConfig().daily_step ?? 20}
-                    onChange={(e) => updateMobilisationConfig({ daily_step: Number(e.target.value) || 20 })}
-                    className={inputClassNarrow}
-                    style={inputStyle}
-                  />
-                </div>
-                <div>
-                  <div className="text-xs font-medium text-[var(--foreground-muted)] mb-2">Effets par palier</div>
-                  <div className="space-y-4">
-                    {MOBILISATION_LEVEL_KEYS.map((levelKey) => {
-                      const effectsForLevel = getMobilisationLevelEffects().filter((e) => e.level === levelKey);
-                      return (
-                        <div key={levelKey} className="rounded border p-2" style={{ borderColor: "var(--border-muted)" }}>
-                          <div className="text-sm font-medium text-[var(--foreground)] mb-2">{MOBILISATION_LEVEL_LABELS[levelKey]}</div>
-                          <ul className="space-y-2">
-                            {(getMobilisationLevelEffects()
-                              .map((e, idx) => (e.level === levelKey ? { e, idx } : null))
-                              .filter((x): x is { e: MobilisationLevelEffect; idx: number } => x !== null))
-                              .map(({ e, idx }) => {
-                                const kind = e.effect_kind;
-                                const needsStatTarget = EFFECT_KINDS_WITH_STAT_TARGET.has(kind);
-                                const needsBudgetTarget = EFFECT_KINDS_WITH_BUDGET_TARGET.has(kind);
-                                const needsBranchTarget = EFFECT_KINDS_WITH_BRANCH_TARGET.has(kind);
-                                const needsRosterTarget = EFFECT_KINDS_WITH_ROSTER_UNIT_TARGET.has(kind);
-                                const noTarget = EFFECT_KINDS_NO_TARGET.has(kind);
-                                const valueHelper = getEffectKindValueHelper(kind);
-                                const inputValue = valueHelper.storedToDisplay(Number(e.value));
-                                const onValueChange = (val: number) =>
-                                  updateMobilisationEffect(idx, {
-                                    value: valueHelper.displayToStored(val),
-                                  });
-                                return (
-                                  <li key={idx} className="flex flex-wrap items-center gap-2 text-xs">
-                                    <select
-                                      value={kind}
-                                      onChange={(ev) => updateMobilisationEffect(idx, { effect_kind: ev.target.value })}
-                                      className="min-w-0 rounded border bg-[var(--background)] px-1.5 py-1 text-[var(--foreground)]"
-                                      style={{ borderColor: "var(--border)", maxWidth: "240px" }}
-                                    >
-                                      {Object.entries(EFFECT_KIND_LABELS).map(([k, label]) => (
-                                        <option key={k} value={k}>{label}</option>
-                                      ))}
-                                    </select>
-                                    {noTarget && <span className="text-[var(--foreground-muted)]">—</span>}
-                                    {needsStatTarget && (
-                                      <select
-                                        value={e.effect_target ?? STAT_KEYS[0]}
-                                        onChange={(ev) => updateMobilisationEffect(idx, { effect_target: ev.target.value || null })}
-                                        className="rounded border bg-[var(--background)] px-1.5 py-1 text-[var(--foreground)]"
-                                        style={{ borderColor: "var(--border)", minWidth: "100px" }}
-                                      >
-                                        {STAT_KEYS.map((k) => (
-                                          <option key={k} value={k}>{STAT_LABELS[k]}</option>
-                                        ))}
-                                      </select>
-                                    )}
-                                    {needsBudgetTarget && (
-                                      <select
-                                        value={e.effect_target ?? getBudgetMinistryOptions()[0]?.key ?? ""}
-                                        onChange={(ev) => updateMobilisationEffect(idx, { effect_target: ev.target.value || null })}
-                                        className="rounded border bg-[var(--background)] px-1.5 py-1 text-[var(--foreground)]"
-                                        style={{ borderColor: "var(--border)", minWidth: "140px" }}
-                                      >
-                                        {getBudgetMinistryOptions().map(({ key, label }) => (
-                                          <option key={key} value={key}>{label}</option>
-                                        ))}
-                                      </select>
-                                    )}
-                                    {needsBranchTarget && (
-                                      <select
-                                        value={e.effect_target ?? MILITARY_BRANCH_EFFECT_IDS[0]}
-                                        onChange={(ev) => updateMobilisationEffect(idx, { effect_target: ev.target.value || null })}
-                                        className="rounded border bg-[var(--background)] px-1.5 py-1 text-[var(--foreground)]"
-                                        style={{ borderColor: "var(--border)" }}
-                                      >
-                                        {MILITARY_BRANCH_EFFECT_IDS.map((b) => (
-                                          <option key={b} value={b}>{MILITARY_BRANCH_EFFECT_LABELS[b]}</option>
-                                        ))}
-                                      </select>
-                                    )}
-                                    {needsRosterTarget && (
-                                      <select
-                                        value={e.effect_target ?? rosterUnits[0]?.id ?? ""}
-                                        onChange={(ev) => updateMobilisationEffect(idx, { effect_target: ev.target.value || null })}
-                                        className="rounded border bg-[var(--background)] px-1.5 py-1 text-[var(--foreground)]"
-                                        style={{ borderColor: "var(--border)", minWidth: "140px" }}
-                                      >
-                                        {rosterUnits.map((u) => (
-                                          <option key={u.id} value={u.id}>{u.name_fr}</option>
-                                        ))}
-                                      </select>
-                                    )}
-                                    <label className="flex items-center gap-1">
-                                      <span className="text-[var(--foreground-muted)] shrink-0">{valueHelper.valueLabel}</span>
-                                      <input
-                                        type="number"
-                                        step={valueHelper.valueStep}
-                                        value={inputValue}
-                                        onChange={(ev) => onValueChange(Number(ev.target.value) || 0)}
-                                        className="w-20 rounded border bg-[var(--background)] px-1.5 py-1 font-mono text-[var(--foreground)]"
-                                        style={{ borderColor: "var(--border)" }}
-                                      />
-                                    </label>
-                                    <button
-                                      type="button"
-                                      onClick={() => removeMobilisationEffect(idx)}
-                                      className="text-[var(--danger)] hover:underline"
-                                    >
-                                      Supprimer
-                                    </button>
-                                  </li>
-                                );
-                              })}
-                          </ul>
-                          <button
-                            type="button"
-                            onClick={() => addMobilisationEffect(levelKey)}
-                            className="mt-1 text-xs text-[var(--accent)] hover:underline"
-                          >
-                            Ajouter un effet
-                          </button>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              </div>
-            </CollapsibleBlock>
-          )}
-
-          {statsDiceModifierRangesRule && (
-            <CollapsibleBlock title="Statistiques" open={statsOpen} onToggle={() => setStatsOpen((o) => !o)}>
-              <div className="p-3 space-y-4">
-                <p className="text-xs text-[var(--foreground-muted)]">
-                  Modificateur min/max pour les jets de dés (ex. -10 à +20). Ces bornes sont utilisées pour calculer le bonus ou malus proportionnel à la valeur de chaque stat du pays.
-                </p>
-                <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
-                  {STAT_KEYS.map((statKey) => {
-                    const ranges = getStatsDiceModifierRanges()[statKey] ?? { min: -10, max: 20 };
+                <div className="space-y-4">
+                  {MOBILISATION_LEVEL_KEYS.map((levelKey) => {
+                    const effectsWithIndex = getMobilisationEffectsForLevel(levelKey);
                     return (
-                      <div key={statKey} className="rounded border p-3" style={{ borderColor: "var(--border-muted)" }}>
-                        <div className="text-sm font-medium text-[var(--foreground)] mb-2">
-                          {STAT_LABELS[statKey]}
-                        </div>
-                        <div className="flex flex-wrap gap-2">
-                          <div className="flex flex-col gap-0.5">
-                            <label className="text-xs text-[var(--foreground-muted)]">Min</label>
-                            <input
-                              type="number"
-                              value={ranges.min}
-                              onChange={(e) => updateStatsDiceModifierRanges(statKey, "min", Number(e.target.value) ?? -10)}
-                              className={inputClassNarrow}
-                              style={inputStyle}
-                            />
-                          </div>
-                          <div className="flex flex-col gap-0.5">
-                            <label className="text-xs text-[var(--foreground-muted)]">Max</label>
-                            <input
-                              type="number"
-                              value={ranges.max}
-                              onChange={(e) => updateStatsDiceModifierRanges(statKey, "max", Number(e.target.value) ?? 20)}
-                              className={inputClassNarrow}
-                              style={inputStyle}
-                            />
-                          </div>
-                        </div>
+                      <div key={levelKey} className="rounded border p-3" style={{ borderColor: "var(--border-muted)" }}>
+                        <div className="text-sm font-medium text-[var(--foreground)] mb-2">{MOBILISATION_LEVEL_LABELS[levelKey]}</div>
+                        <ul className="space-y-2">
+                          {effectsWithIndex.map(({ effect: e, globalIndex: idx }) => {
+                            const valueHelper = getEffectKindValueHelper(e.effect_kind);
+                            const inputValue = valueHelper.storedToDisplay(Number(e.value));
+                            const needsStatTarget = EFFECT_KINDS_WITH_STAT_TARGET.has(e.effect_kind);
+                            const needsBudgetTarget = EFFECT_KINDS_WITH_BUDGET_TARGET.has(e.effect_kind);
+                            const needsBranchTarget = EFFECT_KINDS_WITH_BRANCH_TARGET.has(e.effect_kind);
+                            const needsRosterTarget = EFFECT_KINDS_WITH_ROSTER_UNIT_TARGET.has(e.effect_kind);
+                            const onValueChange = (val: number) => updateMobilisationEffect(idx, { value: valueHelper.displayToStored(val) });
+                            return (
+                              <li key={idx} className="flex flex-wrap items-center gap-2 text-sm">
+                                {needsStatTarget && (
+                                  <select
+                                    value={e.effect_target ?? STAT_KEYS[0]}
+                                    onChange={(ev) => updateMobilisationEffect(idx, { effect_target: ev.target.value || null })}
+                                    className="rounded border bg-[var(--background)] px-1.5 py-1 text-[var(--foreground)]"
+                                    style={{ borderColor: "var(--border)" }}
+                                  >
+                                    {STAT_KEYS.map((k) => (
+                                      <option key={k} value={k}>{STAT_LABELS[k]}</option>
+                                    ))}
+                                  </select>
+                                )}
+                                {needsBudgetTarget && (
+                                  <select
+                                    value={e.effect_target ?? getBudgetMinistryOptions()[0]?.key ?? ""}
+                                    onChange={(ev) => updateMobilisationEffect(idx, { effect_target: ev.target.value || null })}
+                                    className="rounded border bg-[var(--background)] px-1.5 py-1 text-[var(--foreground)]"
+                                    style={{ borderColor: "var(--border)" }}
+                                  >
+                                    {getBudgetMinistryOptions().map(({ key, label }) => (
+                                      <option key={key} value={key}>{label}</option>
+                                    ))}
+                                  </select>
+                                )}
+                                {needsBranchTarget && (
+                                  <select
+                                    value={e.effect_target ?? MILITARY_BRANCH_EFFECT_IDS[0]}
+                                    onChange={(ev) => updateMobilisationEffect(idx, { effect_target: ev.target.value || null })}
+                                    className="rounded border bg-[var(--background)] px-1.5 py-1 text-[var(--foreground)]"
+                                    style={{ borderColor: "var(--border)" }}
+                                  >
+                                    {MILITARY_BRANCH_EFFECT_IDS.map((b) => (
+                                      <option key={b} value={b}>{MILITARY_BRANCH_EFFECT_LABELS[b]}</option>
+                                    ))}
+                                  </select>
+                                )}
+                                {needsRosterTarget && (
+                                  <select
+                                    value={e.effect_target ?? rosterUnits[0]?.id ?? ""}
+                                    onChange={(ev) => updateMobilisationEffect(idx, { effect_target: ev.target.value || null })}
+                                    className="rounded border bg-[var(--background)] px-1.5 py-1 text-[var(--foreground)]"
+                                    style={{ borderColor: "var(--border)", minWidth: "140px" }}
+                                  >
+                                    {rosterUnits.map((u) => (
+                                      <option key={u.id} value={u.id}>{u.name_fr}</option>
+                                    ))}
+                                  </select>
+                                )}
+                                <label className="flex items-center gap-1">
+                                  <span className="text-[var(--foreground-muted)] shrink-0">{valueHelper.valueLabel}</span>
+                                  <input
+                                    type="number"
+                                    step={valueHelper.valueStep}
+                                    value={inputValue}
+                                    onChange={(ev) => onValueChange(Number(ev.target.value) || 0)}
+                                    className="w-20 rounded border bg-[var(--background)] px-1.5 py-1 font-mono text-[var(--foreground)]"
+                                    style={{ borderColor: "var(--border)" }}
+                                  />
+                                </label>
+                                <button
+                                  type="button"
+                                  onClick={() => removeMobilisationEffect(idx)}
+                                  className="text-[var(--danger)] hover:underline"
+                                >
+                                  Supprimer
+                                </button>
+                              </li>
+                            );
+                          })}
+                        </ul>
+                        <button
+                          type="button"
+                          onClick={() => addMobilisationEffect(levelKey)}
+                          className="mt-1 text-xs text-[var(--accent)] hover:underline"
+                        >
+                          Ajouter un effet
+                        </button>
                       </div>
                     );
                   })}
@@ -1602,6 +1252,175 @@ export function ReglesForm({
               </div>
             </CollapsibleBlock>
           )}
+          </CollapsibleBlock>
+          )}
+
+          {(countriesForMatrice && relationMapForMatrice) && (
+            <CollapsibleBlock title="Diplomatie" open={diplomatieOpen} onToggle={() => setDiplomatieOpen((o) => !o)} variant="section">
+              <CollapsibleBlock title="Matrice diplomatique" open={matriceOpen} onToggle={() => setMatriceOpen((o) => !o)}>
+                <div className="p-3">
+                  <MatriceDiplomatiqueForm countries={countriesForMatrice} relationMap={relationMapForMatrice} />
+                </div>
+              </CollapsibleBlock>
+              {items.length > 0 && influenceConfigRule && (
+                <CollapsibleBlock title="Influence" open={influenceOpen} onToggle={() => setInfluenceOpen((o) => !o)}>
+                  <div className="p-3 space-y-3">
+                    <p className="text-xs text-[var(--foreground-muted)]">
+                      Score Influence (type Diplomatic Weight) : multiplicateurs des contributions PIB, Population, Hard Power ; stabilité en intervalle (-3 à +3) ; gravité par paramètre.
+                    </p>
+                    <div className="flex flex-wrap gap-x-6 gap-y-3">
+                      <div className="flex flex-col gap-0.5">
+                        <label className="text-xs text-[var(--foreground-muted)]">Mult. PIB</label>
+                        <input type="number" step="any" value={getInfluenceConfig().mult_gdp ?? 1e-9} onChange={(e) => updateInfluenceConfig({ mult_gdp: Number(e.target.value) || 0 })} className="rounded border py-1.5 px-2 text-sm w-28 font-mono" style={{ borderColor: "var(--border)", background: "var(--background)" }} />
+                      </div>
+                      <div className="flex flex-col gap-0.5">
+                        <label className="text-xs text-[var(--foreground-muted)]">Mult. Population</label>
+                        <input type="number" step="any" value={getInfluenceConfig().mult_population ?? 1e-7} onChange={(e) => updateInfluenceConfig({ mult_population: Number(e.target.value) || 0 })} className="rounded border py-1.5 px-2 text-sm w-28 font-mono" style={{ borderColor: "var(--border)", background: "var(--background)" }} />
+                      </div>
+                      <div className="flex flex-col gap-0.5">
+                        <label className="text-xs text-[var(--foreground-muted)]">Mult. Hard Power</label>
+                        <input type="number" step="any" value={getInfluenceConfig().mult_military ?? 0.01} onChange={(e) => updateInfluenceConfig({ mult_military: Number(e.target.value) || 0 })} className="rounded border py-1.5 px-2 text-sm w-28 font-mono" style={{ borderColor: "var(--border)", background: "var(--background)" }} />
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap gap-x-6 gap-y-3">
+                      <div className="flex flex-col gap-0.5">
+                        <label className="text-xs text-[var(--foreground-muted)]">Stabilité : modif. à min (-3)</label>
+                        <input type="number" step="any" value={getInfluenceConfig().stability_modifier_min ?? 0} onChange={(e) => updateInfluenceConfig({ stability_modifier_min: Number(e.target.value) ?? 0 })} className="rounded border py-1.5 px-2 text-sm w-24 font-mono" style={{ borderColor: "var(--border)", background: "var(--background)" }} />
+                      </div>
+                      <div className="flex flex-col gap-0.5">
+                        <label className="text-xs text-[var(--foreground-muted)]">Stabilité : modif. à max (+3)</label>
+                        <input type="number" step="any" value={getInfluenceConfig().stability_modifier_max ?? 1} onChange={(e) => updateInfluenceConfig({ stability_modifier_max: Number(e.target.value) ?? 1 })} className="rounded border py-1.5 px-2 text-sm w-24 font-mono" style={{ borderColor: "var(--border)", background: "var(--background)" }} />
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap gap-x-6 gap-y-3">
+                      <div className="flex flex-col gap-0.5">
+                        <label className="text-xs text-[var(--foreground-muted)]">Gravité PIB %</label>
+                        <input type="number" min={0} max={100} value={getInfluenceConfig().gravity_pct_gdp ?? 50} onChange={(e) => updateInfluenceConfig({ gravity_pct_gdp: Math.max(0, Math.min(100, Number(e.target.value) || 0)) })} className="rounded border py-1.5 px-2 text-sm w-16 font-mono" style={{ borderColor: "var(--border)", background: "var(--background)" }} />
+                      </div>
+                      <div className="flex flex-col gap-0.5">
+                        <label className="text-xs text-[var(--foreground-muted)]">Gravité Population %</label>
+                        <input type="number" min={0} max={100} value={getInfluenceConfig().gravity_pct_population ?? 50} onChange={(e) => updateInfluenceConfig({ gravity_pct_population: Math.max(0, Math.min(100, Number(e.target.value) || 0)) })} className="rounded border py-1.5 px-2 text-sm w-16 font-mono" style={{ borderColor: "var(--border)", background: "var(--background)" }} />
+                      </div>
+                      <div className="flex flex-col gap-0.5">
+                        <label className="text-xs text-[var(--foreground-muted)]">Gravité Hard Power %</label>
+                        <input type="number" min={0} max={100} value={getInfluenceConfig().gravity_pct_military ?? 50} onChange={(e) => updateInfluenceConfig({ gravity_pct_military: Math.max(0, Math.min(100, Number(e.target.value) || 0)) })} className="rounded border py-1.5 px-2 text-sm w-16 font-mono" style={{ borderColor: "var(--border)", background: "var(--background)" }} />
+                      </div>
+                    </div>
+                  </div>
+                </CollapsibleBlock>
+              )}
+              {items.length > 0 && sphereInfluencePctRule && (
+                <CollapsibleBlock title="Sphère" open={sphereOpen} onToggle={() => setSphereOpen((o) => !o)}>
+                  <div className="p-3 space-y-3">
+                    <p className="text-xs text-[var(--foreground-muted)]">
+                      Pour chaque statut de contrôle, le % de l&apos;influence du pays sous emprise qui est attribué à l&apos;overlord.
+                    </p>
+                    <div className="flex flex-wrap gap-x-6 gap-y-3">
+                      <div className="flex flex-col gap-0.5">
+                        <label className="text-xs text-[var(--foreground-muted)]">Contesté %</label>
+                        <input type="number" min={0} max={100} value={getSphereInfluencePct().contested ?? 50} onChange={(e) => updateSphereInfluencePct({ contested: Math.max(0, Math.min(100, Number(e.target.value) || 0)) })} className="rounded border py-1.5 px-2 text-sm w-20 font-mono" style={{ borderColor: "var(--border)", background: "var(--background)" }} />
+                      </div>
+                      <div className="flex flex-col gap-0.5">
+                        <label className="text-xs text-[var(--foreground-muted)]">Occupé %</label>
+                        <input type="number" min={0} max={100} value={getSphereInfluencePct().occupied ?? 80} onChange={(e) => updateSphereInfluencePct({ occupied: Math.max(0, Math.min(100, Number(e.target.value) || 0)) })} className="rounded border py-1.5 px-2 text-sm w-20 font-mono" style={{ borderColor: "var(--border)", background: "var(--background)" }} />
+                      </div>
+                      <div className="flex flex-col gap-0.5">
+                        <label className="text-xs text-[var(--foreground-muted)]">Annexé %</label>
+                        <input type="number" min={0} max={100} value={getSphereInfluencePct().annexed ?? 100} onChange={(e) => updateSphereInfluencePct({ annexed: Math.max(0, Math.min(100, Number(e.target.value) || 0)) })} className="rounded border py-1.5 px-2 text-sm w-20 font-mono" style={{ borderColor: "var(--border)", background: "var(--background)" }} />
+                      </div>
+                    </div>
+                  </div>
+                </CollapsibleBlock>
+              )}
+            </CollapsibleBlock>
+          )}
+
+          <div className="mt-8 pt-8 border-t" style={{ borderColor: "var(--border-muted)" }}>
+          {aiMajorEffectsRule && aiMinorEffectsRule && (
+            <CollapsibleBlock title="Intelligence Artificielle" open={aiOpen} onToggle={() => setAiOpen((o) => !o)} variant="section">
+              <div className="p-3 space-y-4">
+                <p className="text-xs text-[var(--foreground-muted)]">
+                  Effets appliqués aux pays sans joueur selon leur statut IA (Majeur / Mineur) défini dans la liste admin des pays.
+                </p>
+                <div className="space-y-3">
+                  <div>
+                    <h4 className="mb-2 text-sm font-medium text-[var(--foreground)]">IA majeure</h4>
+                    <ul className="space-y-2">
+                      {getAiEffects(aiMajorEffectsRule).map((e, idx) => (
+                        <li
+                          key={idx}
+                          className="flex flex-wrap items-center justify-between gap-2 rounded border py-2 px-3"
+                          style={{ borderColor: "var(--border-muted)" }}
+                        >
+                          <span className="text-sm text-[var(--foreground)]">{labelForGlobalEffect(e)}</span>
+                          <div className="flex gap-2">
+                            <button type="button" onClick={() => openEditAiEffect("major", idx)} className="text-xs text-[var(--accent)] hover:underline">Modifier</button>
+                            <button type="button" onClick={() => removeAiEffect("major", idx)} className="text-xs text-[var(--danger)] hover:underline">Supprimer</button>
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                    {!aiMajorFormOpen ? (
+                      <button type="button" onClick={() => openAddAiEffect("major")} className="text-sm text-[var(--accent)] hover:underline">Ajouter un effet</button>
+                    ) : (
+                      <div className="rounded border p-3 space-y-2" style={{ borderColor: "var(--border-muted)" }}>
+                        <div>
+                          <label className="mb-0.5 block text-xs text-[var(--foreground-muted)]">Type d'effet</label>
+                          <select value={aiMajorEffectKind} onChange={(ev) => { const k = ev.target.value; setAiMajorEffectKind(k); setAiMajorEffectTarget(getDefaultTargetForKindGlobal(k)); }} className={inputClass} style={inputStyle}>
+                            {ALL_EFFECT_KIND_IDS.map((k) => (<option key={k} value={k}>{EFFECT_KIND_LABELS[k] ?? k}</option>))}
+                          </select>
+                        </div>
+                        {EFFECT_KINDS_WITH_STAT_TARGET.has(aiMajorEffectKind) && (<div><label className="mb-0.5 block text-xs text-[var(--foreground-muted)]">Stat</label><select value={aiMajorEffectTarget ?? STAT_KEYS[0]} onChange={(ev) => setAiMajorEffectTarget(ev.target.value || null)} className={inputClass} style={inputStyle}>{STAT_KEYS.map((k) => (<option key={k} value={k}>{STAT_LABELS[k]}</option>))}</select></div>)}
+                        {EFFECT_KINDS_WITH_BUDGET_TARGET.has(aiMajorEffectKind) && (<div><label className="mb-0.5 block text-xs text-[var(--foreground-muted)]">Ministère</label><select value={aiMajorEffectTarget ?? getBudgetMinistryOptions()[0]?.key ?? ""} onChange={(ev) => setAiMajorEffectTarget(ev.target.value || null)} className={inputClass} style={inputStyle}>{getBudgetMinistryOptions().map(({ key, label }) => (<option key={key} value={key}>{label}</option>))}</select></div>)}
+                        {EFFECT_KINDS_WITH_BRANCH_TARGET.has(aiMajorEffectKind) && (<div><label className="mb-0.5 block text-xs text-[var(--foreground-muted)]">Branche</label><select value={aiMajorEffectTarget ?? MILITARY_BRANCH_EFFECT_IDS[0]} onChange={(ev) => setAiMajorEffectTarget(ev.target.value || null)} className={inputClass} style={inputStyle}>{MILITARY_BRANCH_EFFECT_IDS.map((b) => (<option key={b} value={b}>{MILITARY_BRANCH_EFFECT_LABELS[b]}</option>))}</select></div>)}
+                        {EFFECT_KINDS_WITH_ROSTER_UNIT_TARGET.has(aiMajorEffectKind) && (<div><label className="mb-0.5 block text-xs text-[var(--foreground-muted)]">Unité</label><select value={aiMajorEffectTarget ?? rosterUnits[0]?.id ?? ""} onChange={(ev) => setAiMajorEffectTarget(ev.target.value || null)} className={inputClass} style={inputStyle}>{rosterUnits.map((u) => (<option key={u.id} value={u.id}>{u.name_fr}</option>))}</select></div>)}
+                        <div><label className="mb-0.5 block text-xs text-[var(--foreground-muted)]">{getEffectKindValueHelper(aiMajorEffectKind).valueLabel}</label><input type="number" step={getEffectKindValueHelper(aiMajorEffectKind).valueStep} value={aiMajorEffectValue} onChange={(e) => setAiMajorEffectValue(e.target.value)} className={inputClassNarrow} style={inputStyle} /></div>
+                        <div className="flex gap-2"><button type="button" onClick={() => saveAiEffectForm("major")} className="rounded py-1.5 px-3 text-sm font-medium" style={{ background: "var(--accent)", color: "#0f1419" }}>Enregistrer</button><button type="button" onClick={() => setAiMajorFormOpen(false)} className="rounded border py-1.5 px-3 text-sm" style={{ borderColor: "var(--border)" }}>Annuler</button></div>
+                      </div>
+                    )}
+                  </div>
+                  <div>
+                    <h4 className="mb-2 text-sm font-medium text-[var(--foreground)]">IA mineure</h4>
+                    <ul className="space-y-2">
+                      {getAiEffects(aiMinorEffectsRule).map((e, idx) => (
+                        <li
+                          key={idx}
+                          className="flex flex-wrap items-center justify-between gap-2 rounded border py-2 px-3"
+                          style={{ borderColor: "var(--border-muted)" }}
+                        >
+                          <span className="text-sm text-[var(--foreground)]">{labelForGlobalEffect(e)}</span>
+                          <div className="flex gap-2">
+                            <button type="button" onClick={() => openEditAiEffect("minor", idx)} className="text-xs text-[var(--accent)] hover:underline">Modifier</button>
+                            <button type="button" onClick={() => removeAiEffect("minor", idx)} className="text-xs text-[var(--danger)] hover:underline">Supprimer</button>
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                    {!aiMinorFormOpen ? (
+                      <button type="button" onClick={() => openAddAiEffect("minor")} className="text-sm text-[var(--accent)] hover:underline">Ajouter un effet</button>
+                    ) : (
+                      <div className="rounded border p-3 space-y-2" style={{ borderColor: "var(--border-muted)" }}>
+                        <div>
+                          <label className="mb-0.5 block text-xs text-[var(--foreground-muted)]">Type d'effet</label>
+                          <select value={aiMinorEffectKind} onChange={(ev) => { const k = ev.target.value; setAiMinorEffectKind(k); setAiMinorEffectTarget(getDefaultTargetForKindGlobal(k)); }} className={inputClass} style={inputStyle}>
+                            {ALL_EFFECT_KIND_IDS.map((k) => (<option key={k} value={k}>{EFFECT_KIND_LABELS[k] ?? k}</option>))}
+                          </select>
+                        </div>
+                        {EFFECT_KINDS_WITH_STAT_TARGET.has(aiMinorEffectKind) && (<div><label className="mb-0.5 block text-xs text-[var(--foreground-muted)]">Stat</label><select value={aiMinorEffectTarget ?? STAT_KEYS[0]} onChange={(ev) => setAiMinorEffectTarget(ev.target.value || null)} className={inputClass} style={inputStyle}>{STAT_KEYS.map((k) => (<option key={k} value={k}>{STAT_LABELS[k]}</option>))}</select></div>)}
+                        {EFFECT_KINDS_WITH_BUDGET_TARGET.has(aiMinorEffectKind) && (<div><label className="mb-0.5 block text-xs text-[var(--foreground-muted)]">Ministère</label><select value={aiMinorEffectTarget ?? getBudgetMinistryOptions()[0]?.key ?? ""} onChange={(ev) => setAiMinorEffectTarget(ev.target.value || null)} className={inputClass} style={inputStyle}>{getBudgetMinistryOptions().map(({ key, label }) => (<option key={key} value={key}>{label}</option>))}</select></div>)}
+                        {EFFECT_KINDS_WITH_BRANCH_TARGET.has(aiMinorEffectKind) && (<div><label className="mb-0.5 block text-xs text-[var(--foreground-muted)]">Branche</label><select value={aiMinorEffectTarget ?? MILITARY_BRANCH_EFFECT_IDS[0]} onChange={(ev) => setAiMinorEffectTarget(ev.target.value || null)} className={inputClass} style={inputStyle}>{MILITARY_BRANCH_EFFECT_IDS.map((b) => (<option key={b} value={b}>{MILITARY_BRANCH_EFFECT_LABELS[b]}</option>))}</select></div>)}
+                        {EFFECT_KINDS_WITH_ROSTER_UNIT_TARGET.has(aiMinorEffectKind) && (<div><label className="mb-0.5 block text-xs text-[var(--foreground-muted)]">Unité</label><select value={aiMinorEffectTarget ?? rosterUnits[0]?.id ?? ""} onChange={(ev) => setAiMinorEffectTarget(ev.target.value || null)} className={inputClass} style={inputStyle}>{rosterUnits.map((u) => (<option key={u.id} value={u.id}>{u.name_fr}</option>))}</select></div>)}
+                        <div><label className="mb-0.5 block text-xs text-[var(--foreground-muted)]">{getEffectKindValueHelper(aiMinorEffectKind).valueLabel}</label><input type="number" step={getEffectKindValueHelper(aiMinorEffectKind).valueStep} value={aiMinorEffectValue} onChange={(e) => setAiMinorEffectValue(e.target.value)} className={inputClassNarrow} style={inputStyle} /></div>
+                        <div className="flex gap-2"><button type="button" onClick={() => saveAiEffectForm("minor")} className="rounded py-1.5 px-3 text-sm font-medium" style={{ background: "var(--accent)", color: "#0f1419" }}>Enregistrer</button><button type="button" onClick={() => setAiMinorFormOpen(false)} className="rounded border py-1.5 px-3 text-sm" style={{ borderColor: "var(--border)" }}>Annuler</button></div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </CollapsibleBlock>
+          )}
+          </div>
+
         </div>
       )}
     </div>

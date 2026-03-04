@@ -1,5 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
+import { replacePlaceholders } from "@/lib/discord-format";
+import { formatWorldDateForDiscord } from "@/lib/worldDate";
 
 const DISCORD_API_BASE = "https://discord.com/api/v10";
 
@@ -9,14 +11,9 @@ type DiscordDispatchType = {
   label_fr: string;
   enabled: boolean;
   sort_order: number;
-};
-
-type DiscordChannelRoute = {
-  id: string;
-  dispatch_type_id: string;
-  discord_channel_id: string;
-  country_id: string | null;
-  region_id: string | null;
+  destination: string;
+  state_action_type_id: string | null;
+  outcome: string | null;
 };
 
 type DiscordDispatchTemplate = {
@@ -49,7 +46,7 @@ export async function dispatchToDiscord(
 
   const { data: dispatchType, error: typeErr } = await supabase
     .from("discord_dispatch_types")
-    .select("id, key, label_fr, enabled")
+    .select("id, key, label_fr, enabled, destination, state_action_type_id, outcome")
     .eq("key", eventType)
     .single();
 
@@ -58,7 +55,7 @@ export async function dispatchToDiscord(
 
   const channelId = await resolveChannelId(
     supabase,
-    (dispatchType as DiscordDispatchType).id,
+    (dispatchType as DiscordDispatchType).destination,
     payload.country_id != null ? String(payload.country_id) : null
   );
   if (!channelId) return;
@@ -72,14 +69,47 @@ export async function dispatchToDiscord(
   const list = (templates ?? []) as DiscordDispatchTemplate[];
   if (list.length === 0) return;
 
-  const template = list[Math.floor(Math.random() * list.length)];
-  const vars: Record<string, string> = {};
-  for (const [k, v] of Object.entries(payload)) {
-    if (v !== undefined && v !== null) vars[k] = String(v);
+  let effectivePayload = { ...payload };
+  if (effectivePayload.date == null && effectivePayload.resolution_date == null) {
+    const { data: worldDateRow } = await supabase
+      .from("rule_parameters")
+      .select("value")
+      .eq("key", "world_date")
+      .maybeSingle();
+    const worldDate = (worldDateRow as { value?: { month?: number; year?: number } } | null)?.value;
+    if (worldDate && typeof worldDate.month === "number" && typeof worldDate.year === "number") {
+      effectivePayload = { ...effectivePayload, date: formatWorldDateForDiscord(worldDate) };
+    }
   }
-  vars.date = vars.resolution_date ?? vars.date ?? new Date().toLocaleDateString("fr-FR", { dateStyle: "medium" });
 
-  const description = replacePlaceholders(template.body_template, vars);
+  const template = list[Math.floor(Math.random() * list.length)];
+  const vars = buildPayloadVars(effectivePayload);
+  const outcome = (dispatchType as DiscordDispatchType).outcome ?? null;
+  const stateActionTypeId = (dispatchType as DiscordDispatchType).state_action_type_id ?? null;
+  const diceSuccessRaw = payload.dice_success;
+  const diceSuccess = String(diceSuccessRaw ?? "").toLowerCase() === "true";
+  const diceResult =
+    outcome === "accepted"
+      ? diceSuccess
+        ? "success"
+        : "failure"
+      : null;
+
+  let title: string | undefined;
+  let description: string;
+
+  const snippetTitle = await getSnippetPhrase(supabase, stateActionTypeId, outcome, diceResult, "title");
+  const snippetDescription = await getSnippetPhrase(supabase, stateActionTypeId, outcome, diceResult, "description");
+
+  if (snippetTitle) {
+    title = `${vars.date} — ${replacePlaceholders(snippetTitle, vars)}`;
+  }
+  if (snippetDescription) {
+    description = replacePlaceholders(snippetDescription, vars);
+  } else {
+    description = replacePlaceholders(template.body_template, vars);
+  }
+
   const urls = Array.isArray(template.image_urls) ? template.image_urls : [];
   const imageUrl = urls.length > 0 ? urls[Math.floor(Math.random() * urls.length)] : undefined;
   const color = parseEmbedColor(template.embed_color);
@@ -91,6 +121,7 @@ export async function dispatchToDiscord(
     image?: { url: string };
     footer?: { text: string };
   } = {
+    ...(title ? { title } : {}),
     description: description || undefined,
     color: color ?? undefined,
     footer: { text: `Simulateur de nations · ${vars.date}` },
@@ -115,8 +146,54 @@ export async function dispatchToDiscord(
   }
 }
 
-function replacePlaceholders(template: string, vars: Record<string, string>): string {
-  return template.replace(/\{(\w+)\}/g, (_, key) => vars[key] ?? `{${key}}`);
+function buildPayloadVars(payload: DiscordDispatchPayload): Record<string, string> {
+  const vars: Record<string, string> = {};
+  for (const [k, v] of Object.entries(payload)) {
+    if (v !== undefined && v !== null) vars[k] = String(v);
+  }
+  vars.date = vars.resolution_date ?? vars.date ?? new Date().toLocaleDateString("fr-FR", { dateStyle: "medium" });
+  const magnitudeText = payload.impact_magnitude_text != null ? String(payload.impact_magnitude_text) : "";
+  const impactValue = payload.impact_value != null ? String(payload.impact_value) : "";
+  if (magnitudeText && impactValue) {
+    vars.impact_magnitude_bold = `**${magnitudeText}** (${impactValue})`;
+  } else if (magnitudeText) {
+    vars.impact_magnitude_bold = `**${magnitudeText}**`;
+  } else {
+    vars.impact_magnitude_bold = "";
+  }
+  return vars;
+}
+
+type SnippetPoolRow = { phrases: unknown };
+
+async function getSnippetPhrase(
+  supabase: SupabaseClient,
+  stateActionTypeId: string | null,
+  outcome: string | null,
+  diceResult: string | null,
+  slot: "title" | "description"
+): Promise<string | null> {
+  if (!outcome) return null;
+  const tryLoad = async (typeId: string | null) => {
+    let q = supabase
+      .from("discord_dispatch_snippet_pools")
+      .select("phrases")
+      .eq("outcome", outcome)
+      .eq("slot", slot);
+    if (typeId) q = q.eq("state_action_type_id", typeId);
+    else q = q.is("state_action_type_id", null);
+    if (diceResult) q = q.eq("dice_result", diceResult);
+    else q = q.is("dice_result", null);
+    const { data: row } = await q.maybeSingle();
+    const phrases = (row as SnippetPoolRow | null)?.phrases;
+    if (!Array.isArray(phrases) || phrases.length === 0) return null;
+    const str = phrases[Math.floor(Math.random() * phrases.length)];
+    return typeof str === "string" ? str : null;
+  };
+  const phrase = await tryLoad(stateActionTypeId);
+  if (phrase) return phrase;
+  if (stateActionTypeId) return tryLoad(null);
+  return null;
 }
 
 function parseEmbedColor(hex: string | null | undefined): number | null {
@@ -128,30 +205,23 @@ function parseEmbedColor(hex: string | null | undefined): number | null {
 
 async function resolveChannelId(
   supabase: SupabaseClient,
-  dispatchTypeId: string,
+  destination: string,
   countryId: string | null
 ): Promise<string | null> {
-  const { data: routes } = await supabase
-    .from("discord_channel_routes")
-    .select("id, discord_channel_id, country_id, region_id")
-    .eq("dispatch_type_id", dispatchTypeId);
-
-  const list = (routes ?? []) as DiscordChannelRoute[];
-  if (list.length === 0) return null;
-
-  const exactCountry = list.find((r) => r.country_id === countryId);
-  if (exactCountry) return exactCountry.discord_channel_id;
-
-  if (countryId) {
-    const { data: regionLinks } = await supabase
-      .from("map_region_countries")
-      .select("region_id")
-      .eq("country_id", countryId);
-    const regionIds = (regionLinks ?? []).map((r: { region_id: string }) => r.region_id);
-    const byRegion = list.find((r) => r.region_id && regionIds.includes(r.region_id));
-    if (byRegion) return byRegion.discord_channel_id;
-  }
-
-  const defaultRoute = list.find((r) => r.country_id == null && r.region_id == null);
-  return defaultRoute?.discord_channel_id ?? null;
+  if (!countryId) return null;
+  const { data: country } = await supabase
+    .from("countries")
+    .select("continent_id")
+    .eq("id", countryId)
+    .single();
+  const continentId = (country as { continent_id?: string } | null)?.continent_id;
+  if (!continentId) return null;
+  const channelKind = destination === "national" ? "national" : "international";
+  const { data: row } = await supabase
+    .from("discord_region_channels")
+    .select("discord_channel_id")
+    .eq("continent_id", continentId)
+    .eq("channel_kind", channelKind)
+    .maybeSingle();
+  return (row as { discord_channel_id: string } | null)?.discord_channel_id ?? null;
 }

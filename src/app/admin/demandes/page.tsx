@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { DemandesList } from "@/components/admin/DemandesList";
 import { computeHardPowerByCountry } from "@/lib/hardPower";
+import type { MilitaryBranch } from "@/types/database";
 import { computeInfluenceForAll } from "@/lib/influence";
 import { getAllRelationRows, relationRowsToMap } from "@/lib/relations";
 
@@ -13,7 +14,7 @@ export default async function AdminDemandesPage() {
         id, country_id, user_id, action_type_id, status, payload, admin_effect_added,
         refund_actions, refusal_message, created_at, resolved_at, resolved_by, dice_results,
         country:countries(id, name, slug, flag_url, regime),
-        state_action_types:state_action_types(key, label_fr, cost)
+        state_action_types:state_action_types(key, label_fr, cost, params_schema)
       `)
       .order("created_at", { ascending: false }),
     supabase.from("military_roster_units").select("id, name_fr, branch, base_count").order("name_fr"),
@@ -40,7 +41,7 @@ export default async function AdminDemandesPage() {
     resolved_by: string | null;
     dice_results?: { success_roll?: { roll: number; modifier: number; total: number }; impact_roll?: { roll: number; modifier: number; total: number }; admin_modifiers?: Array<{ label: string; value: number }> } | null;
     country?: { id: string; name: string; slug: string; flag_url: string | null; regime: string | null } | null;
-    state_action_types?: { key: string; label_fr: string; cost: number } | null;
+    state_action_types?: { key: string; label_fr: string; cost: number; params_schema: Record<string, unknown> | null } | null;
   };
 
   const raw = (requestsRes.data ?? []) as Record<string, unknown>[];
@@ -76,7 +77,7 @@ export default async function AdminDemandesPage() {
 
   const countries = (countriesRes.data ?? []) as Array<{ id: string; population: number; gdp: number; stability: number }>;
   const countryMilitaryUnitsAll = (cmuRes.data ?? []) as Array<{ country_id: string; roster_unit_id: string; current_level: number; extra_count: number }>;
-  const rosterUnits = (rosterRes.data ?? []) as Array<{ id: string; branch: string; base_count: number }>;
+  const rosterUnits = (rosterRes.data ?? []) as Array<{ id: string; branch: MilitaryBranch; base_count: number }>;
   const rosterLevels = (rosterLevelsRes.data ?? []) as Array<{ unit_id: string; level: number; hard_power: number }>;
   const influenceConfig = (influenceConfigRes.data?.value ?? {}) as Parameters<typeof computeInfluenceForAll>[2];
   const hardPowerByCountry = computeHardPowerByCountry(countryMilitaryUnitsAll, rosterUnits, rosterLevels);

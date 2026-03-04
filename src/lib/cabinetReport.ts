@@ -134,16 +134,6 @@ const PHRASE_VARIANTS: Record<string, string[]> = {
     "Le budget alloué permet une marge confortable pour les politiques prévues.",
     "Les dotations sont au-delà du minimum requis ; le ministère dispose d'une marge d'action.",
   ],
-  ministry_funding_sufficient: [
-  "Les financements sont à la hauteur des besoins du ministère pour la période considérée.",
-  "Le ministre salue des moyens conformes aux objectifs assignés par le gouvernement.",
-  "Le budget alloué permet de couvrir les dépenses de fonctionnement et d'investissement prévues.",
-  "Les crédits ouverts couvrent les besoins du secteur et permettent la mise en œuvre des réformes.",
-  "Le ministère dispose des moyens nécessaires à l'exercice de ses missions.",
-  "Les financements sont conformes au minimum requis pour une exécution satisfaisante.",
-  "Le ministre constate un budget adapté aux priorités définies par le cabinet.",
-  "Le budget permet de mener les politiques prévues dans de bonnes conditions.",
-  ],
   ministry_funding_tight: [
     "Les financements atteignent tout juste le minimum ; une vigilance est de mise.",
     "Le ministère signale des moyens à la limite du suffisant pour la période.",
@@ -491,7 +481,7 @@ function getFundingPhraseKeyAndTone(level: FundingLevel): { key: string; tone: C
 
 /** Magnitude (4 niveaux) → suffixe pour clé stat_improve_* / stat_decline_*. */
 function magnitudeToLegacySuffix(mag: MagnitudeLevel): "weak" | "moderate" | "large" | "massive" {
-  return mag;
+  return mag === "light" ? "weak" : mag;
 }
 
 /**

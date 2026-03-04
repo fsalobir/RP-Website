@@ -17,12 +17,14 @@ export default async function AdminPaysEditPage({
     configRes,
     controlRes,
     countriesRes,
+    continentsRes,
   ] = await Promise.all([
     supabase.from("countries").select("*").eq("id", id).single(),
     supabase.from("country_mobilisation").select("score, target_score").eq("country_id", id).maybeSingle(),
     supabase.from("rule_parameters").select("value").eq("key", "mobilisation_config").maybeSingle(),
     supabase.from("country_control").select("id, controller_country_id, share_pct, is_annexed").eq("country_id", id),
     supabase.from("countries").select("id, name").order("name"),
+    supabase.from("continents").select("id, slug, label_fr").order("sort_order"),
   ]);
 
   if (error || !country) notFound();
@@ -44,6 +46,7 @@ export default async function AdminPaysEditPage({
     r.controller_name = countryById.get(r.controller_country_id)?.name ?? r.controller_country_id;
   });
   const otherCountries = countries.filter((c) => c.id !== id);
+  const continents = continentsRes.data ?? [];
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-10">
@@ -53,7 +56,7 @@ export default async function AdminPaysEditPage({
       <p className="mb-8 text-[var(--foreground-muted)]">
         Généralités, société, macros, militaire, contrôle et avantages.
       </p>
-      <CountryForm country={country} />
+      <CountryForm country={country} continents={continents} />
       <div className="mt-8 space-y-8">
         <MobilisationAdminBlock
           countryId={id}

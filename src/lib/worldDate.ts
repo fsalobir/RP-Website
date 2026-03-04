@@ -25,3 +25,10 @@ export function formatWorldDate(value: WorldDateValue | null | undefined): strin
   const month = Math.max(1, Math.min(12, Math.round(value.month)));
   return `${MOIS_LABELS[month - 1]} ${value.year}`;
 }
+
+/** Formate la date du monde pour Discord (brèves) : "Janvier - 2025". */
+export function formatWorldDateForDiscord(value: WorldDateValue | null | undefined): string {
+  if (!value || typeof value.month !== "number" || typeof value.year !== "number") return "—";
+  const month = Math.max(1, Math.min(12, Math.round(value.month)));
+  return `${MOIS_LABELS[month - 1]} - ${value.year}`;
+}
