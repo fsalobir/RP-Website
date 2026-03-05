@@ -50,13 +50,14 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: fetchErr.message }, { status: 500 });
   }
 
+  type ActionTypeRow = { key: string; label_fr: string; params_schema: Record<string, number> };
   const list = (rows ?? []) as Array<{
     id: string;
     country_id: string;
     payload: Record<string, unknown>;
     admin_effect_added: unknown;
     dice_results: unknown;
-    state_action_types: { key: string; label_fr: string; params_schema: Record<string, number> } | null;
+    state_action_types: ActionTypeRow | ActionTypeRow[] | null;
   }>;
 
   let processed = 0;
