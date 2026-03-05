@@ -13,6 +13,9 @@ import {
   ALL_EFFECT_KIND_IDS,
   EFFECT_KIND_LABELS,
   getEffectKindValueHelper,
+  normalizeAdminEffectsAdded,
+  formatAdminEffectLabel,
+  DURATION_DAYS_MAX,
 } from "@/lib/countryEffects";
 import { STAT_LABELS } from "@/lib/countryEffects";
 import { getBudgetMinistryOptions } from "@/lib/countryEffects";
@@ -284,17 +287,16 @@ function RequestDetail({
   const [refund, setRefund] = useState(false);
   const [refusalMsg, setRefusalMsg] = useState("");
   const [loading, setLoading] = useState<"accept" | "refuse" | "effect" | null>(null);
-  const [effectForm, setEffectForm] = useState<AdminEffectAdded | null>(() => {
-    const e = request.admin_effect_added;
-    if (e && typeof e === "object" && (e as Record<string, unknown>).name && (e as Record<string, unknown>).effect_kind)
-      return e as unknown as AdminEffectAdded;
-    return null;
-  });
+  const effectsList = normalizeAdminEffectsAdded(request.admin_effect_added);
+  const [editingIndex, setEditingIndex] = useState<number | null>(null);
+  const [effectForm, setEffectForm] = useState<AdminEffectAdded | null>(null);
   const [showEffectForm, setShowEffectForm] = useState(false);
   const [effectFormIsUp, setEffectFormIsUp] = useState(false);
   const [diceLoading, setDiceLoading] = useState<"success" | "impact" | null>(null);
   const [adminModifierStr, setAdminModifierStr] = useState("0");
   const [adminModifierLabel, setAdminModifierLabel] = useState("");
+
+  const effectLookups = { rosterUnits: rosterUnitIds, countries: countriesList };
 
   function parseModifierStr(s: string): number {
     const t = s.trim();
@@ -332,21 +334,88 @@ function RequestDetail({
     else onSuccess();
   }
 
+  const EFFECT_VALUE_MIN = -1000;
+  const EFFECT_VALUE_MAX = 1000;
+
   async function handleSaveEffect(isUp: boolean) {
     if (!effectForm?.name || !effectForm.effect_kind) return;
     setLoading("effect");
     onError("");
+    const clampedValue = Math.max(EFFECT_VALUE_MIN, Math.min(EFFECT_VALUE_MAX, Number(effectForm.value) || 0));
     const payload: AdminEffectAdded = {
       ...effectForm,
+      value: clampedValue,
+      duration_remaining:
+        effectForm.duration_kind === "permanent"
+          ? 0
+          : Math.max(0, Math.min(DURATION_DAYS_MAX, Math.round(Number(effectForm.duration_remaining) || 30))),
       application: isUp ? "immediate" : "duration",
     };
-    const res = await updateRequestEffect(request.id, payload);
+    const newList =
+      editingIndex !== null
+        ? effectsList.map((e, i) => (i === editingIndex ? payload : e))
+        : [...effectsList, payload];
+    const res = await updateRequestEffect(request.id, newList);
     setLoading(null);
     if (res.error) onError(res.error);
     else {
-      onSuccess();
+      onRefresh();
       setShowEffectForm(false);
+      setEditingIndex(null);
+      setEffectForm(null);
     }
+  }
+
+  async function handleDeleteEffect(index: number) {
+    setLoading("effect");
+    onError("");
+    const newList = effectsList.filter((_, i) => i !== index);
+    const res = await updateRequestEffect(request.id, newList.length > 0 ? newList : null);
+    setLoading(null);
+    if (res.error) onError(res.error);
+    else {
+      onRefresh();
+      setShowEffectForm(false);
+      setEditingIndex(null);
+      setEffectForm(null);
+    }
+  }
+
+  function openAddEffect(isUp: boolean) {
+    setEffectFormIsUp(isUp);
+    const kind = isUp ? effectKindsForUp[0] : effectKindsForDemandes[0];
+    const defaultTarget = ["stat_delta", "gdp_growth_per_stat", "population_growth_per_stat"].includes(kind)
+      ? "militarism"
+      : kind.startsWith("budget_ministry")
+        ? (getBudgetMinistryOptions()[0]?.key ?? null)
+        : kind === "military_unit_limit_modifier"
+          ? "terre"
+          : ["military_unit_extra", "military_unit_tech_rate"].includes(kind)
+            ? (rosterUnitIds[0]?.id ?? null)
+            : kind === "relation_delta"
+              ? (countriesList[0]?.id ?? null)
+              : null;
+    setEffectForm({
+      name: "",
+      effect_kind: kind,
+      effect_target: defaultTarget,
+      effect_subtype: null,
+      value: 0,
+      duration_kind: "days",
+      duration_remaining: 30,
+      application: isUp ? "immediate" : "duration",
+    });
+    setEditingIndex(null);
+    setShowEffectForm(true);
+  }
+
+  function openEditEffect(index: number) {
+    const e = effectsList[index];
+    if (!e) return;
+    setEffectForm({ ...e });
+    setEffectFormIsUp(e.application === "immediate");
+    setEditingIndex(index);
+    setShowEffectForm(true);
   }
 
   return (
@@ -598,34 +667,60 @@ function RequestDetail({
         <div className="mt-6 space-y-4 border-t pt-4" style={{ borderColor: "var(--border)" }}>
           <div>
             <h3 className="mb-2 text-sm font-medium text-[var(--foreground)]">Ajouter conséquences optionnelles</h3>
-            {request.admin_effect_added && typeof request.admin_effect_added === "object" && (() => {
-              const e = request.admin_effect_added as unknown as AdminEffectAdded;
-              const isUp = e.application === "immediate";
-              return (
-                <p className="mb-2 text-sm text-[var(--foreground-muted)] whitespace-pre-wrap break-words [overflow-wrap:anywhere]">
-                  {isUp ? "UP immédiat" : "Effet durable"} : {String(e.name)} ({String(e.effect_kind)})
-                </p>
-              );
-            })()}
+            {effectsList.length > 0 && (
+              <ul className="mb-3 space-y-2">
+                {effectsList.map((e, index) => (
+                  <li
+                    key={index}
+                    className="flex flex-wrap items-center justify-between gap-2 rounded border py-2 px-3 text-sm"
+                    style={{ borderColor: "var(--border)", background: "var(--background)" }}
+                  >
+                    <span className="min-w-0 flex-1 whitespace-pre-wrap break-words [overflow-wrap:anywhere] text-[var(--foreground)]">
+                      {formatAdminEffectLabel(e, effectLookups)}
+                    </span>
+                    <span className="flex shrink-0 items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() => openEditEffect(index)}
+                        disabled={loading !== null}
+                        className="rounded p-1.5 text-[var(--foreground-muted)] hover:bg-[var(--border)] hover:text-[var(--foreground)] disabled:opacity-50"
+                        title="Modifier"
+                        aria-label="Modifier"
+                      >
+                        <span aria-hidden>✎</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteEffect(index)}
+                        disabled={loading !== null}
+                        className="rounded p-1.5 text-[var(--foreground-muted)] hover:bg-red-500/20 hover:text-red-400 disabled:opacity-50"
+                        title="Supprimer"
+                        aria-label="Supprimer"
+                      >
+                        <span aria-hidden>🗑</span>
+                      </button>
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
             {!showEffectForm ? (
               <div className="flex flex-wrap gap-2">
                 <button
                   type="button"
-                  onClick={() => { setEffectFormIsUp(false); setShowEffectForm(true); }}
+                  onClick={() => openAddEffect(false)}
                   className="rounded border px-3 py-1.5 text-sm"
                   style={{ borderColor: "var(--border)" }}
                 >
-                  {request.admin_effect_added && (request.admin_effect_added as unknown as AdminEffectAdded).application !== "immediate"
-                    ? "Modifier l'effet actif" : "Effet Actif"}
+                  Effet Actif
                 </button>
                 <button
                   type="button"
-                  onClick={() => { setEffectFormIsUp(true); setShowEffectForm(true); }}
+                  onClick={() => openAddEffect(true)}
                   className="rounded border px-3 py-1.5 text-sm"
                   style={{ borderColor: "var(--border)" }}
                 >
-                  {request.admin_effect_added && (request.admin_effect_added as unknown as AdminEffectAdded).application === "immediate"
-                    ? "Modifier l'effet one-shot" : "Effet One-Shot"}
+                  Effet One-Shot
                 </button>
               </div>
             ) : (
@@ -636,7 +731,7 @@ function RequestDetail({
                 countriesList={countriesList}
                 requestCountryId={request.country_id}
                 onSave={() => handleSaveEffect(effectFormIsUp)}
-                onCancel={() => setShowEffectForm(false)}
+                onCancel={() => { setShowEffectForm(false); setEditingIndex(null); setEffectForm(null); }}
                 saving={loading === "effect"}
                 isUpForm={effectFormIsUp}
               />
@@ -743,9 +838,13 @@ function EffectFormInline({
     duration_remaining: 30,
   };
 
+  const EFFECT_VALUE_MIN = -1000;
+  const EFFECT_VALUE_MAX = 1000;
+  const clampedValue = Math.max(EFFECT_VALUE_MIN, Math.min(EFFECT_VALUE_MAX, Number(effect.value) || 0));
+
   const kind2 = effect.effect_kind;
   const helper = getEffectKindValueHelper(kind2);
-  const displayValue = helper.storedToDisplay(effect.value);
+  const displayValue = helper.storedToDisplay(clampedValue);
 
   const needsStatTarget = needsStat;
   const needsBudgetTarget = needsBudget;
@@ -850,12 +949,11 @@ function EffectFormInline({
           type="number"
           step={helper.valueStep}
           value={displayValue}
-          onChange={(e) =>
-            onChange({
-              ...effect,
-              value: helper.displayToStored(Number(e.target.value)),
-            })
-          }
+          onChange={(e) => {
+            const raw = helper.displayToStored(Number(e.target.value));
+            const value = Number.isNaN(raw) ? 0 : Math.max(EFFECT_VALUE_MIN, Math.min(EFFECT_VALUE_MAX, raw));
+            onChange({ ...effect, value });
+          }}
           className="w-24 rounded border bg-[var(--background)] px-3 py-1.5 text-sm"
           style={{ borderColor: "var(--border)" }}
         />
@@ -880,10 +978,12 @@ function EffectFormInline({
               <input
                 type="number"
                 min={1}
+                max={DURATION_DAYS_MAX}
                 value={effect.duration_remaining}
-                onChange={(e) =>
-                  onChange({ ...effect, duration_remaining: Number(e.target.value) || 30 })
-                }
+                onChange={(e) => {
+                  const v = Math.max(1, Math.min(DURATION_DAYS_MAX, Number(e.target.value) || 30));
+                  onChange({ ...effect, duration_remaining: v });
+                }}
                 className="w-20 rounded border bg-[var(--background)] px-3 py-1.5 text-sm"
                 style={{ borderColor: "var(--border)" }}
               />

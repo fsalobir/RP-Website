@@ -354,13 +354,22 @@ function EmbedPreviewModal({
   onClose: () => void;
 }) {
   const actionLabel = deriveActionLabel(dispatchType.label_fr);
-  const vars = getPreviewVars({ date: worldDateFormatted, action_label: actionLabel });
 
   const [snippets, setSnippets] = useState<{
     titlePhrase: string | null;
     descriptionPhrase: string | null;
+    up_kind: string | null;
+    dice_result: "success" | "failure" | null;
   } | null>(null);
   const [loading, setLoading] = useState(true);
+
+  const vars = getPreviewVars({
+    date: worldDateFormatted,
+    action_label: actionLabel,
+    type_key: dispatchType.key,
+    up_kind: snippets?.up_kind ?? undefined,
+    dice_result: snippets?.dice_result ?? undefined,
+  });
 
   const fetchSnippets = useCallback(async () => {
     setLoading(true);
@@ -368,6 +377,8 @@ function EmbedPreviewModal({
     setSnippets({
       titlePhrase: res.titlePhrase ?? null,
       descriptionPhrase: res.descriptionPhrase ?? null,
+      up_kind: res.up_kind ?? null,
+      dice_result: res.dice_result ?? null,
     });
     setLoading(false);
   }, [dispatchType.id]);

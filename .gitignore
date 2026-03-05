@@ -24,6 +24,9 @@
 .DS_Store
 *.pem
 
+# scripts locaux (création admin, etc.)
+scripts/create-admin-user.js
+
 # debug
 npm-debug.log*
 yarn-debug.log*

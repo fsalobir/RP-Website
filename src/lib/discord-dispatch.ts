@@ -86,6 +86,7 @@ export async function dispatchToDiscord(
   const vars = buildPayloadVars(effectivePayload);
   const outcome = (dispatchType as DiscordDispatchType).outcome ?? null;
   const stateActionTypeId = (dispatchType as DiscordDispatchType).state_action_type_id ?? null;
+  const upKind = effectivePayload.up_kind != null ? String(effectivePayload.up_kind) : null;
   const diceSuccessRaw = payload.dice_success;
   const diceSuccess = String(diceSuccessRaw ?? "").toLowerCase() === "true";
   const diceResult =
@@ -98,8 +99,8 @@ export async function dispatchToDiscord(
   let title: string | undefined;
   let description: string;
 
-  const snippetTitle = await getSnippetPhrase(supabase, stateActionTypeId, outcome, diceResult, "title");
-  const snippetDescription = await getSnippetPhrase(supabase, stateActionTypeId, outcome, diceResult, "description");
+  const snippetTitle = await getSnippetPhrase(supabase, stateActionTypeId, outcome, diceResult, "title", upKind);
+  const snippetDescription = await getSnippetPhrase(supabase, stateActionTypeId, outcome, diceResult, "description", upKind);
 
   if (snippetTitle) {
     title = `${vars.date} — ${replacePlaceholders(snippetTitle, vars)}`;
@@ -161,6 +162,9 @@ function buildPayloadVars(payload: DiscordDispatchPayload): Record<string, strin
   } else {
     vars.impact_magnitude_bold = "";
   }
+  if (payload.up_kind != null && String(payload.dice_success ?? "").toLowerCase() === "false") {
+    vars.up_summary = "Aucun effet";
+  }
   return vars;
 }
 
@@ -171,10 +175,11 @@ async function getSnippetPhrase(
   stateActionTypeId: string | null,
   outcome: string | null,
   diceResult: string | null,
-  slot: "title" | "description"
+  slot: "title" | "description",
+  upKind?: string | null
 ): Promise<string | null> {
   if (!outcome) return null;
-  const tryLoad = async (typeId: string | null) => {
+  const tryLoad = async (typeId: string | null, kind: string | null) => {
     let q = supabase
       .from("discord_dispatch_snippet_pools")
       .select("phrases")
@@ -182,6 +187,8 @@ async function getSnippetPhrase(
       .eq("slot", slot);
     if (typeId) q = q.eq("state_action_type_id", typeId);
     else q = q.is("state_action_type_id", null);
+    if (kind) q = q.eq("up_kind", kind);
+    else q = q.is("up_kind", null);
     if (diceResult) q = q.eq("dice_result", diceResult);
     else q = q.is("dice_result", null);
     const { data: row } = await q.maybeSingle();
@@ -190,9 +197,18 @@ async function getSnippetPhrase(
     const str = phrases[Math.floor(Math.random() * phrases.length)];
     return typeof str === "string" ? str : null;
   };
-  const phrase = await tryLoad(stateActionTypeId);
+  const wantedKind = upKind != null && typeof upKind === "string" && upKind.trim() ? upKind.trim() : null;
+
+  // 1) Pools spécifiques du type (avec up_kind si fourni, sinon NULL)
+  const phrase = await tryLoad(stateActionTypeId, wantedKind);
   if (phrase) return phrase;
-  if (stateActionTypeId) return tryLoad(null);
+  // 2) Fallback : même type mais up_kind NULL
+  const fallbackKindPhrase = wantedKind ? await tryLoad(stateActionTypeId, null) : null;
+  if (fallbackKindPhrase) return fallbackKindPhrase;
+  // 3) Fallback : pools génériques (state_action_type_id NULL), d'abord avec up_kind puis NULL
+  const genericPhrase = await tryLoad(null, wantedKind);
+  if (genericPhrase) return genericPhrase;
+  if (wantedKind) return tryLoad(null, null);
   return null;
 }
 

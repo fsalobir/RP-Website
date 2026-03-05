@@ -9,6 +9,12 @@ import { computeInfluenceForAll } from "@/lib/influence";
 import type { AdminEffectAdded, DiceResults, DiceRollResult, MilitaryBranch } from "@/types/database";
 import { dispatchToDiscord } from "@/lib/discord-dispatch";
 import { formatWorldDateForDiscord } from "@/lib/worldDate";
+import {
+  normalizeAdminEffectsAdded,
+  formatAdminEffectLabel,
+  formatAdminEffectShortForDiscord,
+  DURATION_DAYS_MAX,
+} from "@/lib/countryEffects";
 
 async function ensureAdmin() {
   const supabase = await createClient();
@@ -21,18 +27,32 @@ async function ensureAdmin() {
 
 export async function updateRequestEffect(
   requestId: string,
-  adminEffectAdded: AdminEffectAdded | null
+  adminEffectsAdded: AdminEffectAdded[] | null
 ): Promise<{ error?: string }> {
   const { supabase, error: authError } = await ensureAdmin();
   if (authError || !supabase) return { error: authError ?? "Non autorisé." };
 
+  const EFFECT_VALUE_MIN = -1000;
+  const EFFECT_VALUE_MAX = 1000;
+
   const payload =
-    adminEffectAdded == null
+    adminEffectsAdded == null || adminEffectsAdded.length === 0
       ? null
-      : {
-          ...(adminEffectAdded as unknown as Record<string, unknown>),
-          application: (adminEffectAdded as AdminEffectAdded).application ?? "duration",
-        };
+      : adminEffectsAdded.map((e) => {
+          const base = {
+            ...(e as unknown as Record<string, unknown>),
+            application: (e as AdminEffectAdded).application ?? "duration",
+          };
+          if (typeof base.value === "number" && !Number.isFinite(base.value)) {
+            base.value = 0;
+          } else if (typeof base.value === "number") {
+            base.value = Math.max(EFFECT_VALUE_MIN, Math.min(EFFECT_VALUE_MAX, base.value));
+          }
+          if (typeof base.duration_remaining === "number" && base.application !== "immediate") {
+            base.duration_remaining = Math.max(0, Math.min(DURATION_DAYS_MAX, Math.round(base.duration_remaining)));
+          }
+          return base;
+        });
 
   const { error } = await supabase
     .from("state_action_requests")
@@ -49,6 +69,13 @@ function clampRelation(value: number): number {
   return Math.max(RELATION_MIN, Math.min(RELATION_MAX, Math.round(value)));
 }
 
+const EFFECT_VALUE_MIN = -1000;
+const EFFECT_VALUE_MAX = 1000;
+function clampEffectValue(value: number): number {
+  if (!Number.isFinite(value)) return 0;
+  return Math.max(EFFECT_VALUE_MIN, Math.min(EFFECT_VALUE_MAX, value));
+}
+
 const STAT_COLUMNS = ["militarism", "industry", "science", "stability"] as const;
 const STAT_CLAMP: Record<string, { min: number; max: number }> = {
   militarism: { min: 0, max: 10 },
@@ -63,7 +90,7 @@ async function applyImmediateEffect(
   effect: AdminEffectAdded
 ): Promise<{ error?: string }> {
   const kind = effect.effect_kind;
-  const value = Number(effect.value);
+  const value = clampEffectValue(Number(effect.value));
   const target = effect.effect_target ?? null;
 
   if (kind === "military_unit_extra" && target) {
@@ -469,26 +496,28 @@ export async function acceptRequest(requestId: string): Promise<{ error?: string
     discordImpactLabel = "Influence";
   }
 
-  const effect = req.admin_effect_added as AdminEffectAdded | null;
-  if (effect && typeof effect === "object" && effect.name && effect.effect_kind) {
-    const targetCountryId =
-      key === "prise_influence" && payload.target_country_id
-        ? payload.target_country_id
-        : req.country_id;
+  const effects = normalizeAdminEffectsAdded(req.admin_effect_added);
+  const targetCountryIdBase =
+    key === "prise_influence" && payload.target_country_id ? payload.target_country_id : req.country_id;
+
+  for (const effect of effects) {
+    if (!effect.name || !effect.effect_kind) continue;
+    const targetCountryId = targetCountryIdBase;
 
     if (effect.application === "immediate") {
       const immErr = await applyImmediateEffect(supabase, targetCountryId, effect);
       if (immErr.error) return immErr;
     } else {
       const durationKind = effect.duration_kind === "updates" ? "days" : (effect.duration_kind ?? "days");
-      const durationRemaining = durationKind === "permanent" ? 0 : (Number(effect.duration_remaining) || 30);
+      const rawRemaining = durationKind === "permanent" ? 0 : (Number(effect.duration_remaining) || 30);
+      const durationRemaining = durationKind === "permanent" ? 0 : Math.max(0, Math.min(DURATION_DAYS_MAX, Math.round(rawRemaining)));
       const row = {
         country_id: targetCountryId,
         name: effect.name,
         effect_kind: effect.effect_kind,
         effect_target: effect.effect_target ?? null,
         effect_subtype: effect.effect_subtype ?? null,
-        value: Number(effect.value),
+        value: clampEffectValue(Number(effect.value)),
         duration_kind: durationKind,
         duration_remaining: durationRemaining,
       };
@@ -508,12 +537,14 @@ export async function acceptRequest(requestId: string): Promise<{ error?: string
 
   if (upErr) return { error: upErr.message };
 
-  const [countryRes, targetCountryRes, worldDateRes] = await Promise.all([
+  const [countryRes, targetCountryRes, worldDateRes, rosterRes, countriesRes] = await Promise.all([
     supabase.from("countries").select("name").eq("id", req.country_id).single(),
     targetCountryId
       ? supabase.from("countries").select("name").eq("id", targetCountryId).single()
       : Promise.resolve({ data: null }),
     supabase.from("rule_parameters").select("value").eq("key", "world_date").maybeSingle(),
+    supabase.from("military_roster_units").select("id, name_fr").order("name_fr"),
+    supabase.from("countries").select("id, name").order("name"),
   ]);
   const countryName = (countryRes.data as { name?: string } | null)?.name ?? "";
   const targetCountryName = (targetCountryRes.data as { name?: string } | null)?.name ?? "";
@@ -523,21 +554,59 @@ export async function acceptRequest(requestId: string): Promise<{ error?: string
       ? formatWorldDateForDiscord({ month: worldDateVal.month, year: worldDateVal.year })
       : new Date().toLocaleDateString("fr-FR", { dateStyle: "medium" });
 
+  const rosterUnits = (rosterRes.data ?? []) as { id: string; name_fr: string }[];
+  const countriesList = (countriesRes.data ?? []) as { id: string; name: string }[];
+  const adminEffectsSummary =
+    effects.length > 0
+      ? effects.map((e) => formatAdminEffectLabel(e, { rosterUnits, countries: countriesList })).join("\n")
+      : undefined;
+
+  const hasStatUp = effects.some((e) => e.effect_kind === "stat_delta");
+  const hasTechUp = effects.some((e) => e.effect_kind === "military_unit_tech_rate");
+  const hasNombreUp = effects.some((e) => e.effect_kind === "military_unit_extra");
+  const hasOtherUpKind = effects.some(
+    (e) => e.effect_kind !== "stat_delta" && e.effect_kind !== "military_unit_tech_rate" && e.effect_kind !== "military_unit_extra"
+  );
+  const upKind =
+    !hasOtherUpKind && hasStatUp && !hasTechUp && !hasNombreUp
+      ? "stat"
+      : !hasOtherUpKind && hasTechUp && !hasStatUp && !hasNombreUp
+        ? "tech"
+        : !hasOtherUpKind && hasNombreUp && !hasStatUp && !hasTechUp
+          ? "nombre"
+          : "mixed";
+
+  const upSummary =
+    effects.length > 0
+      ? effects
+          .map((e) => formatAdminEffectShortForDiscord(e, { rosterUnits, countries: countriesList }))
+          .filter((s) => s.trim().length > 0)
+          .join(" · ")
+      : "";
+
   dispatchToDiscord(
     `${key}_accepted`,
     {
       country_id: req.country_id,
       country_name: countryName,
-      target_country_id: targetCountryId ?? undefined,
-      target_country_name: targetCountryName,
       action_label: actionLabel,
       resolution_date: resolutionDate,
       date: resolutionDate,
       dice_success: diceSuccess ? "true" : "false",
       dice_success_label: diceSuccess ? "Succès" : "Échec",
-      impact_magnitude_text: discordImpactMagnitude ?? undefined,
-      impact_value: discordImpactValue != null ? discordImpactValue : undefined,
-      impact_label: discordImpactLabel,
+      ...(key === "demande_up"
+        ? {
+            up_kind: upKind,
+            up_summary: diceSuccess ? upSummary : "Aucun effet",
+          }
+        : {
+            target_country_id: targetCountryId ?? undefined,
+            target_country_name: targetCountryName,
+            impact_magnitude_text: discordImpactMagnitude ?? undefined,
+            impact_value: discordImpactValue != null ? discordImpactValue : undefined,
+            impact_label: discordImpactLabel,
+          }),
+      admin_effects_summary: adminEffectsSummary,
     },
     supabase
   ).catch(() => {});

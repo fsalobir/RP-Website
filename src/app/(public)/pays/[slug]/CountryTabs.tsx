@@ -596,7 +596,7 @@ export function CountryTabs({
       return;
     }
     const isPermanent = effectDurationKind === "permanent";
-    const durationNum = isPermanent ? 0 : Math.max(0, Math.floor(Number(effectDurationRemaining) || 0));
+    const durationNum = isPermanent ? 0 : Math.min(100, Math.max(0, Math.floor(Number(effectDurationRemaining) || 0)));
     const isGrowthEffect =
       effect_kind === "gdp_growth_base" ||
       effect_kind === "gdp_growth_per_stat" ||

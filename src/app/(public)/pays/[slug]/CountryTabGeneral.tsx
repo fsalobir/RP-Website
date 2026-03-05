@@ -23,6 +23,7 @@ import {
   EFFECT_KINDS_WITH_BRANCH_TARGET,
   EFFECT_KINDS_WITH_ROSTER_UNIT_TARGET,
   EFFECT_KINDS_WITH_COUNTRY_TARGET,
+  DURATION_DAYS_MAX,
 } from "@/lib/countryEffects";
 
 type CountryTabGeneralProps = {
@@ -455,12 +456,18 @@ export function CountryTabGeneral({
                   </div>
                   {effectDurationKind !== "permanent" && (
                   <div>
-                    <label className="mb-1 block text-sm text-[var(--foreground-muted)]">Nombre</label>
+                    <label className="mb-1 block text-sm text-[var(--foreground-muted)]">Nombre (max {DURATION_DAYS_MAX} jours)</label>
                     <input
                       type="number"
                       min={1}
+                      max={DURATION_DAYS_MAX}
                       value={effectDurationRemaining}
-                      onChange={(e) => setEffectDurationRemaining(e.target.value)}
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        const n = Number(v);
+                        if (v === "" || (!Number.isNaN(n) && n >= 1 && n <= DURATION_DAYS_MAX)) setEffectDurationRemaining(v);
+                        else if (!Number.isNaN(n) && n > DURATION_DAYS_MAX) setEffectDurationRemaining(String(DURATION_DAYS_MAX));
+                      }}
                       className="w-20 rounded border bg-[var(--background)] px-2 py-1.5 text-sm font-mono text-[var(--foreground)]"
                       style={{ borderColor: "var(--border)" }}
                     />

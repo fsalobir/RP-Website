@@ -117,30 +117,81 @@ export async function deleteTemplate(id: string): Promise<{ error?: string }> {
   return {};
 }
 
-/** Retourne une phrase de titre et une de description tirées au hasard pour l’aperçu (même logique que discord-dispatch). */
+/** Retourne une phrase de titre et une de description tirées au hasard pour l’aperçu, le up_kind et le dice_result (pour cohérence up_summary en échec). */
 export async function getPreviewSnippets(dispatch_type_id: string): Promise<{
   error?: string;
   titlePhrase: string | null;
   descriptionPhrase: string | null;
+  up_kind: string | null;
+  dice_result: "success" | "failure" | null;
 }> {
   const { supabase, error: authError } = await ensureAdmin();
-  if (authError || !supabase) return { error: authError ?? "Non autorisé.", titlePhrase: null, descriptionPhrase: null };
+  if (authError || !supabase)
+    return { error: authError ?? "Non autorisé.", titlePhrase: null, descriptionPhrase: null, up_kind: null, dice_result: null };
 
   const { data: dispatchType, error: typeErr } = await supabase
     .from("discord_dispatch_types")
     .select("state_action_type_id, outcome")
     .eq("id", dispatch_type_id)
     .single();
-  if (typeErr || !dispatchType) return { titlePhrase: null, descriptionPhrase: null };
+  if (typeErr || !dispatchType) return { titlePhrase: null, descriptionPhrase: null, up_kind: null, dice_result: null };
 
   const stateActionTypeId = (dispatchType as { state_action_type_id?: string | null }).state_action_type_id ?? null;
   const outcome = (dispatchType as { outcome?: string | null }).outcome ?? null;
-  if (!outcome) return { titlePhrase: null, descriptionPhrase: null };
+  if (!outcome) return { titlePhrase: null, descriptionPhrase: null, up_kind: null, dice_result: null };
 
   const diceResult =
     outcome === "accepted"
       ? (["success", "failure"] as const)[Math.floor(Math.random() * 2)]
       : null;
+
+  if (stateActionTypeId) {
+    // Pools avec up_kind (ex. demande_up) : un seul up_kind pour tout l’aperçu (titre + description)
+    let qTitle = supabase
+      .from("discord_dispatch_snippet_pools")
+      .select("phrases, up_kind")
+      .eq("state_action_type_id", stateActionTypeId)
+      .eq("outcome", outcome)
+      .eq("slot", "title");
+    if (diceResult) qTitle = qTitle.eq("dice_result", diceResult);
+    else qTitle = qTitle.is("dice_result", null);
+    const { data: titleRows } = await qTitle.limit(100);
+    const titleList = (titleRows ?? []) as { phrases?: unknown; up_kind?: string | null }[];
+    if (titleList.length > 0) {
+      const chosen = titleList[Math.floor(Math.random() * titleList.length)];
+      const phrases = chosen?.phrases;
+      const upKind = chosen?.up_kind ?? null;
+      if (Array.isArray(phrases) && phrases.length > 0) {
+        const idx = Math.floor(Math.random() * phrases.length);
+        const titlePhrase = typeof phrases[idx] === "string" ? (phrases[idx] as string) : null;
+        if (titlePhrase != null) {
+          let qDesc = supabase
+            .from("discord_dispatch_snippet_pools")
+            .select("phrases")
+            .eq("state_action_type_id", stateActionTypeId)
+            .eq("outcome", outcome)
+            .eq("slot", "description");
+          if (diceResult) qDesc = qDesc.eq("dice_result", diceResult);
+          else qDesc = qDesc.is("dice_result", null);
+          if (upKind != null) qDesc = qDesc.eq("up_kind", upKind);
+          else qDesc = qDesc.is("up_kind", null);
+          const { data: descRow } = await qDesc.maybeSingle();
+          const descPhrases = (descRow as { phrases?: unknown } | null)?.phrases;
+          let descriptionPhrase: string | null = null;
+          if (Array.isArray(descPhrases) && descPhrases.length > 0) {
+            const dIdx = Math.floor(Math.random() * descPhrases.length);
+            descriptionPhrase = typeof descPhrases[dIdx] === "string" ? (descPhrases[dIdx] as string) : null;
+          }
+          return {
+            titlePhrase,
+            descriptionPhrase: descriptionPhrase ?? null,
+            up_kind: upKind,
+            dice_result: diceResult,
+          };
+        }
+      }
+    }
+  }
 
   const tryLoad = async (
     typeId: string | null,
@@ -164,9 +215,8 @@ export async function getPreviewSnippets(dispatch_type_id: string): Promise<{
 
   let titlePhrase = await tryLoad(stateActionTypeId, "title");
   if (!titlePhrase && stateActionTypeId) titlePhrase = await tryLoad(null, "title");
-
   let descriptionPhrase = await tryLoad(stateActionTypeId, "description");
   if (!descriptionPhrase && stateActionTypeId) descriptionPhrase = await tryLoad(null, "description");
 
-  return { titlePhrase, descriptionPhrase };
+  return { titlePhrase, descriptionPhrase, up_kind: null, dice_result: diceResult };
 }

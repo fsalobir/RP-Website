@@ -16,7 +16,7 @@
  */
 
 import { BUDGET_MINISTRY_KEYS, BUDGET_MINISTRY_LABELS } from "@/lib/ruleParameters";
-import type { CountryEffect } from "@/types/database";
+import type { AdminEffectAdded, CountryEffect } from "@/types/database";
 
 /** Clés des stats société (pour dropdown et effect_target). */
 export const STAT_KEYS = ["militarism", "industry", "science", "stability"] as const;
@@ -371,6 +371,80 @@ export function formatEffectValue(effectKind: string | null | undefined, value: 
   if (kind.startsWith("influence_modifier_")) return `${(value * 100 - 100).toFixed(0)} %`;
   if (kind === "relation_delta") return `${Number(value) >= 0 ? "+" : ""}${Number(value)}`;
   return String(value);
+}
+
+/** Limite max pour le nombre de jours des effets durables (formulaires + serveur). */
+export const DURATION_DAYS_MAX = 100;
+
+/** Normalise admin_effect_added (objet unique ou tableau) en tableau. Rétrocompat ancien format. */
+export function normalizeAdminEffectsAdded(raw: unknown): AdminEffectAdded[] {
+  if (raw == null) return [];
+  if (Array.isArray(raw)) {
+    return raw.filter(
+      (e): e is AdminEffectAdded =>
+        e != null && typeof e === "object" && typeof (e as Record<string, unknown>).name === "string" && typeof (e as Record<string, unknown>).effect_kind === "string"
+    ) as AdminEffectAdded[];
+  }
+  if (typeof raw === "object" && typeof (raw as Record<string, unknown>).name === "string" && typeof (raw as Record<string, unknown>).effect_kind === "string") {
+    return [raw as AdminEffectAdded];
+  }
+  return [];
+}
+
+export type FormatAdminEffectLabelLookups = {
+  rosterUnits?: { id: string; name_fr: string }[];
+  countries?: { id: string; name: string }[];
+};
+
+/** Libellé lisible pour un effet admin (demandes, Discord). Ex. "One Shot : Up Tech (Lance Roquette Multiple : +100 pts/jour)" */
+export function formatAdminEffectLabel(
+  effect: Pick<AdminEffectAdded, "name" | "effect_kind" | "effect_target" | "value" | "application">,
+  lookups?: FormatAdminEffectLabelLookups
+): string {
+  const kind = effect.effect_kind;
+  const valueStr = formatEffectValue(kind, Number(effect.value));
+  let targetLabel = "";
+  if (effect.effect_target) {
+    if (EFFECT_KINDS_WITH_STAT_TARGET.has(kind)) targetLabel = STAT_LABELS[effect.effect_target as StatKey] ?? effect.effect_target;
+    else if (EFFECT_KINDS_WITH_BUDGET_TARGET.has(kind))
+      targetLabel = getBudgetMinistryOptions().find((o) => o.key === effect.effect_target)?.label ?? effect.effect_target;
+    else if (EFFECT_KINDS_WITH_BRANCH_TARGET.has(kind)) targetLabel = MILITARY_BRANCH_EFFECT_LABELS[effect.effect_target] ?? effect.effect_target;
+    else if (EFFECT_KINDS_WITH_ROSTER_UNIT_TARGET.has(kind))
+      targetLabel = lookups?.rosterUnits?.find((u) => u.id === effect.effect_target)?.name_fr ?? effect.effect_target;
+    else if (EFFECT_KINDS_WITH_COUNTRY_TARGET.has(kind)) targetLabel = lookups?.countries?.find((c) => c.id === effect.effect_target)?.name ?? effect.effect_target;
+  }
+  const part = targetLabel ? `${targetLabel} : ${valueStr}` : valueStr;
+  const applicationLabel = effect.application === "immediate" ? "One Shot" : "Effet durable";
+  return `${applicationLabel} : ${effect.name} (${part})`;
+}
+
+/**
+ * Version courte (brève) pour Discord, surtout utile pour les demandes d'up.
+ * Exemples : "Militarisme +1", "Véhicule Anti-Aérien // Nombre +1", "Drone MALE // Technologie +100 pts/jour".
+ */
+export function formatAdminEffectShortForDiscord(
+  effect: Pick<AdminEffectAdded, "effect_kind" | "effect_target" | "value">,
+  lookups?: FormatAdminEffectLabelLookups
+): string {
+  const kind = effect.effect_kind;
+  const value = Number(effect.value);
+  const signed = (n: number) => (n >= 0 ? `+${n}` : String(n));
+
+  if (kind === "stat_delta" && effect.effect_target) {
+    const statLabel = STAT_LABELS[effect.effect_target as StatKey] ?? effect.effect_target;
+    return `${statLabel} ${signed(Math.round(value))}`;
+  }
+
+  if ((kind === "military_unit_extra" || kind === "military_unit_tech_rate") && effect.effect_target) {
+    const unitLabel = lookups?.rosterUnits?.find((u) => u.id === effect.effect_target)?.name_fr ?? effect.effect_target;
+    if (kind === "military_unit_extra") return `${unitLabel} // Nombre ${signed(Math.round(value))}`;
+    return `${unitLabel} // Technologie ${signed(Math.round(value))} pts/jour`;
+  }
+
+  // Fallback : rester neutre, sans inventer une thématique.
+  const valueStr = formatEffectValue(kind, value);
+  if (effect.effect_target) return `${effect.effect_target} : ${valueStr}`;
+  return valueStr;
 }
 
 /** True si l’effet doit s’afficher en vert (bonus). Minimum forcé = toujours rouge (dépense forcée). */
