@@ -39,8 +39,8 @@ export async function updateRequestEffect(
     adminEffectsAdded == null || adminEffectsAdded.length === 0
       ? null
       : adminEffectsAdded.map((e) => {
-          const base = {
-            ...(e as unknown as Record<string, unknown>),
+          const base: AdminEffectAdded = {
+            ...(e as AdminEffectAdded),
             application: (e as AdminEffectAdded).application ?? "duration",
           };
           if (typeof base.value === "number" && !Number.isFinite(base.value)) {
