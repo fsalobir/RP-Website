@@ -98,6 +98,7 @@ export function CountriesTable({
   showModifierButton = false,
   showAiStatusColumn = false,
   updateAiStatusAction,
+  countryIdsWithPlayer = [],
 }: {
   rows: Row[];
   /** Affiche une colonne « Modifier » (lien vers /admin/pays/[id]) pour les listes admin. */
@@ -106,7 +107,10 @@ export function CountriesTable({
   showAiStatusColumn?: boolean;
   /** Action serveur pour mettre à jour le statut IA (requis si showAiStatusColumn). */
   updateAiStatusAction?: (countryId: string, aiStatus: string | null) => Promise<{ error?: string }>;
+  /** IDs des pays joués par un joueur : affiche « Joué » et désactive le changement de statut IA. */
+  countryIdsWithPlayer?: string[];
 }) {
+  const playedSet = useMemo(() => new Set(countryIdsWithPlayer), [countryIdsWithPlayer]);
   const [sortKey, setSortKey] = useState<SortKey>("name");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
   const [pendingId, setPendingId] = useState<string | null>(null);
@@ -243,26 +247,32 @@ export function CountriesTable({
               <StatCell current={c.stability} previous={prev?.stability} />
               {showAiStatusColumn && (
                 <td className="p-3">
-                  <select
-                    value={c.ai_status ?? ""}
-                    onChange={(e) => {
-                      const v = e.target.value;
-                      const aiStatus = v === "major" || v === "minor" ? v : null;
-                      if (updateAiStatusAction) {
-                        setPendingId(c.id);
-                        startTransition(() => {
-                          updateAiStatusAction(c.id, aiStatus).finally(() => setPendingId(null));
-                        });
-                      }
-                    }}
-                    disabled={isPending && pendingId === c.id}
-                    className="rounded border bg-[var(--background-elevated)] px-2 py-1 text-sm text-[var(--foreground)]"
-                    style={{ borderColor: "var(--border)" }}
-                  >
-                    <option value="">—</option>
-                    <option value="major">Majeur</option>
-                    <option value="minor">Mineur</option>
-                  </select>
+                  {playedSet.has(c.id) ? (
+                    <span className="text-sm text-[var(--foreground-muted)]" title="Pays assigné à un joueur">
+                      Joué
+                    </span>
+                  ) : (
+                    <select
+                      value={c.ai_status ?? ""}
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        const aiStatus = v === "major" || v === "minor" ? v : null;
+                        if (updateAiStatusAction) {
+                          setPendingId(c.id);
+                          startTransition(() => {
+                            updateAiStatusAction(c.id, aiStatus).finally(() => setPendingId(null));
+                          });
+                        }
+                      }}
+                      disabled={isPending && pendingId === c.id}
+                      className="rounded border bg-[var(--background-elevated)] px-2 py-1 text-sm text-[var(--foreground)]"
+                      style={{ borderColor: "var(--border)" }}
+                    >
+                      <option value="">—</option>
+                      <option value="major">Majeur</option>
+                      <option value="minor">Mineur</option>
+                    </select>
+                  )}
                 </td>
               )}
               {showModifierButton && (

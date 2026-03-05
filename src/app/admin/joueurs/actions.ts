@@ -47,7 +47,10 @@ export async function createPlayer(formData: FormData) {
   );
   if (insertError) return { error: insertError.message };
 
+  await admin.from("countries").update({ ai_status: null, updated_at: new Date().toISOString() }).eq("id", country_id);
+
   revalidatePath("/admin/joueurs");
+  revalidatePath("/admin/pays");
   return { error: null, existingAssigned: !!createError };
 }
 
@@ -64,7 +67,13 @@ export async function assignPlayer(user_id: string, country_id: string) {
     .eq("user_id", user_id);
   if (error) return { error: error.message };
 
+  await supabase
+    .from("countries")
+    .update({ ai_status: null, updated_at: new Date().toISOString() })
+    .eq("id", country_id);
+
   revalidatePath("/admin/joueurs");
+  revalidatePath("/admin/pays");
   return { error: null };
 }
 

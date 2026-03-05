@@ -12,15 +12,21 @@ function normId(id: string | null | undefined): string {
 
 export default async function AdminPaysListPage() {
   const supabase = await createClient();
-  const { data: countries } = await supabase
-    .from("countries")
-    .select("id, name, slug, flag_url, regime, population, gdp, militarism, industry, science, stability, ai_status")
-    .order("name");
-
-  const { data: historyRows, error: historyError } = await supabase
-    .from("country_history")
-    .select("country_id, date, population, gdp, militarism, industry, science, stability")
-    .order("date", { ascending: false });
+  const [
+    { data: countries },
+    { data: countryPlayers },
+    { data: historyRows, error: historyError },
+  ] = await Promise.all([
+    supabase
+      .from("countries")
+      .select("id, name, slug, flag_url, regime, population, gdp, militarism, industry, science, stability, ai_status")
+      .order("name"),
+    supabase.from("country_players").select("country_id"),
+    supabase
+      .from("country_history")
+      .select("country_id, date, population, gdp, militarism, industry, science, stability")
+      .order("date", { ascending: false }),
+  ]);
 
   const latestByCountry = new Map<string, NonNullable<typeof historyRows>[number]>();
   if (historyRows?.length && !historyError) {
@@ -37,6 +43,8 @@ export default async function AdminPaysListPage() {
       country: c,
       prev: latestByCountry.get(normId(c.id)) ?? null,
     })) ?? [];
+
+  const countryIdsWithPlayer = (countryPlayers ?? []).map((p) => (p as { country_id: string }).country_id);
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-10">
@@ -77,7 +85,7 @@ export default async function AdminPaysListPage() {
           </Link>
         </div>
       ) : (
-        <CountriesTable rows={rows} showModifierButton showAiStatusColumn updateAiStatusAction={updateCountryAiStatus} />
+        <CountriesTable rows={rows} showModifierButton showAiStatusColumn updateAiStatusAction={updateCountryAiStatus} countryIdsWithPlayer={countryIdsWithPlayer} />
       )}
     </div>
   );

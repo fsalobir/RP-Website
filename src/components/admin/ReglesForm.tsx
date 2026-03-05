@@ -2,7 +2,7 @@
 
 import { useState, useMemo } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { revalidateCountryPageGlobals } from "@/app/admin/regles/actions";
+import { revalidateCountryPageGlobals, computeMapRegionNeighbors, getVoisinagesByCountry, type VoisinageEntry } from "@/app/admin/regles/actions";
 import type { RuleParameter } from "@/types/database";
 import {
   getRuleLabel,
@@ -32,6 +32,125 @@ import {
   formatEffectValue,
 } from "@/lib/countryEffects";
 import { MatriceDiplomatiqueForm } from "@/app/admin/matrice-diplomatique/MatriceDiplomatiqueForm";
+
+function RecalculerVoisinagesButton() {
+  const [loading, setLoading] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+  const [voisinagesOpen, setVoisinagesOpen] = useState(false);
+  const [voisinagesData, setVoisinagesData] = useState<VoisinageEntry[] | null>(null);
+  const [voisinagesLoading, setVoisinagesLoading] = useState(false);
+  const [voisinagesError, setVoisinagesError] = useState<string | null>(null);
+
+  async function handleRecalcul() {
+    setLoading(true);
+    setMessage(null);
+    const result = await computeMapRegionNeighbors();
+    setLoading(false);
+    if (result.error) setMessage(result.error);
+    else setMessage("Voisinages recalculés.");
+  }
+
+  async function handleVoirVoisinages() {
+    setVoisinagesOpen(true);
+    setVoisinagesData(null);
+    setVoisinagesError(null);
+    setVoisinagesLoading(true);
+    const result = await getVoisinagesByCountry();
+    setVoisinagesLoading(false);
+    if (result.error) setVoisinagesError(result.error);
+    else setVoisinagesData(result.data ?? []);
+  }
+
+  return (
+    <div className="mt-2 flex flex-wrap items-center gap-2">
+      <button
+        type="button"
+        onClick={handleRecalcul}
+        disabled={loading}
+        className="rounded border px-2 py-1 text-xs disabled:opacity-50"
+        style={{ borderColor: "var(--border)" }}
+      >
+        {loading ? "Calcul…" : "Recalculer les voisinages"}
+      </button>
+      <button
+        type="button"
+        onClick={handleVoirVoisinages}
+        disabled={voisinagesLoading}
+        className="rounded border px-2 py-1 text-xs disabled:opacity-50"
+        style={{ borderColor: "var(--border)" }}
+      >
+        {voisinagesLoading ? "Chargement…" : "Voir les voisinages"}
+      </button>
+      {message && (
+        <span className={`text-xs ${message.startsWith("Voisinages") ? "text-[var(--accent)]" : "text-red-500"}`}>
+          {message}
+        </span>
+      )}
+      {voisinagesOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+          onClick={() => setVoisinagesOpen(false)}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="voisinages-title"
+        >
+          <div
+            className="max-h-[85vh] w-full max-w-2xl overflow-hidden rounded-lg border shadow-lg"
+            style={{ background: "var(--background-panel)", borderColor: "var(--border)" }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between border-b px-4 py-3" style={{ borderColor: "var(--border)" }}>
+              <h3 id="voisinages-title" className="text-sm font-semibold text-[var(--foreground)]">
+                Voisinages par pays (debug)
+              </h3>
+              <button
+                type="button"
+                onClick={() => setVoisinagesOpen(false)}
+                className="rounded p-1 text-[var(--foreground-muted)] hover:bg-[var(--background-elevated)]"
+                aria-label="Fermer"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="max-h-[70vh] overflow-y-auto p-4">
+              {voisinagesError && (
+                <p className="text-sm text-red-500">{voisinagesError}</p>
+              )}
+              {voisinagesData && voisinagesData.length === 0 && (
+                <p className="text-sm text-[var(--foreground-muted)]">
+                  Aucun pays avec région assignée, ou table map_region_neighbors vide. Recalculez les voisinages après avoir assigné des régions aux pays.
+                </p>
+              )}
+              {voisinagesData && voisinagesData.length > 0 && (
+                <ul className="space-y-3">
+                  {voisinagesData.map((entry) => (
+                    <li
+                      key={entry.country_id}
+                      className="rounded border py-2 px-3"
+                      style={{ borderColor: "var(--border-muted)" }}
+                    >
+                      <span className="text-sm font-medium text-[var(--foreground)]">{entry.country_name}</span>
+                      <span className="ml-1 text-xs text-[var(--foreground-muted)]">
+                        ({entry.neighbors.length} voisin{entry.neighbors.length !== 1 ? "s" : ""})
+                      </span>
+                      {entry.neighbors.length > 0 ? (
+                        <p className="mt-1 text-xs text-[var(--foreground-muted)]">
+                          {entry.neighbors.map((n) => n.name).join(", ")}
+                        </p>
+                      ) : (
+                        <p className="mt-1 text-xs italic text-[var(--foreground-muted)]">Aucun voisin (région sans limite commune)</p>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 function CollapsibleBlock({
   title,
@@ -104,16 +223,32 @@ type GlobalGrowthEffectEntry = {
 
 type CountryForMatrice = { id: string; name: string; slug: string };
 
+type AiEventsConfigValue = {
+  interval_hours?: number;
+  count_major_per_run?: number;
+  count_minor_per_run?: number;
+  allowed_action_type_keys_major?: string[];
+  allowed_action_type_keys_minor?: string[];
+  target_major_ai?: boolean;
+  target_minor_ai?: boolean;
+  target_players?: boolean;
+  distance_modes?: string[];
+  auto_accept_by_action_type?: Record<string, boolean>;
+  trigger_amplitude_minutes?: number;
+};
+
 export function ReglesForm({
   rules,
   rosterUnits = [],
   countries: countriesForMatrice,
   relationMap: relationMapForMatrice,
+  stateActionTypesForAi = [],
 }: {
   rules: RuleParameter[];
   rosterUnits?: { id: string; name_fr: string }[];
   countries?: CountryForMatrice[];
   relationMap?: Record<string, number>;
+  stateActionTypesForAi?: { id: string; key: string; label_fr: string }[];
 }) {
   const [items, setItems] = useState(rules);
   const [saving, setSaving] = useState(false);
@@ -323,6 +458,54 @@ export function ReglesForm({
 
   const aiMajorEffectsRule = useMemo(() => items.find((r) => r.key === aiMajorEffectsKey), [items]);
   const aiMinorEffectsRule = useMemo(() => items.find((r) => r.key === aiMinorEffectsKey), [items]);
+  const aiEventsConfigKey = "ai_events_config";
+  const aiEventsConfigRule = useMemo(() => items.find((r) => r.key === aiEventsConfigKey), [items]);
+  function getAiEventsConfig(): AiEventsConfigValue {
+    if (!aiEventsConfigRule?.value || typeof aiEventsConfigRule.value !== "object") {
+      return {
+        interval_hours: 1,
+        count_major_per_run: 0,
+        count_minor_per_run: 0,
+        allowed_action_type_keys_major: [],
+        allowed_action_type_keys_minor: [],
+        target_major_ai: false,
+        target_minor_ai: false,
+        target_players: false,
+        distance_modes: ["world"],
+        auto_accept_by_action_type: {},
+        trigger_amplitude_minutes: 0,
+      };
+    }
+    return aiEventsConfigRule.value as AiEventsConfigValue;
+  }
+  function updateAiEventsConfig(patch: Partial<AiEventsConfigValue>) {
+    if (!aiEventsConfigRule) return;
+    updateValue(aiEventsConfigRule.id, { ...getAiEventsConfig(), ...patch });
+  }
+  function toggleAllowedActionKey(which: "major" | "minor", key: string) {
+    const cfg = getAiEventsConfig();
+    const arr = which === "major" ? [...(cfg.allowed_action_type_keys_major ?? [])] : [...(cfg.allowed_action_type_keys_minor ?? [])];
+    const idx = arr.indexOf(key);
+    if (idx >= 0) arr.splice(idx, 1);
+    else arr.push(key);
+    if (which === "major") updateAiEventsConfig({ allowed_action_type_keys_major: arr });
+    else updateAiEventsConfig({ allowed_action_type_keys_minor: arr });
+  }
+  function toggleDistanceMode(mode: string) {
+    const cfg = getAiEventsConfig();
+    const modes = [...(cfg.distance_modes ?? [])];
+    const idx = modes.indexOf(mode);
+    if (idx >= 0) modes.splice(idx, 1);
+    else modes.push(mode);
+    if (modes.length === 0) modes.push("world");
+    updateAiEventsConfig({ distance_modes: modes });
+  }
+  function toggleAutoAccept(key: string) {
+    const cfg = getAiEventsConfig();
+    const auto = { ...(cfg.auto_accept_by_action_type ?? {}) };
+    auto[key] = !auto[key];
+    updateAiEventsConfig({ auto_accept_by_action_type: auto });
+  }
   function getAiEffects(rule: RuleParameter | undefined): GlobalGrowthEffectEntry[] {
     if (!rule?.value || !Array.isArray(rule.value)) return [];
     return (rule.value as GlobalGrowthEffectEntry[]).filter(
@@ -1342,6 +1525,152 @@ export function ReglesForm({
                 <p className="text-xs text-[var(--foreground-muted)]">
                   Effets appliqués aux pays sans joueur selon leur statut IA (Majeur / Mineur) défini dans la liste admin des pays.
                 </p>
+
+                {aiEventsConfigRule && (
+                  <div className="rounded border p-4 space-y-4" style={{ borderColor: "var(--border-muted)", background: "var(--background-elevated)" }}>
+                    <h4 className="text-sm font-semibold text-[var(--foreground)]">Paramètres Events IA</h4>
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <div>
+                        <label className="mb-1 block text-xs text-[var(--foreground-muted)]">Intervalle (heures)</label>
+                        <input
+                          type="number"
+                          min={1}
+                          value={getAiEventsConfig().interval_hours ?? 1}
+                          onChange={(e) => updateAiEventsConfig({ interval_hours: Math.max(1, Number(e.target.value) || 1) })}
+                          className="w-full rounded border px-2 py-1.5 text-sm"
+                          style={{ borderColor: "var(--border)" }}
+                        />
+                      </div>
+                      <div>
+                        <label className="mb-1 block text-xs text-[var(--foreground-muted)]">Actions IA majeures par passage</label>
+                        <input
+                          type="number"
+                          min={0}
+                          value={getAiEventsConfig().count_major_per_run ?? 0}
+                          onChange={(e) => updateAiEventsConfig({ count_major_per_run: Math.max(0, Number(e.target.value) || 0) })}
+                          className="w-full rounded border px-2 py-1.5 text-sm"
+                          style={{ borderColor: "var(--border)" }}
+                        />
+                      </div>
+                      <div>
+                        <label className="mb-1 block text-xs text-[var(--foreground-muted)]">Actions IA mineures par passage</label>
+                        <input
+                          type="number"
+                          min={0}
+                          value={getAiEventsConfig().count_minor_per_run ?? 0}
+                          onChange={(e) => updateAiEventsConfig({ count_minor_per_run: Math.max(0, Number(e.target.value) || 0) })}
+                          className="w-full rounded border px-2 py-1.5 text-sm"
+                          style={{ borderColor: "var(--border)" }}
+                        />
+                      </div>
+                      <div>
+                        <label className="mb-1 block text-xs text-[var(--foreground-muted)]">Amplitude temps (minutes)</label>
+                        <input
+                          type="number"
+                          min={0}
+                          value={getAiEventsConfig().trigger_amplitude_minutes ?? 0}
+                          onChange={(e) => updateAiEventsConfig({ trigger_amplitude_minutes: Math.max(0, Number(e.target.value) || 0) })}
+                          className="w-full rounded border px-2 py-1.5 text-sm"
+                          style={{ borderColor: "var(--border)" }}
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <span className="mb-1 block text-xs text-[var(--foreground-muted)]">Actions autorisées (IA majeures)</span>
+                      <div className="flex flex-wrap gap-2">
+                        {stateActionTypesForAi.map((t) => (
+                          <label key={t.id} className="flex items-center gap-1.5 text-sm">
+                            <input
+                              type="checkbox"
+                              checked={(getAiEventsConfig().allowed_action_type_keys_major ?? []).includes(t.key)}
+                              onChange={() => toggleAllowedActionKey("major", t.key)}
+                            />
+                            {t.label_fr}
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                    <div>
+                      <span className="mb-1 block text-xs text-[var(--foreground-muted)]">Actions autorisées (IA mineures)</span>
+                      <div className="flex flex-wrap gap-2">
+                        {stateActionTypesForAi.map((t) => (
+                          <label key={t.id} className="flex items-center gap-1.5 text-sm">
+                            <input
+                              type="checkbox"
+                              checked={(getAiEventsConfig().allowed_action_type_keys_minor ?? []).includes(t.key)}
+                              onChange={() => toggleAllowedActionKey("minor", t.key)}
+                            />
+                            {t.label_fr}
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                    <div>
+                      <span className="mb-1 block text-xs text-[var(--foreground-muted)]">Cibles autorisées</span>
+                      <div className="flex flex-wrap gap-4">
+                        <label className="flex items-center gap-1.5 text-sm">
+                          <input
+                            type="checkbox"
+                            checked={getAiEventsConfig().target_major_ai ?? false}
+                            onChange={(e) => updateAiEventsConfig({ target_major_ai: e.target.checked })}
+                          />
+                          IA majeures
+                        </label>
+                        <label className="flex items-center gap-1.5 text-sm">
+                          <input
+                            type="checkbox"
+                            checked={getAiEventsConfig().target_minor_ai ?? false}
+                            onChange={(e) => updateAiEventsConfig({ target_minor_ai: e.target.checked })}
+                          />
+                          IA mineures
+                        </label>
+                        <label className="flex items-center gap-1.5 text-sm">
+                          <input
+                            type="checkbox"
+                            checked={getAiEventsConfig().target_players ?? false}
+                            onChange={(e) => updateAiEventsConfig({ target_players: e.target.checked })}
+                          />
+                          Joueurs
+                        </label>
+                      </div>
+                    </div>
+                    <div>
+                      <span className="mb-1 block text-xs text-[var(--foreground-muted)]">Distance</span>
+                      <div className="flex flex-wrap gap-4">
+                        {["neighbors", "continent", "world"].map((mode) => (
+                          <label key={mode} className="flex items-center gap-1.5 text-sm">
+                            <input
+                              type="checkbox"
+                              checked={(getAiEventsConfig().distance_modes ?? []).includes(mode)}
+                              onChange={() => toggleDistanceMode(mode)}
+                            />
+                            {mode === "neighbors" ? "Voisins" : mode === "continent" ? "Continent" : "Monde entier"}
+                          </label>
+                        ))}
+                      </div>
+                      <p className="mt-1 text-xs text-[var(--foreground-muted)]">
+                        Pour « Voisins », les régions limitrophes sont lues depuis la table map_region_neighbors. Après modification des formes de la carte, recalculer les voisinages.
+                      </p>
+                      <RecalculerVoisinagesButton />
+                    </div>
+                    <div>
+                      <span className="mb-1 block text-xs text-[var(--foreground-muted)]">Accepter automatiquement (par type)</span>
+                      <div className="flex flex-wrap gap-2">
+                        {stateActionTypesForAi.map((t) => (
+                          <label key={t.id} className="flex items-center gap-1.5 text-sm">
+                            <input
+                              type="checkbox"
+                              checked={getAiEventsConfig().auto_accept_by_action_type?.[t.key] ?? false}
+                              onChange={() => toggleAutoAccept(t.key)}
+                            />
+                            {t.label_fr}
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 <div className="space-y-3">
                   <div>
                     <h4 className="mb-2 text-sm font-medium text-[var(--foreground)]">IA majeure</h4>

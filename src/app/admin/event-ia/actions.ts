@@ -1,22 +1,15 @@
 "use server";
 
-import type { SupabaseClient } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
 import { getRelation } from "@/lib/relations";
 import { computeHardPowerByCountry } from "@/lib/hardPower";
 import { computeInfluenceForAll } from "@/lib/influence";
-import type { AdminEffectAdded, DiceResults, DiceRollResult, MilitaryBranch } from "@/types/database";
+import type { DiceResults, DiceRollResult, MilitaryBranch } from "@/types/database";
 import {
   applyStateActionConsequences,
-  applyImmediateEffect,
-  clampEffectValue,
   ACTION_KEYS_REQUIRING_IMPACT_ROLL,
 } from "@/lib/stateActionConsequences";
-import {
-  normalizeAdminEffectsAdded,
-  DURATION_DAYS_MAX,
-} from "@/lib/countryEffects";
 
 async function ensureAdmin() {
   const supabase = await createClient();
@@ -25,46 +18,6 @@ async function ensureAdmin() {
   const { data: adminRow } = await supabase.from("admins").select("id").eq("user_id", user.id).single();
   if (!adminRow) return { supabase: null, error: "Réservé aux admins." };
   return { supabase, error: null, userId: user.id };
-}
-
-export async function updateRequestEffect(
-  requestId: string,
-  adminEffectsAdded: AdminEffectAdded[] | null
-): Promise<{ error?: string }> {
-  const { supabase, error: authError } = await ensureAdmin();
-  if (authError || !supabase) return { error: authError ?? "Non autorisé." };
-
-  const EFFECT_VALUE_MIN = -1000;
-  const EFFECT_VALUE_MAX = 1000;
-
-  const payload =
-    adminEffectsAdded == null || adminEffectsAdded.length === 0
-      ? null
-      : adminEffectsAdded.map((e) => {
-          const base: AdminEffectAdded = {
-            ...(e as AdminEffectAdded),
-            application: (e as AdminEffectAdded).application ?? "duration",
-          };
-          if (typeof base.value === "number" && !Number.isFinite(base.value)) {
-            base.value = 0;
-          } else if (typeof base.value === "number") {
-            base.value = Math.max(EFFECT_VALUE_MIN, Math.min(EFFECT_VALUE_MAX, base.value));
-          }
-          if (typeof base.duration_remaining === "number" && base.application !== "immediate") {
-            base.duration_remaining = Math.max(0, Math.min(DURATION_DAYS_MAX, Math.round(base.duration_remaining)));
-          }
-          return base;
-        });
-
-  const { error } = await supabase
-    .from("state_action_requests")
-    .update({ admin_effect_added: payload })
-    .eq("id", requestId)
-    .in("status", ["pending"]);
-
-  if (error) return { error: error.message };
-  revalidatePath("/admin/demandes");
-  return {};
 }
 
 const STAT_RANGES: Record<string, { min: number; max: number }> = {
@@ -92,8 +45,8 @@ function computeStatModifierBreakdown(
   return { total, byStat };
 }
 
-export async function rollD100(
-  requestId: string,
+export async function rollD100ForAiEvent(
+  eventId: string,
   rollType: "success" | "impact",
   adminModifiers: Array<{ label: string; value: number }> = []
 ): Promise<{ error?: string; result?: DiceRollResult }> {
@@ -101,13 +54,13 @@ export async function rollD100(
   if (authError || !supabase) return { error: authError ?? "Non autorisé." };
 
   const { data: req, error: fetchErr } = await supabase
-    .from("state_action_requests")
+    .from("ai_event_requests")
     .select("id, country_id, action_type_id, status, payload, dice_results")
-    .eq("id", requestId)
+    .eq("id", eventId)
     .single();
 
-  if (fetchErr || !req) return { error: fetchErr?.message ?? "Requête introuvable." };
-  if (req.status !== "pending") return { error: "Cette demande a déjà été traitée." };
+  if (fetchErr || !req) return { error: fetchErr?.message ?? "Événement introuvable." };
+  if (req.status !== "pending") return { error: "Cet événement a déjà été traité." };
 
   const { data: actionType } = req.action_type_id
     ? await supabase.from("state_action_types").select("key, params_schema").eq("id", req.action_type_id).maybeSingle()
@@ -156,12 +109,12 @@ export async function rollD100(
       if (ratio <= ratioMin) {
         influenceModifier = -malusMax;
       } else if (ratio < ratioEquilibre) {
-        influenceModifier = Math.round(-malusMax * (ratioEquilibre - ratio) / (ratioEquilibre - ratioMin));
+        influenceModifier = Math.round((-malusMax * (ratioEquilibre - ratio)) / (ratioEquilibre - ratioMin));
       } else if (ratio > ratioEquilibre) {
         if (ratio >= ratioMax) {
           influenceModifier = bonusMax;
         } else {
-          influenceModifier = Math.round(bonusMax * (ratio - ratioEquilibre) / (ratioMax - ratioEquilibre));
+          influenceModifier = Math.round((bonusMax * (ratio - ratioEquilibre)) / (ratioMax - ratioEquilibre));
         }
       }
     }
@@ -188,8 +141,7 @@ export async function rollD100(
     .eq("key", "stats_dice_modifier_ranges")
     .maybeSingle();
 
-  const fullRangesConfig =
-    (rangesRow?.value as Record<string, { min: number; max: number }>) ?? {};
+  const fullRangesConfig = (rangesRow?.value as Record<string, { min: number; max: number }>) ?? {};
   const rangesConfig: Record<string, { min: number; max: number }> = {};
   for (const key of Object.keys(fullRangesConfig)) {
     if (statBonusEnabled(key)) rangesConfig[key] = fullRangesConfig[key];
@@ -219,76 +171,82 @@ export async function rollD100(
   };
 
   const { error: upErr } = await supabase
-    .from("state_action_requests")
+    .from("ai_event_requests")
     .update({ dice_results: next as unknown as Record<string, unknown> })
-    .eq("id", requestId);
+    .eq("id", eventId);
 
   if (upErr) return { error: upErr.message };
-  revalidatePath("/admin/demandes");
+  revalidatePath("/admin/event-ia");
   return { result };
 }
 
-export async function removeImpactRoll(requestId: string): Promise<{ error?: string }> {
-  const { supabase, error: authError } = await ensureAdmin();
-  if (authError || !supabase) return { error: authError ?? "Non autorisé." };
-
-  const { data: req, error: fetchErr } = await supabase
-    .from("state_action_requests")
-    .select("id, status, dice_results")
-    .eq("id", requestId)
-    .single();
-
-  if (fetchErr || !req) return { error: fetchErr?.message ?? "Requête introuvable." };
-  if (req.status !== "pending") return { error: "Cette demande a déjà été traitée." };
-
-  const existing = (req.dice_results ?? {}) as DiceResults;
-  const { impact_roll: _removed, ...rest } = existing;
-  const next: DiceResults = rest as DiceResults;
-
-  const { error: upErr } = await supabase
-    .from("state_action_requests")
-    .update({ dice_results: next as unknown as Record<string, unknown> })
-    .eq("id", requestId);
-
-  if (upErr) return { error: upErr.message };
-  revalidatePath("/admin/demandes");
-  return {};
-}
-
-export async function acceptRequest(requestId: string): Promise<{ error?: string }> {
+export async function acceptAiEvent(
+  eventId: string,
+  options?: { scheduleWithAmplitude?: boolean }
+): Promise<{ error?: string }> {
   const { supabase, error: authError, userId } = await ensureAdmin();
   if (authError || !supabase) return { error: authError ?? "Non autorisé." };
 
-  const { data: req, error: fetchErr } = await supabase
-    .from("state_action_requests")
+  const { data: ev, error: fetchErr } = await supabase
+    .from("ai_event_requests")
     .select("id, country_id, action_type_id, status, payload, admin_effect_added, dice_results")
-    .eq("id", requestId)
+    .eq("id", eventId)
     .single();
 
-  if (fetchErr || !req) return { error: fetchErr?.message ?? "Requête introuvable." };
-  if (req.status !== "pending") return { error: "Cette demande a déjà été traitée." };
+  if (fetchErr || !ev) return { error: fetchErr?.message ?? "Événement introuvable." };
+  if (ev.status !== "pending") return { error: "Cet événement a déjà été traité." };
 
   const { data: actionType } = await supabase
     .from("state_action_types")
     .select("key, label_fr, params_schema")
-    .eq("id", req.action_type_id)
+    .eq("id", ev.action_type_id)
     .single();
 
   const key = (actionType?.key ?? "") as string;
   const actionLabel = (actionType as { label_fr?: string } | null)?.label_fr ?? key;
-  const payload = (req.payload ?? {}) as Record<string, string>;
+  const payload = (ev.payload ?? {}) as Record<string, string>;
   const params = (actionType?.params_schema ?? {}) as Record<string, number>;
-  const diceResults = req.dice_results as DiceResults | null;
+  const diceResults = ev.dice_results as DiceResults | null;
 
   if (ACTION_KEYS_REQUIRING_IMPACT_ROLL.has(key) && !diceResults?.impact_roll) {
-    return { error: "Un jet d'impact doit être réalisé avant d'accepter cette demande." };
+    return { error: "Un jet d'impact doit être réalisé avant d'accepter cet événement." };
+  }
+
+  const scheduleWithAmplitude = options?.scheduleWithAmplitude ?? false;
+
+  if (scheduleWithAmplitude) {
+    const { data: configRow } = await supabase
+      .from("rule_parameters")
+      .select("value")
+      .eq("key", "ai_events_config")
+      .maybeSingle();
+    const config = (configRow?.value ?? {}) as { trigger_amplitude_minutes?: number };
+    const amplitude = Math.max(0, Number(config.trigger_amplitude_minutes) || 0);
+    const delayMinutes = Math.random() * amplitude;
+    const scheduledAt = new Date(Date.now() + delayMinutes * 60 * 1000).toISOString();
+
+    const { error: upErr } = await supabase
+      .from("ai_event_requests")
+      .update({
+        status: "accepted",
+        resolved_at: new Date().toISOString(),
+        resolved_by: userId,
+        scheduled_trigger_at: scheduledAt,
+      })
+      .eq("id", eventId);
+
+    if (upErr) return { error: upErr.message };
+    revalidatePath("/admin/event-ia");
+    revalidatePath("/pays");
+    revalidatePath("/");
+    return {};
   }
 
   const applyErr = await applyStateActionConsequences({
     supabase,
-    countryId: req.country_id,
+    countryId: ev.country_id,
     payload,
-    adminEffectAdded: req.admin_effect_added,
+    adminEffectAdded: ev.admin_effect_added,
     diceResults,
     actionKey: key,
     actionLabel,
@@ -297,81 +255,75 @@ export async function acceptRequest(requestId: string): Promise<{ error?: string
   if (applyErr.error) return applyErr;
 
   const { error: upErr } = await supabase
-    .from("state_action_requests")
+    .from("ai_event_requests")
     .update({
       status: "accepted",
       resolved_at: new Date().toISOString(),
       resolved_by: userId,
+      consequences_applied_at: new Date().toISOString(),
     })
-    .eq("id", requestId);
+    .eq("id", eventId);
 
   if (upErr) return { error: upErr.message };
 
-  revalidatePath("/admin/demandes");
+  revalidatePath("/admin/event-ia");
   revalidatePath("/pays");
   revalidatePath("/");
   return {};
 }
 
-export async function refuseRequest(
-  requestId: string,
-  refundActions: boolean,
-  refusalMessage: string
-): Promise<{ error?: string }> {
+export async function refuseAiEvent(eventId: string, refusalMessage: string): Promise<{ error?: string }> {
   const { supabase, error: authError, userId } = await ensureAdmin();
   if (authError || !supabase) return { error: authError ?? "Non autorisé." };
 
-  const { data: req, error: fetchErr } = await supabase
-    .from("state_action_requests")
-    .select("id, country_id, action_type_id, status, payload")
-    .eq("id", requestId)
+  const { data: ev, error: fetchErr } = await supabase
+    .from("ai_event_requests")
+    .select("id, status")
+    .eq("id", eventId)
     .single();
 
-  if (fetchErr || !req) return { error: fetchErr?.message ?? "Requête introuvable." };
-  if (req.status !== "pending") return { error: "Cette demande a déjà été traitée." };
-
-  const refPayload = (req.payload ?? {}) as Record<string, string>;
-  const refTargetCountryId = typeof refPayload.target_country_id === "string" ? refPayload.target_country_id : undefined;
-
-  if (refundActions) {
-    const { data: actionType } = await supabase
-      .from("state_action_types")
-      .select("cost")
-      .eq("id", req.action_type_id)
-      .single();
-    const cost = actionType?.cost ?? 1;
-    const { data: balanceRow } = await supabase
-      .from("country_state_action_balance")
-      .select("balance")
-      .eq("country_id", req.country_id)
-      .single();
-    const current = balanceRow?.balance ?? 0;
-    await supabase
-      .from("country_state_action_balance")
-      .upsert(
-        {
-          country_id: req.country_id,
-          balance: current + cost,
-          updated_at: new Date().toISOString(),
-        },
-        { onConflict: "country_id" }
-      );
-  }
+  if (fetchErr || !ev) return { error: fetchErr?.message ?? "Événement introuvable." };
+  if (ev.status !== "pending") return { error: "Cet événement a déjà été traité." };
 
   const { error: upErr } = await supabase
-    .from("state_action_requests")
+    .from("ai_event_requests")
     .update({
       status: "refused",
-      refund_actions: refundActions,
       refusal_message: refusalMessage.trim() || null,
       resolved_at: new Date().toISOString(),
       resolved_by: userId,
     })
-    .eq("id", requestId);
+    .eq("id", eventId);
 
   if (upErr) return { error: upErr.message };
 
-  revalidatePath("/admin/demandes");
-  revalidatePath("/pays");
+  revalidatePath("/admin/event-ia");
+  return {};
+}
+
+export async function createAiEvent(payload: {
+  actionTypeId: string;
+  countryId: string;
+  targetCountryId: string;
+}): Promise<{ error?: string }> {
+  const { supabase, error: authError } = await ensureAdmin();
+  if (authError || !supabase) return { error: authError ?? "Non autorisé." };
+
+  const { actionTypeId, countryId, targetCountryId } = payload;
+  if (targetCountryId === countryId) {
+    return { error: "La cible ne doit pas être l'émetteur." };
+  }
+
+  const { error: insErr } = await supabase.from("ai_event_requests").insert({
+    country_id: countryId,
+    action_type_id: actionTypeId,
+    status: "pending",
+    payload: { target_country_id: targetCountryId },
+    source: "manual",
+  });
+
+  if (insErr) return { error: insErr.message };
+
+  revalidatePath("/admin/event-ia");
   return {};
 }

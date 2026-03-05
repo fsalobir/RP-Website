@@ -309,7 +309,7 @@ export async function randomizeNationalBudgets(): Promise<{ error?: string; upda
   return { updated };
 }
 
-/** Met à jour le statut IA d'un pays (admin uniquement). */
+/** Met à jour le statut IA d'un pays (admin uniquement). Refusé si le pays est joué par un joueur. */
 export async function updateCountryAiStatus(
   countryId: string,
   aiStatus: string | null
@@ -317,6 +317,13 @@ export async function updateCountryAiStatus(
   const supabase = await createClient();
   const { data: adminRow } = await supabase.from("admins").select("id").limit(1).single();
   if (!adminRow) return { error: "Non autorisé." };
+
+  const { data: playerRow } = await supabase
+    .from("country_players")
+    .select("country_id")
+    .eq("country_id", countryId)
+    .maybeSingle();
+  if (playerRow) return { error: "Ce pays est joué par un joueur, le statut IA ne peut pas être modifié." };
 
   const value = aiStatus === "major" || aiStatus === "minor" ? aiStatus : null;
   const { error } = await supabase
