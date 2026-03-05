@@ -300,7 +300,10 @@ function RequestDetail({
     const t = s.trim();
     if (t === "" || t === "-") return 0;
     const n = parseInt(t, 10);
-    return Number.isNaN(n) ? 0 : n;
+    if (Number.isNaN(n)) return 0;
+    if (n > 100) return 100;
+    if (n < -100) return -100;
+    return n;
   }
 
   const payload = request.payload ?? {};
@@ -441,13 +444,17 @@ function RequestDetail({
       {request.state_action_types?.key === "demande_up" && payload.message != null && (
         <dl className="mt-4 border-t pt-4 text-sm" style={{ borderColor: "var(--border)" }}>
           <dt className="text-[var(--foreground-muted)]">Message</dt>
-          <dd className="text-[var(--foreground)]">{String(payload.message)}</dd>
+          <dd className="text-[var(--foreground)] whitespace-pre-wrap break-words [overflow-wrap:anywhere]">
+            {String(payload.message)}
+          </dd>
         </dl>
       )}
       {request.refusal_message && (
         <dl className="mt-4 border-t pt-4 text-sm" style={{ borderColor: "var(--border)" }}>
           <dt className="text-[var(--foreground-muted)]">Message de refus</dt>
-          <dd className="text-[var(--foreground)]">{request.refusal_message}</dd>
+          <dd className="text-[var(--foreground)] whitespace-pre-wrap break-words [overflow-wrap:anywhere]">
+            {request.refusal_message}
+          </dd>
         </dl>
       )}
 
@@ -479,8 +486,9 @@ function RequestDetail({
             <input
               type="text"
               value={adminModifierLabel}
-              onChange={(e) => setAdminModifierLabel(e.target.value)}
+              onChange={(e) => setAdminModifierLabel(e.target.value.slice(0, 50))}
               placeholder="Ponctuel"
+              maxLength={50}
               className="min-w-[8rem] rounded border bg-[var(--background)] px-2 py-1 text-sm"
               style={{ borderColor: "var(--border)" }}
             />
@@ -594,7 +602,7 @@ function RequestDetail({
               const e = request.admin_effect_added as unknown as AdminEffectAdded;
               const isUp = e.application === "immediate";
               return (
-                <p className="mb-2 text-sm text-[var(--foreground-muted)]">
+                <p className="mb-2 text-sm text-[var(--foreground-muted)] whitespace-pre-wrap break-words [overflow-wrap:anywhere]">
                   {isUp ? "UP immédiat" : "Effet durable"} : {String(e.name)} ({String(e.effect_kind)})
                 </p>
               );
@@ -634,12 +642,26 @@ function RequestDetail({
               />
             )}
           </div>
+          {(request.state_action_types?.key === "prise_influence" ||
+            request.state_action_types?.key === "ouverture_diplomatique" ||
+            request.state_action_types?.key === "insulte_diplomatique") &&
+            !request.dice_results?.impact_roll && (
+              <p className="text-sm text-amber-500 dark:text-amber-400">
+                Lancez le jet d&apos;impact pour pouvoir accepter cette demande.
+              </p>
+            )}
           <div className="flex flex-wrap items-start gap-6">
             <div className="flex flex-wrap items-center gap-2">
               <button
                 type="button"
                 onClick={handleAccept}
-                disabled={loading !== null}
+                disabled={
+                  loading !== null ||
+                  ((request.state_action_types?.key === "prise_influence" ||
+                    request.state_action_types?.key === "ouverture_diplomatique" ||
+                    request.state_action_types?.key === "insulte_diplomatique") &&
+                    !request.dice_results?.impact_roll)
+                }
                 className="rounded bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
               >
                 {loading === "accept" ? "En cours…" : "Accepter"}
@@ -667,9 +689,10 @@ function RequestDetail({
                 type="text"
                 placeholder="Message explicatif (refus)"
                 value={refusalMsg}
-                onChange={(e) => setRefusalMsg(e.target.value)}
+                onChange={(e) => setRefusalMsg(e.target.value.slice(0, 500))}
                 className="min-w-[200px] max-w-md flex-1 rounded border bg-[var(--background)] px-3 py-1.5 text-sm"
                 style={{ borderColor: "var(--border)" }}
+                maxLength={500}
               />
             </div>
           </div>
@@ -737,7 +760,8 @@ function EffectFormInline({
           type="text"
           placeholder="Nom de l'effet"
           value={effect.name}
-          onChange={(e) => onChange({ ...effect, name: e.target.value })}
+          onChange={(e) => onChange({ ...effect, name: e.target.value.slice(0, 500) })}
+          maxLength={500}
           className="min-w-[180px] rounded border bg-[var(--background)] px-3 py-1.5 text-sm"
           style={{ borderColor: "var(--border)" }}
         />

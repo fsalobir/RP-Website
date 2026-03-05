@@ -198,10 +198,14 @@ export function CountryTabStateActions({
                           );
                         })()}
                         {r.refusal_message && (
-                          <p className="mt-2 text-red-400">Refus : {r.refusal_message}</p>
+                          <p className="mt-2 text-red-400 break-words [overflow-wrap:anywhere]">
+                            Refus : {r.refusal_message}
+                          </p>
                         )}
                         {!r.dice_results?.success_roll && !r.dice_results?.impact_roll && (
-                          <pre className="whitespace-pre-wrap">{JSON.stringify(r.payload, null, 2)}</pre>
+                          <pre className="whitespace-pre-wrap break-words [overflow-wrap:anywhere]">
+                            {JSON.stringify(r.payload, null, 2)}
+                          </pre>
                         )}
                       </td>
                     </tr>
@@ -297,12 +301,16 @@ export function CountryTabStateActions({
                     <label className="mb-1 block text-sm text-[var(--foreground-muted)]">Message (stat, unité, tech, etc.)</label>
                     <textarea
                       value={message}
-                      onChange={(e) => setMessage(e.target.value)}
+                      onChange={(e) => setMessage(e.target.value.slice(0, 500))}
                       rows={3}
                       placeholder="Décrivez votre demande d'up…"
+                      maxLength={500}
                       className="w-full rounded border bg-[var(--background)] px-3 py-2 text-sm"
                       style={{ borderColor: "var(--border)" }}
                     />
+                    <p className="mt-1 text-xs text-[var(--foreground-muted)]">
+                      {message.length}/500 caractères
+                    </p>
                   </div>
                 )}
                 {error && (

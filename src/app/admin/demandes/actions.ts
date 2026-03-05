@@ -357,6 +357,13 @@ export async function acceptRequest(requestId: string): Promise<{ error?: string
   const params = (actionType?.params_schema ?? {}) as Record<string, number>;
   const diceResults = req.dice_results as DiceResults | null;
 
+  if (
+    (key === "prise_influence" || key === "ouverture_diplomatique" || key === "insulte_diplomatique") &&
+    !diceResults?.impact_roll
+  ) {
+    return { error: "Un jet d'impact doit être réalisé avant d'accepter cette demande." };
+  }
+
   const targetCountryId = typeof payload.target_country_id === "string" ? payload.target_country_id : undefined;
   const diceSuccess = diceResults?.success_roll
     ? diceResults.success_roll.total >= 50
