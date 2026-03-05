@@ -793,13 +793,112 @@ export function CountryTabs({
         {canEditCountry && !generalEditMode && (
           <button
             type="button"
-            onClick={() => setGeneralEditMode(true)}
+            onClick={() => {
+              setGeneralName(country.name ?? "");
+              setGeneralRegime(country.regime ?? "");
+              setGeneralFlagUrl(country.flag_url ?? "");
+              setGeneralFlagFile(null);
+              setGeneralFlagPreview(null);
+              setGeneralError(null);
+              setGeneralEditMode(true);
+            }}
             className="shrink-0 rounded border border-[var(--border)] bg-[var(--background-elevated)] px-3 py-1.5 text-sm text-[var(--foreground-muted)] hover:text-[var(--accent)] hover:border-[var(--accent-muted)]"
           >
             Éditer
           </button>
         )}
       </div>
+
+      {canEditCountry && generalEditMode && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="general-edit-modal-title"
+        >
+          <div
+            className="mx-4 max-w-lg rounded-lg border p-6 shadow-lg"
+            style={{ background: "var(--background-panel)", borderColor: "var(--border)" }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 id="general-edit-modal-title" className="mb-4 text-lg font-semibold text-[var(--foreground)]">
+              Changer informations nationales
+            </h2>
+            {generalError && <p className="mb-2 text-sm text-[var(--danger)]">{generalError}</p>}
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div>
+                <label className="mb-1 block text-xs text-[var(--foreground-muted)]">Nom du pays</label>
+                <input
+                  type="text"
+                  value={generalName}
+                  onChange={(e) => setGeneralName(e.target.value)}
+                  className="w-full rounded border bg-[var(--background)] px-2 py-1.5 text-sm text-[var(--foreground)]"
+                  style={{ borderColor: "var(--border)" }}
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs text-[var(--foreground-muted)]">Régime</label>
+                <input
+                  type="text"
+                  value={generalRegime}
+                  onChange={(e) => setGeneralRegime(e.target.value)}
+                  className="w-full rounded border bg-[var(--background)] px-2 py-1.5 text-sm text-[var(--foreground)]"
+                  style={{ borderColor: "var(--border)" }}
+                />
+              </div>
+              <div className="sm:col-span-2">
+                <label className="mb-1 block text-xs text-[var(--foreground-muted)]">Drapeau</label>
+                <input
+                  type="file"
+                  accept="image/jpeg,image/png,image/gif,image/webp"
+                  onChange={(e) => setGeneralFlagFile(e.target.files?.[0] ?? null)}
+                  className="hidden"
+                  id="country-flag-upload-modal"
+                />
+                <label
+                  htmlFor="country-flag-upload-modal"
+                  className="inline-block cursor-pointer rounded border border-[var(--border)] bg-[var(--accent)] px-3 py-1.5 text-sm font-medium text-[#0f1419] hover:opacity-90"
+                >
+                  Upload
+                </label>
+                {generalFlagFile && (
+                  <span className="ml-2 text-xs text-[var(--foreground-muted)]">{generalFlagFile.name}</span>
+                )}
+                {(generalFlagPreview || generalFlagUrl) && (
+                  <div className="mt-1.5">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={generalFlagPreview ?? generalFlagUrl ?? ""}
+                      alt=""
+                      className="h-10 w-14 rounded border object-cover"
+                      style={{ borderColor: "var(--border)" }}
+                    />
+                  </div>
+                )}
+              </div>
+            </div>
+            <div className="mt-4 flex gap-2">
+              <button
+                type="button"
+                disabled={generalSaving}
+                onClick={handleSaveGeneral}
+                className="rounded py-2 px-4 text-sm font-medium disabled:opacity-50"
+                style={{ background: "var(--accent)", color: "#0f1419" }}
+              >
+                {generalSaving ? "Enregistrement…" : "Enregistrer"}
+              </button>
+              <button
+                type="button"
+                onClick={handleCancelGeneralEdit}
+                className="rounded border border-[var(--border)] bg-[var(--background-elevated)] py-2 px-4 text-sm text-[var(--foreground-muted)] hover:text-[var(--foreground)]"
+                style={{ borderColor: "var(--border)" }}
+              >
+                Annuler
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="tab-list mb-6" style={{ borderColor: "var(--border)" }}>
         <button
@@ -908,20 +1007,6 @@ export function CountryTabs({
           panelClass={panelClass}
           panelStyle={panelStyle}
           canEditCountry={canEditCountry}
-          generalEditMode={generalEditMode}
-          setGeneralEditMode={setGeneralEditMode}
-          generalName={generalName}
-          setGeneralName={setGeneralName}
-          generalRegime={generalRegime}
-          setGeneralRegime={setGeneralRegime}
-          generalFlagUrl={generalFlagUrl}
-          generalFlagFile={generalFlagFile}
-          setGeneralFlagFile={setGeneralFlagFile}
-          generalFlagPreview={generalFlagPreview}
-          generalError={generalError}
-          generalSaving={generalSaving}
-          onSaveGeneral={handleSaveGeneral}
-          onCancelGeneralEdit={handleCancelGeneralEdit}
           effects={effects}
           isAdmin={isAdmin}
           rosterUnitsFlat={rosterUnitsFlat}

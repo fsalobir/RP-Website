@@ -34,20 +34,6 @@ type CountryTabGeneralProps = {
   panelClass: string;
   panelStyle: React.CSSProperties;
   canEditCountry: boolean;
-  generalEditMode: boolean;
-  setGeneralEditMode: (v: boolean) => void;
-  generalName: string;
-  setGeneralName: (v: string) => void;
-  generalRegime: string;
-  setGeneralRegime: (v: string) => void;
-  generalFlagUrl: string;
-  generalFlagFile: File | null;
-  setGeneralFlagFile: (f: File | null) => void;
-  generalFlagPreview: string | null;
-  generalError: string | null;
-  generalSaving: boolean;
-  onSaveGeneral: () => Promise<void>;
-  onCancelGeneralEdit: () => void;
   effects: CountryEffect[];
   isAdmin: boolean;
   rosterUnitsFlat: { id: string; name_fr: string }[];
@@ -89,20 +75,6 @@ export function CountryTabGeneral({
   panelClass,
   panelStyle,
   canEditCountry,
-  generalEditMode,
-  setGeneralEditMode,
-  generalName,
-  setGeneralName,
-  generalRegime,
-  setGeneralRegime,
-  generalFlagUrl,
-  generalFlagFile,
-  setGeneralFlagFile,
-  generalFlagPreview,
-  generalError,
-  generalSaving,
-  onSaveGeneral,
-  onCancelGeneralEdit,
   effects,
   isAdmin,
   rosterUnitsFlat,
@@ -174,85 +146,6 @@ export function CountryTabGeneral({
             <span className="text-[var(--foreground)]">
               Terrestre {formatNumber(hardPowerByBranch.terre)} · Aérien {formatNumber(hardPowerByBranch.air)} · Naval {formatNumber(hardPowerByBranch.mer)} · Stratégique {formatNumber(hardPowerByBranch.strategique)} — Total {formatNumber(hardPowerByBranch.total)}
             </span>
-          </div>
-        )}
-
-        {canEditCountry && generalEditMode && (
-          <div className="mb-8 mt-6 rounded-lg border p-4" style={{ borderColor: "var(--border-muted)", background: "var(--background-elevated)" }}>
-            <div className="mb-3 flex items-center justify-between">
-              <h3 className="text-sm font-semibold text-[var(--foreground)]">Modifier les généralités</h3>
-              <button
-                type="button"
-                onClick={onCancelGeneralEdit}
-                className="text-xs text-[var(--foreground-muted)] hover:text-[var(--foreground)]"
-              >
-                Annuler
-              </button>
-            </div>
-            {generalError && <p className="mb-2 text-sm text-[var(--danger)]">{generalError}</p>}
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              <div>
-                <label className="mb-1 block text-xs text-[var(--foreground-muted)]">Nom du pays</label>
-                <input
-                  type="text"
-                  value={generalName}
-                  onChange={(e) => setGeneralName(e.target.value)}
-                  className="w-full rounded border bg-[var(--background)] px-2 py-1.5 text-sm text-[var(--foreground)]"
-                  style={{ borderColor: "var(--border)" }}
-                />
-              </div>
-              <div>
-                <label className="mb-1 block text-xs text-[var(--foreground-muted)]">Régime</label>
-                <input
-                  type="text"
-                  value={generalRegime}
-                  onChange={(e) => setGeneralRegime(e.target.value)}
-                  className="w-full rounded border bg-[var(--background)] px-2 py-1.5 text-sm text-[var(--foreground)]"
-                  style={{ borderColor: "var(--border)" }}
-                />
-              </div>
-              <div>
-                <label className="mb-1 block text-xs text-[var(--foreground-muted)]">Drapeau</label>
-                <input
-                  type="file"
-                  accept="image/jpeg,image/png,image/gif,image/webp"
-                  onChange={(e) => setGeneralFlagFile(e.target.files?.[0] ?? null)}
-                  className="hidden"
-                  id="country-flag-upload"
-                />
-                <label
-                  htmlFor="country-flag-upload"
-                  className="inline-block cursor-pointer rounded border border-[var(--border)] bg-[var(--accent)] px-3 py-1.5 text-sm font-medium text-[#0f1419] hover:opacity-90"
-                >
-                  Upload
-                </label>
-                {generalFlagFile && (
-                  <span className="ml-2 text-xs text-[var(--foreground-muted)]">{generalFlagFile.name}</span>
-                )}
-                {(generalFlagPreview || generalFlagUrl) && (
-                  <div className="mt-1.5">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src={generalFlagPreview ?? generalFlagUrl ?? ""}
-                      alt=""
-                      className="h-10 w-14 rounded border object-cover"
-                      style={{ borderColor: "var(--border)" }}
-                    />
-                  </div>
-                )}
-              </div>
-            </div>
-            <div className="mt-3">
-              <button
-                type="button"
-                disabled={generalSaving}
-                onClick={onSaveGeneral}
-                className="rounded py-2 px-4 text-sm font-medium disabled:opacity-50"
-                style={{ background: "var(--accent)", color: "#0f1419" }}
-              >
-                {generalSaving ? "Enregistrement…" : "Enregistrer"}
-              </button>
-            </div>
           </div>
         )}
 
