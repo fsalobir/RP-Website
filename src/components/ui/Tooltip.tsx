@@ -41,6 +41,7 @@ export function Tooltip({ content, children, side = "top" }: TooltipProps) {
       onMouseLeave={() => setOpen(false)}
       onClick={(e) => {
         e.preventDefault();
+        e.stopPropagation();
         setOpen((o) => !o);
       }}
     >
