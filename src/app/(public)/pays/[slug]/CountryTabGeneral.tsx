@@ -69,7 +69,21 @@ type CountryTabGeneralProps = {
     drift: { monarchism: number; republicanism: number; cultism: number };
     dominant: "monarchism" | "republicanism" | "cultism";
     centerDistance: number;
-    breakdown: { topFactors: Array<{ label: string; ideology: "monarchism" | "republicanism" | "cultism"; value: number }> };
+    breakdown: {
+      neighbors: { monarchism: number; republicanism: number; cultism: number };
+      effects: { monarchism: number; republicanism: number; cultism: number };
+      topFactors: Array<{ label: string; ideology: "monarchism" | "republicanism" | "cultism"; value: number }>;
+      baseDrivers: Array<{ label: string; ideology: "monarchism" | "republicanism" | "cultism"; value: number }>;
+      neighborContributors: Array<{
+        countryId: string;
+        name: string;
+        slug: string;
+        flag_url: string | null;
+        ideology: "monarchism" | "republicanism" | "cultism";
+        value: number;
+        weight: number;
+      }>;
+    };
   } | null;
   otherCountriesForRelation?: Array<{ id: string; name: string }>;
 };
@@ -115,6 +129,10 @@ export function CountryTabGeneral({
   ideologySummary = null,
   otherCountriesForRelation = [],
 }: CountryTabGeneralProps) {
+  const ideologyEffects = effects.filter(
+    (effect) => effect.effect_kind.startsWith("ideology_drift_") || effect.effect_kind.startsWith("ideology_snap_")
+  );
+
   return (
     <div className="space-y-8">
       <section className={panelClass} style={panelStyle}>
@@ -185,8 +203,125 @@ export function CountryTabGeneral({
               <span>Drift R : {Number(ideologySummary.drift.republicanism).toFixed(2)}</span>
               <span>Drift C : {Number(ideologySummary.drift.cultism).toFixed(2)}</span>
             </div>
-            <div className="mt-3 text-xs text-[var(--foreground-muted)]">
-              {ideologySummary.breakdown.topFactors.map((factor) => `${factor.label} : ${IDEOLOGY_LABELS[factor.ideology]}`).join(" · ")}
+            <div className="mt-4 space-y-3">
+              <div className="rounded border px-3 py-3" style={{ borderColor: "var(--border)" }}>
+                <div className="text-xs font-semibold uppercase tracking-wide text-[var(--foreground-muted)]">
+                  Tendance interne
+                </div>
+                <div className="mt-1 text-xs text-[var(--foreground-muted)]">
+                  Calculée à partir des stats structurelles du pays : stabilité, science, industrie et militarisme.
+                </div>
+                <div className="mt-2 flex flex-wrap gap-2 text-xs">
+                  {ideologySummary.breakdown.baseDrivers.slice(0, 5).map((driver) => (
+                    <span
+                      key={`${driver.label}-${driver.ideology}`}
+                      className="rounded border px-2 py-1 text-[var(--foreground)]"
+                      style={{ borderColor: "var(--border-muted)", background: "var(--background-panel)" }}
+                    >
+                      {driver.label} : {IDEOLOGY_LABELS[driver.ideology]} ({Number(driver.value).toFixed(2)})
+                    </span>
+                  ))}
+                </div>
+              </div>
+
+              <div className="rounded border px-3 py-3" style={{ borderColor: "var(--border)" }}>
+                <div className="text-xs font-semibold uppercase tracking-wide text-[var(--foreground-muted)]">
+                  Influences voisines
+                </div>
+                {ideologySummary.breakdown.neighborContributors.length > 0 ? (
+                  <>
+                    <div className="mt-2 space-y-2">
+                      {ideologySummary.breakdown.neighborContributors.map((neighbor) => (
+                        <div
+                          key={neighbor.countryId}
+                          className="flex items-center justify-between gap-3 rounded border px-2 py-2"
+                          style={{ borderColor: "var(--border-muted)", background: "var(--background-panel)" }}
+                        >
+                          <div className="flex min-w-0 items-center gap-2">
+                            {neighbor.flag_url ? (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img
+                                src={neighbor.flag_url}
+                                alt={neighbor.name}
+                                width={24}
+                                height={16}
+                                className="h-4 w-6 rounded object-cover"
+                              />
+                            ) : (
+                              <div className="h-4 w-6 rounded border" style={{ borderColor: "var(--border)" }} />
+                            )}
+                            <Link href={`/pays/${neighbor.slug}`} className="truncate text-[var(--accent)] hover:underline">
+                              {neighbor.name}
+                            </Link>
+                          </div>
+                          <div className="text-right text-xs text-[var(--foreground-muted)]">
+                            <div>{IDEOLOGY_LABELS[neighbor.ideology]}</div>
+                            <div className="font-mono text-[var(--foreground)]">+{Number(neighbor.value).toFixed(2)}</div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="mt-2 text-xs text-[var(--foreground-muted)]">
+                      Solde voisins :
+                      {" "}
+                      M {Number(ideologySummary.breakdown.neighbors.monarchism).toFixed(1)}
+                      {" · "}
+                      R {Number(ideologySummary.breakdown.neighbors.republicanism).toFixed(1)}
+                      {" · "}
+                      C {Number(ideologySummary.breakdown.neighbors.cultism).toFixed(1)}
+                    </div>
+                  </>
+                ) : (
+                  <div className="mt-2 text-xs text-[var(--foreground-muted)]">Aucune influence voisine détectée.</div>
+                )}
+              </div>
+
+              <div className="rounded border px-3 py-3" style={{ borderColor: "var(--border)" }}>
+                <div className="text-xs font-semibold uppercase tracking-wide text-[var(--foreground-muted)]">
+                  Effets idéologiques actifs
+                </div>
+                {ideologyEffects.length > 0 ? (
+                  <>
+                    <div className="mt-2 space-y-2 text-xs">
+                      {ideologyEffects.map((effect) => (
+                        <div
+                          key={effect.id}
+                          className="rounded border px-2 py-2 text-[var(--foreground)]"
+                          style={{ borderColor: "var(--border-muted)", background: "var(--background-panel)" }}
+                        >
+                          <div>{getEffectDescription(effect)}</div>
+                          <div className="mt-1 text-[var(--foreground-muted)]">
+                            Durée restante : {formatDurationRemaining(effect)}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="mt-2 text-xs text-[var(--foreground-muted)]">
+                      Solde effets :
+                      {" "}
+                      M {Number(ideologySummary.breakdown.effects.monarchism).toFixed(2)}
+                      {" · "}
+                      R {Number(ideologySummary.breakdown.effects.republicanism).toFixed(2)}
+                      {" · "}
+                      C {Number(ideologySummary.breakdown.effects.cultism).toFixed(2)}
+                    </div>
+                  </>
+                ) : (
+                  <div className="mt-2 text-xs text-[var(--foreground-muted)]">
+                    Aucun effet idéologique actif dans les effets du pays.
+                  </div>
+                )}
+              </div>
+
+              {ideologySummary.breakdown.topFactors.length > 0 && (
+                <div className="text-xs text-[var(--foreground-muted)]">
+                  Lecture rapide :
+                  {" "}
+                  {ideologySummary.breakdown.topFactors
+                    .map((factor) => `${factor.label} : ${IDEOLOGY_LABELS[factor.ideology]}`)
+                    .join(" · ")}
+                </div>
+              )}
             </div>
           </div>
         )}

@@ -125,6 +125,16 @@ export type IdeologyCountryResult = {
     base: IdeologyScores;
     neighbors: IdeologyScores;
     effects: IdeologyScores;
+    baseDrivers: Array<{ label: string; ideology: IdeologyId; value: number }>;
+    neighborContributors: Array<{
+      countryId: string;
+      name: string;
+      slug: string;
+      flag_url: string | null;
+      ideology: IdeologyId;
+      value: number;
+      weight: number;
+    }>;
     topFactors: Array<{ label: string; ideology: IdeologyId; value: number }>;
   };
 };
@@ -199,13 +209,33 @@ export function ideologyPointFromScores(scores: IdeologyScores): { x: number; y:
   };
 }
 
-function deriveBaseIdeology(country: IdeologyCountryInput, config: IdeologyConfig): IdeologyScores {
+function getBaseMetrics(country: IdeologyCountryInput) {
   const militarism = clamp(num(country.militarism, 0), 0, 10) / 10;
   const industry = clamp(num(country.industry, 0), 0, 10) / 10;
   const science = clamp(num(country.science, 0), 0, 10) / 10;
   const stability = (clamp(num(country.stability, 0), -3, 3) + 3) / 6;
   const instability = 1 - stability;
   const lowScience = 1 - science;
+  return { militarism, industry, science, stability, instability, lowScience };
+}
+
+function deriveBaseDrivers(country: IdeologyCountryInput, config: IdeologyConfig) {
+  const { militarism, industry, science, stability, instability, lowScience } = getBaseMetrics(country);
+  const weights = config.weights;
+  return [
+    { label: "Stabilité", ideology: "monarchism" as const, value: stability * weights.monarchism_from_stability },
+    { label: "Militarisme", ideology: "monarchism" as const, value: militarism * weights.monarchism_from_militarism },
+    { label: "Science", ideology: "republicanism" as const, value: science * weights.republicanism_from_science },
+    { label: "Stabilité", ideology: "republicanism" as const, value: stability * weights.republicanism_from_stability },
+    { label: "Industrie", ideology: "republicanism" as const, value: industry * weights.republicanism_from_industry },
+    { label: "Instabilité", ideology: "cultism" as const, value: instability * weights.cultism_from_instability },
+    { label: "Faible science", ideology: "cultism" as const, value: lowScience * weights.cultism_from_low_science },
+    { label: "Militarisme", ideology: "cultism" as const, value: militarism * weights.cultism_from_militarism },
+  ].sort((a, b) => b.value - a.value);
+}
+
+function deriveBaseIdeology(country: IdeologyCountryInput, config: IdeologyConfig): IdeologyScores {
+  const { militarism, industry, science, stability, instability, lowScience } = getBaseMetrics(country);
   const weights = config.weights;
   return normalizeIdeologyScores({
     monarchism:
@@ -321,10 +351,12 @@ export function computeWorldIdeologies(params: {
   for (const country of params.countries) {
     const prior = priorByCountry.get(country.id) ?? normalizeIdeologyScores({});
     const base = deriveBaseIdeology(country, config);
+    const baseDrivers = deriveBaseDrivers(country, config);
     const effectTotals = effectsByCountry.get(country.id) ?? { drift: createZeroScores(), snap: createZeroScores() };
     const neighbors = neighborIdsByCountry.get(country.id) ?? [];
     let neighborWeightSum = 0;
     let neighborAccum = createZeroScores();
+    const neighborContributors: IdeologyCountryResult["breakdown"]["neighborContributors"] = [];
 
     for (const neighborId of neighbors) {
       const neighbor = countriesById.get(neighborId);
@@ -337,8 +369,19 @@ export function computeWorldIdeologies(params: {
         ? 1 + ((controlRow.is_annexed ? 100 : num(controlRow.share_pct, 0)) / 100) * config.control_pull_weight
         : 1;
       const totalWeight = Math.max(0.05, relationFactor * influenceFactor * controlFactor);
+      const neighborScoresRaw = priorByCountry.get(neighborId) ?? base;
+      const weightedPull = scaleScores(neighborScoresRaw, totalWeight);
       neighborWeightSum += totalWeight;
-      neighborAccum = addScores(neighborAccum, scaleScores(priorByCountry.get(neighborId) ?? base, totalWeight));
+      neighborAccum = addScores(neighborAccum, weightedPull);
+      neighborContributors.push({
+        countryId: neighbor.id,
+        name: neighbor.name,
+        slug: neighbor.slug,
+        flag_url: neighbor.flag_url,
+        ideology: dominantIdeology(neighborScoresRaw),
+        value: Math.max(...Object.values(weightedPull)),
+        weight: totalWeight,
+      });
     }
 
     const neighborScores =
@@ -348,6 +391,7 @@ export function computeWorldIdeologies(params: {
 
     const effectsVector = scaleScores(effectTotals.drift, config.effect_pull_weight);
     const snapVector = scaleScores(effectTotals.snap, config.snap_strength);
+    const effectBreakdown = addScores(effectTotals.drift, snapVector);
     const target = normalizeIdeologyScores(
       addScores(
         addScores(scaleScores(base, config.base_pull_weight), scaleScores(neighborScores, config.neighbor_pull_weight)),
@@ -367,9 +411,13 @@ export function computeWorldIdeologies(params: {
     });
     const dominant = dominantIdeology(scores);
     const topFactors = [
-      { label: "Socle interne", ideology: dominantIdeology(base), value: Math.max(...Object.values(base)) },
-      { label: "Voisins", ideology: dominantIdeology(neighborScores), value: Math.max(...Object.values(neighborScores)) },
-      { label: "Effets actifs", ideology: dominantIdeology(addScores(effectTotals.drift, snapVector)), value: Math.max(...Object.values(addScores(effectTotals.drift, snapVector))) },
+      { label: "Tendance interne", ideology: dominantIdeology(base), value: Math.max(...Object.values(base)) },
+      ...(neighborWeightSum > 0
+        ? [{ label: "Voisins", ideology: dominantIdeology(neighborScores), value: Math.max(...Object.values(neighborScores)) }]
+        : []),
+      ...(Math.max(...Object.values(effectBreakdown)) > 0
+        ? [{ label: "Effets idéologiques", ideology: dominantIdeology(effectBreakdown), value: Math.max(...Object.values(effectBreakdown)) }]
+        : []),
     ].sort((a, b) => b.value - a.value);
 
     out.set(country.id, {
@@ -382,7 +430,9 @@ export function computeWorldIdeologies(params: {
       breakdown: {
         base,
         neighbors: neighborScores,
-        effects: addScores(effectTotals.drift, snapVector),
+        effects: effectBreakdown,
+        baseDrivers,
+        neighborContributors: neighborContributors.sort((a, b) => b.value - a.value),
         topFactors,
       },
     });

@@ -126,7 +126,21 @@ export function CountryTabs({
     drift: { monarchism: number; republicanism: number; cultism: number };
     dominant: "monarchism" | "republicanism" | "cultism";
     centerDistance: number;
-    breakdown: { topFactors: Array<{ label: string; ideology: "monarchism" | "republicanism" | "cultism"; value: number }> };
+    breakdown: {
+      neighbors: { monarchism: number; republicanism: number; cultism: number };
+      effects: { monarchism: number; republicanism: number; cultism: number };
+      topFactors: Array<{ label: string; ideology: "monarchism" | "republicanism" | "cultism"; value: number }>;
+      baseDrivers: Array<{ label: string; ideology: "monarchism" | "republicanism" | "cultism"; value: number }>;
+      neighborContributors: Array<{
+        countryId: string;
+        name: string;
+        slug: string;
+        flag_url: string | null;
+        ideology: "monarchism" | "republicanism" | "cultism";
+        value: number;
+        weight: number;
+      }>;
+    };
   } | null;
   stateActionTypes?: Array<{ id: string; key: string; label_fr: string; cost: number; params_schema: Record<string, unknown> | null }>;
   stateActionBalance?: number;
