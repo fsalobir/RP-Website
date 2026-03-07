@@ -8,7 +8,6 @@ import {
   applyStateActionConsequences,
   ACTION_KEYS_REQUIRING_IMPACT_ROLL,
 } from "@/lib/stateActionConsequences";
-import { computeAiEventDiceRoll } from "@/lib/stateActionDice";
 
 async function ensureAdmin() {
   const supabase = await createClient();
