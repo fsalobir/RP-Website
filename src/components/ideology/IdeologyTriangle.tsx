@@ -26,6 +26,26 @@ type IdeologyEntry = {
     republicanism: number;
     cultism: number;
   };
+  neighbors: {
+    monarchism: number;
+    republicanism: number;
+    cultism: number;
+  };
+  effects: {
+    monarchism: number;
+    republicanism: number;
+    cultism: number;
+  };
+  baseDrivers: Array<{ label: string; ideology: "monarchism" | "republicanism" | "cultism"; value: number }>;
+  neighborContributors: Array<{
+    countryId: string;
+    name: string;
+    slug: string;
+    flag_url: string | null;
+    ideology: "monarchism" | "republicanism" | "cultism";
+    value: number;
+    weight: number;
+  }>;
   topFactors: Array<{ label: string; ideology: "monarchism" | "republicanism" | "cultism"; value: number }>;
 };
 
@@ -250,7 +270,86 @@ export function IdeologyTriangle({ entries }: { entries: IdeologyEntry[] }) {
               </div>
 
               <div className="rounded border p-3" style={{ borderColor: "var(--border-muted)" }}>
-                <div className="mb-2 text-sm font-medium text-[var(--foreground)]">Principales causes</div>
+                <div className="mb-2 text-sm font-medium text-[var(--foreground)]">Tendance interne</div>
+                <div className="text-xs text-[var(--foreground-muted)]">
+                  Calculée à partir des stats structurelles du pays.
+                </div>
+                <div className="mt-2 flex flex-wrap gap-2 text-xs">
+                  {selected.baseDrivers.slice(0, 4).map((driver) => (
+                    <span
+                      key={`${selected.id}-${driver.label}-${driver.ideology}`}
+                      className="rounded border px-2 py-1 text-[var(--foreground)]"
+                      style={{ borderColor: "var(--border-muted)", background: "var(--background-elevated)" }}
+                    >
+                      {driver.label} : {IDEOLOGY_LABELS[driver.ideology]} ({formatScore(driver.value)})
+                    </span>
+                  ))}
+                </div>
+              </div>
+
+              <div className="rounded border p-3" style={{ borderColor: "var(--border-muted)" }}>
+                <div className="mb-2 text-sm font-medium text-[var(--foreground)]">Influences voisines</div>
+                {selected.neighborContributors.length > 0 ? (
+                  <>
+                    <div className="space-y-2">
+                      {selected.neighborContributors.map((neighbor) => (
+                        <div
+                          key={`${selected.id}-${neighbor.countryId}`}
+                          className="flex items-center justify-between gap-3 rounded border px-2 py-2"
+                          style={{ borderColor: "var(--border-muted)", background: "var(--background-elevated)" }}
+                        >
+                          <div className="flex min-w-0 items-center gap-2">
+                            {neighbor.flag_url ? (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img
+                                src={neighbor.flag_url}
+                                alt={neighbor.name}
+                                width={24}
+                                height={16}
+                                className="h-4 w-6 rounded object-cover"
+                              />
+                            ) : (
+                              <div className="h-4 w-6 rounded border" style={{ borderColor: "var(--border)" }} />
+                            )}
+                            <Link href={`/pays/${neighbor.slug}`} className="truncate text-sm text-[var(--accent)] hover:underline">
+                              {neighbor.name}
+                            </Link>
+                          </div>
+                          <div className="text-right text-xs text-[var(--foreground-muted)]">
+                            <div>{IDEOLOGY_LABELS[neighbor.ideology]}</div>
+                            <div className="font-mono text-[var(--foreground)]">+{formatScore(neighbor.value)}</div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="mt-2 text-xs text-[var(--foreground-muted)]">
+                      Solde voisins :
+                      {" "}
+                      M {formatScore(selected.neighbors.monarchism)}
+                      {" · "}
+                      R {formatScore(selected.neighbors.republicanism)}
+                      {" · "}
+                      C {formatScore(selected.neighbors.cultism)}
+                    </div>
+                  </>
+                ) : (
+                  <div className="text-sm text-[var(--foreground-muted)]">Aucune influence voisine détectée.</div>
+                )}
+              </div>
+
+              {Math.max(selected.effects.monarchism, selected.effects.republicanism, selected.effects.cultism) > 0 && (
+                <div className="rounded border p-3" style={{ borderColor: "var(--border-muted)" }}>
+                  <div className="mb-2 text-sm font-medium text-[var(--foreground)]">Effets idéologiques</div>
+                  <div className="space-y-1 text-sm text-[var(--foreground-muted)]">
+                    <div>Monarchisme : {formatScore(selected.effects.monarchism)}</div>
+                    <div>Républicanisme : {formatScore(selected.effects.republicanism)}</div>
+                    <div>Cultisme : {formatScore(selected.effects.cultism)}</div>
+                  </div>
+                </div>
+              )}
+
+              <div className="rounded border p-3" style={{ borderColor: "var(--border-muted)" }}>
+                <div className="mb-2 text-sm font-medium text-[var(--foreground)]">Lecture rapide</div>
                 <div className="space-y-1 text-sm text-[var(--foreground-muted)]">
                   {selected.topFactors.map((factor) => (
                     <div key={`${selected.id}-${factor.label}`}>

@@ -26,6 +26,10 @@ export default async function IdeologiePage() {
         point: ideology.point,
         scores: ideology.scores,
         drift: ideology.drift,
+        neighbors: ideology.breakdown.neighbors,
+        effects: ideology.breakdown.effects,
+        baseDrivers: ideology.breakdown.baseDrivers,
+        neighborContributors: ideology.breakdown.neighborContributors,
         topFactors: ideology.breakdown.topFactors,
       };
     })
