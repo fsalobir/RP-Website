@@ -7,6 +7,7 @@ import {
   refuseAiEvent,
   createAiEvent,
   rollD100ForAiEvent,
+  simulateAiEventsCron,
 } from "@/app/admin/event-ia/actions";
 import { ACTION_KEYS_REQUIRING_IMPACT_ROLL } from "@/lib/actionKeys";
 import { normalizeAdminEffectsAdded, formatAdminEffectLabel } from "@/lib/countryEffects";
@@ -103,6 +104,7 @@ export function EventIaList({
   const [createEmitterId, setCreateEmitterId] = useState<string>(aiCountries[0]?.id ?? "");
   const [createTargetId, setCreateTargetId] = useState<string>(allCountries[0]?.id ?? "");
   const [createLoading, setCreateLoading] = useState(false);
+  const [simulateLoading, setSimulateLoading] = useState(false);
 
   const selected = events.find((e) => e.id === selectedId);
 
@@ -141,6 +143,15 @@ export function EventIaList({
     }
   }
 
+  async function handleSimulateCron() {
+    setSimulateLoading(true);
+    setError(null);
+    const res = await simulateAiEventsCron();
+    setSimulateLoading(false);
+    if (res.error) setError(res.error);
+    else router.refresh();
+  }
+
   return (
     <div className="space-y-6">
       <section className={panelClass} style={panelStyle}>
@@ -148,14 +159,25 @@ export function EventIaList({
           <h2 className="text-lg font-semibold text-[var(--foreground)]">
             Événements IA (du plus récent au plus ancien)
           </h2>
-          <button
-            type="button"
-            onClick={() => setShowCreateModal(true)}
-            className="rounded border px-3 py-1.5 text-sm font-medium hover:bg-[var(--background)]"
-            style={{ borderColor: "var(--border)" }}
-          >
-            Générer un event IA
-          </button>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={handleSimulateCron}
+              disabled={simulateLoading}
+              className="rounded border px-3 py-1.5 text-sm font-medium hover:bg-[var(--background)] disabled:opacity-50"
+              style={{ borderColor: "var(--border)" }}
+            >
+              {simulateLoading ? "Passage en cours…" : "Simuler passage IA"}
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowCreateModal(true)}
+              className="rounded border px-3 py-1.5 text-sm font-medium hover:bg-[var(--background)]"
+              style={{ borderColor: "var(--border)" }}
+            >
+              Générer un event IA
+            </button>
+          </div>
         </div>
         {error && (
           <p className="mb-4 rounded border border-red-500/50 bg-red-500/10 px-3 py-2 text-sm text-red-400">

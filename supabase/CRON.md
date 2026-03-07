@@ -19,18 +19,23 @@ La fonction `public.run_daily_country_update()` est maintenant créée. Elle fai
 
 ## 2. Faire tourner cette logique
 
-### Option A – Planifier avec pg_cron (si disponible sur ton plan)
+**Organisation recommandée** : le passage de jour tourne **automatiquement côté Supabase** grâce à **pg_cron** : tous les jours à 6h00 UTC, le job appelle `run_daily_country_update()` et fait avancer la date du monde + snapshot + mise à jour des pays.
 
-1. **Database** → **Extensions** → active **pg_cron** si ce n’est pas déjà fait.
-2. Dans **SQL Editor**, exécute :
-   ```sql
-   SELECT cron.schedule(
-     'daily-country-update',
-     '0 6 * * *',
-     $$SELECT public.run_daily_country_update()$$
-   );
-   ```
-   → La fonction s’exécutera **tous les jours à 6h00 UTC**.
+### Jobs créés par la migration 089
+
+La migration **`089_schedule_pg_cron_jobs.sql`** crée les jobs pg_cron au moment du `supabase db push` :
+
+- **`daily-country-update`** : tous les jours à 6h00 UTC (`0 6 * * *`) → `run_daily_country_update()`
+- **`ai-events-generation`** : toutes les heures (`0 * * * *`) → `run_ai_events_cron()` (voir section Events IA)
+
+**Prérequis** : activer l’extension **pg_cron** dans Supabase (**Database** → **Extensions**) **avant** d’exécuter les migrations (ou avant le premier `db push` incluant la 089). Sinon la migration 089 échouera ; activer pg_cron puis relancer le push.
+
+**Vérifier que les jobs existent** (Supabase → SQL Editor) :
+```sql
+SELECT jobid, jobname, schedule, command FROM cron.job WHERE jobname IN ('daily-country-update', 'ai-events-generation');
+```
+- Aucune ligne : soit pg_cron n’est pas activé, soit la migration 089 n’a pas encore été appliquée.
+- Jobs présents : le passage de jour et la génération events IA sont planifiés.
 
 ### Option B – Exécution manuelle
 
@@ -41,9 +46,15 @@ Quand tu veux lancer un passage (test ou sans cron) :
   SELECT public.run_daily_country_update();
   ```
 
-### Option C – Cron externe (sans pg_cron)
+### Option C – Cron externe (repli si pg_cron indisponible)
 
-Si ton plan n’a pas pg_cron : créer une **Edge Function** Supabase qui appelle cette logique (avec la clé service_role), la déployer, puis utiliser un service (ex. [cron-job.org](https://cron-job.org)) pour appeler l’URL de la fonction une fois par jour. Voir la doc Supabase sur les Edge Functions.
+Si ton plan Supabase n’a pas pg_cron, une **route API** permet de déclencher le passage de jour depuis l’extérieur :
+
+- **URL** : `GET /api/cron/daily-country-update`
+- **Protection** : en-tête `x-cron-secret` ou paramètre `?secret=...` égal à **`CRON_SECRET`**.
+- Planifier avec [cron-job.org](https://cron-job.org) ou équivalent : appeler cette URL **une fois par jour** (ex. 6h00 UTC).
+
+**En attendant** (ou pour un passage ponctuel) : **Admin → Pays** → bouton **« Passer jour »**.
 
 ---
 
@@ -68,26 +79,32 @@ L’**application des conséquences** (relations, influence, effets, Discord) ne
 
 **Réservation** : le champ `processing_started_at` (migration 088) évite le double traitement si deux appels se chevauchent : une ligne n’est traitée que si l’UPDATE de réservation retourne une ligne. Après 10 min sans `consequences_applied_at`, une ligne reste re-sélectionnable (retry).
 
-### Option A – Génération par pg_cron
+### Route « Génération » (recommandée si pas de pg_cron)
 
-1. Activer **pg_cron** (Database → Extensions).
-2. Planifier la génération (ex. toutes les heures) :
-   ```sql
-   SELECT cron.schedule(
-     'ai-events-generation',
-     '0 * * * *',
-     $$SELECT public.run_ai_events_cron()$$
-   );
-   ```
-3. Séparément, faire appeler **`GET /api/cron/process-ai-events`** par un cron externe (toutes les 5–10 min) avec `CRON_SECRET`.
+- **URL** : `GET /api/cron/generate-ai-events` (même protection `CRON_SECRET` que Process due).
+- **Rôle** : appelle la RPC `run_ai_events_cron()` en base. La fonction décide selon `interval_hours` et `ai_events_last_run` si elle génère des events (elle peut ne rien insérer si l’intervalle n’est pas écoulé).
+- **À planifier** : même cron externe que Process due, ou un tick dédié (ex. toutes les heures). Ordre conseillé : 1) `generate-ai-events`, 2) `process-ai-events`.
 
-### Option B – Tout côté application (repli)
+### Génération par pg_cron (Supabase)
 
-Sans pg_cron : un **seul** cron externe (ex. toutes les 15 min) qui :
-1. Appelle `GET /api/cron/process-ai-events` (Process due),
-2. Puis appelle une route ou RPC qui exécute `run_ai_events_cron()` (génération), ou réimplémente la génération en TypeScript.
+Si **pg_cron** est activé, le job **`ai-events-generation`** est créé par la **migration 089** (toutes les heures). La fonction `run_ai_events_cron()` décide selon `interval_hours` et `ai_events_last_run` si elle génère des events. Séparément, faire appeler **`GET /api/cron/process-ai-events`** par un cron externe (toutes les 5–10 min) avec `CRON_SECRET` pour appliquer les conséquences.
 
-Documenter la procédure retenue dans ce fichier ou en commentaire de la route.
+### Option B – Tout côté application (sans pg_cron)
+
+Un **seul** cron externe (ex. toutes les 15 min ou 1 h) qui appelle dans l’ordre :
+1. **`GET /api/cron/generate-ai-events`** (génération, avec `CRON_SECRET`),
+2. **`GET /api/cron/process-ai-events`** (Process due, même secret).
+
+### Pourquoi aucun event n’est généré ?
+
+Si la génération est bien appelée (route ou pg_cron) mais qu’aucun event n’apparaît, vérifier dans **Admin → Règles → Intelligence artificielle** :
+
+- **Intervalle (heures)** : > 0. Si l’intervalle n’est pas encore écoulé depuis le dernier run, la fonction sort sans rien faire.
+- **Actions IA majeures / mineures par passage** : au moins un des deux > 0.
+- **Actions autorisées** : au moins un type coché pour les IA majeures et/ou mineures (selon les quantités).
+- **Cibles autorisées** : au moins une case (IA majeures, IA mineures ou Joueurs). Sinon aucun pays n’est éligible comme cible.
+- **Pays IA** : au moins un pays avec **Statut IA = Majeur** ou **Mineur** (liste Admin → Pays). Les pays « Joué » ne comptent pas comme IA.
+- **Dernier run** : en base, `rule_parameters.ai_events_last_run` peut être récent ; pour forcer un run de test, mettre la valeur à une date ancienne (ou supprimer la clé) puis rappeler la génération.
 
 ---
 

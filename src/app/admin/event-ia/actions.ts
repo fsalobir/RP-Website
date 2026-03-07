@@ -327,3 +327,15 @@ export async function createAiEvent(payload: {
   revalidatePath("/admin/event-ia");
   return {};
 }
+
+/** Simule un passage du cron de génération des events IA (appelle run_ai_events_cron). Réservé aux admins. */
+export async function simulateAiEventsCron(): Promise<{ error?: string }> {
+  const { supabase, error: authError } = await ensureAdmin();
+  if (authError || !supabase) return { error: authError ?? "Non autorisé." };
+
+  const { error } = await supabase.rpc("run_ai_events_cron", { p_force: true });
+  if (error) return { error: error.message };
+
+  revalidatePath("/admin/event-ia");
+  return {};
+}
