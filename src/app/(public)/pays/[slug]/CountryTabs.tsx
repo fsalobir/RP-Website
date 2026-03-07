@@ -129,8 +129,6 @@ export function CountryTabs({
     breakdown: {
       neighbors: { monarchism: number; republicanism: number; cultism: number };
       effects: { monarchism: number; republicanism: number; cultism: number };
-      topFactors: Array<{ label: string; ideology: "monarchism" | "republicanism" | "cultism"; value: number }>;
-      baseDrivers: Array<{ label: string; ideology: "monarchism" | "republicanism" | "cultism"; value: number }>;
       neighborContributors: Array<{
         countryId: string;
         name: string;

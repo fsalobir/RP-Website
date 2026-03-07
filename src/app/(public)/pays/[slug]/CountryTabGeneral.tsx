@@ -72,8 +72,6 @@ type CountryTabGeneralProps = {
     breakdown: {
       neighbors: { monarchism: number; republicanism: number; cultism: number };
       effects: { monarchism: number; republicanism: number; cultism: number };
-      topFactors: Array<{ label: string; ideology: "monarchism" | "republicanism" | "cultism"; value: number }>;
-      baseDrivers: Array<{ label: string; ideology: "monarchism" | "republicanism" | "cultism"; value: number }>;
       neighborContributors: Array<{
         countryId: string;
         name: string;
@@ -132,6 +130,37 @@ export function CountryTabGeneral({
   const ideologyEffects = effects.filter(
     (effect) => effect.effect_kind.startsWith("ideology_drift_") || effect.effect_kind.startsWith("ideology_snap_")
   );
+  const strongestNeighborInfluence = Math.max(
+    0,
+    ...ideologySummary?.breakdown.neighborContributors.map((neighbor) => neighbor.value) ?? [0]
+  );
+  const strongestNeighborDirection =
+    ideologySummary != null
+      ? IDEOLOGY_LABELS[
+          Object.entries(ideologySummary.breakdown.neighbors).sort((a, b) => Number(b[1]) - Number(a[1]))[0]?.[0] as
+            | "monarchism"
+            | "republicanism"
+            | "cultism"
+        ]
+      : null;
+  const strongestEffectDirection =
+    ideologySummary != null && Math.max(...Object.values(ideologySummary.breakdown.effects)) > 0
+      ? IDEOLOGY_LABELS[
+          Object.entries(ideologySummary.breakdown.effects).sort((a, b) => Number(b[1]) - Number(a[1]))[0]?.[0] as
+            | "monarchism"
+            | "republicanism"
+            | "cultism"
+        ]
+      : null;
+
+  function getInfluenceIntensity(value: number, maxValue: number): string {
+    if (maxValue <= 0) return "légère";
+    const ratio = value / maxValue;
+    if (ratio >= 0.85) return "majeure";
+    if (ratio >= 0.6) return "forte";
+    if (ratio >= 0.35) return "modérée";
+    return "légère";
+  }
 
   return (
     <div className="space-y-8">
@@ -206,26 +235,6 @@ export function CountryTabGeneral({
             <div className="mt-4 space-y-3">
               <div className="rounded border px-3 py-3" style={{ borderColor: "var(--border)" }}>
                 <div className="text-xs font-semibold uppercase tracking-wide text-[var(--foreground-muted)]">
-                  Tendance interne
-                </div>
-                <div className="mt-1 text-xs text-[var(--foreground-muted)]">
-                  Calculée à partir des stats structurelles du pays : stabilité, science, industrie et militarisme.
-                </div>
-                <div className="mt-2 flex flex-wrap gap-2 text-xs">
-                  {ideologySummary.breakdown.baseDrivers.slice(0, 5).map((driver) => (
-                    <span
-                      key={`${driver.label}-${driver.ideology}`}
-                      className="rounded border px-2 py-1 text-[var(--foreground)]"
-                      style={{ borderColor: "var(--border-muted)", background: "var(--background-panel)" }}
-                    >
-                      {driver.label} : {IDEOLOGY_LABELS[driver.ideology]} ({Number(driver.value).toFixed(2)})
-                    </span>
-                  ))}
-                </div>
-              </div>
-
-              <div className="rounded border px-3 py-3" style={{ borderColor: "var(--border)" }}>
-                <div className="text-xs font-semibold uppercase tracking-wide text-[var(--foreground-muted)]">
                   Influences voisines
                 </div>
                 {ideologySummary.breakdown.neighborContributors.length > 0 ? (
@@ -255,20 +264,17 @@ export function CountryTabGeneral({
                             </Link>
                           </div>
                           <div className="text-right text-xs text-[var(--foreground-muted)]">
-                            <div>{IDEOLOGY_LABELS[neighbor.ideology]}</div>
-                            <div className="font-mono text-[var(--foreground)]">+{Number(neighbor.value).toFixed(2)}</div>
+                            <div className="text-[var(--foreground)]">
+                              Influence {getInfluenceIntensity(neighbor.value, strongestNeighborInfluence)} vers le {IDEOLOGY_LABELS[neighbor.ideology]}
+                            </div>
                           </div>
                         </div>
                       ))}
                     </div>
                     <div className="mt-2 text-xs text-[var(--foreground-muted)]">
-                      Solde voisins :
-                      {" "}
-                      M {Number(ideologySummary.breakdown.neighbors.monarchism).toFixed(1)}
-                      {" · "}
-                      R {Number(ideologySummary.breakdown.neighbors.republicanism).toFixed(1)}
-                      {" · "}
-                      C {Number(ideologySummary.breakdown.neighbors.cultism).toFixed(1)}
+                      {strongestNeighborDirection
+                        ? `Dans l’ensemble, nos voisins nous poussent surtout vers le ${strongestNeighborDirection}.`
+                        : "Nos voisins n’exercent pas de direction idéologique nette."}
                     </div>
                   </>
                 ) : (
@@ -297,13 +303,9 @@ export function CountryTabGeneral({
                       ))}
                     </div>
                     <div className="mt-2 text-xs text-[var(--foreground-muted)]">
-                      Solde effets :
-                      {" "}
-                      M {Number(ideologySummary.breakdown.effects.monarchism).toFixed(2)}
-                      {" · "}
-                      R {Number(ideologySummary.breakdown.effects.republicanism).toFixed(2)}
-                      {" · "}
-                      C {Number(ideologySummary.breakdown.effects.cultism).toFixed(2)}
+                      {strongestEffectDirection
+                        ? `Les effets administratifs poussent actuellement surtout vers le ${strongestEffectDirection}.`
+                        : "Les effets administratifs n’impriment pas de direction idéologique nette."}
                     </div>
                   </>
                 ) : (
@@ -312,16 +314,6 @@ export function CountryTabGeneral({
                   </div>
                 )}
               </div>
-
-              {ideologySummary.breakdown.topFactors.length > 0 && (
-                <div className="text-xs text-[var(--foreground-muted)]">
-                  Lecture rapide :
-                  {" "}
-                  {ideologySummary.breakdown.topFactors
-                    .map((factor) => `${factor.label} : ${IDEOLOGY_LABELS[factor.ideology]}`)
-                    .join(" · ")}
-                </div>
-              )}
             </div>
           </div>
         )}

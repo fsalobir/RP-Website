@@ -36,7 +36,6 @@ type IdeologyEntry = {
     republicanism: number;
     cultism: number;
   };
-  baseDrivers: Array<{ label: string; ideology: "monarchism" | "republicanism" | "cultism"; value: number }>;
   neighborContributors: Array<{
     countryId: string;
     name: string;
@@ -46,7 +45,6 @@ type IdeologyEntry = {
     value: number;
     weight: number;
   }>;
-  topFactors: Array<{ label: string; ideology: "monarchism" | "republicanism" | "cultism"; value: number }>;
 };
 
 const TRIANGLE_LAYOUT = {
@@ -90,6 +88,20 @@ function getMarkerPosition(point: { x: number; y: number }) {
   return { left: `${x * 100}%`, top: `${y * 100}%` };
 }
 
+function getStrongestDirection(scores: IdeologyEntry["neighbors"] | IdeologyEntry["effects"]) {
+  const ordered = Object.entries(scores).sort((a, b) => Number(b[1]) - Number(a[1]));
+  return (ordered[0]?.[0] ?? null) as "monarchism" | "republicanism" | "cultism" | null;
+}
+
+function getInfluenceIntensity(value: number, maxValue: number): string {
+  if (maxValue <= 0) return "légère";
+  const ratio = value / maxValue;
+  if (ratio >= 0.85) return "majeure";
+  if (ratio >= 0.6) return "forte";
+  if (ratio >= 0.35) return "modérée";
+  return "légère";
+}
+
 export function IdeologyTriangle({ entries }: { entries: IdeologyEntry[] }) {
   const [showPlayers, setShowPlayers] = useState(true);
   const [showAiMajor, setShowAiMajor] = useState(true);
@@ -108,6 +120,9 @@ export function IdeologyTriangle({ entries }: { entries: IdeologyEntry[] }) {
   }, [entries, showPlayers, showAiMajor, showAiMinor]);
 
   const selected = visibleEntries.find((entry) => entry.id === selectedId) ?? visibleEntries[0] ?? null;
+  const strongestNeighborInfluence = Math.max(0, ...((selected?.neighborContributors ?? []).map((neighbor) => neighbor.value)));
+  const strongestNeighborDirection = selected ? getStrongestDirection(selected.neighbors) : null;
+  const strongestEffectDirection = selected ? getStrongestDirection(selected.effects) : null;
 
   return (
     <div className="space-y-6">
@@ -270,24 +285,6 @@ export function IdeologyTriangle({ entries }: { entries: IdeologyEntry[] }) {
               </div>
 
               <div className="rounded border p-3" style={{ borderColor: "var(--border-muted)" }}>
-                <div className="mb-2 text-sm font-medium text-[var(--foreground)]">Tendance interne</div>
-                <div className="text-xs text-[var(--foreground-muted)]">
-                  Calculée à partir des stats structurelles du pays.
-                </div>
-                <div className="mt-2 flex flex-wrap gap-2 text-xs">
-                  {selected.baseDrivers.slice(0, 4).map((driver) => (
-                    <span
-                      key={`${selected.id}-${driver.label}-${driver.ideology}`}
-                      className="rounded border px-2 py-1 text-[var(--foreground)]"
-                      style={{ borderColor: "var(--border-muted)", background: "var(--background-elevated)" }}
-                    >
-                      {driver.label} : {IDEOLOGY_LABELS[driver.ideology]} ({formatScore(driver.value)})
-                    </span>
-                  ))}
-                </div>
-              </div>
-
-              <div className="rounded border p-3" style={{ borderColor: "var(--border-muted)" }}>
                 <div className="mb-2 text-sm font-medium text-[var(--foreground)]">Influences voisines</div>
                 {selected.neighborContributors.length > 0 ? (
                   <>
@@ -316,20 +313,17 @@ export function IdeologyTriangle({ entries }: { entries: IdeologyEntry[] }) {
                             </Link>
                           </div>
                           <div className="text-right text-xs text-[var(--foreground-muted)]">
-                            <div>{IDEOLOGY_LABELS[neighbor.ideology]}</div>
-                            <div className="font-mono text-[var(--foreground)]">+{formatScore(neighbor.value)}</div>
+                            <div className="text-[var(--foreground)]">
+                              Influence {getInfluenceIntensity(neighbor.value, strongestNeighborInfluence)} vers le {IDEOLOGY_LABELS[neighbor.ideology]}
+                            </div>
                           </div>
                         </div>
                       ))}
                     </div>
                     <div className="mt-2 text-xs text-[var(--foreground-muted)]">
-                      Solde voisins :
-                      {" "}
-                      M {formatScore(selected.neighbors.monarchism)}
-                      {" · "}
-                      R {formatScore(selected.neighbors.republicanism)}
-                      {" · "}
-                      C {formatScore(selected.neighbors.cultism)}
+                      {strongestNeighborDirection
+                        ? `Dans l’ensemble, nos voisins nous poussent surtout vers le ${IDEOLOGY_LABELS[strongestNeighborDirection]}.`
+                        : "Nos voisins n’exercent pas de direction idéologique nette."}
                     </div>
                   </>
                 ) : (
@@ -345,19 +339,13 @@ export function IdeologyTriangle({ entries }: { entries: IdeologyEntry[] }) {
                     <div>Républicanisme : {formatScore(selected.effects.republicanism)}</div>
                     <div>Cultisme : {formatScore(selected.effects.cultism)}</div>
                   </div>
+                  <div className="mt-2 text-xs text-[var(--foreground-muted)]">
+                    {strongestEffectDirection
+                      ? `Les effets administratifs poussent actuellement surtout vers le ${IDEOLOGY_LABELS[strongestEffectDirection]}.`
+                      : "Les effets administratifs n’impriment pas de direction idéologique nette."}
+                  </div>
                 </div>
               )}
-
-              <div className="rounded border p-3" style={{ borderColor: "var(--border-muted)" }}>
-                <div className="mb-2 text-sm font-medium text-[var(--foreground)]">Lecture rapide</div>
-                <div className="space-y-1 text-sm text-[var(--foreground-muted)]">
-                  {selected.topFactors.map((factor) => (
-                    <div key={`${selected.id}-${factor.label}`}>
-                      {factor.label} : {IDEOLOGY_LABELS[factor.ideology]}
-                    </div>
-                  ))}
-                </div>
-              </div>
 
               <Link href={`/pays/${selected.slug}`} className="inline-block text-sm text-[var(--accent)] hover:underline">
                 Voir la fiche pays
