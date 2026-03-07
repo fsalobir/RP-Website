@@ -14,7 +14,7 @@ import {
   type BudgetMinistryValue,
   type BudgetMinistryEffectDef,
 } from "@/lib/ruleParameters";
-import { DEFAULT_IDEOLOGY_CONFIG, getIdeologyConfig as parseIdeologyConfig, IDEOLOGY_LABELS, type IdeologyConfig } from "@/lib/ideology";
+import { DEFAULT_IDEOLOGY_CONFIG, getIdeologyConfig as parseIdeologyConfig, type IdeologyConfig } from "@/lib/ideology";
 import { MOIS_LABELS } from "@/lib/worldDate";
 import {
   ALL_EFFECT_KIND_IDS,
@@ -355,19 +355,10 @@ export function ReglesForm({
   function getIdeologyConfigValue(): IdeologyConfig {
     return parseIdeologyConfig(ideologyConfigRule?.value);
   }
-  function updateIdeologyConfig(
-    patch: Omit<Partial<IdeologyConfig>, "weights"> & { weights?: Partial<IdeologyConfig["weights"]> }
-  ) {
+  function updateIdeologyConfig(patch: Partial<IdeologyConfig>) {
     if (!ideologyConfigRule) return;
     const current = getIdeologyConfigValue();
-    updateValue(ideologyConfigRule.id, {
-      ...current,
-      ...patch,
-      weights: {
-        ...current.weights,
-        ...(patch.weights ?? {}),
-      },
-    });
+    updateValue(ideologyConfigRule.id, { ...current, ...patch });
   }
 
   type InfluenceConfigValue = {
@@ -1544,7 +1535,7 @@ export function ReglesForm({
             <CollapsibleBlock title="Idéologie" open={ideologyOpen} onToggle={() => setIdeologyOpen((o) => !o)} variant="section">
               <div className="p-3 space-y-4">
                 <p className="text-xs text-[var(--foreground-muted)]">
-                  Règles du triangle d’alignement. La dérive combine socle interne, voisins, relation, influence, contrôle et effets actifs.
+                  Règles du triangle d’alignement. La dérive combine désormais le voisinage, la relation, l’influence, le contrôle et les effets idéologiques actifs.
                 </p>
                 <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
                   <div>
@@ -1554,17 +1545,6 @@ export function ReglesForm({
                       step="0.01"
                       value={getIdeologyConfigValue().daily_step}
                       onChange={(e) => updateIdeologyConfig({ daily_step: Number(e.target.value) || DEFAULT_IDEOLOGY_CONFIG.daily_step })}
-                      className="w-full rounded border px-2 py-1.5 text-sm font-mono"
-                      style={{ borderColor: "var(--border)", background: "var(--background)" }}
-                    />
-                  </div>
-                  <div>
-                    <label className="mb-1 block text-xs text-[var(--foreground-muted)]">Poids socle interne</label>
-                    <input
-                      type="number"
-                      step="0.01"
-                      value={getIdeologyConfigValue().base_pull_weight}
-                      onChange={(e) => updateIdeologyConfig({ base_pull_weight: Number(e.target.value) || DEFAULT_IDEOLOGY_CONFIG.base_pull_weight })}
                       className="w-full rounded border px-2 py-1.5 text-sm font-mono"
                       style={{ borderColor: "var(--border)", background: "var(--background)" }}
                     />
@@ -1636,55 +1616,6 @@ export function ReglesForm({
                       className="w-full rounded border px-2 py-1.5 text-sm font-mono"
                       style={{ borderColor: "var(--border)", background: "var(--background)" }}
                     />
-                  </div>
-                </div>
-                <div className="grid gap-4 lg:grid-cols-3">
-                  <div className="rounded border p-3" style={{ borderColor: "var(--border-muted)" }}>
-                    <div className="mb-2 text-sm font-medium text-[var(--foreground)]">{IDEOLOGY_LABELS.monarchism}</div>
-                    <div className="space-y-2">
-                      <div>
-                        <label className="mb-1 block text-xs text-[var(--foreground-muted)]">Depuis stabilité</label>
-                        <input type="number" step="0.01" value={getIdeologyConfigValue().weights.monarchism_from_stability} onChange={(e) => updateIdeologyConfig({ weights: { monarchism_from_stability: Number(e.target.value) || DEFAULT_IDEOLOGY_CONFIG.weights.monarchism_from_stability } })} className="w-full rounded border px-2 py-1.5 text-sm font-mono" style={{ borderColor: "var(--border)", background: "var(--background)" }} />
-                      </div>
-                      <div>
-                        <label className="mb-1 block text-xs text-[var(--foreground-muted)]">Depuis militarisme</label>
-                        <input type="number" step="0.01" value={getIdeologyConfigValue().weights.monarchism_from_militarism} onChange={(e) => updateIdeologyConfig({ weights: { monarchism_from_militarism: Number(e.target.value) || DEFAULT_IDEOLOGY_CONFIG.weights.monarchism_from_militarism } })} className="w-full rounded border px-2 py-1.5 text-sm font-mono" style={{ borderColor: "var(--border)", background: "var(--background)" }} />
-                      </div>
-                    </div>
-                  </div>
-                  <div className="rounded border p-3" style={{ borderColor: "var(--border-muted)" }}>
-                    <div className="mb-2 text-sm font-medium text-[var(--foreground)]">{IDEOLOGY_LABELS.republicanism}</div>
-                    <div className="space-y-2">
-                      <div>
-                        <label className="mb-1 block text-xs text-[var(--foreground-muted)]">Depuis science</label>
-                        <input type="number" step="0.01" value={getIdeologyConfigValue().weights.republicanism_from_science} onChange={(e) => updateIdeologyConfig({ weights: { republicanism_from_science: Number(e.target.value) || DEFAULT_IDEOLOGY_CONFIG.weights.republicanism_from_science } })} className="w-full rounded border px-2 py-1.5 text-sm font-mono" style={{ borderColor: "var(--border)", background: "var(--background)" }} />
-                      </div>
-                      <div>
-                        <label className="mb-1 block text-xs text-[var(--foreground-muted)]">Depuis stabilité</label>
-                        <input type="number" step="0.01" value={getIdeologyConfigValue().weights.republicanism_from_stability} onChange={(e) => updateIdeologyConfig({ weights: { republicanism_from_stability: Number(e.target.value) || DEFAULT_IDEOLOGY_CONFIG.weights.republicanism_from_stability } })} className="w-full rounded border px-2 py-1.5 text-sm font-mono" style={{ borderColor: "var(--border)", background: "var(--background)" }} />
-                      </div>
-                      <div>
-                        <label className="mb-1 block text-xs text-[var(--foreground-muted)]">Depuis industrie</label>
-                        <input type="number" step="0.01" value={getIdeologyConfigValue().weights.republicanism_from_industry} onChange={(e) => updateIdeologyConfig({ weights: { republicanism_from_industry: Number(e.target.value) || DEFAULT_IDEOLOGY_CONFIG.weights.republicanism_from_industry } })} className="w-full rounded border px-2 py-1.5 text-sm font-mono" style={{ borderColor: "var(--border)", background: "var(--background)" }} />
-                      </div>
-                    </div>
-                  </div>
-                  <div className="rounded border p-3" style={{ borderColor: "var(--border-muted)" }}>
-                    <div className="mb-2 text-sm font-medium text-[var(--foreground)]">{IDEOLOGY_LABELS.cultism}</div>
-                    <div className="space-y-2">
-                      <div>
-                        <label className="mb-1 block text-xs text-[var(--foreground-muted)]">Depuis instabilité</label>
-                        <input type="number" step="0.01" value={getIdeologyConfigValue().weights.cultism_from_instability} onChange={(e) => updateIdeologyConfig({ weights: { cultism_from_instability: Number(e.target.value) || DEFAULT_IDEOLOGY_CONFIG.weights.cultism_from_instability } })} className="w-full rounded border px-2 py-1.5 text-sm font-mono" style={{ borderColor: "var(--border)", background: "var(--background)" }} />
-                      </div>
-                      <div>
-                        <label className="mb-1 block text-xs text-[var(--foreground-muted)]">Depuis faible science</label>
-                        <input type="number" step="0.01" value={getIdeologyConfigValue().weights.cultism_from_low_science} onChange={(e) => updateIdeologyConfig({ weights: { cultism_from_low_science: Number(e.target.value) || DEFAULT_IDEOLOGY_CONFIG.weights.cultism_from_low_science } })} className="w-full rounded border px-2 py-1.5 text-sm font-mono" style={{ borderColor: "var(--border)", background: "var(--background)" }} />
-                      </div>
-                      <div>
-                        <label className="mb-1 block text-xs text-[var(--foreground-muted)]">Depuis militarisme</label>
-                        <input type="number" step="0.01" value={getIdeologyConfigValue().weights.cultism_from_militarism} onChange={(e) => updateIdeologyConfig({ weights: { cultism_from_militarism: Number(e.target.value) || DEFAULT_IDEOLOGY_CONFIG.weights.cultism_from_militarism } })} className="w-full rounded border px-2 py-1.5 text-sm font-mono" style={{ borderColor: "var(--border)", background: "var(--background)" }} />
-                      </div>
-                    </div>
                   </div>
                 </div>
               </div>
