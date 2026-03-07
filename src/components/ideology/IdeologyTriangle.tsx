@@ -46,6 +46,15 @@ function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
 }
 
+function getDisplayPoint(scores: IdeologyEntry["scores"]) {
+  const monarchism = scores.monarchism / 100;
+  const cultism = scores.cultism / 100;
+  return {
+    x: cultism + monarchism * 0.5,
+    y: monarchism * 0.8660254038,
+  };
+}
+
 function getMarkerPosition(point: { x: number; y: number }) {
   const heightRatio = clamp(point.y / 0.8660254038, 0, 1);
   const rowLeft = TRIANGLE_LAYOUT.baseLeftX + (TRIANGLE_LAYOUT.apexX - TRIANGLE_LAYOUT.baseLeftX) * heightRatio;
@@ -111,7 +120,7 @@ export function IdeologyTriangle({ entries }: { entries: IdeologyEntry[] }) {
           style={{ background: "var(--background-panel)", borderColor: "var(--border)" }}
         >
           <div className="mb-4 text-sm text-[var(--foreground-muted)]">
-            Triangle d’alignement mondial. Le centre représente les pays non alignés. Les drapeaux les plus influents passent visuellement au-dessus.
+            Triangle d’alignement mondial. Les drapeaux les plus influents passent visuellement au-dessus.
           </div>
           <div className="relative mx-auto aspect-[1.3/0.82] max-w-3xl sm:aspect-[1.25/0.8]">
             <div
@@ -119,27 +128,26 @@ export function IdeologyTriangle({ entries }: { entries: IdeologyEntry[] }) {
               style={{
                 clipPath: "polygon(50% 6%, 8% 90%, 92% 90%)",
                 background:
-                  "linear-gradient(180deg, rgba(249,168,37,0.22) 0%, rgba(239,68,68,0.18) 50%, rgba(59,130,246,0.18) 100%)",
+                  [
+                    "radial-gradient(circle at 50% 6%, rgba(59,130,246,0.26), transparent 38%)",
+                    "radial-gradient(circle at 8% 90%, rgba(239,68,68,0.24), transparent 42%)",
+                    "radial-gradient(circle at 92% 90%, rgba(34,197,94,0.24), transparent 42%)",
+                    "linear-gradient(180deg, rgba(26,35,54,0.96) 0%, rgba(39,48,84,0.9) 100%)",
+                  ].join(", "),
               }}
             />
             <div className="absolute left-1/2 top-[1%] -translate-x-1/2 text-center">
-              <div className="text-xs font-semibold text-[var(--foreground)] sm:text-sm">Cultisme</div>
-            </div>
-            <div className="absolute bottom-[0.5%] left-[5%] text-left">
               <div className="text-xs font-semibold text-[var(--foreground)] sm:text-sm">Monarchisme</div>
             </div>
-            <div className="absolute bottom-[0.5%] right-[5%] text-right">
+            <div className="absolute bottom-[0.5%] left-[5%] text-left">
               <div className="text-xs font-semibold text-[var(--foreground)] sm:text-sm">Républicanisme</div>
             </div>
-            <div
-              className="absolute left-1/2 top-[56%] -translate-x-1/2 -translate-y-1/2 rounded-full border px-2.5 py-1 text-[11px] sm:px-3 sm:text-xs"
-              style={{ borderColor: "var(--border-muted)", background: "rgba(15,20,25,0.55)" }}
-            >
-              Non-aligné
+            <div className="absolute bottom-[0.5%] right-[5%] text-right">
+              <div className="text-xs font-semibold text-[var(--foreground)] sm:text-sm">Cultisme</div>
             </div>
 
             {visibleEntries.map((entry, index) => {
-              const { left, top } = getMarkerPosition(entry.point);
+              const { left, top } = getMarkerPosition(getDisplayPoint(entry.scores));
               const isSelected = entry.id === selected?.id;
               return (
                 <button
