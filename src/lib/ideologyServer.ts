@@ -148,7 +148,9 @@ export async function persistWorldIdeologies(supabase: SupabaseClient): Promise<
       center_distance: ideology.centerDistance,
       top_factors: ideology.breakdown.topFactors,
       base: ideology.breakdown.base,
+      base_drivers: ideology.breakdown.baseDrivers,
       neighbors: ideology.breakdown.neighbors,
+      neighbor_contributors: ideology.breakdown.neighborContributors,
       effects: ideology.breakdown.effects,
     };
     const { error } = await supabase
