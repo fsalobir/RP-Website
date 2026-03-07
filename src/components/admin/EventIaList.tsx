@@ -8,9 +8,12 @@ import {
   createAiEvent,
   rollD100ForAiEvent,
   simulateAiEventsCron,
+  processDueAiEvents,
 } from "@/app/admin/event-ia/actions";
 import { ACTION_KEYS_REQUIRING_IMPACT_ROLL } from "@/lib/actionKeys";
 import { normalizeAdminEffectsAdded, formatAdminEffectLabel } from "@/lib/countryEffects";
+import { normalizePair } from "@/lib/relations";
+import { getRelationLabel, getRelationColor } from "@/lib/relationScale";
 
 type DiceRollResultRow = {
   roll: number;
@@ -78,12 +81,19 @@ export type AiEventRow = {
   state_action_types?: { key: string; label_fr: string; params_schema?: Record<string, unknown> | null } | null;
 };
 
+function getRelationFromMap(record: Record<string, number>, countryIdA: string, countryIdB: string): number {
+  if (countryIdA === countryIdB) return 0;
+  const [a, b] = normalizePair(countryIdA, countryIdB);
+  return record[`${a}|${b}`] ?? 0;
+}
+
 type Props = {
   events: AiEventRow[];
   targetCountriesById?: Record<string, { name: string; flag_url: string | null; regime?: string | null }>;
   actionTypesForAi: { id: string; key: string; label_fr: string }[];
   aiCountries: { id: string; name: string; flag_url: string | null; ai_status: string | null }[];
   allCountries: { id: string; name: string }[];
+  relationMap?: Record<string, number>;
 };
 
 const panelClass = "rounded-lg border p-6";
@@ -95,6 +105,7 @@ export function EventIaList({
   actionTypesForAi,
   aiCountries,
   allCountries,
+  relationMap = {},
 }: Props) {
   const router = useRouter();
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -105,6 +116,7 @@ export function EventIaList({
   const [createTargetId, setCreateTargetId] = useState<string>(allCountries[0]?.id ?? "");
   const [createLoading, setCreateLoading] = useState(false);
   const [simulateLoading, setSimulateLoading] = useState(false);
+  const [processDueLoading, setProcessDueLoading] = useState(false);
 
   const selected = events.find((e) => e.id === selectedId);
 
@@ -152,6 +164,15 @@ export function EventIaList({
     else router.refresh();
   }
 
+  async function handleProcessDue() {
+    setProcessDueLoading(true);
+    setError(null);
+    const res = await processDueAiEvents();
+    setProcessDueLoading(false);
+    if (res.error) setError(res.error);
+    else router.refresh();
+  }
+
   return (
     <div className="space-y-6">
       <section className={panelClass} style={panelStyle}>
@@ -168,6 +189,15 @@ export function EventIaList({
               style={{ borderColor: "var(--border)" }}
             >
               {simulateLoading ? "Passage en cours…" : "Simuler passage IA"}
+            </button>
+            <button
+              type="button"
+              onClick={handleProcessDue}
+              disabled={processDueLoading}
+              className="rounded border px-3 py-1.5 text-sm font-medium hover:bg-[var(--background)] disabled:opacity-50"
+              style={{ borderColor: "var(--border)" }}
+            >
+              {processDueLoading ? "Traitement…" : "Traiter les events IA dus"}
             </button>
             <button
               type="button"
@@ -362,6 +392,7 @@ export function EventIaList({
           event={selected}
           targetCountriesById={targetCountriesById}
           countriesList={allCountries}
+          relationMap={relationMap}
           onClose={() => setSelectedId(null)}
           onSuccess={handleSuccess}
           onRefresh={handleRefresh}
@@ -398,6 +429,7 @@ function EventDetail({
   event,
   targetCountriesById = {},
   countriesList = [],
+  relationMap = {},
   onClose,
   onSuccess,
   onRefresh,
@@ -406,6 +438,7 @@ function EventDetail({
   event: AiEventRow;
   targetCountriesById?: Record<string, { name: string; flag_url: string | null; regime?: string | null }>;
   countriesList?: Array<{ id: string; name: string }>;
+  relationMap?: Record<string, number>;
   onClose: () => void;
   onSuccess: () => void;
   onRefresh: () => void;
@@ -527,6 +560,21 @@ function EventDetail({
           </>
         )}
       </div>
+
+      {hasTarget && targetId && (() => {
+        const relation = getRelationFromMap(relationMap, event.country_id, targetId);
+        return (
+          <div className="mt-3 flex flex-wrap items-baseline justify-center gap-2 border-t py-3" style={{ borderColor: "var(--border)" }}>
+            <span className="text-xs text-[var(--foreground-muted)]">Relation bilatérale :</span>
+            <span className="text-sm font-medium" style={{ color: getRelationColor(relation) }}>
+              {relation}
+            </span>
+            <span className="text-sm font-medium" style={{ color: getRelationColor(relation) }}>
+              {getRelationLabel(relation)}
+            </span>
+          </div>
+        );
+      })()}
 
       {event.refusal_message && (
         <dl className="mt-4 border-t pt-4 text-sm" style={{ borderColor: "var(--border)" }}>
@@ -664,26 +712,41 @@ function EventDetail({
             </div>
           )}
           {event.dice_results?.impact_roll && (
-            <div
-              className="mb-4 flex flex-wrap items-center justify-between gap-4 rounded-lg border p-4"
-              style={{ borderColor: "var(--border)", background: "var(--background)" }}
-            >
-              <div className="min-w-0">
-                <p className="mb-1 text-xs font-medium uppercase tracking-wider text-[var(--foreground-muted)]">
-                  Jet impact
-                </p>
-                <p className="text-sm text-[var(--foreground)]">
-                  {formatRollFormula(
-                    event.dice_results.impact_roll,
-                    event.dice_results?.admin_modifiers?.[0]?.label
-                  )}{" "}
-                  = <strong className="text-lg">{event.dice_results.impact_roll.total}</strong>
+            <>
+              <div
+                className="mb-4 flex flex-wrap items-center justify-between gap-4 rounded-lg border p-4"
+                style={{ borderColor: "var(--border)", background: "var(--background)" }}
+              >
+                <div className="min-w-0">
+                  <p className="mb-1 text-xs font-medium uppercase tracking-wider text-[var(--foreground-muted)]">
+                    Jet impact
+                  </p>
+                  <p className="text-sm text-[var(--foreground)]">
+                    {formatRollFormula(
+                      event.dice_results.impact_roll,
+                      event.dice_results?.admin_modifiers?.[0]?.label
+                    )}{" "}
+                    = <strong className="text-lg">{event.dice_results.impact_roll.total}</strong>
+                  </p>
+                </div>
+                <p className="shrink-0 text-base font-bold uppercase text-[var(--foreground)]">
+                  {getRollConclusion(event.dice_results.impact_roll.roll, event.dice_results.impact_roll.total)}
                 </p>
               </div>
-              <p className="shrink-0 text-base font-bold uppercase text-[var(--foreground)]">
-                {getRollConclusion(event.dice_results.impact_roll.roll, event.dice_results.impact_roll.total)}
-              </p>
-            </div>
+              {(actionKey === "prise_influence" || actionKey === "insulte_diplomatique" || actionKey === "ouverture_diplomatique" || actionKey === "escarmouche_militaire" || actionKey === "conflit_arme" || actionKey === "guerre_ouverte") && (() => {
+                const paramsSchema = event.state_action_types?.params_schema as Record<string, number> | undefined;
+                const impactMax = typeof paramsSchema?.impact_maximum === "number" ? paramsSchema.impact_maximum : (actionKey === "prise_influence" ? 100 : 50);
+                const total = event.dice_results!.impact_roll!.total;
+                const impactPct = (total / 100) * impactMax;
+                const impactLabel = actionKey === "prise_influence" ? `${Math.round(impactPct)} %` : actionKey === "insulte_diplomatique" || actionKey === "escarmouche_militaire" || actionKey === "conflit_arme" || actionKey === "guerre_ouverte" ? `−${Math.round(impactPct)}` : `+${Math.round(impactPct)}`;
+                return (
+                  <div className="mb-4 rounded-lg border p-4" style={{ borderColor: "var(--border)", background: "var(--background)" }}>
+                    <p className="mb-1 text-xs font-medium uppercase tracking-wider text-[var(--foreground-muted)]">Impact</p>
+                    <p className="text-lg font-bold text-[var(--foreground)]">{impactLabel}</p>
+                  </div>
+                );
+              })()}
+            </>
           )}
         </div>
       )}

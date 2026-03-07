@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { EventIaList } from "@/components/admin/EventIaList";
 import type { AiEventRow } from "@/components/admin/EventIaList";
+import { getAllRelationRows, relationRowsToMap } from "@/lib/relations";
 
 const AI_EVENT_ACTION_KEYS = [
   "insulte_diplomatique",
@@ -14,7 +15,7 @@ const AI_EVENT_ACTION_KEYS = [
 export default async function AdminEventIaPage() {
   const supabase = await createClient();
 
-  const [eventsRes, actionTypesRes, countriesRes] = await Promise.all([
+  const [eventsRes, actionTypesRes, countriesRes, relationRowsRes] = await Promise.all([
     supabase
       .from("ai_event_requests")
       .select(`
@@ -31,6 +32,7 @@ export default async function AdminEventIaPage() {
       .in("key", [...AI_EVENT_ACTION_KEYS])
       .order("sort_order"),
     supabase.from("countries").select("id, name, flag_url, ai_status").order("name"),
+    getAllRelationRows(supabase),
   ]);
 
   const rawEvents = (eventsRes.data ?? []) as Record<string, unknown>[];
@@ -66,6 +68,7 @@ export default async function AdminEventIaPage() {
   const allCountriesList = (countriesRes.data ?? []) as { id: string; name: string; flag_url: string | null; ai_status: string | null }[];
   const aiCountries = allCountriesList.filter((c) => c.ai_status === "major" || c.ai_status === "minor");
   const allCountries = allCountriesList.map((c) => ({ id: c.id, name: c.name }));
+  const relationMap: Record<string, number> = Object.fromEntries(relationRowsToMap(relationRowsRes ?? []));
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-10">
@@ -79,6 +82,7 @@ export default async function AdminEventIaPage() {
         actionTypesForAi={actionTypesForAi}
         aiCountries={aiCountries}
         allCountries={allCountries}
+        relationMap={relationMap}
       />
     </div>
   );

@@ -2,14 +2,13 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
-import { getRelation } from "@/lib/relations";
-import { computeHardPowerByCountry } from "@/lib/hardPower";
-import { computeInfluenceForAll } from "@/lib/influence";
-import type { DiceResults, DiceRollResult, MilitaryBranch } from "@/types/database";
+import type { DiceResults, DiceRollResult } from "@/types/database";
+import { computeAiEventDiceRoll } from "@/lib/stateActionDice";
 import {
   applyStateActionConsequences,
   ACTION_KEYS_REQUIRING_IMPACT_ROLL,
 } from "@/lib/stateActionConsequences";
+import { computeAiEventDiceRoll } from "@/lib/stateActionDice";
 
 async function ensureAdmin() {
   const supabase = await createClient();
@@ -18,31 +17,6 @@ async function ensureAdmin() {
   const { data: adminRow } = await supabase.from("admins").select("id").eq("user_id", user.id).single();
   if (!adminRow) return { supabase: null, error: "Réservé aux admins." };
   return { supabase, error: null, userId: user.id };
-}
-
-const STAT_RANGES: Record<string, { min: number; max: number }> = {
-  militarism: { min: 0, max: 10 },
-  industry: { min: 0, max: 10 },
-  science: { min: 0, max: 10 },
-  stability: { min: -3, max: 3 },
-};
-
-function computeStatModifierBreakdown(
-  rangesConfig: Record<string, { min: number; max: number }>,
-  stats: Record<string, number>
-): { total: number; byStat: Record<string, number> } {
-  const byStat: Record<string, number> = {};
-  let total = 0;
-  for (const [statKey, range] of Object.entries(rangesConfig)) {
-    const statRange = STAT_RANGES[statKey];
-    if (!statRange) continue;
-    const value = stats[statKey] ?? statRange.min;
-    const t = (value - statRange.min) / (statRange.max - statRange.min || 1);
-    const modifier = Math.round(range.min + t * (range.max - range.min));
-    byStat[statKey] = modifier;
-    total += modifier;
-  }
-  return { total, byStat };
 }
 
 export async function rollD100ForAiEvent(
@@ -67,101 +41,17 @@ export async function rollD100ForAiEvent(
     : { data: null };
   const actionKey = (actionType as { key?: string } | null)?.key ?? "";
   const paramsSchema = (actionType?.params_schema ?? {}) as Record<string, unknown>;
-  const statBonus = (paramsSchema.stat_bonus ?? {}) as Record<string, boolean>;
-  const statBonusEnabled = (key: string) => (statBonus[key] === undefined ? true : !!statBonus[key]);
 
-  let relationModifier = 0;
-  let influenceModifier = 0;
-  if (actionKey === "prise_influence") {
-    const targetCountryId = (req.payload as Record<string, unknown>)?.target_country_id;
-    const amplitudeRel = typeof paramsSchema.amplitude_relations === "number" ? paramsSchema.amplitude_relations : 0;
-    if (typeof targetCountryId === "string" && targetCountryId && amplitudeRel !== 0) {
-      const relation = await getRelation(supabase, req.country_id, targetCountryId);
-      relationModifier = Math.round((relation / 100) * amplitudeRel);
-    }
-    if (typeof targetCountryId === "string" && targetCountryId) {
-      const [countriesRes, cmuRes, rosterRes, levelsRes, influenceConfigRes] = await Promise.all([
-        supabase.from("countries").select("id, population, gdp, stability"),
-        supabase.from("country_military_units").select("country_id, roster_unit_id, current_level, extra_count"),
-        supabase.from("military_roster_units").select("id, branch, base_count").order("name_fr"),
-        supabase.from("military_roster_unit_levels").select("unit_id, level, hard_power").order("unit_id").order("level"),
-        supabase.from("rule_parameters").select("value").eq("key", "influence_config").maybeSingle(),
-      ]);
-      const countries = (countriesRes.data ?? []) as Array<{ id: string; population: number; gdp: number; stability: number }>;
-      const rosterUnits = (rosterRes.data ?? []) as Array<{ id: string; branch: MilitaryBranch; base_count: number }>;
-      const rosterLevels = (levelsRes.data ?? []) as Array<{ unit_id: string; level: number; hard_power: number }>;
-      const influenceConfig = (influenceConfigRes.data?.value ?? {}) as Parameters<typeof computeInfluenceForAll>[2];
-      const hardPowerByCountry = computeHardPowerByCountry(
-        (cmuRes.data ?? []) as Array<{ country_id: string; roster_unit_id: string; current_level: number; extra_count: number }>,
-        rosterUnits,
-        rosterLevels
-      );
-      const { byCountry: influenceByCountry } = computeInfluenceForAll(countries, hardPowerByCountry, influenceConfig);
-      const emitterInfluence = influenceByCountry.get(req.country_id)?.influence ?? 0;
-      const targetInfluence = influenceByCountry.get(targetCountryId)?.influence ?? 0;
-      const ratio = targetInfluence > 0 ? emitterInfluence / targetInfluence : 0;
-      const eq = (paramsSchema.equilibre_des_forces ?? {}) as Record<string, number>;
-      const ratioEquilibre = typeof eq.ratio_equilibre === "number" ? eq.ratio_equilibre : 1;
-      const malusMax = typeof eq.malus_max === "number" ? eq.malus_max : 20;
-      const bonusMax = typeof eq.bonus_max === "number" ? eq.bonus_max : 20;
-      const ratioMin = typeof eq.ratio_min === "number" ? eq.ratio_min : 0.5;
-      const ratioMax = typeof eq.ratio_max === "number" ? eq.ratio_max : 2;
-      if (ratio <= ratioMin) {
-        influenceModifier = -malusMax;
-      } else if (ratio < ratioEquilibre) {
-        influenceModifier = Math.round((-malusMax * (ratioEquilibre - ratio)) / (ratioEquilibre - ratioMin));
-      } else if (ratio > ratioEquilibre) {
-        if (ratio >= ratioMax) {
-          influenceModifier = bonusMax;
-        } else {
-          influenceModifier = Math.round((bonusMax * (ratio - ratioEquilibre)) / (ratioMax - ratioEquilibre));
-        }
-      }
-    }
-  }
-
-  const { data: country } = await supabase
-    .from("countries")
-    .select("militarism, industry, science, stability")
-    .eq("id", req.country_id)
-    .single();
-
-  const stats = country
-    ? {
-        militarism: Number(country.militarism ?? 0),
-        industry: Number(country.industry ?? 0),
-        science: Number(country.science ?? 0),
-        stability: Number(country.stability ?? 0),
-      }
-    : { militarism: 0, industry: 0, science: 0, stability: 0 };
-
-  const { data: rangesRow } = await supabase
-    .from("rule_parameters")
-    .select("value")
-    .eq("key", "stats_dice_modifier_ranges")
-    .maybeSingle();
-
-  const fullRangesConfig = (rangesRow?.value as Record<string, { min: number; max: number }>) ?? {};
-  const rangesConfig: Record<string, { min: number; max: number }> = {};
-  for (const key of Object.keys(fullRangesConfig)) {
-    if (statBonusEnabled(key)) rangesConfig[key] = fullRangesConfig[key];
-  }
-  const { total: statModifier, byStat: statModifiers } = computeStatModifierBreakdown(rangesConfig, stats);
-  const adminSum = adminModifiers.reduce((s, m) => s + m.value, 0);
-  const totalModifier = statModifier + adminSum + relationModifier + influenceModifier;
-
-  const roll = Math.floor(Math.random() * 100) + 1;
-  const total = Math.max(1, Math.min(100, roll + totalModifier));
-
-  const result: DiceRollResult = {
-    roll,
-    modifier: totalModifier,
-    total,
-    stat_modifiers: Object.keys(statModifiers).length > 0 ? statModifiers : undefined,
-    admin_modifier: adminSum !== 0 ? adminSum : undefined,
-    relation_modifier: relationModifier !== 0 ? relationModifier : undefined,
-    influence_modifier: influenceModifier !== 0 ? influenceModifier : undefined,
-  };
+  const { error: computeErr, result } = await computeAiEventDiceRoll({
+    supabase,
+    countryId: req.country_id,
+    actionKey,
+    paramsSchema,
+    payload: (req.payload ?? {}) as Record<string, unknown>,
+    rollType,
+    adminModifiers,
+  });
+  if (computeErr || !result) return { error: computeErr ?? "Calcul du jet impossible." };
 
   const existing = (req.dice_results ?? {}) as DiceResults;
   const next: DiceResults = {
@@ -338,4 +228,154 @@ export async function simulateAiEventsCron(): Promise<{ error?: string }> {
 
   revalidatePath("/admin/event-ia");
   return {};
+}
+
+/** Traite les events IA acceptés dont le déclenchement est dû (même logique que GET /api/cron/process-ai-events). Réservé aux admins. */
+export async function processDueAiEvents(): Promise<{
+  error?: string;
+  processed?: number;
+  failed?: number;
+  total?: number;
+}> {
+  const { supabase, error: authError } = await ensureAdmin();
+  if (authError || !supabase) return { error: authError ?? "Non autorisé." };
+
+  const now = new Date();
+  const retryAfterMs = 10 * 60 * 1000;
+  const retryThreshold = new Date(now.getTime() - retryAfterMs).toISOString();
+
+  const { data: rows, error: fetchErr } = await supabase
+    .from("ai_event_requests")
+    .select(`
+      id,
+      country_id,
+      payload,
+      admin_effect_added,
+      dice_results,
+      state_action_types:action_type_id(key, label_fr, params_schema)
+    `)
+    .eq("status", "accepted")
+    .is("consequences_applied_at", null)
+    .or("scheduled_trigger_at.is.null,scheduled_trigger_at.lte." + now.toISOString())
+    .or(`processing_started_at.is.null,processing_started_at.lt.${retryThreshold}`)
+    .limit(50);
+
+  if (fetchErr) return { error: fetchErr.message };
+
+  type ActionTypeRow = { key: string; label_fr: string; params_schema: Record<string, number> };
+  const list = (rows ?? []) as Array<{
+    id: string;
+    country_id: string;
+    payload: Record<string, unknown>;
+    admin_effect_added: unknown;
+    dice_results: unknown;
+    state_action_types: ActionTypeRow | ActionTypeRow[] | null;
+  }>;
+
+  let processed = 0;
+  let failed = 0;
+
+  for (const row of list) {
+    const { data: reserved } = await supabase
+      .from("ai_event_requests")
+      .update({ processing_started_at: new Date().toISOString() })
+      .eq("id", row.id)
+      .is("consequences_applied_at", null)
+      .or(`processing_started_at.is.null,processing_started_at.lt.${retryThreshold}`)
+      .select("id")
+      .single();
+
+    if (!reserved) continue;
+
+    const typeRow = Array.isArray(row.state_action_types) ? row.state_action_types[0] : row.state_action_types;
+    if (!typeRow?.key) {
+      failed++;
+      continue;
+    }
+
+    let diceResults: DiceResults | null = (row.dice_results ?? null) as DiceResults | null;
+    const needsRolls = diceResults == null || (ACTION_KEYS_REQUIRING_IMPACT_ROLL.has(typeRow.key) && !diceResults?.impact_roll);
+
+    if (needsRolls) {
+      const { error: successErr, result: successResult } = await computeAiEventDiceRoll({
+        supabase,
+        countryId: row.country_id,
+        actionKey: typeRow.key,
+        paramsSchema: (typeRow.params_schema ?? {}) as Record<string, unknown>,
+        payload: (row.payload ?? {}) as Record<string, unknown>,
+        rollType: "success",
+        adminModifiers: [],
+      });
+      if (successErr || !successResult) {
+        failed++;
+        continue;
+      }
+      if (successResult.total < 50) {
+        await supabase
+          .from("ai_event_requests")
+          .update({
+            status: "refused",
+            refusal_message: "Échec au jet de succès (auto-accept).",
+            resolved_at: new Date().toISOString(),
+          })
+          .eq("id", row.id);
+        continue;
+      }
+      diceResults = { success_roll: successResult };
+      if (ACTION_KEYS_REQUIRING_IMPACT_ROLL.has(typeRow.key)) {
+        const { error: impactErr, result: impactResult } = await computeAiEventDiceRoll({
+          supabase,
+          countryId: row.country_id,
+          actionKey: typeRow.key,
+          paramsSchema: (typeRow.params_schema ?? {}) as Record<string, unknown>,
+          payload: (row.payload ?? {}) as Record<string, unknown>,
+          rollType: "impact",
+          adminModifiers: [],
+        });
+        if (impactErr || !impactResult) {
+          failed++;
+          continue;
+        }
+        diceResults = { ...diceResults, impact_roll: impactResult };
+      }
+      const { error: diceUpErr } = await supabase
+        .from("ai_event_requests")
+        .update({ dice_results: diceResults as unknown as Record<string, unknown> })
+        .eq("id", row.id);
+      if (diceUpErr) {
+        failed++;
+        continue;
+      }
+    }
+
+    const { error: applyErr } = await applyStateActionConsequences({
+      supabase,
+      countryId: row.country_id,
+      payload: (row.payload ?? {}) as Record<string, string>,
+      adminEffectAdded: row.admin_effect_added,
+      diceResults,
+      actionKey: typeRow.key,
+      actionLabel: typeRow.label_fr,
+      paramsSchema: typeRow.params_schema ?? {},
+    });
+
+    if (applyErr) {
+      failed++;
+      continue;
+    }
+
+    const { error: upErr } = await supabase
+      .from("ai_event_requests")
+      .update({ consequences_applied_at: new Date().toISOString() })
+      .eq("id", row.id)
+      .is("consequences_applied_at", null);
+
+    if (upErr) failed++;
+    else processed++;
+  }
+
+  revalidatePath("/admin/event-ia");
+  revalidatePath("/pays");
+  revalidatePath("/");
+  return { processed, failed, total: list.length };
 }

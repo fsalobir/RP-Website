@@ -75,7 +75,7 @@ L’**application des conséquences** (relations, influence, effets, Discord) ne
 - **Protection** : en-tête `x-cron-secret` ou query `secret` doit être égal à la variable d’environnement **`CRON_SECRET`**.
 - **Comportement** : sélectionne les `ai_event_requests` avec `status = 'accepted'`, `consequences_applied_at IS NULL`, (`scheduled_trigger_at IS NULL` ou `scheduled_trigger_at <= now()`), et (**`processing_started_at` NULL** ou **&lt; now − 10 min**, pour retry des lignes bloquées), **au plus 50 lignes par invocation** (LIMIT 50). Pour chaque ligne, la route **réserve** d’abord (UPDATE `processing_started_at = now()` si la ligne est encore réservable), puis applique les conséquences et met à jour `consequences_applied_at`. En cas de backlog, lancer le cron toutes les 5–10 min. La réponse JSON inclut `processed`, `failed`, `total` et un tableau `errors` (id + message) pour les lignes en échec.
 
-**À planifier** : un cron **externe** (ex. cron-job.org, toutes les 5–10 min) qui appelle cette URL avec le secret.
+**À planifier** : un cron **externe** (ex. cron-job.org, toutes les 5–10 min) qui appelle cette URL avec le secret. **Sans cet appel**, les events IA acceptés avec « Planifier avec amplitude » (déclenchement différé) ne verront jamais leurs conséquences appliquées ni la publication Discord. En attendant, l’admin peut utiliser le bouton **« Traiter les events IA dus »** sur la page Event IA pour lancer le traitement manuellement.
 
 **Réservation** : le champ `processing_started_at` (migration 088) évite le double traitement si deux appels se chevauchent : une ligne n’est traitée que si l’UPDATE de réservation retourne une ligne. Après 10 min sans `consequences_applied_at`, une ligne reste re-sélectionnable (retry).
 

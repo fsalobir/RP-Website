@@ -9,7 +9,9 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { createServiceRoleClient } from "@/lib/supabase/server";
-import { applyStateActionConsequences } from "@/lib/stateActionConsequences";
+import { applyStateActionConsequences, ACTION_KEYS_REQUIRING_IMPACT_ROLL } from "@/lib/stateActionConsequences";
+import { computeAiEventDiceRoll } from "@/lib/stateActionDice";
+import type { DiceResults } from "@/types/database";
 
 function getCronSecret(request: NextRequest): string | null {
   const header = request.headers.get("x-cron-secret") ?? request.headers.get("authorization")?.replace(/^Bearer\s+/i, "");
@@ -85,12 +87,70 @@ export async function GET(request: NextRequest) {
       continue;
     }
 
+    let diceResults: DiceResults | null = (row.dice_results ?? null) as DiceResults | null;
+    const needsRolls = diceResults == null || (ACTION_KEYS_REQUIRING_IMPACT_ROLL.has(typeRow.key) && !diceResults?.impact_roll);
+
+    if (needsRolls) {
+      const { error: successErr, result: successResult } = await computeAiEventDiceRoll({
+        supabase,
+        countryId: row.country_id,
+        actionKey: typeRow.key,
+        paramsSchema: (typeRow.params_schema ?? {}) as Record<string, unknown>,
+        payload: (row.payload ?? {}) as Record<string, unknown>,
+        rollType: "success",
+        adminModifiers: [],
+      });
+      if (successErr || !successResult) {
+        failed++;
+        errors.push({ id: row.id, error: successErr ?? "Jet de succès impossible" });
+        continue;
+      }
+      if (successResult.total < 50) {
+        await supabase
+          .from("ai_event_requests")
+          .update({
+            status: "refused",
+            refusal_message: "Échec au jet de succès (auto-accept).",
+            resolved_at: new Date().toISOString(),
+          })
+          .eq("id", row.id);
+        continue;
+      }
+      diceResults = { success_roll: successResult };
+      if (ACTION_KEYS_REQUIRING_IMPACT_ROLL.has(typeRow.key)) {
+        const { error: impactErr, result: impactResult } = await computeAiEventDiceRoll({
+          supabase,
+          countryId: row.country_id,
+          actionKey: typeRow.key,
+          paramsSchema: (typeRow.params_schema ?? {}) as Record<string, unknown>,
+          payload: (row.payload ?? {}) as Record<string, unknown>,
+          rollType: "impact",
+          adminModifiers: [],
+        });
+        if (impactErr || !impactResult) {
+          failed++;
+          errors.push({ id: row.id, error: impactErr ?? "Jet d'impact impossible" });
+          continue;
+        }
+        diceResults = { ...diceResults, impact_roll: impactResult };
+      }
+      const { error: diceUpErr } = await supabase
+        .from("ai_event_requests")
+        .update({ dice_results: diceResults as unknown as Record<string, unknown> })
+        .eq("id", row.id);
+      if (diceUpErr) {
+        failed++;
+        errors.push({ id: row.id, error: diceUpErr.message });
+        continue;
+      }
+    }
+
     const { error: applyErr } = await applyStateActionConsequences({
       supabase,
       countryId: row.country_id,
       payload: (row.payload ?? {}) as Record<string, string>,
       adminEffectAdded: row.admin_effect_added,
-      diceResults: (row.dice_results ?? null) as Parameters<typeof applyStateActionConsequences>[0]["diceResults"],
+      diceResults,
       actionKey: typeRow.key,
       actionLabel: typeRow.label_fr,
       paramsSchema: typeRow.params_schema ?? {},
