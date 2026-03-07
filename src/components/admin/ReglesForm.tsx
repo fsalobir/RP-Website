@@ -33,6 +33,7 @@ import {
   formatEffectValue,
 } from "@/lib/countryEffects";
 import { MatriceDiplomatiqueForm } from "@/app/admin/matrice-diplomatique/MatriceDiplomatiqueForm";
+import { InfoTooltip } from "@/components/ui/InfoTooltip";
 
 function RecalculerVoisinagesButton() {
   const [loading, setLoading] = useState(false);
@@ -153,14 +154,69 @@ function RecalculerVoisinagesButton() {
   );
 }
 
+function TooltipBody({ text, warning }: { text: string; warning?: string }) {
+  return (
+    <div className="space-y-1 text-xs leading-snug">
+      <div>{text}</div>
+      {warning ? <div className="text-[var(--danger)]">⚠️ {warning}</div> : null}
+    </div>
+  );
+}
+
+function TitleWithInfo({
+  title,
+  tooltip,
+  warning,
+  side = "top",
+  className,
+}: {
+  title: React.ReactNode;
+  tooltip?: string;
+  warning?: string;
+  side?: "top" | "bottom";
+  className?: string;
+}) {
+  return (
+    <span className={className ?? "inline-flex items-center gap-2"}>
+      <span>{title}</span>
+      {tooltip ? <InfoTooltip side={side} warning={Boolean(warning)} content={<TooltipBody text={tooltip} warning={warning} />} /> : null}
+    </span>
+  );
+}
+
+function FormLabel({
+  label,
+  tooltip,
+  warning,
+  className = "text-xs text-[var(--foreground-muted)]",
+  side = "top",
+}: {
+  label: React.ReactNode;
+  tooltip?: string;
+  warning?: string;
+  className?: string;
+  side?: "top" | "bottom";
+}) {
+  return (
+    <span className={`inline-flex items-center gap-1.5 ${className}`}>
+      <span>{label}</span>
+      {tooltip ? <InfoTooltip side={side} warning={Boolean(warning)} content={<TooltipBody text={tooltip} warning={warning} />} /> : null}
+    </span>
+  );
+}
+
 function CollapsibleBlock({
   title,
+  infoContent,
+  infoWarning,
   open,
   onToggle,
   children,
   variant = "default",
 }: {
   title: string;
+  infoContent?: React.ReactNode;
+  infoWarning?: boolean;
   open: boolean;
   onToggle: () => void;
   children: React.ReactNode;
@@ -182,9 +238,10 @@ function CollapsibleBlock({
         style={{ background: isSection ? "var(--background-elevated)" : "var(--background-elevated)" }}
       >
         <span
-          className={isSection ? "text-base font-semibold text-[var(--foreground)]" : "text-sm font-medium text-[var(--foreground)]"}
+          className={`${isSection ? "text-base font-semibold" : "text-sm font-medium"} text-[var(--foreground)] inline-flex items-center gap-2`}
         >
           {title}
+          {infoContent ? <InfoTooltip side="bottom" warning={infoWarning} content={infoContent} /> : null}
         </span>
         <span
           className="block shrink-0 transition-transform duration-300 ease-out"
@@ -798,6 +855,13 @@ export function ReglesForm({
   const inputClassNarrow =
     "w-full max-w-20 rounded border bg-[var(--background)] px-1.5 py-1 font-mono text-xs text-[var(--foreground)] focus:border-[var(--accent)] focus:outline-none focus:ring-1 focus:ring-[var(--accent)]";
   const inputStyle = { borderColor: "var(--border)" };
+  const genericEffectTypeTooltip = "Choisit la mécanique exacte appliquée par ce réglage : croissance, stat, budget, unité, influence, relation ou idéologie.";
+  const genericStatTooltip = "Choisit la statistique du pays concernée par l'effet.";
+  const genericBudgetTooltip = "Choisit le ministère concerné par l'effet.";
+  const genericBranchTooltip = "Choisit la branche militaire ciblée par l'effet.";
+  const genericUnitTooltip = "Choisit l'unité militaire précise touchée par l'effet.";
+  const genericEffectValueTooltip = "Règle l'intensité de l'effet sélectionné. Une valeur plus élevée renforce son impact à chaque application.";
+  const sphereWarning = "Ce réglage existe dans l'admin, mais son branchement réel doit être vérifié en test avant de le considérer comme pleinement fiable.";
 
   const ruleForMinistry = rulesByKey.get(simulatorMinistry);
   const simulatorParams = ruleForMinistry ? getBudgetValue(ruleForMinistry) : null;
@@ -860,9 +924,20 @@ export function ReglesForm({
           style={{ background: "var(--background-panel)", borderColor: "var(--border)" }}
         >
           {items.length > 0 && (
-            <CollapsibleBlock title="Effets Globaux" open={effetsGlobauxOpen} onToggle={() => setEffetsGlobauxOpen((o) => !o)} variant="section">
+            <CollapsibleBlock
+              title="Effets Globaux"
+              infoContent={<TooltipBody text="Réglages qui s'appliquent à l'ensemble du monde. Ils servent à fixer le climat général de la simulation, sans cibler un pays en particulier." />}
+              open={effetsGlobauxOpen}
+              onToggle={() => setEffetsGlobauxOpen((o) => !o)}
+              variant="section"
+            >
               {globalGrowthEffectsRule && (
-            <CollapsibleBlock title="Global [Appliqué à tous les pays]" open={globalGrowthOpen} onToggle={() => setGlobalGrowthOpen((o) => !o)}>
+            <CollapsibleBlock
+              title="Global [Appliqué à tous les pays]"
+              infoContent={<TooltipBody text="Liste des effets économiques et structurels communs à tous les pays à chaque passage du monde. C'est la météo générale de la campagne." />}
+              open={globalGrowthOpen}
+              onToggle={() => setGlobalGrowthOpen((o) => !o)}
+            >
               <div className="p-3 space-y-3">
                 <p className="text-xs text-[var(--foreground-muted)]">
                   Effets de croissance PIB et population appliqués à tous les pays à chaque passage du cron.
@@ -905,7 +980,9 @@ export function ReglesForm({
                 ) : (
                   <div className="rounded border p-3 space-y-2" style={{ borderColor: "var(--border-muted)" }}>
                     <div>
-                      <label className="mb-0.5 block text-xs text-[var(--foreground-muted)]">Type d&apos;effet</label>
+                      <label className="mb-0.5 block text-xs text-[var(--foreground-muted)]">
+                        <FormLabel label="Type d'effet" tooltip={genericEffectTypeTooltip} />
+                      </label>
                       <select
                         value={globalEffectKind}
                         onChange={(ev) => {
@@ -923,7 +1000,9 @@ export function ReglesForm({
                     </div>
                     {EFFECT_KINDS_WITH_STAT_TARGET.has(globalEffectKind) && (
                       <div>
-                        <label className="mb-0.5 block text-xs text-[var(--foreground-muted)]">Stat</label>
+                        <label className="mb-0.5 block text-xs text-[var(--foreground-muted)]">
+                          <FormLabel label="Stat" tooltip={genericStatTooltip} />
+                        </label>
                         <select
                           value={globalEffectTarget ?? STAT_KEYS[0]}
                           onChange={(ev) => setGlobalEffectTarget(ev.target.value || null)}
@@ -938,7 +1017,9 @@ export function ReglesForm({
                     )}
                     {EFFECT_KINDS_WITH_BUDGET_TARGET.has(globalEffectKind) && (
                       <div>
-                        <label className="mb-0.5 block text-xs text-[var(--foreground-muted)]">Ministère</label>
+                        <label className="mb-0.5 block text-xs text-[var(--foreground-muted)]">
+                          <FormLabel label="Ministère" tooltip={genericBudgetTooltip} />
+                        </label>
                         <select
                           value={globalEffectTarget ?? getBudgetMinistryOptions()[0]?.key ?? ""}
                           onChange={(ev) => setGlobalEffectTarget(ev.target.value || null)}
@@ -953,7 +1034,9 @@ export function ReglesForm({
                     )}
                     {EFFECT_KINDS_WITH_BRANCH_TARGET.has(globalEffectKind) && (
                       <div>
-                        <label className="mb-0.5 block text-xs text-[var(--foreground-muted)]">Branche</label>
+                        <label className="mb-0.5 block text-xs text-[var(--foreground-muted)]">
+                          <FormLabel label="Branche" tooltip={genericBranchTooltip} />
+                        </label>
                         <select
                           value={globalEffectTarget ?? MILITARY_BRANCH_EFFECT_IDS[0]}
                           onChange={(ev) => setGlobalEffectTarget(ev.target.value || null)}
@@ -968,7 +1051,9 @@ export function ReglesForm({
                     )}
                     {EFFECT_KINDS_WITH_ROSTER_UNIT_TARGET.has(globalEffectKind) && (
                       <div>
-                        <label className="mb-0.5 block text-xs text-[var(--foreground-muted)]">Unité</label>
+                        <label className="mb-0.5 block text-xs text-[var(--foreground-muted)]">
+                          <FormLabel label="Unité" tooltip={genericUnitTooltip} />
+                        </label>
                         <select
                           value={globalEffectTarget ?? rosterUnits[0]?.id ?? ""}
                           onChange={(ev) => setGlobalEffectTarget(ev.target.value || null)}
@@ -983,7 +1068,7 @@ export function ReglesForm({
                     )}
                     <div>
                       <label className="mb-0.5 block text-xs text-[var(--foreground-muted)]">
-                        {getEffectKindValueHelper(globalEffectKind).valueLabel}
+                        <FormLabel label={getEffectKindValueHelper(globalEffectKind).valueLabel} tooltip={genericEffectValueTooltip} />
                       </label>
                       <input
                         type="number"
@@ -1018,7 +1103,12 @@ export function ReglesForm({
             </CollapsibleBlock>
           )}
               {statsDiceModifierRangesRule && (
-                <CollapsibleBlock title="Statistiques" open={statsOpen} onToggle={() => setStatsOpen((o) => !o)}>
+                <CollapsibleBlock
+                  title="Statistiques"
+                  infoContent={<TooltipBody text="Définit comment les stats du pays se traduisent en bonus ou malus lors des jets admin et des événements IA." />}
+                  open={statsOpen}
+                  onToggle={() => setStatsOpen((o) => !o)}
+                >
                   <div className="p-3 space-y-4">
                     <p className="text-xs text-[var(--foreground-muted)]">
                       Modificateur min/max pour les jets de dés (ex. -10 à +20). Ces bornes sont utilisées pour calculer le bonus ou malus proportionnel à la valeur de chaque stat du pays.
@@ -1031,11 +1121,15 @@ export function ReglesForm({
                             <div className="text-sm font-medium text-[var(--foreground)] mb-2">{STAT_LABELS[statKey]}</div>
                             <div className="flex flex-wrap gap-2">
                               <div className="flex flex-col gap-0.5">
-                                <label className="text-xs text-[var(--foreground-muted)]">Min</label>
+                                <label className="text-xs text-[var(--foreground-muted)]">
+                                  <FormLabel label="Min" tooltip="Valeur la plus défavorable que cette stat peut donner à un jet quand le pays est très faible sur ce domaine." />
+                                </label>
                                 <input type="number" value={ranges.min} onChange={(e) => updateStatsDiceModifierRanges(statKey, "min", Number(e.target.value) ?? -10)} className={inputClassNarrow} style={inputStyle} />
                               </div>
                               <div className="flex flex-col gap-0.5">
-                                <label className="text-xs text-[var(--foreground-muted)]">Max</label>
+                                <label className="text-xs text-[var(--foreground-muted)]">
+                                  <FormLabel label="Max" tooltip="Valeur la plus favorable que cette stat peut donner à un jet quand le pays excelle sur ce domaine." />
+                                </label>
                                 <input type="number" value={ranges.max} onChange={(e) => updateStatsDiceModifierRanges(statKey, "max", Number(e.target.value) ?? 20)} className={inputClassNarrow} style={inputStyle} />
                               </div>
                             </div>
@@ -1047,14 +1141,21 @@ export function ReglesForm({
                 </CollapsibleBlock>
               )}
               {worldDateRule && worldDateAdvanceRule && (
-                <CollapsibleBlock title="Date" open={worldDateOpen} onToggle={() => setWorldDateOpen((o) => !o)}>
+                <CollapsibleBlock
+                  title="Date"
+                  infoContent={<TooltipBody text="Règle la date officielle de l'univers de jeu et la vitesse à laquelle elle avance au fil des passages du monde." />}
+                  open={worldDateOpen}
+                  onToggle={() => setWorldDateOpen((o) => !o)}
+                >
                   <div className="p-3 space-y-3">
                     <p className="text-xs text-[var(--foreground-muted)]">
                       Date du monde affichée aux joueurs (ex. Rapport du Cabinet). À chaque passage du cron, la date avance du nombre de mois indiqué dans la temporalité (0 = date figée).
                     </p>
                     <div className="flex flex-wrap items-end gap-x-6 gap-y-2">
                       <div className="flex flex-col gap-0.5">
-                        <label className="text-xs text-[var(--foreground-muted)]">Mois</label>
+                        <label className="text-xs text-[var(--foreground-muted)]">
+                          <FormLabel label="Mois" tooltip="Choisit le mois affiché comme date actuelle de l'univers." />
+                        </label>
                         <select
                           value={typeof worldDateRule.value === "object" && worldDateRule.value !== null && "month" in worldDateRule.value ? Number((worldDateRule.value as { month?: number }).month) : 1}
                           onChange={(e) => {
@@ -1071,7 +1172,9 @@ export function ReglesForm({
                         </select>
                       </div>
                       <div className="flex flex-col gap-0.5">
-                        <label className="text-xs text-[var(--foreground-muted)]">Année</label>
+                        <label className="text-xs text-[var(--foreground-muted)]">
+                          <FormLabel label="Année" tooltip="Choisit l'année affichée comme date actuelle de l'univers." />
+                        </label>
                         <input
                           type="number"
                           min={1}
@@ -1087,7 +1190,9 @@ export function ReglesForm({
                         />
                       </div>
                       <div className="flex flex-col gap-0.5">
-                        <label className="text-xs text-[var(--foreground-muted)]">Temporalité (mois par mise à jour cron)</label>
+                        <label className="text-xs text-[var(--foreground-muted)]">
+                          <FormLabel label="Temporalité (mois par mise à jour cron)" tooltip="Détermine de combien de mois la date du monde avance à chaque mise à jour quotidienne. À 0, la date reste figée." />
+                        </label>
                         <input
                           type="number"
                           min={0}
@@ -1109,8 +1214,19 @@ export function ReglesForm({
           )}
 
           {items.length > 0 && (
-          <CollapsibleBlock title="Lois" open={loisOpen} onToggle={() => setLoisOpen((o) => !o)} variant="section">
-          <CollapsibleBlock title="Paramètres Budget" open={budgetOpen} onToggle={() => setBudgetOpen((o) => !o)}>
+          <CollapsibleBlock
+            title="Lois"
+            infoContent={<TooltipBody text="Réunit les réglages structurels des ministères, du budget et de la mobilisation. Ces règles influencent directement l'évolution des pays." />}
+            open={loisOpen}
+            onToggle={() => setLoisOpen((o) => !o)}
+            variant="section"
+          >
+          <CollapsibleBlock
+            title="Paramètres Budget"
+            infoContent={<TooltipBody text="Définit comment chaque ministère réagit au financement : seuil minimal, bonus en cas d'effort suffisant, et malus en cas de sous-financement." />}
+            open={budgetOpen}
+            onToggle={() => setBudgetOpen((o) => !o)}
+          >
             <div className="pl-4 ml-2 border-l-2" style={{ borderColor: "var(--border-muted)" }}>
             {BUDGET_MINISTRY_KEYS.map((key) => {
               const r = rulesByKey.get(key);
@@ -1130,7 +1246,9 @@ export function ReglesForm({
                   <div className="p-3 space-y-3" style={{ borderColor: "var(--border-muted)" }}>
                     <div className="flex flex-wrap items-end gap-x-4 gap-y-2">
                       <div className="flex flex-col gap-0.5">
-                        <label className="text-xs text-[var(--foreground-muted)]">% min</label>
+                        <label className="text-xs text-[var(--foreground-muted)]">
+                          <FormLabel label="% min" tooltip="Seuil minimal de financement à atteindre pour que ce ministère commence à produire correctement ses effets positifs." />
+                        </label>
                         <input
                           type="number"
                           min={0}
@@ -1143,7 +1261,9 @@ export function ReglesForm({
                         />
                       </div>
                       <div className="flex flex-col gap-0.5">
-                        <label className="text-xs text-[var(--foreground-muted)]">Gravité %</label>
+                        <label className="text-xs text-[var(--foreground-muted)]">
+                          <FormLabel label="Gravité %" tooltip="Accentue les effets de ce ministère pour les pays en retard sur la moyenne mondiale. Plus la valeur est haute, plus le rattrapage est marqué." />
+                        </label>
                         <input
                           type="number"
                           min={0}
@@ -1158,7 +1278,9 @@ export function ReglesForm({
                     </div>
                     <div>
                       <div className="mb-1 flex items-center justify-between">
-                        <span className="text-xs text-[var(--foreground-muted)]">Effets (type, bonus, malus, gravité)</span>
+                        <span className="text-xs text-[var(--foreground-muted)]">
+                          <TitleWithInfo title="Effets (type, bonus, malus, gravité)" tooltip="Liste des effets concrets portés par ce ministère. Chaque ligne décrit ce qu'il aide, ce qu'il pénalise en sous-financement, et si le rattrapage mondial s'applique." className="inline-flex items-center gap-1.5" />
+                        </span>
                         <button
                           type="button"
                           onClick={() => addBudgetEffect(r)}
@@ -1181,7 +1303,9 @@ export function ReglesForm({
                               style={{ borderColor: "var(--border-muted)" }}
                             >
                               <div className="flex flex-col gap-0.5">
-                                <label className="text-xs text-[var(--foreground-muted)]">Type</label>
+                                <label className="text-xs text-[var(--foreground-muted)]">
+                                  <FormLabel label="Type" tooltip="Choisit quel domaine ce ministère influence : population, PIB ou l'une des stats du pays." />
+                                </label>
                                 <select
                                   value={effect.effect_type}
                                   onChange={(e) => updateBudgetEffectAt(r, idx, { effect_type: e.target.value as BudgetMinistryEffectDef["effect_type"] })}
@@ -1194,7 +1318,9 @@ export function ReglesForm({
                                 </select>
                               </div>
                               <div className="flex flex-col gap-0.5">
-                                <label className="text-xs text-[var(--foreground-muted)]">Bonus</label>
+                                <label className="text-xs text-[var(--foreground-muted)]">
+                                  <FormLabel label="Bonus" tooltip="Effet positif maximal produit à chaque passage du monde quand le ministère est correctement financé." />
+                                </label>
                                 <input
                                   type="number"
                                   min={0}
@@ -1206,7 +1332,9 @@ export function ReglesForm({
                                 />
                               </div>
                               <div className="flex flex-col gap-0.5">
-                                <label className="text-xs text-[var(--foreground-muted)]">Malus</label>
+                                <label className="text-xs text-[var(--foreground-muted)]">
+                                  <FormLabel label="Malus" tooltip="Effet négatif appliqué quand le ministère tombe sous son seuil minimal de financement." />
+                                </label>
                                 <input
                                   type="number"
                                   max={0}
@@ -1225,7 +1353,9 @@ export function ReglesForm({
                                   onChange={(e) => updateBudgetEffectAt(r, idx, { gravity_applies: e.target.checked })}
                                   className="rounded"
                                 />
-                                <label htmlFor={`gravity-${r.id}-${idx}`} className="text-xs text-[var(--foreground-muted)]">Gravité</label>
+                                <label htmlFor={`gravity-${r.id}-${idx}`} className="text-xs text-[var(--foreground-muted)]">
+                                  <FormLabel label="Gravité" tooltip="Si activé, l'effet tient compte de l'écart entre le pays et la moyenne mondiale pour renforcer le rattrapage." />
+                                </label>
                               </div>
                               <button
                                 type="button"
@@ -1248,10 +1378,14 @@ export function ReglesForm({
               className="border-t p-3"
               style={{ borderColor: "var(--border-muted)", background: "var(--background)" }}
             >
-              <div className="mb-2 text-sm font-medium text-[var(--foreground)]">Simulateur (test des paramètres)</div>
+              <div className="mb-2 text-sm font-medium text-[var(--foreground)]">
+                <TitleWithInfo title="Simulateur (test des paramètres)" tooltip="Outil de test rapide pour voir ce que produirait un ministère selon le budget alloué et la situation du pays par rapport au monde." className="inline-flex items-center gap-2" />
+              </div>
               <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
                 <div>
-                  <label className="mb-0.5 block text-xs text-[var(--foreground-muted)]">Ministère</label>
+                  <label className="mb-0.5 block text-xs text-[var(--foreground-muted)]">
+                    <FormLabel label="Ministère" tooltip="Choisit quel ministère vous souhaitez tester dans le simulateur." />
+                  </label>
                   <select
                     value={simulatorMinistry}
                     onChange={(e) => setSimulatorMinistry(e.target.value)}
@@ -1264,7 +1398,9 @@ export function ReglesForm({
                   </select>
                 </div>
                 <div>
-                  <label className="mb-0.5 block text-xs text-[var(--foreground-muted)]">Valeur de base du pays</label>
+                  <label className="mb-0.5 block text-xs text-[var(--foreground-muted)]">
+                    <FormLabel label="Valeur de base du pays" tooltip="Valeur actuelle estimée du pays sur le domaine testé, avant application du ministère." />
+                  </label>
                   <input
                     type="number"
                     step={0.01}
@@ -1275,7 +1411,9 @@ export function ReglesForm({
                   />
                 </div>
                 <div>
-                  <label className="mb-0.5 block text-xs text-[var(--foreground-muted)]">Moyenne mondiale</label>
+                  <label className="mb-0.5 block text-xs text-[var(--foreground-muted)]">
+                    <FormLabel label="Moyenne mondiale" tooltip="Référence utilisée pour mesurer si le pays est en avance ou en retard, notamment pour les effets de gravité." />
+                  </label>
                   <input
                     type="number"
                     step={0.01}
@@ -1287,7 +1425,9 @@ export function ReglesForm({
                 </div>
               </div>
               <div className="mt-2">
-                <label className="mb-0.5 block text-xs text-[var(--foreground-muted)]">Allocation % (slider)</label>
+                <label className="mb-0.5 block text-xs text-[var(--foreground-muted)]">
+                  <FormLabel label="Allocation % (slider)" tooltip="Part du budget total donnée à ce ministère dans le test. Cela permet de simuler un sous-financement ou un effort volontaire." />
+                </label>
                 <div className="flex items-center gap-2">
                   <input
                     type="range"
@@ -1318,13 +1458,20 @@ export function ReglesForm({
           </CollapsibleBlock>
 
           {mobilisationConfigRule && mobilisationEffectsRule && (
-            <CollapsibleBlock title="Mobilisation" open={mobilisationOpen} onToggle={() => setMobilisationOpen((o) => !o)}>
+            <CollapsibleBlock
+              title="Mobilisation"
+              infoContent={<TooltipBody text="Transforme le score de mobilisation en paliers politiques et militaires, puis applique les effets correspondants lors de la mise à jour du monde." />}
+              open={mobilisationOpen}
+              onToggle={() => setMobilisationOpen((o) => !o)}
+            >
               <div className="p-3 space-y-4">
                 <p className="text-xs text-[var(--foreground-muted)]">
                   Les paramètres et effets de mobilisation sont lus par le cron à chaque exécution. Toute modification enregistrée ici sera prise en compte à la prochaine mise à jour quotidienne.
                 </p>
                 <div>
-                  <div className="text-xs font-medium text-[var(--foreground-muted)] mb-2">Seuils par palier (score 0–500)</div>
+                  <div className="text-xs font-medium text-[var(--foreground-muted)] mb-2">
+                    <TitleWithInfo title="Seuils par palier (score 0–500)" tooltip="Chaque valeur indique à partir de quel score le pays entre dans ce palier de mobilisation." className="inline-flex items-center gap-1.5" />
+                  </div>
                   <div className="grid gap-2 grid-cols-2 sm:grid-cols-3 lg:grid-cols-5">
                     {MOBILISATION_LEVEL_KEYS.map((key) => {
                       const config = getMobilisationConfig();
@@ -1332,7 +1479,9 @@ export function ReglesForm({
                       const val = thresholds[key] ?? 0;
                       return (
                         <div key={key} className="flex flex-col gap-0.5">
-                          <label className="text-xs text-[var(--foreground-muted)]">{MOBILISATION_LEVEL_LABELS[key]}</label>
+                          <label className="text-xs text-[var(--foreground-muted)]">
+                            <FormLabel label={MOBILISATION_LEVEL_LABELS[key]} tooltip={`Score minimal nécessaire pour atteindre le palier « ${MOBILISATION_LEVEL_LABELS[key]} ».`} />
+                          </label>
                           <input
                             type="number"
                             min={0}
@@ -1352,7 +1501,9 @@ export function ReglesForm({
                     const effectsWithIndex = getMobilisationEffectsForLevel(levelKey);
                     return (
                       <div key={levelKey} className="rounded border p-3" style={{ borderColor: "var(--border-muted)" }}>
-                        <div className="text-sm font-medium text-[var(--foreground)] mb-2">{MOBILISATION_LEVEL_LABELS[levelKey]}</div>
+                        <div className="text-sm font-medium text-[var(--foreground)] mb-2">
+                          <TitleWithInfo title={MOBILISATION_LEVEL_LABELS[levelKey]} tooltip={`Effets appliqués quand un pays se trouve dans le palier « ${MOBILISATION_LEVEL_LABELS[levelKey]} ».`} className="inline-flex items-center gap-2" />
+                        </div>
                         <ul className="space-y-2">
                           {effectsWithIndex.map(({ effect: e, globalIndex: idx }) => {
                             const valueHelper = getEffectKindValueHelper(e.effect_kind);
@@ -1413,7 +1564,9 @@ export function ReglesForm({
                                   </select>
                                 )}
                                 <label className="flex items-center gap-1">
-                                  <span className="text-[var(--foreground-muted)] shrink-0">{valueHelper.valueLabel}</span>
+                                  <span className="text-[var(--foreground-muted)] shrink-0">
+                                    <FormLabel label={valueHelper.valueLabel} tooltip={genericEffectValueTooltip} />
+                                  </span>
                                   <input
                                     type="number"
                                     step={valueHelper.valueStep}
@@ -1452,53 +1605,85 @@ export function ReglesForm({
           )}
 
           {(countriesForMatrice && relationMapForMatrice) && (
-            <CollapsibleBlock title="Diplomatie" open={diplomatieOpen} onToggle={() => setDiplomatieOpen((o) => !o)} variant="section">
-              <CollapsibleBlock title="Matrice diplomatique" open={matriceOpen} onToggle={() => setMatriceOpen((o) => !o)}>
+            <CollapsibleBlock
+              title="Diplomatie"
+              infoContent={<TooltipBody text="Réunit les règles qui structurent les relations entre pays : perception mutuelle, poids international, emprise sur d'autres pays et certains effets de voisinage." />}
+              open={diplomatieOpen}
+              onToggle={() => setDiplomatieOpen((o) => !o)}
+              variant="section"
+            >
+              <CollapsibleBlock
+                title="Matrice diplomatique"
+                infoContent={<TooltipBody text="Permet de fixer la relation bilatérale entre deux pays. Cette valeur influence plusieurs systèmes, dont certains événements et l'idéologie." />}
+                open={matriceOpen}
+                onToggle={() => setMatriceOpen((o) => !o)}
+              >
                 <div className="p-3">
                   <MatriceDiplomatiqueForm countries={countriesForMatrice} relationMap={relationMapForMatrice} />
                 </div>
               </CollapsibleBlock>
               {items.length > 0 && influenceConfigRule && (
-                <CollapsibleBlock title="Influence" open={influenceOpen} onToggle={() => setInfluenceOpen((o) => !o)}>
+                <CollapsibleBlock
+                  title="Influence"
+                  infoContent={<TooltipBody text="Détermine comment se calcule le poids international d'un pays à partir de son économie, de sa population, de sa puissance militaire et de sa stabilité." />}
+                  open={influenceOpen}
+                  onToggle={() => setInfluenceOpen((o) => !o)}
+                >
                   <div className="p-3 space-y-3">
                     <p className="text-xs text-[var(--foreground-muted)]">
                       Score Influence (type Diplomatic Weight) : multiplicateurs des contributions PIB, Population, Hard Power ; stabilité en intervalle (-3 à +3) ; gravité par paramètre.
                     </p>
                     <div className="flex flex-wrap gap-x-6 gap-y-3">
                       <div className="flex flex-col gap-0.5">
-                        <label className="text-xs text-[var(--foreground-muted)]">Mult. PIB</label>
+                        <label className="text-xs text-[var(--foreground-muted)]">
+                          <FormLabel label="Mult. PIB" tooltip="Règle l'importance du PIB dans le calcul de l'influence. Plus la valeur est haute, plus la richesse pèse lourd." />
+                        </label>
                         <input type="number" step="any" value={getInfluenceConfig().mult_gdp ?? 1e-9} onChange={(e) => updateInfluenceConfig({ mult_gdp: Number(e.target.value) || 0 })} className="rounded border py-1.5 px-2 text-sm w-28 font-mono" style={{ borderColor: "var(--border)", background: "var(--background)" }} />
                       </div>
                       <div className="flex flex-col gap-0.5">
-                        <label className="text-xs text-[var(--foreground-muted)]">Mult. Population</label>
+                        <label className="text-xs text-[var(--foreground-muted)]">
+                          <FormLabel label="Mult. Population" tooltip="Règle l'importance de la population dans le calcul de l'influence." />
+                        </label>
                         <input type="number" step="any" value={getInfluenceConfig().mult_population ?? 1e-7} onChange={(e) => updateInfluenceConfig({ mult_population: Number(e.target.value) || 0 })} className="rounded border py-1.5 px-2 text-sm w-28 font-mono" style={{ borderColor: "var(--border)", background: "var(--background)" }} />
                       </div>
                       <div className="flex flex-col gap-0.5">
-                        <label className="text-xs text-[var(--foreground-muted)]">Mult. Hard Power</label>
+                        <label className="text-xs text-[var(--foreground-muted)]">
+                          <FormLabel label="Mult. Hard Power" tooltip="Règle l'importance de la puissance militaire dans le calcul de l'influence." />
+                        </label>
                         <input type="number" step="any" value={getInfluenceConfig().mult_military ?? 0.01} onChange={(e) => updateInfluenceConfig({ mult_military: Number(e.target.value) || 0 })} className="rounded border py-1.5 px-2 text-sm w-28 font-mono" style={{ borderColor: "var(--border)", background: "var(--background)" }} />
                       </div>
                     </div>
                     <div className="flex flex-wrap gap-x-6 gap-y-3">
                       <div className="flex flex-col gap-0.5">
-                        <label className="text-xs text-[var(--foreground-muted)]">Stabilité : modif. à min (-3)</label>
+                        <label className="text-xs text-[var(--foreground-muted)]">
+                          <FormLabel label="Stabilité : modif. à min (-3)" tooltip="Définit à quel point une stabilité très mauvaise réduit l'influence internationale du pays." />
+                        </label>
                         <input type="number" step="any" value={getInfluenceConfig().stability_modifier_min ?? 0} onChange={(e) => updateInfluenceConfig({ stability_modifier_min: Number(e.target.value) ?? 0 })} className="rounded border py-1.5 px-2 text-sm w-24 font-mono" style={{ borderColor: "var(--border)", background: "var(--background)" }} />
                       </div>
                       <div className="flex flex-col gap-0.5">
-                        <label className="text-xs text-[var(--foreground-muted)]">Stabilité : modif. à max (+3)</label>
+                        <label className="text-xs text-[var(--foreground-muted)]">
+                          <FormLabel label="Stabilité : modif. à max (+3)" tooltip="Définit à quel point une stabilité excellente renforce l'influence internationale du pays." />
+                        </label>
                         <input type="number" step="any" value={getInfluenceConfig().stability_modifier_max ?? 1} onChange={(e) => updateInfluenceConfig({ stability_modifier_max: Number(e.target.value) ?? 1 })} className="rounded border py-1.5 px-2 text-sm w-24 font-mono" style={{ borderColor: "var(--border)", background: "var(--background)" }} />
                       </div>
                     </div>
                     <div className="flex flex-wrap gap-x-6 gap-y-3">
                       <div className="flex flex-col gap-0.5">
-                        <label className="text-xs text-[var(--foreground-muted)]">Gravité PIB %</label>
+                        <label className="text-xs text-[var(--foreground-muted)]">
+                          <FormLabel label="Gravité PIB %" tooltip="Accentue l'effet du PIB pour les pays éloignés de la moyenne mondiale." />
+                        </label>
                         <input type="number" min={0} max={100} value={getInfluenceConfig().gravity_pct_gdp ?? 50} onChange={(e) => updateInfluenceConfig({ gravity_pct_gdp: Math.max(0, Math.min(100, Number(e.target.value) || 0)) })} className="rounded border py-1.5 px-2 text-sm w-16 font-mono" style={{ borderColor: "var(--border)", background: "var(--background)" }} />
                       </div>
                       <div className="flex flex-col gap-0.5">
-                        <label className="text-xs text-[var(--foreground-muted)]">Gravité Population %</label>
+                        <label className="text-xs text-[var(--foreground-muted)]">
+                          <FormLabel label="Gravité Population %" tooltip="Accentue l'effet de la population pour les pays éloignés de la moyenne mondiale." />
+                        </label>
                         <input type="number" min={0} max={100} value={getInfluenceConfig().gravity_pct_population ?? 50} onChange={(e) => updateInfluenceConfig({ gravity_pct_population: Math.max(0, Math.min(100, Number(e.target.value) || 0)) })} className="rounded border py-1.5 px-2 text-sm w-16 font-mono" style={{ borderColor: "var(--border)", background: "var(--background)" }} />
                       </div>
                       <div className="flex flex-col gap-0.5">
-                        <label className="text-xs text-[var(--foreground-muted)]">Gravité Hard Power %</label>
+                        <label className="text-xs text-[var(--foreground-muted)]">
+                          <FormLabel label="Gravité Hard Power %" tooltip="Accentue l'effet de la puissance militaire pour les pays éloignés de la moyenne mondiale." />
+                        </label>
                         <input type="number" min={0} max={100} value={getInfluenceConfig().gravity_pct_military ?? 50} onChange={(e) => updateInfluenceConfig({ gravity_pct_military: Math.max(0, Math.min(100, Number(e.target.value) || 0)) })} className="rounded border py-1.5 px-2 text-sm w-16 font-mono" style={{ borderColor: "var(--border)", background: "var(--background)" }} />
                       </div>
                     </div>
@@ -1506,22 +1691,34 @@ export function ReglesForm({
                 </CollapsibleBlock>
               )}
               {items.length > 0 && sphereInfluencePctRule && (
-                <CollapsibleBlock title="Sphère" open={sphereOpen} onToggle={() => setSphereOpen((o) => !o)}>
+                <CollapsibleBlock
+                  title="Sphère"
+                  infoContent={<TooltipBody text="Règle la part d'influence récupérée par un pays dominant sur un pays qu'il contrôle partiellement ou totalement." warning={sphereWarning} />}
+                  infoWarning
+                  open={sphereOpen}
+                  onToggle={() => setSphereOpen((o) => !o)}
+                >
                   <div className="p-3 space-y-3">
                     <p className="text-xs text-[var(--foreground-muted)]">
                       Pour chaque statut de contrôle, le % de l&apos;influence du pays sous emprise qui est attribué à l&apos;overlord.
                     </p>
                     <div className="flex flex-wrap gap-x-6 gap-y-3">
                       <div className="flex flex-col gap-0.5">
-                        <label className="text-xs text-[var(--foreground-muted)]">Contesté %</label>
+                        <label className="text-xs text-[var(--foreground-muted)]">
+                          <FormLabel label="Contesté %" tooltip="Part d'influence transmise quand le contrôle du pays reste disputé." warning={sphereWarning} />
+                        </label>
                         <input type="number" min={0} max={100} value={getSphereInfluencePct().contested ?? 50} onChange={(e) => updateSphereInfluencePct({ contested: Math.max(0, Math.min(100, Number(e.target.value) || 0)) })} className="rounded border py-1.5 px-2 text-sm w-20 font-mono" style={{ borderColor: "var(--border)", background: "var(--background)" }} />
                       </div>
                       <div className="flex flex-col gap-0.5">
-                        <label className="text-xs text-[var(--foreground-muted)]">Occupé %</label>
+                        <label className="text-xs text-[var(--foreground-muted)]">
+                          <FormLabel label="Occupé %" tooltip="Part d'influence transmise quand le pays est occupé mais pas encore annexé." warning={sphereWarning} />
+                        </label>
                         <input type="number" min={0} max={100} value={getSphereInfluencePct().occupied ?? 80} onChange={(e) => updateSphereInfluencePct({ occupied: Math.max(0, Math.min(100, Number(e.target.value) || 0)) })} className="rounded border py-1.5 px-2 text-sm w-20 font-mono" style={{ borderColor: "var(--border)", background: "var(--background)" }} />
                       </div>
                       <div className="flex flex-col gap-0.5">
-                        <label className="text-xs text-[var(--foreground-muted)]">Annexé %</label>
+                        <label className="text-xs text-[var(--foreground-muted)]">
+                          <FormLabel label="Annexé %" tooltip="Part d'influence transmise quand le pays est considéré comme entièrement annexé." warning={sphereWarning} />
+                        </label>
                         <input type="number" min={0} max={100} value={getSphereInfluencePct().annexed ?? 100} onChange={(e) => updateSphereInfluencePct({ annexed: Math.max(0, Math.min(100, Number(e.target.value) || 0)) })} className="rounded border py-1.5 px-2 text-sm w-20 font-mono" style={{ borderColor: "var(--border)", background: "var(--background)" }} />
                       </div>
                     </div>
@@ -1532,14 +1729,22 @@ export function ReglesForm({
           )}
 
           {items.length > 0 && ideologyConfigRule && (
-            <CollapsibleBlock title="Idéologie" open={ideologyOpen} onToggle={() => setIdeologyOpen((o) => !o)} variant="section">
+            <CollapsibleBlock
+              title="Idéologie"
+              infoContent={<TooltipBody text="Règle la vitesse et la force du glissement idéologique des pays, désormais uniquement via les voisins et les effets idéologiques actifs." />}
+              open={ideologyOpen}
+              onToggle={() => setIdeologyOpen((o) => !o)}
+              variant="section"
+            >
               <div className="p-3 space-y-4">
                 <p className="text-xs text-[var(--foreground-muted)]">
                   Règles du triangle d’alignement. La dérive combine désormais le voisinage, la relation, l’influence, le contrôle et les effets idéologiques actifs.
                 </p>
                 <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
                   <div>
-                    <label className="mb-1 block text-xs text-[var(--foreground-muted)]">Lissage quotidien</label>
+                    <label className="mb-1 block text-xs text-[var(--foreground-muted)]">
+                      <FormLabel label="Lissage quotidien" tooltip="Règle la vitesse du changement idéologique. Une faible valeur crée de l'inertie, une forte valeur accélère les bascules." />
+                    </label>
                     <input
                       type="number"
                       step="0.01"
@@ -1550,7 +1755,9 @@ export function ReglesForm({
                     />
                   </div>
                   <div>
-                    <label className="mb-1 block text-xs text-[var(--foreground-muted)]">Poids voisins</label>
+                    <label className="mb-1 block text-xs text-[var(--foreground-muted)]">
+                      <FormLabel label="Poids voisins" tooltip="Mesure à quel point l'idéologie des pays voisins tire un pays dans une direction." />
+                    </label>
                     <input
                       type="number"
                       step="0.01"
@@ -1561,7 +1768,9 @@ export function ReglesForm({
                     />
                   </div>
                   <div>
-                    <label className="mb-1 block text-xs text-[var(--foreground-muted)]">Poids effets</label>
+                    <label className="mb-1 block text-xs text-[var(--foreground-muted)]">
+                      <FormLabel label="Poids effets" tooltip="Mesure à quel point les effets idéologiques ajoutés par l'administration comptent dans la dérive." />
+                    </label>
                     <input
                       type="number"
                       step="0.01"
@@ -1574,7 +1783,9 @@ export function ReglesForm({
                 </div>
                 <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
                   <div>
-                    <label className="mb-1 block text-xs text-[var(--foreground-muted)]">Poids relation</label>
+                    <label className="mb-1 block text-xs text-[var(--foreground-muted)]">
+                      <FormLabel label="Poids relation" tooltip="Augmente ou réduit l'influence idéologique d'un voisin selon que la relation bilatérale est bonne ou mauvaise." />
+                    </label>
                     <input
                       type="number"
                       step="0.01"
@@ -1585,7 +1796,9 @@ export function ReglesForm({
                     />
                   </div>
                   <div>
-                    <label className="mb-1 block text-xs text-[var(--foreground-muted)]">Poids influence</label>
+                    <label className="mb-1 block text-xs text-[var(--foreground-muted)]">
+                      <FormLabel label="Poids influence" tooltip="Donne davantage de poids idéologique aux voisins les plus influents sur la scène internationale." />
+                    </label>
                     <input
                       type="number"
                       step="0.01"
@@ -1596,7 +1809,9 @@ export function ReglesForm({
                     />
                   </div>
                   <div>
-                    <label className="mb-1 block text-xs text-[var(--foreground-muted)]">Poids contrôle</label>
+                    <label className="mb-1 block text-xs text-[var(--foreground-muted)]">
+                      <FormLabel label="Poids contrôle" tooltip="Renforce l'empreinte idéologique d'un voisin quand il contrôle ou annexe une part du pays concerné." />
+                    </label>
                     <input
                       type="number"
                       step="0.01"
@@ -1607,7 +1822,9 @@ export function ReglesForm({
                     />
                   </div>
                   <div>
-                    <label className="mb-1 block text-xs text-[var(--foreground-muted)]">Force des impulsions</label>
+                    <label className="mb-1 block text-xs text-[var(--foreground-muted)]">
+                      <FormLabel label="Force des impulsions" tooltip="Amplifie les chocs idéologiques brusques par rapport aux influences lentes et progressives." />
+                    </label>
                     <input
                       type="number"
                       step="0.1"
@@ -1624,7 +1841,13 @@ export function ReglesForm({
 
           <div className="mt-8 pt-8 border-t" style={{ borderColor: "var(--border-muted)" }}>
           {aiMajorEffectsRule && aiMinorEffectsRule && (
-            <CollapsibleBlock title="Intelligence Artificielle" open={aiOpen} onToggle={() => setAiOpen((o) => !o)} variant="section">
+            <CollapsibleBlock
+              title="Intelligence Artificielle"
+              infoContent={<TooltipBody text="Règle le rythme d'action des pays sans joueur et les avantages ou handicaps permanents accordés aux IA majeures et mineures." />}
+              open={aiOpen}
+              onToggle={() => setAiOpen((o) => !o)}
+              variant="section"
+            >
               <div className="p-3 space-y-4">
                 <p className="text-xs text-[var(--foreground-muted)]">
                   Effets appliqués aux pays sans joueur selon leur statut IA (Majeur / Mineur) défini dans la liste admin des pays.
@@ -1632,10 +1855,14 @@ export function ReglesForm({
 
                 {aiEventsConfigRule && (
                   <div className="rounded border p-4 space-y-4" style={{ borderColor: "var(--border-muted)", background: "var(--background-elevated)" }}>
-                    <h4 className="text-sm font-semibold text-[var(--foreground)]">Paramètres Events IA</h4>
+                    <h4 className="text-sm font-semibold text-[var(--foreground)]">
+                      <TitleWithInfo title="Paramètres Events IA" tooltip="Détermine à quelle fréquence le système crée des actions automatiques pour les pays IA, sur quelles cibles et dans quel périmètre." className="inline-flex items-center gap-2" />
+                    </h4>
                     <div className="grid gap-4 sm:grid-cols-2">
                       <div>
-                        <label className="mb-1 block text-xs text-[var(--foreground-muted)]">Intervalle (heures)</label>
+                        <label className="mb-1 block text-xs text-[var(--foreground-muted)]">
+                          <FormLabel label="Intervalle (heures)" tooltip="Temps minimum entre deux générations automatiques d'actions IA." />
+                        </label>
                         <input
                           type="number"
                           min={1}
@@ -1646,7 +1873,9 @@ export function ReglesForm({
                         />
                       </div>
                       <div>
-                        <label className="mb-1 block text-xs text-[var(--foreground-muted)]">Actions IA majeures par passage</label>
+                        <label className="mb-1 block text-xs text-[var(--foreground-muted)]">
+                          <FormLabel label="Actions IA majeures par passage" tooltip="Nombre d'actions que le système peut créer pour les grandes IA à chaque passage." />
+                        </label>
                         <input
                           type="number"
                           min={0}
@@ -1657,7 +1886,9 @@ export function ReglesForm({
                         />
                       </div>
                       <div>
-                        <label className="mb-1 block text-xs text-[var(--foreground-muted)]">Actions IA mineures par passage</label>
+                        <label className="mb-1 block text-xs text-[var(--foreground-muted)]">
+                          <FormLabel label="Actions IA mineures par passage" tooltip="Nombre d'actions que le système peut créer pour les petites IA à chaque passage." />
+                        </label>
                         <input
                           type="number"
                           min={0}
@@ -1668,7 +1899,9 @@ export function ReglesForm({
                         />
                       </div>
                       <div>
-                        <label className="mb-1 block text-xs text-[var(--foreground-muted)]">Amplitude temps (minutes)</label>
+                        <label className="mb-1 block text-xs text-[var(--foreground-muted)]">
+                          <FormLabel label="Amplitude temps (minutes)" tooltip="Décale légèrement l'heure exacte des actions IA autour de l'heure théorique pour éviter un déclenchement trop mécanique." />
+                        </label>
                         <input
                           type="number"
                           min={0}
@@ -1680,7 +1913,9 @@ export function ReglesForm({
                       </div>
                     </div>
                     <div>
-                      <span className="mb-1 block text-xs text-[var(--foreground-muted)]">Actions autorisées (IA majeures)</span>
+                      <span className="mb-1 block text-xs text-[var(--foreground-muted)]">
+                        <TitleWithInfo title="Actions autorisées (IA majeures)" tooltip="Liste des types d'actions que les IA majeures ont le droit de générer automatiquement." className="inline-flex items-center gap-1.5" />
+                      </span>
                       <div className="flex flex-wrap gap-2">
                         {stateActionTypesForAi.map((t) => (
                           <label key={t.id} className="flex items-center gap-1.5 text-sm">
@@ -1695,7 +1930,9 @@ export function ReglesForm({
                       </div>
                     </div>
                     <div>
-                      <span className="mb-1 block text-xs text-[var(--foreground-muted)]">Actions autorisées (IA mineures)</span>
+                      <span className="mb-1 block text-xs text-[var(--foreground-muted)]">
+                        <TitleWithInfo title="Actions autorisées (IA mineures)" tooltip="Liste des types d'actions que les IA mineures ont le droit de générer automatiquement." className="inline-flex items-center gap-1.5" />
+                      </span>
                       <div className="flex flex-wrap gap-2">
                         {stateActionTypesForAi.map((t) => (
                           <label key={t.id} className="flex items-center gap-1.5 text-sm">
@@ -1710,7 +1947,9 @@ export function ReglesForm({
                       </div>
                     </div>
                     <div>
-                      <span className="mb-1 block text-xs text-[var(--foreground-muted)]">Cibles autorisées</span>
+                      <span className="mb-1 block text-xs text-[var(--foreground-muted)]">
+                        <TitleWithInfo title="Cibles autorisées" tooltip="Détermine quelles catégories de pays peuvent être choisies comme cibles par les actions IA." className="inline-flex items-center gap-1.5" />
+                      </span>
                       <div className="flex flex-wrap gap-4">
                         <label className="flex items-center gap-1.5 text-sm">
                           <input
@@ -1739,7 +1978,9 @@ export function ReglesForm({
                       </div>
                     </div>
                     <div>
-                      <span className="mb-1 block text-xs text-[var(--foreground-muted)]">Distance</span>
+                      <span className="mb-1 block text-xs text-[var(--foreground-muted)]">
+                        <TitleWithInfo title="Distance" tooltip="Définit le périmètre dans lequel l'IA peut choisir ses cibles : voisins directs, même continent ou monde entier." className="inline-flex items-center gap-1.5" />
+                      </span>
                       <div className="flex flex-wrap gap-4">
                         {["neighbors", "continent", "world"].map((mode) => (
                           <label key={mode} className="flex items-center gap-1.5 text-sm">
@@ -1758,7 +1999,9 @@ export function ReglesForm({
                       <RecalculerVoisinagesButton />
                     </div>
                     <div>
-                      <span className="mb-1 block text-xs text-[var(--foreground-muted)]">Accepter automatiquement (par type)</span>
+                      <span className="mb-1 block text-xs text-[var(--foreground-muted)]">
+                        <TitleWithInfo title="Accepter automatiquement (par type)" tooltip="Permet de faire passer certaines actions IA directement à l'état accepté, sans validation manuelle." className="inline-flex items-center gap-1.5" />
+                      </span>
                       <div className="flex flex-wrap gap-2">
                         {stateActionTypesForAi.map((t) => (
                           <label key={t.id} className="flex items-center gap-1.5 text-sm">
@@ -1777,7 +2020,9 @@ export function ReglesForm({
 
                 <div className="space-y-3">
                   <div>
-                    <h4 className="mb-2 text-sm font-medium text-[var(--foreground)]">IA majeure</h4>
+                    <h4 className="mb-2 text-sm font-medium text-[var(--foreground)]">
+                      <TitleWithInfo title="IA majeure" tooltip="Effets permanents appliqués aux pays sans joueur considérés comme grandes puissances IA." className="inline-flex items-center gap-2" />
+                    </h4>
                     <ul className="space-y-2">
                       {getAiEffects(aiMajorEffectsRule).map((e, idx) => (
                         <li
@@ -1798,22 +2043,26 @@ export function ReglesForm({
                     ) : (
                       <div className="rounded border p-3 space-y-2" style={{ borderColor: "var(--border-muted)" }}>
                         <div>
-                          <label className="mb-0.5 block text-xs text-[var(--foreground-muted)]">Type d&apos;effet</label>
+                          <label className="mb-0.5 block text-xs text-[var(--foreground-muted)]">
+                            <FormLabel label="Type d'effet" tooltip={genericEffectTypeTooltip} />
+                          </label>
                           <select value={aiMajorEffectKind} onChange={(ev) => { const k = ev.target.value; setAiMajorEffectKind(k); setAiMajorEffectTarget(getDefaultTargetForKindGlobal(k)); }} className={inputClass} style={inputStyle}>
                             {ALL_EFFECT_KIND_IDS.map((k) => (<option key={k} value={k}>{EFFECT_KIND_LABELS[k] ?? k}</option>))}
                           </select>
                         </div>
-                        {EFFECT_KINDS_WITH_STAT_TARGET.has(aiMajorEffectKind) && (<div><label className="mb-0.5 block text-xs text-[var(--foreground-muted)]">Stat</label><select value={aiMajorEffectTarget ?? STAT_KEYS[0]} onChange={(ev) => setAiMajorEffectTarget(ev.target.value || null)} className={inputClass} style={inputStyle}>{STAT_KEYS.map((k) => (<option key={k} value={k}>{STAT_LABELS[k]}</option>))}</select></div>)}
-                        {EFFECT_KINDS_WITH_BUDGET_TARGET.has(aiMajorEffectKind) && (<div><label className="mb-0.5 block text-xs text-[var(--foreground-muted)]">Ministère</label><select value={aiMajorEffectTarget ?? getBudgetMinistryOptions()[0]?.key ?? ""} onChange={(ev) => setAiMajorEffectTarget(ev.target.value || null)} className={inputClass} style={inputStyle}>{getBudgetMinistryOptions().map(({ key, label }) => (<option key={key} value={key}>{label}</option>))}</select></div>)}
-                        {EFFECT_KINDS_WITH_BRANCH_TARGET.has(aiMajorEffectKind) && (<div><label className="mb-0.5 block text-xs text-[var(--foreground-muted)]">Branche</label><select value={aiMajorEffectTarget ?? MILITARY_BRANCH_EFFECT_IDS[0]} onChange={(ev) => setAiMajorEffectTarget(ev.target.value || null)} className={inputClass} style={inputStyle}>{MILITARY_BRANCH_EFFECT_IDS.map((b) => (<option key={b} value={b}>{MILITARY_BRANCH_EFFECT_LABELS[b]}</option>))}</select></div>)}
-                        {EFFECT_KINDS_WITH_ROSTER_UNIT_TARGET.has(aiMajorEffectKind) && (<div><label className="mb-0.5 block text-xs text-[var(--foreground-muted)]">Unité</label><select value={aiMajorEffectTarget ?? rosterUnits[0]?.id ?? ""} onChange={(ev) => setAiMajorEffectTarget(ev.target.value || null)} className={inputClass} style={inputStyle}>{rosterUnits.map((u) => (<option key={u.id} value={u.id}>{u.name_fr}</option>))}</select></div>)}
-                        <div><label className="mb-0.5 block text-xs text-[var(--foreground-muted)]">{getEffectKindValueHelper(aiMajorEffectKind).valueLabel}</label><input type="number" step={getEffectKindValueHelper(aiMajorEffectKind).valueStep} value={aiMajorEffectValue} onChange={(e) => setAiMajorEffectValue(e.target.value)} className={inputClassNarrow} style={inputStyle} /></div>
+                        {EFFECT_KINDS_WITH_STAT_TARGET.has(aiMajorEffectKind) && (<div><label className="mb-0.5 block text-xs text-[var(--foreground-muted)]"><FormLabel label="Stat" tooltip={genericStatTooltip} /></label><select value={aiMajorEffectTarget ?? STAT_KEYS[0]} onChange={(ev) => setAiMajorEffectTarget(ev.target.value || null)} className={inputClass} style={inputStyle}>{STAT_KEYS.map((k) => (<option key={k} value={k}>{STAT_LABELS[k]}</option>))}</select></div>)}
+                        {EFFECT_KINDS_WITH_BUDGET_TARGET.has(aiMajorEffectKind) && (<div><label className="mb-0.5 block text-xs text-[var(--foreground-muted)]"><FormLabel label="Ministère" tooltip={genericBudgetTooltip} /></label><select value={aiMajorEffectTarget ?? getBudgetMinistryOptions()[0]?.key ?? ""} onChange={(ev) => setAiMajorEffectTarget(ev.target.value || null)} className={inputClass} style={inputStyle}>{getBudgetMinistryOptions().map(({ key, label }) => (<option key={key} value={key}>{label}</option>))}</select></div>)}
+                        {EFFECT_KINDS_WITH_BRANCH_TARGET.has(aiMajorEffectKind) && (<div><label className="mb-0.5 block text-xs text-[var(--foreground-muted)]"><FormLabel label="Branche" tooltip={genericBranchTooltip} /></label><select value={aiMajorEffectTarget ?? MILITARY_BRANCH_EFFECT_IDS[0]} onChange={(ev) => setAiMajorEffectTarget(ev.target.value || null)} className={inputClass} style={inputStyle}>{MILITARY_BRANCH_EFFECT_IDS.map((b) => (<option key={b} value={b}>{MILITARY_BRANCH_EFFECT_LABELS[b]}</option>))}</select></div>)}
+                        {EFFECT_KINDS_WITH_ROSTER_UNIT_TARGET.has(aiMajorEffectKind) && (<div><label className="mb-0.5 block text-xs text-[var(--foreground-muted)]"><FormLabel label="Unité" tooltip={genericUnitTooltip} /></label><select value={aiMajorEffectTarget ?? rosterUnits[0]?.id ?? ""} onChange={(ev) => setAiMajorEffectTarget(ev.target.value || null)} className={inputClass} style={inputStyle}>{rosterUnits.map((u) => (<option key={u.id} value={u.id}>{u.name_fr}</option>))}</select></div>)}
+                        <div><label className="mb-0.5 block text-xs text-[var(--foreground-muted)]"><FormLabel label={getEffectKindValueHelper(aiMajorEffectKind).valueLabel} tooltip={genericEffectValueTooltip} /></label><input type="number" step={getEffectKindValueHelper(aiMajorEffectKind).valueStep} value={aiMajorEffectValue} onChange={(e) => setAiMajorEffectValue(e.target.value)} className={inputClassNarrow} style={inputStyle} /></div>
                         <div className="flex gap-2"><button type="button" onClick={() => saveAiEffectForm("major")} className="rounded py-1.5 px-3 text-sm font-medium" style={{ background: "var(--accent)", color: "#0f1419" }}>Enregistrer</button><button type="button" onClick={() => setAiMajorFormOpen(false)} className="rounded border py-1.5 px-3 text-sm" style={{ borderColor: "var(--border)" }}>Annuler</button></div>
                       </div>
                     )}
                   </div>
                   <div>
-                    <h4 className="mb-2 text-sm font-medium text-[var(--foreground)]">IA mineure</h4>
+                    <h4 className="mb-2 text-sm font-medium text-[var(--foreground)]">
+                      <TitleWithInfo title="IA mineure" tooltip="Effets permanents appliqués aux pays sans joueur considérés comme puissances secondaires IA." className="inline-flex items-center gap-2" />
+                    </h4>
                     <ul className="space-y-2">
                       {getAiEffects(aiMinorEffectsRule).map((e, idx) => (
                         <li
@@ -1834,16 +2083,18 @@ export function ReglesForm({
                     ) : (
                       <div className="rounded border p-3 space-y-2" style={{ borderColor: "var(--border-muted)" }}>
                         <div>
-                          <label className="mb-0.5 block text-xs text-[var(--foreground-muted)]">Type d&apos;effet</label>
+                          <label className="mb-0.5 block text-xs text-[var(--foreground-muted)]">
+                            <FormLabel label="Type d'effet" tooltip={genericEffectTypeTooltip} />
+                          </label>
                           <select value={aiMinorEffectKind} onChange={(ev) => { const k = ev.target.value; setAiMinorEffectKind(k); setAiMinorEffectTarget(getDefaultTargetForKindGlobal(k)); }} className={inputClass} style={inputStyle}>
                             {ALL_EFFECT_KIND_IDS.map((k) => (<option key={k} value={k}>{EFFECT_KIND_LABELS[k] ?? k}</option>))}
                           </select>
                         </div>
-                        {EFFECT_KINDS_WITH_STAT_TARGET.has(aiMinorEffectKind) && (<div><label className="mb-0.5 block text-xs text-[var(--foreground-muted)]">Stat</label><select value={aiMinorEffectTarget ?? STAT_KEYS[0]} onChange={(ev) => setAiMinorEffectTarget(ev.target.value || null)} className={inputClass} style={inputStyle}>{STAT_KEYS.map((k) => (<option key={k} value={k}>{STAT_LABELS[k]}</option>))}</select></div>)}
-                        {EFFECT_KINDS_WITH_BUDGET_TARGET.has(aiMinorEffectKind) && (<div><label className="mb-0.5 block text-xs text-[var(--foreground-muted)]">Ministère</label><select value={aiMinorEffectTarget ?? getBudgetMinistryOptions()[0]?.key ?? ""} onChange={(ev) => setAiMinorEffectTarget(ev.target.value || null)} className={inputClass} style={inputStyle}>{getBudgetMinistryOptions().map(({ key, label }) => (<option key={key} value={key}>{label}</option>))}</select></div>)}
-                        {EFFECT_KINDS_WITH_BRANCH_TARGET.has(aiMinorEffectKind) && (<div><label className="mb-0.5 block text-xs text-[var(--foreground-muted)]">Branche</label><select value={aiMinorEffectTarget ?? MILITARY_BRANCH_EFFECT_IDS[0]} onChange={(ev) => setAiMinorEffectTarget(ev.target.value || null)} className={inputClass} style={inputStyle}>{MILITARY_BRANCH_EFFECT_IDS.map((b) => (<option key={b} value={b}>{MILITARY_BRANCH_EFFECT_LABELS[b]}</option>))}</select></div>)}
-                        {EFFECT_KINDS_WITH_ROSTER_UNIT_TARGET.has(aiMinorEffectKind) && (<div><label className="mb-0.5 block text-xs text-[var(--foreground-muted)]">Unité</label><select value={aiMinorEffectTarget ?? rosterUnits[0]?.id ?? ""} onChange={(ev) => setAiMinorEffectTarget(ev.target.value || null)} className={inputClass} style={inputStyle}>{rosterUnits.map((u) => (<option key={u.id} value={u.id}>{u.name_fr}</option>))}</select></div>)}
-                        <div><label className="mb-0.5 block text-xs text-[var(--foreground-muted)]">{getEffectKindValueHelper(aiMinorEffectKind).valueLabel}</label><input type="number" step={getEffectKindValueHelper(aiMinorEffectKind).valueStep} value={aiMinorEffectValue} onChange={(e) => setAiMinorEffectValue(e.target.value)} className={inputClassNarrow} style={inputStyle} /></div>
+                        {EFFECT_KINDS_WITH_STAT_TARGET.has(aiMinorEffectKind) && (<div><label className="mb-0.5 block text-xs text-[var(--foreground-muted)]"><FormLabel label="Stat" tooltip={genericStatTooltip} /></label><select value={aiMinorEffectTarget ?? STAT_KEYS[0]} onChange={(ev) => setAiMinorEffectTarget(ev.target.value || null)} className={inputClass} style={inputStyle}>{STAT_KEYS.map((k) => (<option key={k} value={k}>{STAT_LABELS[k]}</option>))}</select></div>)}
+                        {EFFECT_KINDS_WITH_BUDGET_TARGET.has(aiMinorEffectKind) && (<div><label className="mb-0.5 block text-xs text-[var(--foreground-muted)]"><FormLabel label="Ministère" tooltip={genericBudgetTooltip} /></label><select value={aiMinorEffectTarget ?? getBudgetMinistryOptions()[0]?.key ?? ""} onChange={(ev) => setAiMinorEffectTarget(ev.target.value || null)} className={inputClass} style={inputStyle}>{getBudgetMinistryOptions().map(({ key, label }) => (<option key={key} value={key}>{label}</option>))}</select></div>)}
+                        {EFFECT_KINDS_WITH_BRANCH_TARGET.has(aiMinorEffectKind) && (<div><label className="mb-0.5 block text-xs text-[var(--foreground-muted)]"><FormLabel label="Branche" tooltip={genericBranchTooltip} /></label><select value={aiMinorEffectTarget ?? MILITARY_BRANCH_EFFECT_IDS[0]} onChange={(ev) => setAiMinorEffectTarget(ev.target.value || null)} className={inputClass} style={inputStyle}>{MILITARY_BRANCH_EFFECT_IDS.map((b) => (<option key={b} value={b}>{MILITARY_BRANCH_EFFECT_LABELS[b]}</option>))}</select></div>)}
+                        {EFFECT_KINDS_WITH_ROSTER_UNIT_TARGET.has(aiMinorEffectKind) && (<div><label className="mb-0.5 block text-xs text-[var(--foreground-muted)]"><FormLabel label="Unité" tooltip={genericUnitTooltip} /></label><select value={aiMinorEffectTarget ?? rosterUnits[0]?.id ?? ""} onChange={(ev) => setAiMinorEffectTarget(ev.target.value || null)} className={inputClass} style={inputStyle}>{rosterUnits.map((u) => (<option key={u.id} value={u.id}>{u.name_fr}</option>))}</select></div>)}
+                        <div><label className="mb-0.5 block text-xs text-[var(--foreground-muted)]"><FormLabel label={getEffectKindValueHelper(aiMinorEffectKind).valueLabel} tooltip={genericEffectValueTooltip} /></label><input type="number" step={getEffectKindValueHelper(aiMinorEffectKind).valueStep} value={aiMinorEffectValue} onChange={(e) => setAiMinorEffectValue(e.target.value)} className={inputClassNarrow} style={inputStyle} /></div>
                         <div className="flex gap-2"><button type="button" onClick={() => saveAiEffectForm("minor")} className="rounded py-1.5 px-3 text-sm font-medium" style={{ background: "var(--accent)", color: "#0f1419" }}>Enregistrer</button><button type="button" onClick={() => setAiMinorFormOpen(false)} className="rounded border py-1.5 px-3 text-sm" style={{ borderColor: "var(--border)" }}>Annuler</button></div>
                       </div>
                     )}

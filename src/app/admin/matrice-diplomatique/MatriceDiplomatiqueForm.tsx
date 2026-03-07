@@ -4,8 +4,13 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { setRelation, resetAllRelations, randomizeAllRelations } from "./actions";
 import { RELATION_MIN, RELATION_MAX } from "@/lib/relations";
+import { InfoTooltip } from "@/components/ui/InfoTooltip";
 
 type Country = { id: string; name: string; slug: string };
+
+function TooltipBody({ text }: { text: string }) {
+  return <div className="text-xs leading-snug">{text}</div>;
+}
 
 export function MatriceDiplomatiqueForm({
   countries,
@@ -75,10 +80,16 @@ export function MatriceDiplomatiqueForm({
   return (
     <div className="space-y-8">
       <section className="rounded-lg border p-6" style={{ borderColor: "var(--border)", background: "var(--background-panel)" }}>
-        <h2 className="mb-4 text-lg font-semibold text-[var(--foreground)]">Modifier une relation</h2>
+        <h2 className="mb-4 inline-flex items-center gap-2 text-lg font-semibold text-[var(--foreground)]">
+          <span>Modifier une relation</span>
+          <InfoTooltip content={<TooltipBody text="Permet de fixer la relation diplomatique entre deux pays. Cette valeur est utilisée par plusieurs systèmes, notamment l'idéologie et certains événements." />} side="bottom" />
+        </h2>
         <div className="flex flex-wrap items-end gap-4">
           <div className="flex flex-col gap-1">
-            <label className="text-sm text-[var(--foreground-muted)]">Pays A</label>
+            <label className="inline-flex items-center gap-1.5 text-sm text-[var(--foreground-muted)]">
+              <span>Pays A</span>
+              <InfoTooltip content={<TooltipBody text="Premier pays de la relation bilatérale à modifier." />} />
+            </label>
             <select
               value={countryA}
               onChange={(e) => {
@@ -97,7 +108,10 @@ export function MatriceDiplomatiqueForm({
             </select>
           </div>
           <div className="flex flex-col gap-1">
-            <label className="text-sm text-[var(--foreground-muted)]">Pays B</label>
+            <label className="inline-flex items-center gap-1.5 text-sm text-[var(--foreground-muted)]">
+              <span>Pays B</span>
+              <InfoTooltip content={<TooltipBody text="Second pays de la relation bilatérale à modifier. Il doit être différent du premier." />} />
+            </label>
             <select
               value={countryB}
               onChange={(e) => {
@@ -116,7 +130,10 @@ export function MatriceDiplomatiqueForm({
             </select>
           </div>
           <div className="flex flex-col gap-1">
-            <label className="text-sm text-[var(--foreground-muted)]">Relation ({RELATION_MIN} à {RELATION_MAX})</label>
+            <label className="inline-flex items-center gap-1.5 text-sm text-[var(--foreground-muted)]">
+              <span>Relation ({RELATION_MIN} à {RELATION_MAX})</span>
+              <InfoTooltip content={<TooltipBody text="Mesure la qualité du lien diplomatique entre les deux pays : négative en cas d'hostilité, positive en cas de proximité." />} />
+            </label>
             <div className="flex items-center gap-3">
               <input
                 type="range"
