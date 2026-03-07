@@ -16,6 +16,7 @@ export const RULE_KEY_LABELS: Record<string, string> = {
   budget_affaires_etrangeres: "Ministère des Affaires étrangères",
   world_date: "Date du monde",
   world_date_advance_months: "Mois par mise à jour (temporalité)",
+  ideology_config: "Configuration idéologique",
 };
 
 export type RuleSection = {

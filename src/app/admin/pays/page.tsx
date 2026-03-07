@@ -4,6 +4,7 @@ import { CountriesTable } from "@/components/countries/CountriesTable";
 import { ResetStatsButton } from "./ResetStatsButton";
 import { AdvanceDayButton } from "./AdvanceDayButton";
 import { RandomizeBudgetsButton } from "./RandomizeBudgetsButton";
+import { RandomizeIdeologiesButton } from "./RandomizeIdeologiesButton";
 import { updateCountryAiStatus } from "./actions";
 
 function normId(id: string | null | undefined): string {
@@ -68,6 +69,7 @@ export default async function AdminPaysListPage() {
           <ResetStatsButton />
           <AdvanceDayButton />
           <RandomizeBudgetsButton />
+          <RandomizeIdeologiesButton />
         </div>
       </div>
 

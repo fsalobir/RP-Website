@@ -14,6 +14,7 @@ import {
   type BudgetMinistryValue,
   type BudgetMinistryEffectDef,
 } from "@/lib/ruleParameters";
+import { DEFAULT_IDEOLOGY_CONFIG, getIdeologyConfig as parseIdeologyConfig, IDEOLOGY_LABELS, type IdeologyConfig } from "@/lib/ideology";
 import { MOIS_LABELS } from "@/lib/worldDate";
 import {
   ALL_EFFECT_KIND_IDS,
@@ -276,6 +277,7 @@ export function ReglesForm({
   const [diplomatieOpen, setDiplomatieOpen] = useState(true);
   const [effetsGlobauxOpen, setEffetsGlobauxOpen] = useState(true);
   const [loisOpen, setLoisOpen] = useState(true);
+  const [ideologyOpen, setIdeologyOpen] = useState(false);
   const [aiOpen, setAiOpen] = useState(false);
   const [aiMajorFormOpen, setAiMajorFormOpen] = useState(false);
   const [aiMajorEditIndex, setAiMajorEditIndex] = useState<number | null>(null);
@@ -329,12 +331,14 @@ export function ReglesForm({
   const influenceConfigKey = "influence_config";
   const sphereInfluencePctKey = "sphere_influence_pct";
   const statsDiceModifierRangesKey = "stats_dice_modifier_ranges";
+  const ideologyConfigKey = "ideology_config";
 
   const globalGrowthEffectsRule = useMemo(() => items.find((r) => r.key === globalGrowthEffectsKey), [items]);
   const worldDateRule = useMemo(() => items.find((r) => r.key === worldDateKey), [items]);
   const worldDateAdvanceRule = useMemo(() => items.find((r) => r.key === worldDateAdvanceKey), [items]);
   const influenceConfigRule = useMemo(() => items.find((r) => r.key === influenceConfigKey), [items]);
   const sphereInfluencePctRule = useMemo(() => items.find((r) => r.key === sphereInfluencePctKey), [items]);
+  const ideologyConfigRule = useMemo(() => items.find((r) => r.key === ideologyConfigKey), [items]);
 
   type SphereInfluencePctValue = { contested?: number; occupied?: number; annexed?: number };
   function getSphereInfluencePct(): SphereInfluencePctValue {
@@ -346,6 +350,24 @@ export function ReglesForm({
   function updateSphereInfluencePct(patch: Partial<SphereInfluencePctValue>) {
     if (!sphereInfluencePctRule) return;
     updateValue(sphereInfluencePctRule.id, { ...getSphereInfluencePct(), ...patch });
+  }
+
+  function getIdeologyConfigValue(): IdeologyConfig {
+    return parseIdeologyConfig(ideologyConfigRule?.value);
+  }
+  function updateIdeologyConfig(
+    patch: Omit<Partial<IdeologyConfig>, "weights"> & { weights?: Partial<IdeologyConfig["weights"]> }
+  ) {
+    if (!ideologyConfigRule) return;
+    const current = getIdeologyConfigValue();
+    updateValue(ideologyConfigRule.id, {
+      ...current,
+      ...patch,
+      weights: {
+        ...current.weights,
+        ...(patch.weights ?? {}),
+      },
+    });
   }
 
   type InfluenceConfigValue = {
@@ -892,7 +914,7 @@ export function ReglesForm({
                 ) : (
                   <div className="rounded border p-3 space-y-2" style={{ borderColor: "var(--border-muted)" }}>
                     <div>
-                      <label className="mb-0.5 block text-xs text-[var(--foreground-muted)]">Type d'effet</label>
+                      <label className="mb-0.5 block text-xs text-[var(--foreground-muted)]">Type d&apos;effet</label>
                       <select
                         value={globalEffectKind}
                         onChange={(ev) => {
@@ -1518,6 +1540,157 @@ export function ReglesForm({
             </CollapsibleBlock>
           )}
 
+          {items.length > 0 && ideologyConfigRule && (
+            <CollapsibleBlock title="Idéologie" open={ideologyOpen} onToggle={() => setIdeologyOpen((o) => !o)} variant="section">
+              <div className="p-3 space-y-4">
+                <p className="text-xs text-[var(--foreground-muted)]">
+                  Règles du triangle d’alignement. La dérive combine socle interne, voisins, relation, influence, contrôle et effets actifs.
+                </p>
+                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                  <div>
+                    <label className="mb-1 block text-xs text-[var(--foreground-muted)]">Lissage quotidien</label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={getIdeologyConfigValue().daily_step}
+                      onChange={(e) => updateIdeologyConfig({ daily_step: Number(e.target.value) || DEFAULT_IDEOLOGY_CONFIG.daily_step })}
+                      className="w-full rounded border px-2 py-1.5 text-sm font-mono"
+                      style={{ borderColor: "var(--border)", background: "var(--background)" }}
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-xs text-[var(--foreground-muted)]">Poids socle interne</label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={getIdeologyConfigValue().base_pull_weight}
+                      onChange={(e) => updateIdeologyConfig({ base_pull_weight: Number(e.target.value) || DEFAULT_IDEOLOGY_CONFIG.base_pull_weight })}
+                      className="w-full rounded border px-2 py-1.5 text-sm font-mono"
+                      style={{ borderColor: "var(--border)", background: "var(--background)" }}
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-xs text-[var(--foreground-muted)]">Poids voisins</label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={getIdeologyConfigValue().neighbor_pull_weight}
+                      onChange={(e) => updateIdeologyConfig({ neighbor_pull_weight: Number(e.target.value) || DEFAULT_IDEOLOGY_CONFIG.neighbor_pull_weight })}
+                      className="w-full rounded border px-2 py-1.5 text-sm font-mono"
+                      style={{ borderColor: "var(--border)", background: "var(--background)" }}
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-xs text-[var(--foreground-muted)]">Poids effets</label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={getIdeologyConfigValue().effect_pull_weight}
+                      onChange={(e) => updateIdeologyConfig({ effect_pull_weight: Number(e.target.value) || DEFAULT_IDEOLOGY_CONFIG.effect_pull_weight })}
+                      className="w-full rounded border px-2 py-1.5 text-sm font-mono"
+                      style={{ borderColor: "var(--border)", background: "var(--background)" }}
+                    />
+                  </div>
+                </div>
+                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                  <div>
+                    <label className="mb-1 block text-xs text-[var(--foreground-muted)]">Poids relation</label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={getIdeologyConfigValue().relation_pull_weight}
+                      onChange={(e) => updateIdeologyConfig({ relation_pull_weight: Number(e.target.value) || DEFAULT_IDEOLOGY_CONFIG.relation_pull_weight })}
+                      className="w-full rounded border px-2 py-1.5 text-sm font-mono"
+                      style={{ borderColor: "var(--border)", background: "var(--background)" }}
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-xs text-[var(--foreground-muted)]">Poids influence</label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={getIdeologyConfigValue().influence_pull_weight}
+                      onChange={(e) => updateIdeologyConfig({ influence_pull_weight: Number(e.target.value) || DEFAULT_IDEOLOGY_CONFIG.influence_pull_weight })}
+                      className="w-full rounded border px-2 py-1.5 text-sm font-mono"
+                      style={{ borderColor: "var(--border)", background: "var(--background)" }}
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-xs text-[var(--foreground-muted)]">Poids contrôle</label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={getIdeologyConfigValue().control_pull_weight}
+                      onChange={(e) => updateIdeologyConfig({ control_pull_weight: Number(e.target.value) || DEFAULT_IDEOLOGY_CONFIG.control_pull_weight })}
+                      className="w-full rounded border px-2 py-1.5 text-sm font-mono"
+                      style={{ borderColor: "var(--border)", background: "var(--background)" }}
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-xs text-[var(--foreground-muted)]">Force des impulsions</label>
+                    <input
+                      type="number"
+                      step="0.1"
+                      value={getIdeologyConfigValue().snap_strength}
+                      onChange={(e) => updateIdeologyConfig({ snap_strength: Number(e.target.value) || DEFAULT_IDEOLOGY_CONFIG.snap_strength })}
+                      className="w-full rounded border px-2 py-1.5 text-sm font-mono"
+                      style={{ borderColor: "var(--border)", background: "var(--background)" }}
+                    />
+                  </div>
+                </div>
+                <div className="grid gap-4 lg:grid-cols-3">
+                  <div className="rounded border p-3" style={{ borderColor: "var(--border-muted)" }}>
+                    <div className="mb-2 text-sm font-medium text-[var(--foreground)]">{IDEOLOGY_LABELS.monarchism}</div>
+                    <div className="space-y-2">
+                      <div>
+                        <label className="mb-1 block text-xs text-[var(--foreground-muted)]">Depuis stabilité</label>
+                        <input type="number" step="0.01" value={getIdeologyConfigValue().weights.monarchism_from_stability} onChange={(e) => updateIdeologyConfig({ weights: { monarchism_from_stability: Number(e.target.value) || DEFAULT_IDEOLOGY_CONFIG.weights.monarchism_from_stability } })} className="w-full rounded border px-2 py-1.5 text-sm font-mono" style={{ borderColor: "var(--border)", background: "var(--background)" }} />
+                      </div>
+                      <div>
+                        <label className="mb-1 block text-xs text-[var(--foreground-muted)]">Depuis militarisme</label>
+                        <input type="number" step="0.01" value={getIdeologyConfigValue().weights.monarchism_from_militarism} onChange={(e) => updateIdeologyConfig({ weights: { monarchism_from_militarism: Number(e.target.value) || DEFAULT_IDEOLOGY_CONFIG.weights.monarchism_from_militarism } })} className="w-full rounded border px-2 py-1.5 text-sm font-mono" style={{ borderColor: "var(--border)", background: "var(--background)" }} />
+                      </div>
+                    </div>
+                  </div>
+                  <div className="rounded border p-3" style={{ borderColor: "var(--border-muted)" }}>
+                    <div className="mb-2 text-sm font-medium text-[var(--foreground)]">{IDEOLOGY_LABELS.republicanism}</div>
+                    <div className="space-y-2">
+                      <div>
+                        <label className="mb-1 block text-xs text-[var(--foreground-muted)]">Depuis science</label>
+                        <input type="number" step="0.01" value={getIdeologyConfigValue().weights.republicanism_from_science} onChange={(e) => updateIdeologyConfig({ weights: { republicanism_from_science: Number(e.target.value) || DEFAULT_IDEOLOGY_CONFIG.weights.republicanism_from_science } })} className="w-full rounded border px-2 py-1.5 text-sm font-mono" style={{ borderColor: "var(--border)", background: "var(--background)" }} />
+                      </div>
+                      <div>
+                        <label className="mb-1 block text-xs text-[var(--foreground-muted)]">Depuis stabilité</label>
+                        <input type="number" step="0.01" value={getIdeologyConfigValue().weights.republicanism_from_stability} onChange={(e) => updateIdeologyConfig({ weights: { republicanism_from_stability: Number(e.target.value) || DEFAULT_IDEOLOGY_CONFIG.weights.republicanism_from_stability } })} className="w-full rounded border px-2 py-1.5 text-sm font-mono" style={{ borderColor: "var(--border)", background: "var(--background)" }} />
+                      </div>
+                      <div>
+                        <label className="mb-1 block text-xs text-[var(--foreground-muted)]">Depuis industrie</label>
+                        <input type="number" step="0.01" value={getIdeologyConfigValue().weights.republicanism_from_industry} onChange={(e) => updateIdeologyConfig({ weights: { republicanism_from_industry: Number(e.target.value) || DEFAULT_IDEOLOGY_CONFIG.weights.republicanism_from_industry } })} className="w-full rounded border px-2 py-1.5 text-sm font-mono" style={{ borderColor: "var(--border)", background: "var(--background)" }} />
+                      </div>
+                    </div>
+                  </div>
+                  <div className="rounded border p-3" style={{ borderColor: "var(--border-muted)" }}>
+                    <div className="mb-2 text-sm font-medium text-[var(--foreground)]">{IDEOLOGY_LABELS.cultism}</div>
+                    <div className="space-y-2">
+                      <div>
+                        <label className="mb-1 block text-xs text-[var(--foreground-muted)]">Depuis instabilité</label>
+                        <input type="number" step="0.01" value={getIdeologyConfigValue().weights.cultism_from_instability} onChange={(e) => updateIdeologyConfig({ weights: { cultism_from_instability: Number(e.target.value) || DEFAULT_IDEOLOGY_CONFIG.weights.cultism_from_instability } })} className="w-full rounded border px-2 py-1.5 text-sm font-mono" style={{ borderColor: "var(--border)", background: "var(--background)" }} />
+                      </div>
+                      <div>
+                        <label className="mb-1 block text-xs text-[var(--foreground-muted)]">Depuis faible science</label>
+                        <input type="number" step="0.01" value={getIdeologyConfigValue().weights.cultism_from_low_science} onChange={(e) => updateIdeologyConfig({ weights: { cultism_from_low_science: Number(e.target.value) || DEFAULT_IDEOLOGY_CONFIG.weights.cultism_from_low_science } })} className="w-full rounded border px-2 py-1.5 text-sm font-mono" style={{ borderColor: "var(--border)", background: "var(--background)" }} />
+                      </div>
+                      <div>
+                        <label className="mb-1 block text-xs text-[var(--foreground-muted)]">Depuis militarisme</label>
+                        <input type="number" step="0.01" value={getIdeologyConfigValue().weights.cultism_from_militarism} onChange={(e) => updateIdeologyConfig({ weights: { cultism_from_militarism: Number(e.target.value) || DEFAULT_IDEOLOGY_CONFIG.weights.cultism_from_militarism } })} className="w-full rounded border px-2 py-1.5 text-sm font-mono" style={{ borderColor: "var(--border)", background: "var(--background)" }} />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </CollapsibleBlock>
+          )}
+
           <div className="mt-8 pt-8 border-t" style={{ borderColor: "var(--border-muted)" }}>
           {aiMajorEffectsRule && aiMinorEffectsRule && (
             <CollapsibleBlock title="Intelligence Artificielle" open={aiOpen} onToggle={() => setAiOpen((o) => !o)} variant="section">
@@ -1694,7 +1867,7 @@ export function ReglesForm({
                     ) : (
                       <div className="rounded border p-3 space-y-2" style={{ borderColor: "var(--border-muted)" }}>
                         <div>
-                          <label className="mb-0.5 block text-xs text-[var(--foreground-muted)]">Type d'effet</label>
+                          <label className="mb-0.5 block text-xs text-[var(--foreground-muted)]">Type d&apos;effet</label>
                           <select value={aiMajorEffectKind} onChange={(ev) => { const k = ev.target.value; setAiMajorEffectKind(k); setAiMajorEffectTarget(getDefaultTargetForKindGlobal(k)); }} className={inputClass} style={inputStyle}>
                             {ALL_EFFECT_KIND_IDS.map((k) => (<option key={k} value={k}>{EFFECT_KIND_LABELS[k] ?? k}</option>))}
                           </select>
@@ -1730,7 +1903,7 @@ export function ReglesForm({
                     ) : (
                       <div className="rounded border p-3 space-y-2" style={{ borderColor: "var(--border-muted)" }}>
                         <div>
-                          <label className="mb-0.5 block text-xs text-[var(--foreground-muted)]">Type d'effet</label>
+                          <label className="mb-0.5 block text-xs text-[var(--foreground-muted)]">Type d&apos;effet</label>
                           <select value={aiMinorEffectKind} onChange={(ev) => { const k = ev.target.value; setAiMinorEffectKind(k); setAiMinorEffectTarget(getDefaultTargetForKindGlobal(k)); }} className={inputClass} style={inputStyle}>
                             {ALL_EFFECT_KIND_IDS.map((k) => (<option key={k} value={k}>{EFFECT_KIND_LABELS[k] ?? k}</option>))}
                           </select>

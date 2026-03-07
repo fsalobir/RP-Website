@@ -9,6 +9,8 @@ import {
   type EffectResolutionContext,
   type ResolvedEffect,
 } from "@/lib/countryEffects";
+import { persistWorldIdeologies } from "@/lib/ideologyServer";
+import { normalizeIdeologyScores } from "@/lib/ideology";
 
 const BUDGET_PCT_KEYS = [
   "pct_etat",
@@ -113,7 +115,7 @@ function randomizeBudgetPcts(forcedMinPcts: Record<string, number>, allocationCa
   });
   pcts[lastKey] = Math.floor((effectiveCap - sumFirst) * 100) / 100;
   pcts[lastKey] = Math.max(mins[lastKey], pcts[lastKey]);
-  let total = BUDGET_PCT_KEYS.reduce((s, k) => s + pcts[k], 0);
+  const total = BUDGET_PCT_KEYS.reduce((s, k) => s + pcts[k], 0);
   if (Math.round(total * 100) / 100 > effectiveCap) {
     const excess = Math.ceil((total - effectiveCap) * 100) / 100;
     const donor = firstKeys.find((k) => pcts[k] - mins[k] >= excess);
@@ -175,6 +177,7 @@ export async function resetAllCountriesStats(): Promise<{ error?: string; update
   revalidatePath("/admin/pays");
   revalidatePath("/");
   revalidatePath("/classement");
+  revalidatePath("/ideologie");
   return { updated: ids.length };
 }
 
@@ -195,10 +198,12 @@ export async function runDailyCountryUpdate(): Promise<{ error?: string }> {
   const { error } = await serviceSupabase.rpc("run_daily_country_update");
 
   if (error) return { error: error.message };
+  await persistWorldIdeologies(serviceSupabase);
 
   revalidatePath("/admin/pays");
   revalidatePath("/");
   revalidatePath("/classement");
+  revalidatePath("/ideologie");
   revalidateTag("country-page-globals", "max");
   return {};
 }
@@ -307,6 +312,64 @@ export async function randomizeNationalBudgets(): Promise<{ error?: string; upda
   revalidatePath("/admin/pays");
   revalidatePath("/");
   return { updated };
+}
+
+/**
+ * Randomise les idéologies de tous les pays pour les tests UI / gameplay.
+ * Réservé aux admins.
+ */
+export async function randomizeCountryIdeologies(): Promise<{ error?: string; updated?: number }> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: "Non connecté." };
+  const { data: adminRow } = await supabase.from("admins").select("id").eq("user_id", user.id).single();
+  if (!adminRow) return { error: "Réservé aux admins." };
+
+  const { data: countries, error: fetchError } = await supabase.from("countries").select("id, name");
+  if (fetchError) return { error: fetchError.message };
+  if (!countries?.length) return { updated: 0 };
+
+  const serviceSupabase = createServiceRoleClient();
+  for (const country of countries) {
+    const scores = normalizeIdeologyScores({
+      monarchism: Math.random(),
+      republicanism: Math.random(),
+      cultism: Math.random(),
+    });
+    const dominant =
+      scores.monarchism >= scores.republicanism && scores.monarchism >= scores.cultism
+        ? "monarchism"
+        : scores.republicanism >= scores.cultism
+          ? "republicanism"
+          : "cultism";
+    const { error } = await serviceSupabase
+      .from("countries")
+      .update({
+        ideology_monarchism: Number(scores.monarchism.toFixed(4)),
+        ideology_republicanism: Number(scores.republicanism.toFixed(4)),
+        ideology_cultism: Number(scores.cultism.toFixed(4)),
+        ideology_drift_monarchism: 0,
+        ideology_drift_republicanism: 0,
+        ideology_drift_cultism: 0,
+        ideology_breakdown: {
+          dominant,
+          source: "admin_randomize",
+          top_factors: [{ label: "Randomisation de test", ideology: dominant, value: 100 }],
+        },
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", country.id);
+    if (error) return { error: error.message };
+  }
+
+  revalidatePath("/admin/pays");
+  revalidatePath("/");
+  revalidatePath("/classement");
+  revalidatePath("/ideologie");
+  revalidateTag("country-page-globals", "max");
+  return { updated: countries.length };
 }
 
 /** Met à jour le statut IA d'un pays (admin uniquement). Refusé si le pays est joué par un joueur. */

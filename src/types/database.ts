@@ -15,6 +15,13 @@ export interface Country {
   growth: number
   /** Pays IA Majeur (major) ou Mineur (minor) pour les pays sans joueur. Null = pas IA. */
   ai_status?: string | null
+  ideology_monarchism?: number | null
+  ideology_republicanism?: number | null
+  ideology_cultism?: number | null
+  ideology_drift_monarchism?: number | null
+  ideology_drift_republicanism?: number | null
+  ideology_drift_cultism?: number | null
+  ideology_breakdown?: Record<string, unknown> | null
   created_at: string
   updated_at: string
 }

@@ -4,7 +4,6 @@ import Link from "next/link";
 import type { Country } from "@/types/database";
 import type { CountryEffect } from "@/types/database";
 import { formatNumber, formatGdp, formatPopulation } from "@/lib/format";
-import { Tooltip } from "@/components/ui/Tooltip";
 import {
   getEffectDescription,
   isEffectDisplayPositive,
@@ -25,6 +24,7 @@ import {
   EFFECT_KINDS_WITH_COUNTRY_TARGET,
   DURATION_DAYS_MAX,
 } from "@/lib/countryEffects";
+import { IDEOLOGY_LABELS } from "@/lib/ideology";
 
 type CountryTabGeneralProps = {
   country: Country;
@@ -64,6 +64,13 @@ type CountryTabGeneralProps = {
   influenceResult?: import("@/lib/influence").InfluenceResult | null;
   hardPowerByBranch?: import("@/lib/hardPower").HardPowerByBranch | null;
   sphereData?: { totalPopulation: number; totalGdp: number; countries: Array<{ id: string; name: string; slug: string; population: number | null; gdp: number | null }> };
+  ideologySummary?: {
+    scores: { monarchism: number; republicanism: number; cultism: number };
+    drift: { monarchism: number; republicanism: number; cultism: number };
+    dominant: "monarchism" | "republicanism" | "cultism";
+    centerDistance: number;
+    breakdown: { topFactors: Array<{ label: string; ideology: "monarchism" | "republicanism" | "cultism"; value: number }> };
+  } | null;
   otherCountriesForRelation?: Array<{ id: string; name: string }>;
 };
 
@@ -105,6 +112,7 @@ export function CountryTabGeneral({
   influenceResult = null,
   hardPowerByBranch = null,
   sphereData = { totalPopulation: 0, totalGdp: 0, countries: [] },
+  ideologySummary = null,
   otherCountriesForRelation = [],
 }: CountryTabGeneralProps) {
   return (
@@ -146,6 +154,40 @@ export function CountryTabGeneral({
             <span className="text-[var(--foreground)]">
               Terrestre {formatNumber(hardPowerByBranch.terre)} · Aérien {formatNumber(hardPowerByBranch.air)} · Naval {formatNumber(hardPowerByBranch.mer)} · Stratégique {formatNumber(hardPowerByBranch.strategique)} — Total {formatNumber(hardPowerByBranch.total)}
             </span>
+          </div>
+        )}
+        {ideologySummary && (
+          <div className="mb-6 rounded border p-4 text-sm" style={{ borderColor: "var(--border-muted)", background: "var(--background-elevated)" }}>
+            <div className="mb-2 flex flex-wrap items-center justify-between gap-3">
+              <span className="font-medium text-[var(--foreground)]">
+                Idéologie dominante : {IDEOLOGY_LABELS[ideologySummary.dominant]}
+              </span>
+              <span className="text-[var(--foreground-muted)]">
+                Distance au centre : {Math.round(ideologySummary.centerDistance * 100)} %
+              </span>
+            </div>
+            <div className="grid gap-2 sm:grid-cols-3">
+              <div className="rounded border px-3 py-2" style={{ borderColor: "var(--border)" }}>
+                <div className="text-xs text-[var(--foreground-muted)]">Monarchisme</div>
+                <div className="font-mono text-[var(--foreground)]">{Number(ideologySummary.scores.monarchism).toFixed(1)}</div>
+              </div>
+              <div className="rounded border px-3 py-2" style={{ borderColor: "var(--border)" }}>
+                <div className="text-xs text-[var(--foreground-muted)]">Républicanisme</div>
+                <div className="font-mono text-[var(--foreground)]">{Number(ideologySummary.scores.republicanism).toFixed(1)}</div>
+              </div>
+              <div className="rounded border px-3 py-2" style={{ borderColor: "var(--border)" }}>
+                <div className="text-xs text-[var(--foreground-muted)]">Cultisme</div>
+                <div className="font-mono text-[var(--foreground)]">{Number(ideologySummary.scores.cultism).toFixed(1)}</div>
+              </div>
+            </div>
+            <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs text-[var(--foreground-muted)]">
+              <span>Drift M : {Number(ideologySummary.drift.monarchism).toFixed(2)}</span>
+              <span>Drift R : {Number(ideologySummary.drift.republicanism).toFixed(2)}</span>
+              <span>Drift C : {Number(ideologySummary.drift.cultism).toFixed(2)}</span>
+            </div>
+            <div className="mt-3 text-xs text-[var(--foreground-muted)]">
+              {ideologySummary.breakdown.topFactors.map((factor) => `${factor.label} : ${IDEOLOGY_LABELS[factor.ideology]}`).join(" · ")}
+            </div>
           </div>
         )}
 
@@ -221,7 +263,7 @@ export function CountryTabGeneral({
                   />
                 </div>
                 <div>
-                  <label className="mb-1 block text-sm text-[var(--foreground-muted)]">Type d'effet</label>
+                  <label className="mb-1 block text-sm text-[var(--foreground-muted)]">Type d&apos;effet</label>
                   <select
                     value={effectKind}
                     onChange={(e) => {
@@ -305,7 +347,7 @@ export function CountryTabGeneral({
                       onChange={(e) => setEffectTarget(e.target.value || null)}
                       className="rounded border bg-[var(--background)] px-2 py-1.5 text-sm text-[var(--foreground)] min-w-[12rem]"
                       style={{ borderColor: "var(--border)" }}
-                      title="L'autre pays (la relation est entre ce pays et le pays de la fiche)"
+                      title="L&apos;autre pays (la relation est entre ce pays et le pays de la fiche)"
                     >
                       <option value="">— Choisir un pays —</option>
                       {otherCountriesForRelation.map((c) => (
@@ -316,7 +358,7 @@ export function CountryTabGeneral({
                 )}
                 {effectKind === "budget_allocation_cap" && (
                   <p className="text-sm text-[var(--foreground-muted)]">
-                    Positif = excédent (plafond d'allocation augmenté, ex. +20 → 120 % max). Négatif = dette (plafond réduit, ex. -20 → 80 % max).
+                    Positif = excédent (plafond d&apos;allocation augmenté, ex. +20 → 120 % max). Négatif = dette (plafond réduit, ex. -20 → 80 % max).
                   </p>
                 )}
                 <div>

@@ -12,6 +12,7 @@ export async function revalidateCountryPageGlobals() {
   revalidateTag("country-page-globals", "max");
   revalidatePath("/classement");
   revalidatePath("/");
+  revalidatePath("/ideologie");
 }
 
 /**
