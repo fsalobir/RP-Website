@@ -6,6 +6,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { createServiceRoleClient } from "@/lib/supabase/server";
+import { persistWorldIdeologies } from "@/lib/ideologyServer";
 
 function getCronSecret(request: NextRequest): string | null {
   const header = request.headers.get("x-cron-secret") ?? request.headers.get("authorization")?.replace(/^Bearer\s+/i, "");
@@ -26,6 +27,8 @@ export async function GET(request: NextRequest) {
   if (error) {
     return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
   }
+
+  await persistWorldIdeologies(supabase);
 
   return NextResponse.json({ ok: true });
 }

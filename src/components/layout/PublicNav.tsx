@@ -41,6 +41,9 @@ export function PublicNav({
           <Link href="/classement" className={navLinkClass}>
             <span aria-hidden className="mr-1.5">📊</span>Classement
           </Link>
+          <Link href="/ideologie" className={navLinkClass}>
+            <span aria-hidden className="mr-1.5">△</span>Idéologie
+          </Link>
           <div className={separatorClass} role="separator" />
           {isLoggedIn ? (
             <>

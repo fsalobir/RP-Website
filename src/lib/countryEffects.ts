@@ -47,6 +47,7 @@ export const EFFECT_CATEGORY_IDS = [
   "budget_debt_surplus",
   "military_unit",
   "influence_modifier",
+  "ideology",
 ] as const;
 export type EffectCategoryId = (typeof EFFECT_CATEGORY_IDS)[number];
 
@@ -58,6 +59,7 @@ export const EFFECT_CATEGORY_LABELS: Record<EffectCategoryId, string> = {
   budget_debt_surplus: "Allocation de Budget Maximum",
   military_unit: "Unité militaire",
   influence_modifier: "Modificateur d'influence",
+  ideology: "Idéologie",
 };
 
 /** Sous-type Croissance PIB / Population : base ou par stat. */
@@ -189,6 +191,12 @@ export const ALL_EFFECT_KIND_IDS = [
   "influence_modifier_hard_power",
   "state_actions_grant",
   "relation_delta",
+  "ideology_drift_monarchism",
+  "ideology_drift_republicanism",
+  "ideology_drift_cultism",
+  "ideology_snap_monarchism",
+  "ideology_snap_republicanism",
+  "ideology_snap_cultism",
 ] as const;
 
 export type EffectKindId = (typeof ALL_EFFECT_KIND_IDS)[number];
@@ -212,6 +220,12 @@ export const EFFECT_KIND_META: Record<EffectKindId, EffectKindMeta> = {
   influence_modifier_hard_power: { targetType: "none", valueFormat: "multiplier", label: "Modificateur d'influence (Hard Power)" },
   state_actions_grant: { targetType: "none", valueFormat: "integer", label: "Actions d'État (octroi par tick)" },
   relation_delta: { targetType: "country", valueFormat: "raw", label: "Évolution relation bilatérale" },
+  ideology_drift_monarchism: { targetType: "none", valueFormat: "raw", label: "Dérive idéologique (Monarchisme)" },
+  ideology_drift_republicanism: { targetType: "none", valueFormat: "raw", label: "Dérive idéologique (Républicanisme)" },
+  ideology_drift_cultism: { targetType: "none", valueFormat: "raw", label: "Dérive idéologique (Cultisme)" },
+  ideology_snap_monarchism: { targetType: "none", valueFormat: "raw", label: "Impulsion idéologique (Monarchisme)" },
+  ideology_snap_republicanism: { targetType: "none", valueFormat: "raw", label: "Impulsion idéologique (Républicanisme)" },
+  ideology_snap_cultism: { targetType: "none", valueFormat: "raw", label: "Impulsion idéologique (Cultisme)" },
 };
 
 /** Libellé court pour effect_kind (affichage liste). Dérivé des métadonnées, avec fallback. */
@@ -231,6 +245,12 @@ const _NONE = new Set<string>([
   "influence_modifier_gdp",
   "influence_modifier_population",
   "influence_modifier_hard_power",
+  "ideology_drift_monarchism",
+  "ideology_drift_republicanism",
+  "ideology_drift_cultism",
+  "ideology_snap_monarchism",
+  "ideology_snap_republicanism",
+  "ideology_snap_cultism",
 ]);
 const _BRANCH = new Set<string>(["military_unit_limit_modifier"]);
 const _ROSTER = new Set<string>(["military_unit_extra", "military_unit_tech_rate"]);
@@ -351,6 +371,12 @@ export function getEffectDescription(e: CountryEffect | ResolvedEffect, options?
     const otherName = options?.countryName?.(e.effect_target) ?? e.effect_target;
     return `Relation bilatérale — ${otherName} : ${valueStr} par tick`;
   }
+  if (e.effect_kind === "ideology_drift_monarchism") return `Dérive idéologique — Monarchisme : ${valueStr}`;
+  if (e.effect_kind === "ideology_drift_republicanism") return `Dérive idéologique — Républicanisme : ${valueStr}`;
+  if (e.effect_kind === "ideology_drift_cultism") return `Dérive idéologique — Cultisme : ${valueStr}`;
+  if (e.effect_kind === "ideology_snap_monarchism") return `Impulsion idéologique — Monarchisme : ${valueStr}`;
+  if (e.effect_kind === "ideology_snap_republicanism") return `Impulsion idéologique — Républicanisme : ${valueStr}`;
+  if (e.effect_kind === "ideology_snap_cultism") return `Impulsion idéologique — Cultisme : ${valueStr}`;
 
   const kindLabel = EFFECT_KIND_LABELS[e.effect_kind] ?? e.effect_kind;
   if (targetLabel) return `${kindLabel} — ${targetLabel} : ${valueStr}`;
@@ -370,6 +396,9 @@ export function formatEffectValue(effectKind: string | null | undefined, value: 
   if (kind === "military_unit_limit_modifier") return `${Number(value) >= 0 ? "+" : ""}${Number(value)} %`;
   if (kind.startsWith("influence_modifier_")) return `${(value * 100 - 100).toFixed(0)} %`;
   if (kind === "relation_delta") return `${Number(value) >= 0 ? "+" : ""}${Number(value)}`;
+  if (kind.startsWith("ideology_drift_") || kind.startsWith("ideology_snap_")) {
+    return `${Number(value) >= 0 ? "+" : ""}${Number(value).toFixed(2)}`;
+  }
   return String(value);
 }
 

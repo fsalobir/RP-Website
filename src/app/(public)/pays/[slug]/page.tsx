@@ -1,5 +1,5 @@
 import { unstable_cache, unstable_noStore } from "next/cache";
-import { createClient, createAnonClientForCache } from "@/lib/supabase/server";
+import { createClient, createAnonClientForCache, createServiceRoleClient } from "@/lib/supabase/server";
 import { getCachedAuth } from "@/lib/auth-server";
 import { notFound } from "next/navigation";
 import Link from "next/link";
@@ -9,6 +9,7 @@ import { computeHardPowerByCountry } from "@/lib/hardPower";
 import { computeInfluenceForAll, applyInfluenceModifiers } from "@/lib/influence";
 import { getAllRelationRows, relationRowsToMap, getRelationFromMap } from "@/lib/relations";
 import { getEffectsForCountry, getInfluenceModifiersFromEffects } from "@/lib/countryEffects";
+import { fetchWorldIdeologyState } from "@/lib/ideologyServer";
 import type {
   CountryUpdateLog,
   MilitaryBranch,
@@ -241,6 +242,9 @@ export default async function CountryPage({
       }
     : null;
 
+  const ideologyState = await fetchWorldIdeologyState(createServiceRoleClient());
+  const ideologySummary = ideologyState.ideologyByCountry.get(country.id) ?? null;
+
   const branches: MilitaryBranch[] = ["terre", "air", "mer", "strategique"];
   const rosterByBranch: Record<MilitaryBranch, RosterRowByBranch[]> = {
     terre: [],
@@ -298,6 +302,7 @@ export default async function CountryPage({
         aiMajorEffects={aiMajorEffects}
         aiMinorEffects={aiMinorEffects}
         sphereData={sphereData}
+        ideologySummary={ideologySummary}
         stateActionTypes={stateActionTypes}
         stateActionBalance={stateActionBalance}
         stateActionRequests={stateActionRequests}

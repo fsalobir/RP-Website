@@ -88,6 +88,7 @@ export function CountryTabs({
   aiMajorEffects = [],
   aiMinorEffects = [],
   sphereData = { totalPopulation: 0, totalGdp: 0, countries: [] },
+  ideologySummary = null,
   stateActionTypes = [],
   stateActionBalance = 0,
   stateActionRequests = [],
@@ -120,6 +121,13 @@ export function CountryTabs({
   aiMajorEffects?: Array<{ effect_kind: string; effect_target: string | null; value: number }>;
   aiMinorEffects?: Array<{ effect_kind: string; effect_target: string | null; value: number }>;
   sphereData?: { totalPopulation: number; totalGdp: number; countries: Array<{ id: string; name: string; slug: string; population: number | null; gdp: number | null }> };
+  ideologySummary?: {
+    scores: { monarchism: number; republicanism: number; cultism: number };
+    drift: { monarchism: number; republicanism: number; cultism: number };
+    dominant: "monarchism" | "republicanism" | "cultism";
+    centerDistance: number;
+    breakdown: { topFactors: Array<{ label: string; ideology: "monarchism" | "republicanism" | "cultism"; value: number }> };
+  } | null;
   stateActionTypes?: Array<{ id: string; key: string; label_fr: string; cost: number; params_schema: Record<string, unknown> | null }>;
   stateActionBalance?: number;
   stateActionRequests?: Array<{ id: string; action_type_id: string; status: string; payload: Record<string, unknown> | null; created_at: string; refusal_message: string | null; dice_results?: { success_roll?: { roll: number; modifier: number; total: number }; impact_roll?: { roll: number; modifier: number; total: number } } | null; state_action_types?: { key: string; label_fr: string } | null }>;
@@ -1037,6 +1045,7 @@ export function CountryTabs({
           influenceResult={influenceResult}
           hardPowerByBranch={localHardPowerByBranch ?? hardPowerByBranch}
           sphereData={sphereData}
+          ideologySummary={ideologySummary}
           otherCountriesForRelation={otherCountriesForRelation}
         />
       )}

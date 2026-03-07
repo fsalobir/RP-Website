@@ -14,6 +14,7 @@ import {
   formatAdminEffectShortForDiscord,
   DURATION_DAYS_MAX,
 } from "@/lib/countryEffects";
+import { normalizeIdeologyScores } from "@/lib/ideology";
 import type { AdminEffectAdded, DiceResults } from "@/types/database";
 
 function clampRelation(value: number): number {
@@ -114,6 +115,38 @@ export async function applyImmediateEffect(
     const { error: upErr } = await supabase
       .from("countries")
       .update({ [col]: newVal })
+      .eq("id", countryId);
+    if (upErr) return { error: upErr.message };
+    return {};
+  }
+
+  if (
+    kind === "ideology_snap_monarchism" ||
+    kind === "ideology_snap_republicanism" ||
+    kind === "ideology_snap_cultism"
+  ) {
+    const { data: row } = await supabase
+      .from("countries")
+      .select("ideology_monarchism, ideology_republicanism, ideology_cultism")
+      .eq("id", countryId)
+      .single();
+    const current = normalizeIdeologyScores({
+      monarchism: Number(row?.ideology_monarchism ?? 33.3333),
+      republicanism: Number(row?.ideology_republicanism ?? 33.3333),
+      cultism: Number(row?.ideology_cultism ?? 33.3334),
+    });
+    const shifted = normalizeIdeologyScores({
+      monarchism: current.monarchism + (kind === "ideology_snap_monarchism" ? value : 0),
+      republicanism: current.republicanism + (kind === "ideology_snap_republicanism" ? value : 0),
+      cultism: current.cultism + (kind === "ideology_snap_cultism" ? value : 0),
+    });
+    const { error: upErr } = await supabase
+      .from("countries")
+      .update({
+        ideology_monarchism: Number(shifted.monarchism.toFixed(4)),
+        ideology_republicanism: Number(shifted.republicanism.toFixed(4)),
+        ideology_cultism: Number(shifted.cultism.toFixed(4)),
+      })
       .eq("id", countryId);
     if (upErr) return { error: upErr.message };
     return {};
