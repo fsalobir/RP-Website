@@ -11,76 +11,39 @@ export const IDEOLOGY_LABELS: Record<IdeologyId, string> = {
 
 export type IdeologyScores = Record<IdeologyId, number>;
 
-export type IdeologyWeights = {
-  monarchism_from_stability: number;
-  monarchism_from_militarism: number;
-  republicanism_from_science: number;
-  republicanism_from_stability: number;
-  republicanism_from_industry: number;
-  cultism_from_instability: number;
-  cultism_from_low_science: number;
-  cultism_from_militarism: number;
-};
-
 export type IdeologyConfig = {
   daily_step: number;
-  base_pull_weight: number;
   neighbor_pull_weight: number;
   relation_pull_weight: number;
   influence_pull_weight: number;
   control_pull_weight: number;
   effect_pull_weight: number;
   snap_strength: number;
-  weights: IdeologyWeights;
 };
 
 export const DEFAULT_IDEOLOGY_CONFIG: IdeologyConfig = {
   daily_step: 0.18,
-  base_pull_weight: 0.9,
   neighbor_pull_weight: 0.8,
   relation_pull_weight: 0.35,
   influence_pull_weight: 0.45,
   control_pull_weight: 1.1,
   effect_pull_weight: 1,
   snap_strength: 16,
-  weights: {
-    monarchism_from_stability: 1.15,
-    monarchism_from_militarism: 0.75,
-    republicanism_from_science: 1.1,
-    republicanism_from_stability: 0.75,
-    republicanism_from_industry: 0.55,
-    cultism_from_instability: 1.2,
-    cultism_from_low_science: 0.85,
-    cultism_from_militarism: 0.3,
-  },
 };
 
-type PartialIdeologyConfig = Partial<IdeologyConfig> & {
-  weights?: Partial<IdeologyWeights>;
-};
+type PartialIdeologyConfig = Partial<IdeologyConfig>;
 
 export function getIdeologyConfig(raw: unknown): IdeologyConfig {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return DEFAULT_IDEOLOGY_CONFIG;
   const cfg = raw as PartialIdeologyConfig;
   return {
     daily_step: num(cfg.daily_step, DEFAULT_IDEOLOGY_CONFIG.daily_step),
-    base_pull_weight: num(cfg.base_pull_weight, DEFAULT_IDEOLOGY_CONFIG.base_pull_weight),
     neighbor_pull_weight: num(cfg.neighbor_pull_weight, DEFAULT_IDEOLOGY_CONFIG.neighbor_pull_weight),
     relation_pull_weight: num(cfg.relation_pull_weight, DEFAULT_IDEOLOGY_CONFIG.relation_pull_weight),
     influence_pull_weight: num(cfg.influence_pull_weight, DEFAULT_IDEOLOGY_CONFIG.influence_pull_weight),
     control_pull_weight: num(cfg.control_pull_weight, DEFAULT_IDEOLOGY_CONFIG.control_pull_weight),
     effect_pull_weight: num(cfg.effect_pull_weight, DEFAULT_IDEOLOGY_CONFIG.effect_pull_weight),
     snap_strength: num(cfg.snap_strength, DEFAULT_IDEOLOGY_CONFIG.snap_strength),
-    weights: {
-      monarchism_from_stability: num(cfg.weights?.monarchism_from_stability, DEFAULT_IDEOLOGY_CONFIG.weights.monarchism_from_stability),
-      monarchism_from_militarism: num(cfg.weights?.monarchism_from_militarism, DEFAULT_IDEOLOGY_CONFIG.weights.monarchism_from_militarism),
-      republicanism_from_science: num(cfg.weights?.republicanism_from_science, DEFAULT_IDEOLOGY_CONFIG.weights.republicanism_from_science),
-      republicanism_from_stability: num(cfg.weights?.republicanism_from_stability, DEFAULT_IDEOLOGY_CONFIG.weights.republicanism_from_stability),
-      republicanism_from_industry: num(cfg.weights?.republicanism_from_industry, DEFAULT_IDEOLOGY_CONFIG.weights.republicanism_from_industry),
-      cultism_from_instability: num(cfg.weights?.cultism_from_instability, DEFAULT_IDEOLOGY_CONFIG.weights.cultism_from_instability),
-      cultism_from_low_science: num(cfg.weights?.cultism_from_low_science, DEFAULT_IDEOLOGY_CONFIG.weights.cultism_from_low_science),
-      cultism_from_militarism: num(cfg.weights?.cultism_from_militarism, DEFAULT_IDEOLOGY_CONFIG.weights.cultism_from_militarism),
-    },
   };
 }
 
