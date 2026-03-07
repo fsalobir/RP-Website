@@ -154,11 +154,26 @@ function RecalculerVoisinagesButton() {
   );
 }
 
-function TooltipBody({ text, warning }: { text: string; warning?: string }) {
+function TooltipBody({
+  text,
+  points,
+  warning,
+}: {
+  text: React.ReactNode;
+  points?: React.ReactNode[];
+  warning?: string;
+}) {
   return (
-    <div className="space-y-1 text-xs leading-snug">
+    <div className="space-y-2 text-xs leading-relaxed">
       <div>{text}</div>
-      {warning ? <div className="text-[var(--danger)]">⚠️ {warning}</div> : null}
+      {points && points.length > 0 ? (
+        <ul className="list-disc space-y-1 pl-4">
+          {points.map((point, index) => (
+            <li key={index}>{point}</li>
+          ))}
+        </ul>
+      ) : null}
+      {warning ? <div className="font-medium text-[var(--danger)]">⚠️ {warning}</div> : null}
     </div>
   );
 }
@@ -171,7 +186,7 @@ function TitleWithInfo({
   className,
 }: {
   title: React.ReactNode;
-  tooltip?: string;
+  tooltip?: React.ReactNode;
   warning?: string;
   side?: "top" | "bottom";
   className?: string;
@@ -192,7 +207,7 @@ function FormLabel({
   side = "top",
 }: {
   label: React.ReactNode;
-  tooltip?: string;
+  tooltip?: React.ReactNode;
   warning?: string;
   className?: string;
   side?: "top" | "bottom";
@@ -1693,7 +1708,17 @@ export function ReglesForm({
               {items.length > 0 && sphereInfluencePctRule && (
                 <CollapsibleBlock
                   title="Sphère"
-                  infoContent={<TooltipBody text="Règle la part d'influence récupérée par un pays dominant sur un pays qu'il contrôle partiellement ou totalement." warning={sphereWarning} />}
+                  infoContent={
+                    <TooltipBody
+                      text={<strong>Règle la part d&apos;influence récupérée par un pays dominant sur un pays qu&apos;il contrôle.</strong>}
+                      points={[
+                        "Contesté : emprise incomplète ou disputée.",
+                        "Occupé : contrôle fort, sans intégration totale.",
+                        "Annexé : contrôle maximal.",
+                      ]}
+                      warning={sphereWarning}
+                    />
+                  }
                   infoWarning
                   open={sphereOpen}
                   onToggle={() => setSphereOpen((o) => !o)}
@@ -1856,7 +1881,20 @@ export function ReglesForm({
                 {aiEventsConfigRule && (
                   <div className="rounded border p-4 space-y-4" style={{ borderColor: "var(--border-muted)", background: "var(--background-elevated)" }}>
                     <h4 className="text-sm font-semibold text-[var(--foreground)]">
-                      <TitleWithInfo title="Paramètres Events IA" tooltip="Détermine à quelle fréquence le système crée des actions automatiques pour les pays IA, sur quelles cibles et dans quel périmètre." className="inline-flex items-center gap-2" />
+                      <TitleWithInfo
+                        title="Paramètres Events IA"
+                        tooltip={
+                          <TooltipBody
+                            text={<strong>Détermine comment le système génère les actions automatiques des pays IA.</strong>}
+                            points={[
+                              "quand elles sont créées",
+                              "combien d'actions partent à chaque passage",
+                              "quels types d'actions et quelles cibles sont autorisés",
+                            ]}
+                          />
+                        }
+                        className="inline-flex items-center gap-2"
+                      />
                     </h4>
                     <div className="grid gap-4 sm:grid-cols-2">
                       <div>
@@ -1979,7 +2017,20 @@ export function ReglesForm({
                     </div>
                     <div>
                       <span className="mb-1 block text-xs text-[var(--foreground-muted)]">
-                        <TitleWithInfo title="Distance" tooltip="Définit le périmètre dans lequel l'IA peut choisir ses cibles : voisins directs, même continent ou monde entier." className="inline-flex items-center gap-1.5" />
+                        <TitleWithInfo
+                          title="Distance"
+                          tooltip={
+                            <TooltipBody
+                              text={<strong>Définit jusqu&apos;où l&apos;IA peut aller chercher ses cibles.</strong>}
+                              points={[
+                                "Voisins : pays limitrophes via la carte.",
+                                "Continent : pays du même continent.",
+                                "Monde entier : aucune contrainte géographique.",
+                              ]}
+                            />
+                          }
+                          className="inline-flex items-center gap-1.5"
+                        />
                       </span>
                       <div className="flex flex-wrap gap-4">
                         {["neighbors", "continent", "world"].map((mode) => (
