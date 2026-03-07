@@ -129,10 +129,11 @@ export function IdeologyTriangle({ entries }: { entries: IdeologyEntry[] }) {
                 clipPath: "polygon(50% 6%, 8% 90%, 92% 90%)",
                 background:
                   [
-                    "radial-gradient(circle at 50% 6%, rgba(59,130,246,0.26), transparent 38%)",
-                    "radial-gradient(circle at 8% 90%, rgba(239,68,68,0.24), transparent 42%)",
-                    "radial-gradient(circle at 92% 90%, rgba(34,197,94,0.24), transparent 42%)",
-                    "linear-gradient(180deg, rgba(26,35,54,0.96) 0%, rgba(39,48,84,0.9) 100%)",
+                    "radial-gradient(circle at 50% 8%, rgba(59,130,246,0.2) 0%, rgba(59,130,246,0.12) 18%, transparent 56%)",
+                    "radial-gradient(circle at 10% 88%, rgba(239,68,68,0.18) 0%, rgba(239,68,68,0.1) 22%, transparent 60%)",
+                    "radial-gradient(circle at 90% 88%, rgba(34,197,94,0.18) 0%, rgba(34,197,94,0.1) 22%, transparent 60%)",
+                    "linear-gradient(135deg, rgba(239,68,68,0.05) 0%, transparent 34%, rgba(34,197,94,0.05) 100%)",
+                    "linear-gradient(180deg, rgba(15,23,42,0.96) 0%, rgba(30,41,59,0.92) 52%, rgba(17,24,39,0.97) 100%)",
                   ].join(", "),
               }}
             />
