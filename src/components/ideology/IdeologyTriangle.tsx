@@ -29,8 +29,36 @@ type IdeologyEntry = {
   topFactors: Array<{ label: string; ideology: "monarchism" | "republicanism" | "cultism"; value: number }>;
 };
 
+const TRIANGLE_LAYOUT = {
+  apexX: 0.5,
+  apexY: 0.06,
+  baseLeftX: 0.08,
+  baseRightX: 0.92,
+  baseY: 0.9,
+  markerPaddingX: 0.018,
+};
+
 function formatScore(value: number): string {
   return Number(value).toLocaleString("fr-FR", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+}
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, value));
+}
+
+function getMarkerPosition(point: { x: number; y: number }) {
+  const heightRatio = clamp(point.y / 0.8660254038, 0, 1);
+  const rowLeft = TRIANGLE_LAYOUT.baseLeftX + (TRIANGLE_LAYOUT.apexX - TRIANGLE_LAYOUT.baseLeftX) * heightRatio;
+  const rowRight = TRIANGLE_LAYOUT.baseRightX + (TRIANGLE_LAYOUT.apexX - TRIANGLE_LAYOUT.baseRightX) * heightRatio;
+  const normalizedRowLeft = heightRatio / 2;
+  const normalizedRowRight = 1 - heightRatio / 2;
+  const normalizedWidth = Math.max(0.0001, normalizedRowRight - normalizedRowLeft);
+  const rowProgress = clamp((point.x - normalizedRowLeft) / normalizedWidth, 0, 1);
+  const safeLeft = rowLeft + TRIANGLE_LAYOUT.markerPaddingX;
+  const safeRight = rowRight - TRIANGLE_LAYOUT.markerPaddingX;
+  const x = safeLeft + rowProgress * Math.max(0, safeRight - safeLeft);
+  const y = TRIANGLE_LAYOUT.baseY - heightRatio * (TRIANGLE_LAYOUT.baseY - TRIANGLE_LAYOUT.apexY);
+  return { left: `${x * 100}%`, top: `${y * 100}%` };
 }
 
 export function IdeologyTriangle({ entries }: { entries: IdeologyEntry[] }) {
@@ -85,34 +113,33 @@ export function IdeologyTriangle({ entries }: { entries: IdeologyEntry[] }) {
           <div className="mb-4 text-sm text-[var(--foreground-muted)]">
             Triangle d’alignement mondial. Le centre représente les pays non alignés. Les drapeaux les plus influents passent visuellement au-dessus.
           </div>
-          <div className="relative mx-auto aspect-[1.1/1] max-w-4xl">
+          <div className="relative mx-auto aspect-[1.3/0.82] max-w-3xl sm:aspect-[1.25/0.8]">
             <div
               className="absolute inset-0 rounded-lg opacity-90"
               style={{
-                clipPath: "polygon(50% 4%, 6% 94%, 94% 94%)",
+                clipPath: "polygon(50% 6%, 8% 90%, 92% 90%)",
                 background:
                   "linear-gradient(180deg, rgba(249,168,37,0.22) 0%, rgba(239,68,68,0.18) 50%, rgba(59,130,246,0.18) 100%)",
               }}
             />
-            <div className="absolute left-1/2 top-[8%] -translate-x-1/2 text-center">
-              <div className="text-sm font-semibold text-[var(--foreground)]">Cultisme</div>
+            <div className="absolute left-1/2 top-[1%] -translate-x-1/2 text-center">
+              <div className="text-xs font-semibold text-[var(--foreground)] sm:text-sm">Cultisme</div>
             </div>
-            <div className="absolute bottom-[3%] left-[7%] text-left">
-              <div className="text-sm font-semibold text-[var(--foreground)]">Monarchisme</div>
+            <div className="absolute bottom-[0.5%] left-[5%] text-left">
+              <div className="text-xs font-semibold text-[var(--foreground)] sm:text-sm">Monarchisme</div>
             </div>
-            <div className="absolute bottom-[3%] right-[7%] text-right">
-              <div className="text-sm font-semibold text-[var(--foreground)]">Républicanisme</div>
+            <div className="absolute bottom-[0.5%] right-[5%] text-right">
+              <div className="text-xs font-semibold text-[var(--foreground)] sm:text-sm">Républicanisme</div>
             </div>
             <div
-              className="absolute left-1/2 top-[58%] -translate-x-1/2 -translate-y-1/2 rounded-full border px-3 py-1 text-xs"
+              className="absolute left-1/2 top-[56%] -translate-x-1/2 -translate-y-1/2 rounded-full border px-2.5 py-1 text-[11px] sm:px-3 sm:text-xs"
               style={{ borderColor: "var(--border-muted)", background: "rgba(15,20,25,0.55)" }}
             >
               Non-aligné
             </div>
 
             {visibleEntries.map((entry, index) => {
-              const left = `${entry.point.x * 100}%`;
-              const top = `${(1 - entry.point.y) * 100}%`;
+              const { left, top } = getMarkerPosition(entry.point);
               const isSelected = entry.id === selected?.id;
               return (
                 <button
@@ -134,14 +161,14 @@ export function IdeologyTriangle({ entries }: { entries: IdeologyEntry[] }) {
                     <img
                       src={entry.flag_url}
                       alt={entry.name}
-                      width={28}
-                      height={19}
-                      className="h-5 w-7 rounded border object-cover shadow-sm"
+                      width={24}
+                      height={16}
+                      className="h-4 w-6 rounded border object-cover shadow-sm sm:h-5 sm:w-7"
                       style={{ borderColor: isSelected ? "var(--accent)" : "var(--border)" }}
                     />
                   ) : (
                     <div
-                      className="h-5 w-7 rounded border shadow-sm"
+                      className="h-4 w-6 rounded border shadow-sm sm:h-5 sm:w-7"
                       style={{ borderColor: isSelected ? "var(--accent)" : "var(--border)", background: "var(--background-elevated)" }}
                     />
                   )}
