@@ -94,6 +94,7 @@ export function CountryTabs({
   stateActionTypes = [],
   stateActionBalance = 0,
   stateActionRequests = [],
+  incomingTargetRequests = [],
   countriesForTarget = [],
   countriesList = [],
   emitterCountry = { name: "", flag_url: null, regime: null, influence: null },
@@ -146,7 +147,8 @@ export function CountryTabs({
   } | null;
   stateActionTypes?: Array<{ id: string; key: string; label_fr: string; cost: number; params_schema: Record<string, unknown> | null }>;
   stateActionBalance?: number;
-  stateActionRequests?: Array<{ id: string; action_type_id: string; status: string; payload: Record<string, unknown> | null; created_at: string; refusal_message: string | null; dice_results?: { success_roll?: { roll: number; modifier: number; total: number }; impact_roll?: { roll: number; modifier: number; total: number } } | null; state_action_types?: { key: string; label_fr: string } | null }>;
+  stateActionRequests?: Array<{ id: string; action_type_id: string; status: string; payload: Record<string, unknown> | null; created_at: string; refusal_message: string | null; dice_results?: { success_roll?: { roll: number; modifier: number; total: number }; impact_roll?: { roll: number; modifier: number; total: number } } | null; admin_effect_added?: Record<string, unknown> | null; state_action_types?: { key: string; label_fr: string } | null }>;
+  incomingTargetRequests?: Array<{ id: string; action_type_id: string; status: string; payload: Record<string, unknown> | null; created_at: string; state_action_types?: { key: string; label_fr: string } | null; country?: { id: string; name: string; slug: string; flag_url: string | null } | null }>;
   countriesForTarget?: Array<{ id: string; name: string; flag_url: string | null; regime: string | null; influence: number; relation: number }>;
   countriesList?: Array<{ id: string; name: string }>;
   emitterCountry?: { name: string; flag_url: string | null; regime: string | null; influence: number | null };
@@ -206,6 +208,15 @@ export function CountryTabs({
     const found = entries.find(([, val]) => (val as number) <= score);
     return found?.[0] ?? null;
   }, [mobilisationConfig?.level_thresholds, mobilisationState?.score]);
+
+  const stateActionEffectLookups = useMemo(() => {
+    const rosterUnits = rosterByBranch
+      ? [rosterByBranch.terre, rosterByBranch.air, rosterByBranch.mer, rosterByBranch.strategique]
+          .flat()
+          .map((row) => ({ id: row.unit.id, name_fr: row.unit.name_fr ?? "" }))
+      : [];
+    return { rosterUnits, countries: countriesList ?? [] };
+  }, [rosterByBranch, countriesList]);
 
   const globalGrowthEffects = useMemo(() => {
     const raw = ruleParametersByKey.global_growth_effects?.value;
@@ -761,15 +772,28 @@ export function CountryTabs({
     setMobilisationMessage(null);
     try {
       const result = await setMobilisationTarget(country.id, threshold);
-      if (result.error) setMobilisationError(result.error);
-      else {
+      if (result.error) {
+        setMobilisationError(result.error);
+        setMobilisationSetting(null);
+      } else {
         setMobilisationMessage("Objectif de mobilisation mis à jour. Les services suivront désormais cette montée en puissance au fil des prochains jours.");
-        router.refresh();
+        await router.refresh();
       }
+      // En cas de succès, le loader est retiré par le useEffect quand target_score reflète la mise à jour
     } catch (error) {
+      setMobilisationSetting(null);
       throw error;
     }
   };
+
+  // Retirer le loader de mobilisation uniquement quand les données reçues reflètent la nouvelle cible (surbrillance à jour)
+  useEffect(() => {
+    if (!mobilisationSetting || mobilisationState == null || !mobilisationConfig?.level_thresholds) return;
+    const wantedThreshold = mobilisationConfig.level_thresholds[mobilisationSetting];
+    if (typeof wantedThreshold === "number" && mobilisationState.target_score === wantedThreshold) {
+      setMobilisationSetting(null);
+    }
+  }, [mobilisationState?.target_score, mobilisationSetting, mobilisationConfig?.level_thresholds]);
 
   const handleSaveMilitaryUnit = async (rosterUnitId: string, currentLevel: number, extraCount: number) => {
     setMilitaryError(null);
@@ -1167,8 +1191,10 @@ export function CountryTabs({
           types={stateActionTypes}
           balance={stateActionBalance ?? 0}
           requests={stateActionRequests}
+          incomingTargetRequests={incomingTargetRequests ?? []}
           countriesForTarget={countriesForTarget}
           emitterCountry={emitterCountry}
+          effectLookups={stateActionEffectLookups}
           panelClass={panelClass}
           panelStyle={panelStyle}
         />

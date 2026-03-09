@@ -92,43 +92,62 @@ export function CountryTabMilitary({
           <h2 className="mb-4 text-lg font-semibold text-[var(--foreground)]">
             Mobilisation
           </h2>
-          <div className="flex flex-wrap gap-3">
-            {MOBILISATION_LEVELS.map((level) => {
-              const threshold = thresholds?.[level.key] ?? 0;
-              const isCurrent = currentLevelKey === level.key;
-              const isTarget = targetLevelKey === level.key;
-              const isClickable = canEditCountry && mobilisationSetting === null;
-              const isSetting = mobilisationSetting === level.key;
-              return (
-                <button
-                  key={level.key}
-                  type="button"
-                  disabled={!canEditCountry || !!mobilisationSetting}
-                  onClick={async () => {
-                    if (!canEditCountry) return;
-                    setMobilisationSetting(level.key);
-                    await onMobilisationClick(threshold);
-                    setMobilisationSetting(null);
-                  }}
-                  className="flex h-16 w-36 shrink-0 items-center justify-center rounded border px-2 py-1 text-center text-sm font-medium transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
-                  style={{
-                    borderColor: isCurrent
-                      ? "var(--accent)"
-                      : isTarget
+          <div className="relative min-h-[4.5rem]">
+            <div
+              className={`flex flex-wrap gap-3 transition-[filter] duration-200 ${mobilisationSetting ? "pointer-events-none select-none blur-[3px]" : ""}`}
+              aria-busy={!!mobilisationSetting}
+              aria-live="polite"
+            >
+              {MOBILISATION_LEVELS.map((level) => {
+                const threshold = thresholds?.[level.key] ?? 0;
+                const isCurrent = currentLevelKey === level.key;
+                const isTarget = targetLevelKey === level.key;
+                const isSetting = mobilisationSetting === level.key;
+                return (
+                  <button
+                    key={level.key}
+                    type="button"
+                    disabled={!canEditCountry || !!mobilisationSetting}
+                    onClick={async () => {
+                      if (!canEditCountry) return;
+                      setMobilisationSetting(level.key);
+                      await onMobilisationClick(threshold);
+                      // Le loader est retiré par le parent quand mobilisationState reflète la mise à jour (ou en cas d'erreur)
+                    }}
+                    className="flex h-16 w-36 shrink-0 items-center justify-center rounded border px-2 py-1 text-center text-sm font-medium transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+                    style={{
+                      borderColor: isCurrent
+                        ? "var(--accent)"
+                        : isTarget
+                          ? "var(--accent-muted)"
+                          : "var(--border)",
+                      background: isCurrent
                         ? "var(--accent-muted)"
-                        : "var(--border)",
-                    background: isCurrent
-                      ? "var(--accent-muted)"
-                      : isTarget
-                        ? "var(--background-elevated)"
-                        : "var(--background-panel)",
-                    color: "var(--foreground)",
-                  }}
+                        : isTarget
+                          ? "var(--background-elevated)"
+                          : "var(--background-panel)",
+                      color: "var(--foreground)",
+                    }}
+                  >
+                    {isSetting ? "…" : level.label}
+                  </button>
+                );
+              })}
+            </div>
+            {mobilisationSetting && (
+              <div
+                className="absolute inset-0 flex items-center justify-center rounded-lg bg-[var(--background-panel)]/70"
+                aria-hidden
+              >
+                <span
+                  className="text-4xl animate-spin"
+                  style={{ filter: "drop-shadow(0 0 4px var(--background))" }}
+                  title="Mise à jour en cours…"
                 >
-                  {isSetting ? "…" : level.label}
-                </button>
-              );
-            })}
+                  ⏳
+                </span>
+              </div>
+            )}
           </div>
           <p className="mt-3 text-sm text-[var(--foreground-muted)]">
             {daysToTarget !== null && scoreDistance > 0

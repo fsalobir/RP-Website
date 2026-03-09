@@ -24,6 +24,18 @@ export const ACTION_KEYS_REQUIRING_TARGET = new Set([
   "ouverture_diplomatique",
   "prise_influence",
   ...MILITARY_STATE_ACTION_KEYS,
+  "accord_commercial_politique",
+  "cooperation_militaire",
+  "alliance",
+  "espionnage",
+  "sabotage",
+]);
+
+/** Types nécessitant acceptation par la cible avant validation admin. */
+export const ACTION_KEYS_REQUIRING_TARGET_ACCEPTANCE = new Set([
+  "accord_commercial_politique",
+  "cooperation_militaire",
+  "alliance",
 ]);
 
 const DEFAULT_IMPACT_MAXIMUM_BY_ACTION_KEY: Record<string, number> = {
@@ -47,6 +59,15 @@ export function isMilitaryStateActionKey(actionKey: string): actionKey is (typeo
 
 export function actionRequiresTarget(actionKey: string): boolean {
   return ACTION_KEYS_REQUIRING_TARGET.has(actionKey);
+}
+
+export function actionRequiresTargetAcceptance(
+  actionKey: string,
+  paramsSchema?: Record<string, unknown> | null
+): boolean {
+  if (ACTION_KEYS_REQUIRING_TARGET_ACCEPTANCE.has(actionKey)) return true;
+  const raw = paramsSchema?.requires_target_acceptance;
+  return raw === true || raw === "true";
 }
 
 export function getDefaultImpactMaximum(actionKey: string): number {

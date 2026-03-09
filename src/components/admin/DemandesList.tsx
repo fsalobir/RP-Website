@@ -26,6 +26,7 @@ import { normalizePair } from "@/lib/relations";
 import { getRelationLabel, getRelationColor } from "@/lib/relationScale";
 import {
   ACTION_KEYS_REQUIRING_IMPACT_ROLL,
+  actionRequiresTargetAcceptance,
   getDefaultImpactMaximum,
   getStateActionImpactPreviewLabel,
 } from "@/lib/actionKeys";
@@ -129,6 +130,8 @@ function normalizeSearchValue(value: string): string {
 
 function getStatusLabel(status: string): string {
   if (status === "pending") return "en attente";
+  if (status === "pending_target") return "en attente acceptation cible";
+  if (status === "target_refused") return "refusee par cible";
   if (status === "accepted") return "acceptee";
   if (status === "refused") return "refusee";
   return status;
@@ -143,8 +146,9 @@ export function DemandesList({ requests, rosterUnitIds, targetCountriesById = {}
 
   const sortedRequests = useMemo(() => {
     return [...requests].sort((a, b) => {
-      const statusA = a.status === "pending" ? 0 : 1;
-      const statusB = b.status === "pending" ? 0 : 1;
+      const actionable = (s: string) => (s === "pending" || s === "pending_target" ? 0 : 1);
+      const statusA = actionable(a.status);
+      const statusB = actionable(b.status);
       if (statusA !== statusB) return statusA - statusB;
       return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
     });
@@ -375,6 +379,18 @@ function StatusBadge({ status }: { status: string }) {
         <span aria-hidden>⏳</span> En attente
       </span>
     );
+  if (status === "pending_target")
+    return (
+      <span className="inline-flex items-center gap-1 rounded bg-blue-500/20 px-2 py-0.5 text-blue-600 dark:text-blue-400">
+        <span aria-hidden>⏳</span> En attente acceptation cible
+      </span>
+    );
+  if (status === "target_refused")
+    return (
+      <span className="inline-flex items-center gap-1 rounded bg-orange-500/20 px-2 py-0.5 text-orange-600 dark:text-orange-400">
+        <span aria-hidden>✗</span> Refusé par la cible
+      </span>
+    );
   if (status === "accepted")
     return (
       <span className="inline-flex items-center gap-1 rounded bg-emerald-500/20 px-2 py-0.5 text-emerald-600 dark:text-emerald-400">
@@ -441,13 +457,13 @@ function RequestDetail({
   }
 
   const payload = request.payload ?? {};
-  const isPending = request.status === "pending";
+  const isAdminActionable = request.status === "pending";
   const targetId = typeof payload.target_country_id === "string" ? payload.target_country_id : null;
   const targetCountry = targetId ? targetCountriesById[targetId] : null;
   const hasTarget = targetCountry != null;
 
   async function handleAccept() {
-    if (!isPending) return;
+    if (!isAdminActionable) return;
     setLoading("accept");
     onError("");
     const res = await acceptRequest(request.id);
@@ -457,7 +473,7 @@ function RequestDetail({
   }
 
   async function handleRefuse() {
-    if (!isPending) return;
+    if (!isAdminActionable) return;
     setLoading("refuse");
     onError("");
     const res = await refuseRequest(request.id, refund, refusalMsg);
@@ -623,6 +639,22 @@ function RequestDetail({
         </button>
       </div>
 
+      {request.status === "pending_target" && (
+        <div className="mb-4 rounded border border-blue-500/30 bg-blue-500/10 px-4 py-3 text-sm text-blue-200">
+          <strong>En attente acceptation par la cible.</strong> Le joueur du pays cible doit accepter cette demande avant que vous puissiez la valider ou la refuser.
+        </div>
+      )}
+
+      {isAdminActionable &&
+        actionRequiresTargetAcceptance(
+          request.state_action_types?.key ?? "",
+          request.state_action_types?.params_schema ?? null
+        ) && (
+          <div className="mb-4 rounded border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-200">
+            <strong>Accepté par la cible.</strong> En attente de votre validation.
+          </div>
+        )}
+
       <div className="flex gap-0" style={{ borderColor: "var(--border)" }}>
         <div className={hasTarget ? "flex-1 py-3 pr-4" : "flex-1 py-3"}>
           <p className="mb-2 text-xs font-medium uppercase tracking-wider text-[var(--foreground-muted)]">
@@ -700,14 +732,19 @@ function RequestDetail({
         );
       })()}
 
-      {request.state_action_types?.key === "demande_up" && payload.message != null && (
-        <dl className="mt-4 border-t pt-4 text-sm" style={{ borderColor: "var(--border)" }}>
-          <dt className="text-[var(--foreground-muted)]">Message</dt>
-          <dd className="text-[var(--foreground)] whitespace-pre-wrap break-words [overflow-wrap:anywhere]">
-            {String(payload.message)}
-          </dd>
-        </dl>
-      )}
+      {((request.state_action_types?.key === "demande_up") ||
+        request.state_action_types?.key === "effort_fortifications" ||
+        request.state_action_types?.key === "investissements") &&
+        payload.message != null && (
+          <dl className="mt-4 border-t pt-4 text-sm" style={{ borderColor: "var(--border)" }}>
+            <dt className="text-[var(--foreground-muted)]">
+              {request.state_action_types?.key === "effort_fortifications" ? "Zone ou description" : "Message"}
+            </dt>
+            <dd className="text-[var(--foreground)] whitespace-pre-wrap break-words [overflow-wrap:anywhere]">
+              {String(payload.message)}
+            </dd>
+          </dl>
+        )}
       {request.refusal_message && (
         <dl className="mt-4 border-t pt-4 text-sm" style={{ borderColor: "var(--border)" }}>
           <dt className="text-[var(--foreground-muted)]">Message de refus</dt>
@@ -720,7 +757,7 @@ function RequestDetail({
       {ACTION_KEYS_REQUIRING_IMPACT_ROLL.has(request.state_action_types?.key ?? "") && (
         <div className="mt-4 border-t pt-4" style={{ borderColor: "var(--border)" }}>
           <h3 className="mb-2 text-sm font-medium text-[var(--foreground)]">Jets de dés</h3>
-          {isPending && (
+          {isAdminActionable && (
             <p className="mb-2 text-xs text-[var(--foreground-muted)]">
               {request.state_action_types?.key === "prise_influence"
                 ? "Les modificateurs (statistiques du pays émetteur + relations bilatérales + rang d'influence selon les amplitudes configurées) sont calculés automatiquement à chaque jet."
@@ -807,7 +844,7 @@ function RequestDetail({
                   <p className="text-sm text-[var(--foreground)]">
                     {formatRollFormula(request.dice_results.impact_roll, request.dice_results?.admin_modifiers?.[0]?.label)} = <strong className="text-lg">{request.dice_results.impact_roll.total}</strong>
                   </p>
-                  {isPending && (
+                  {isAdminActionable && (
                     <p className="mt-1 text-xs text-[var(--foreground-muted)]">
                       {request.state_action_types?.key === "prise_influence"
                         ? "Utilisé pour l'impact sur l'influence à l'acceptation."
@@ -819,7 +856,7 @@ function RequestDetail({
                   <p className="text-base font-bold uppercase text-[var(--foreground)]">
                     {getRollConclusion(request.dice_results.impact_roll.roll, request.dice_results.impact_roll.total)}
                   </p>
-                  {isPending && (
+                  {isAdminActionable && (
                     <button
                       type="button"
                       onClick={async () => {
@@ -857,7 +894,7 @@ function RequestDetail({
         </div>
       )}
 
-      {isPending && (
+      {isAdminActionable && (
         <div className="mt-6 space-y-4 border-t pt-4" style={{ borderColor: "var(--border)" }}>
           <div>
             <h3 className="mb-2 text-sm font-medium text-[var(--foreground)]">Ajouter conséquences optionnelles</h3>

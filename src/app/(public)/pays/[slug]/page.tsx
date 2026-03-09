@@ -126,13 +126,15 @@ export default async function CountryPage({
 
   let stateActionTypes: Array<{ id: string; key: string; label_fr: string; cost: number; params_schema: Record<string, unknown> | null }> = [];
   let stateActionBalance: number = 0;
-  let stateActionRequests: Array<{ id: string; action_type_id: string; status: string; payload: Record<string, unknown> | null; created_at: string; refusal_message: string | null; dice_results?: { success_roll?: { roll: number; modifier: number; total: number }; impact_roll?: { roll: number; modifier: number; total: number } } | null; state_action_types?: { key: string; label_fr: string } | null }> = [];
+  let stateActionRequests: Array<{ id: string; action_type_id: string; status: string; payload: Record<string, unknown> | null; created_at: string; refusal_message: string | null; dice_results?: { success_roll?: { roll: number; modifier: number; total: number }; impact_roll?: { roll: number; modifier: number; total: number } } | null; admin_effect_added: Record<string, unknown> | null; state_action_types?: { key: string; label_fr: string } | null }> = [];
+  let incomingTargetRequests: Array<{ id: string; action_type_id: string; status: string; payload: Record<string, unknown> | null; created_at: string; state_action_types?: { key: string; label_fr: string } | null; country?: { id: string; name: string; slug: string; flag_url: string | null } | null }> = [];
   let countriesForTarget: Array<{ id: string; name: string; flag_url: string | null; regime: string | null; influence: number; relation: number }> = [];
   if (isPlayerForThisCountry) {
-    const [typesRes, balanceRes, requestsRes, countriesTargetRes] = await Promise.all([
+    const [typesRes, balanceRes, requestsRes, incomingRes, countriesTargetRes] = await Promise.all([
       supabase.from("state_action_types").select("id, key, label_fr, cost, params_schema").order("sort_order"),
       supabase.from("country_state_action_balance").select("balance").eq("country_id", country.id).maybeSingle(),
-      supabase.from("state_action_requests").select("id, action_type_id, status, payload, created_at, refusal_message, dice_results, state_action_types:state_action_types(key, label_fr)").eq("country_id", country.id).order("created_at", { ascending: false }),
+      supabase.from("state_action_requests").select("id, action_type_id, status, payload, created_at, refusal_message, dice_results, admin_effect_added, state_action_types:state_action_types(key, label_fr)").eq("country_id", country.id).order("created_at", { ascending: false }),
+      supabase.from("state_action_requests").select("id, action_type_id, status, payload, created_at, state_action_types:state_action_types(key, label_fr), country:countries(id, name, slug, flag_url)").eq("target_country_id", country.id).eq("status", "pending_target").order("created_at", { ascending: false }),
       supabase.from("countries").select("id, name, flag_url, regime").neq("id", country.id).order("name"),
     ]);
     stateActionTypes = (typesRes.data ?? []) as Array<{ id: string; key: string; label_fr: string; cost: number; params_schema: Record<string, unknown> | null }>;
@@ -142,6 +144,12 @@ export default async function CountryPage({
       ...r,
       state_action_types: Array.isArray(r.state_action_types) ? r.state_action_types[0] : r.state_action_types,
     })) as typeof stateActionRequests;
+    const rawIncoming = incomingRes.data ?? [];
+    incomingTargetRequests = rawIncoming.map((r: Record<string, unknown>) => ({
+      ...r,
+      state_action_types: Array.isArray(r.state_action_types) ? r.state_action_types[0] : r.state_action_types,
+      country: Array.isArray(r.country) ? r.country[0] : r.country,
+    })) as typeof incomingTargetRequests;
     countriesForTarget = ((countriesTargetRes.data ?? []) as Array<{ id: string; name: string; flag_url: string | null; regime: string | null }>).map((c) => ({
       ...c,
       influence: 0,
@@ -344,6 +352,7 @@ export default async function CountryPage({
         stateActionTypes={stateActionTypes}
         stateActionBalance={stateActionBalance}
         stateActionRequests={stateActionRequests}
+        incomingTargetRequests={incomingTargetRequests}
         countriesForTarget={countriesForTarget}
         countriesList={((countriesListRes as { data?: { id: string; name: string }[] })?.data ?? []) as Array<{ id: string; name: string }>}
         emitterCountry={{

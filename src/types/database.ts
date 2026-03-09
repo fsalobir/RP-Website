@@ -196,7 +196,12 @@ export interface CountryStateActionBalance {
 }
 
 /** Statut d'une demande d'action d'État. */
-export type StateActionRequestStatus = "pending" | "accepted" | "refused"
+export type StateActionRequestStatus =
+  | "pending"
+  | "pending_target"
+  | "target_refused"
+  | "accepted"
+  | "refused"
 
 /** Résultat d'un jet d100 (succès ou impact). */
 export interface DiceRollResult {
@@ -236,6 +241,8 @@ export interface StateActionRequest {
   resolved_at: string | null
   resolved_by: string | null
   dice_results?: DiceResults | null
+  /** Pays cible (dénormalisé depuis payload pour RLS). */
+  target_country_id?: string | null
 }
 
 /** Effet à appliquer à l'acceptation (sans country_id). */
