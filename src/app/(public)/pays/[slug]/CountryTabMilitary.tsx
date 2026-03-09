@@ -5,6 +5,7 @@ import { formatNumber } from "@/lib/format";
 import { Tooltip } from "@/components/ui/Tooltip";
 import { getUnitExtraEffectSum, MOBILISATION_LEVELS, type ResolvedEffect } from "@/lib/countryEffects";
 import type { RosterRowByBranch } from "./countryTabsTypes";
+import type { FoggedRoster, FoggedBranchEstimate, FoggedUnitEstimate } from "@/lib/intelFog";
 
 const BRANCH_LABELS: Record<MilitaryBranch, string> = {
   terre: "Terre",
@@ -50,6 +51,8 @@ type CountryTabMilitaryProps = {
   isAdmin: boolean;
   effects: ResolvedEffect[];
   onSaveMilitaryUnit: (rosterUnitId: string, currentLevel: number, extraCount: number) => Promise<void>;
+  intelLevel?: number | null;
+  foggedRoster?: FoggedRoster | null;
 };
 
 export function CountryTabMilitary({
@@ -75,6 +78,8 @@ export function CountryTabMilitary({
   isAdmin,
   effects,
   onSaveMilitaryUnit,
+  intelLevel = null,
+  foggedRoster = null,
 }: CountryTabMilitaryProps) {
   const thresholds = mobilisationConfig?.level_thresholds;
   const currentScore = mobilisationState?.score ?? 0;
@@ -84,6 +89,34 @@ export function CountryTabMilitary({
   const dailyStep = Math.max(0, mobilisationConfig?.daily_step ?? 0);
   const scoreDistance = Math.abs(targetScore - currentScore);
   const daysToTarget = dailyStep > 0 ? Math.ceil(scoreDistance / dailyStep) : null;
+
+  if (foggedRoster != null && intelLevel != null) {
+    return (
+      <div className="space-y-6">
+        <IntelGauge level={intelLevel} panelClass={panelClass} panelStyle={panelStyle} />
+        {foggedRoster.type === "none" && (
+          <section className={panelClass} style={panelStyle}>
+            <div className="flex flex-col items-center justify-center gap-4 py-12">
+              <span className="text-4xl opacity-40">🔍</span>
+              <p className="text-center text-[var(--foreground-muted)] text-sm max-w-md">
+                Renseignement insuffisant. Les services de renseignement ne disposent d'aucune information
+                fiable sur les capacités militaires de ce pays.
+              </p>
+              <p className="text-center text-xs text-[var(--foreground-muted)] opacity-70">
+                Lancez une opération d'espionnage pour en savoir plus.
+              </p>
+            </div>
+          </section>
+        )}
+        {foggedRoster.type === "branch" && (
+          <FoggedBranchView branches={foggedRoster.branches} panelClass={panelClass} panelStyle={panelStyle} />
+        )}
+        {foggedRoster.type === "unit" && (
+          <FoggedUnitView units={foggedRoster.units} panelClass={panelClass} panelStyle={panelStyle} />
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -416,5 +449,205 @@ export function CountryTabMilitary({
         );
       })}
     </div>
+  );
+}
+
+// ─── Fog sub-components ──────────────────────────────────────────────
+
+const INTEL_MESSAGES: [number, string][] = [
+  [0, "Aucune information disponible."],
+  [10, "Bribes fragmentaires, fiabilité douteuse."],
+  [25, "Sources partielles, estimations grossières."],
+  [50, "Renseignement partiel, estimations par unité."],
+  [75, "Renseignement fiable, fourchettes serrées."],
+  [90, "Intelligence quasi-complète."],
+];
+
+function getIntelMessage(level: number): string {
+  let msg = INTEL_MESSAGES[0][1];
+  for (const [threshold, text] of INTEL_MESSAGES) {
+    if (level >= threshold) msg = text;
+  }
+  return msg;
+}
+
+function IntelGauge({
+  level,
+  panelClass,
+  panelStyle,
+}: {
+  level: number;
+  panelClass: string;
+  panelStyle: React.CSSProperties;
+}) {
+  const pct = Math.max(0, Math.min(100, Math.round(level)));
+  const color =
+    pct < 25 ? "var(--danger)" : pct < 50 ? "#e6a817" : pct < 75 ? "#d4a017" : "var(--accent)";
+  return (
+    <section className={panelClass} style={panelStyle}>
+      <div className="flex items-center gap-4">
+        <span className="text-lg">🔍</span>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-baseline gap-2 mb-1.5">
+            <span className="text-sm font-semibold text-[var(--foreground)]">
+              Niveau de renseignement
+            </span>
+            <span className="text-xs font-mono" style={{ color }}>
+              {pct} %
+            </span>
+          </div>
+          <div
+            className="h-2 w-full rounded-full overflow-hidden"
+            style={{ background: "var(--background-elevated)" }}
+          >
+            <div
+              className="h-full rounded-full transition-all duration-500"
+              style={{ width: `${pct}%`, background: color }}
+            />
+          </div>
+          <p className="mt-1.5 text-xs text-[var(--foreground-muted)]">
+            {getIntelMessage(pct)}
+          </p>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function formatFogRange(range: { min: number; max: number }): string {
+  if (range.min === range.max) return formatNumber(range.min);
+  return `${formatNumber(range.min)} – ${formatNumber(range.max)}`;
+}
+
+function FoggedBranchView({
+  branches,
+  panelClass,
+  panelStyle,
+}: {
+  branches: FoggedBranchEstimate[];
+  panelClass: string;
+  panelStyle: React.CSSProperties;
+}) {
+  return (
+    <section className={panelClass} style={panelStyle}>
+      <h2 className="mb-3 text-lg font-semibold text-[var(--foreground)]">
+        Estimations par branche
+      </h2>
+      <p className="mb-4 text-xs text-[var(--foreground-muted)]">
+        Données fragmentaires — les fourchettes ci-dessous sont des estimations.
+      </p>
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-[var(--border)]">
+              <th className="pb-2 px-3 text-left font-medium text-[var(--foreground-muted)] text-xs">Branche</th>
+              <th className="pb-2 px-3 text-center font-medium text-[var(--foreground-muted)] text-xs">Unités (est.)</th>
+              <th className="pb-2 px-3 text-center font-medium text-[var(--foreground-muted)] text-xs">Personnel (est.)</th>
+              <th className="pb-2 px-3 text-center font-medium text-[var(--foreground-muted)] text-xs">Niveau tech.</th>
+            </tr>
+          </thead>
+          <tbody>
+            {branches.map((b) => (
+              <tr key={b.branch} className="border-b border-[var(--border-muted)]">
+                <td className="py-2 px-3 font-medium text-[var(--foreground)]">
+                  {BRANCH_LABELS[b.branch]}
+                </td>
+                <td className="py-2 px-3 text-center font-mono text-xs text-[var(--foreground)]">
+                  {formatFogRange(b.unitCountRange)}
+                </td>
+                <td className="py-2 px-3 text-center font-mono text-xs text-[var(--foreground)]">
+                  {formatFogRange(b.personnelRange)}
+                </td>
+                <td className="py-2 px-3 text-center text-xs text-[var(--foreground-muted)]">
+                  {b.techLevel ?? "—"}
+                </td>
+              </tr>
+            ))}
+            {branches.length === 0 && (
+              <tr>
+                <td colSpan={4} className="py-4 text-center text-[var(--foreground-muted)] text-xs">
+                  Aucune donnée disponible.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  );
+}
+
+function FoggedUnitView({
+  units,
+  panelClass,
+  panelStyle,
+}: {
+  units: FoggedUnitEstimate[];
+  panelClass: string;
+  panelStyle: React.CSSProperties;
+}) {
+  const byBranch = new Map<MilitaryBranch, FoggedUnitEstimate[]>();
+  for (const u of units) {
+    if (!byBranch.has(u.branch)) byBranch.set(u.branch, []);
+    byBranch.get(u.branch)!.push(u);
+  }
+
+  return (
+    <>
+      {(["terre", "air", "mer", "strategique"] as const).map((branch) => {
+        const branchUnits = byBranch.get(branch) ?? [];
+        if (branchUnits.length === 0) return null;
+        return (
+          <section key={branch} className={panelClass} style={panelStyle}>
+            <h2 className="mb-3 text-lg font-semibold text-[var(--foreground)]">
+              {BRANCH_LABELS[branch]}
+            </h2>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm table-fixed">
+                <thead>
+                  <tr className="border-b border-[var(--border)]">
+                    <th className="w-12 pb-1.5 pt-1 px-2 text-center font-medium text-[var(--foreground-muted)] text-xs">Icône</th>
+                    <th className="w-[22%] pb-1.5 pt-1 px-2 text-center font-medium text-[var(--foreground-muted)] text-xs">Nom</th>
+                    <th className="w-[20%] pb-1.5 pt-1 px-2 text-center font-medium text-[var(--foreground-muted)] text-xs">Nombre (est.)</th>
+                    <th className="w-[20%] pb-1.5 pt-1 px-2 text-center font-medium text-[var(--foreground-muted)] text-xs">Personnel (est.)</th>
+                    <th className="pb-1.5 pt-1 px-2 text-center font-medium text-[var(--foreground-muted)] text-xs">Niv. tech.</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {branchUnits.map((u) => (
+                    <tr key={u.unitId} className="border-b border-[var(--border-muted)]">
+                      <td className="w-12 py-0.5 px-2 align-middle text-center">
+                        <div className="inline-block h-9 w-9 overflow-hidden rounded border bg-[var(--background-elevated)]" style={{ borderColor: "var(--border)" }}>
+                          {u.iconUrl ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img src={u.iconUrl} alt="" className="h-full w-full object-contain" />
+                          ) : (
+                            <div className="flex h-full w-full items-center justify-center text-[8px] text-[var(--foreground-muted)]">—</div>
+                          )}
+                        </div>
+                      </td>
+                      <td className="py-0.5 px-2 align-middle text-center">
+                        <span className="inline-block max-w-full truncate text-xs font-medium text-[var(--foreground)]" title={u.unitName}>
+                          {u.unitName}
+                        </span>
+                      </td>
+                      <td className="py-0.5 px-2 align-middle text-center font-mono text-xs text-[var(--foreground)]">
+                        {formatFogRange(u.countRange)}
+                      </td>
+                      <td className="py-0.5 px-2 align-middle text-center font-mono text-xs text-[var(--foreground)]">
+                        {formatFogRange(u.personnelRange)}
+                      </td>
+                      <td className="py-0.5 px-2 align-middle text-center text-xs text-[var(--foreground-muted)]">
+                        {u.techLevel ?? "—"}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        );
+      })}
+    </>
   );
 }

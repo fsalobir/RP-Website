@@ -9,6 +9,7 @@ import { computeHardPowerByCountry } from "@/lib/hardPower";
 import { computeInfluenceForAll, applyInfluenceModifiers } from "@/lib/influence";
 import { getAllRelationRows, relationRowsToMap, getRelationFromMap } from "@/lib/relations";
 import { getEffectsForCountry, getInfluenceModifiersFromEffects } from "@/lib/countryEffects";
+import { computeFoggedRoster, type FoggedRoster } from "@/lib/intelFog";
 import { fetchWorldIdeologyState } from "@/lib/ideologyServer";
 import type {
   CountryUpdateLog,
@@ -67,6 +68,7 @@ const getCachedCountryPageGlobals = unstable_cache(
 export const dynamic = "force-dynamic";
 
 export type { RosterRowByBranch };
+export type { FoggedRoster } from "@/lib/intelFog";
 
 export default async function CountryPage({
   params,
@@ -289,6 +291,36 @@ export default async function CountryPage({
   const ideologyState = await fetchWorldIdeologyState(createServiceRoleClient());
   const ideologySummary = ideologyState.ideologyByCountry.get(country.id) ?? null;
 
+  let intelLevel: number | null = null;
+  let foggedRoster: FoggedRoster | null = null;
+  if (!isAdmin && !isPlayerForThisCountry) {
+    let intelRow: { intel_level: number; display_seed: number } | null = null;
+    if (auth.playerCountryId) {
+      const { data } = await supabase
+        .from("country_intel")
+        .select("intel_level, display_seed")
+        .eq("observer_country_id", auth.playerCountryId)
+        .eq("target_country_id", country.id)
+        .maybeSingle();
+      intelRow = data;
+    }
+    intelLevel = intelRow ? Number(intelRow.intel_level) : 0;
+    const displaySeed = intelRow ? Number(intelRow.display_seed) : Math.floor(Math.random() * 2147483647);
+    const tempRoster: Record<MilitaryBranch, RosterRowByBranch[]> = { terre: [], air: [], mer: [], strategique: [] };
+    for (const unit of rosterUnits) {
+      const countryState = countryMilitaryUnits.find((cmu) => cmu.roster_unit_id === unit.id) ?? null;
+      const levels = rosterLevels
+        .filter((l) => l.unit_id === unit.id)
+        .sort((a, b) => a.level - b.level)
+        .map((l) => ({ level: l.level, manpower: l.manpower, hard_power: (l as { hard_power?: number }).hard_power ?? 0 }));
+      tempRoster[unit.branch].push({ unit, countryState, levels });
+    }
+    for (const b of ["terre", "air", "mer", "strategique"] as const) {
+      tempRoster[b].sort((a, b2) => (a.unit.sort_order ?? 0) - (b2.unit.sort_order ?? 0) || a.unit.name_fr.localeCompare(b2.unit.name_fr));
+    }
+    foggedRoster = computeFoggedRoster(tempRoster, intelLevel, displaySeed);
+  }
+
   const branches: MilitaryBranch[] = ["terre", "air", "mer", "strategique"];
   const rosterByBranch: Record<MilitaryBranch, RosterRowByBranch[]> = {
     terre: [],
@@ -336,7 +368,9 @@ export default async function CountryPage({
         updateLogs={updateLogs}
         ruleParametersByKey={ruleParametersByKey}
         worldAverages={worldAverages}
-        rosterByBranch={rosterByBranch}
+        rosterByBranch={foggedRoster ? { terre: [], air: [], mer: [], strategique: [] } : rosterByBranch}
+        intelLevel={intelLevel}
+        foggedRoster={foggedRoster}
         mobilisationConfig={mobilisationConfig}
         mobilisationState={mobilisationState}
         worldDate={ruleParametersByKey.world_date?.value as { month: number; year: number } | undefined}

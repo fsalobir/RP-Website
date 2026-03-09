@@ -245,6 +245,16 @@ export interface StateActionRequest {
   target_country_id?: string | null
 }
 
+/** Niveau d'intel militaire entre deux pays. */
+export interface CountryIntel {
+  id: string
+  observer_country_id: string
+  target_country_id: string
+  intel_level: number
+  display_seed: number
+  updated_at: string
+}
+
 /** Effet à appliquer à l'acceptation (sans country_id). */
 export interface AdminEffectAdded {
   name: string

@@ -22,6 +22,7 @@ import {
 import { getTickBreakdown } from "@/lib/tickBreakdown";
 import { setMobilisationTarget, saveMilitaryUnit, getCountryMilitaryUnits } from "./actions";
 import type { RosterRowByBranch } from "./countryTabsTypes";
+import type { FoggedRoster } from "@/lib/intelFog";
 import type { InfluenceResult } from "@/lib/influence";
 import { computeHardPowerByCountry, type HardPowerByBranch } from "@/lib/hardPower";
 import { CountryTabGeneral } from "./CountryTabGeneral";
@@ -98,6 +99,8 @@ export function CountryTabs({
   countriesForTarget = [],
   countriesList = [],
   emitterCountry = { name: "", flag_url: null, regime: null, influence: null },
+  intelLevel = null,
+  foggedRoster = null,
 }: {
   country: Country;
   macros: { key: string; value: number }[];
@@ -152,11 +155,14 @@ export function CountryTabs({
   countriesForTarget?: Array<{ id: string; name: string; flag_url: string | null; regime: string | null; influence: number; relation: number }>;
   countriesList?: Array<{ id: string; name: string }>;
   emitterCountry?: { name: string; flag_url: string | null; regime: string | null; influence: number | null };
+  intelLevel?: number | null;
+  foggedRoster?: FoggedRoster | null;
 }) {
   const canEditCountry = isAdmin || isPlayerForThisCountry;
+  const canSeeCabinetAndBudget = isAdmin || isPlayerForThisCountry;
   const rankEmoji = (r: number) => (r === 1 ? "👑" : r === 2 ? "🥈" : r === 3 ? "🥉" : null);
   const router = useRouter();
-  const [tab, setTab] = useState<"general" | "military" | "perks" | "budget" | "cabinet" | "state_actions" | "debug">("cabinet");
+  const [tab, setTab] = useState<"general" | "military" | "perks" | "budget" | "cabinet" | "state_actions" | "debug">(canSeeCabinetAndBudget ? "cabinet" : "general");
   const [budgetFraction, setBudgetFraction] = useState(DEFAULT_BUDGET_FRACTION);
   const [pcts, setPcts] = useState<Record<BudgetPctKey, number>>(getDefaultPcts);
   const [budgetSaving, setBudgetSaving] = useState(false);
@@ -379,6 +385,12 @@ export function CountryTabs({
     window.addEventListener("pageshow", onPageShow);
     return () => window.removeEventListener("pageshow", onPageShow);
   }, []);
+
+  useEffect(() => {
+    if (!canSeeCabinetAndBudget && (tab === "cabinet" || tab === "budget")) {
+      setTab("general");
+    }
+  }, [canSeeCabinetAndBudget, tab]);
 
   useEffect(() => {
     const next: Record<string, { current_level: number; extra_count: number }> = {};
@@ -978,19 +990,21 @@ export function CountryTabs({
       )}
 
       <div className="tab-list mb-6" style={{ borderColor: "var(--border)" }}>
-        <button
-          type="button"
-          className={`tab ${tab === "cabinet" ? "tab-active" : ""}`}
-          data-state={tab === "cabinet" ? "active" : "inactive"}
-          onClick={() => setTab("cabinet")}
-          style={
-            tab === "cabinet"
-              ? { color: "var(--accent)", borderBottomColor: "var(--accent)" }
-              : undefined
-          }
-        >
-          Rapport du Cabinet
-        </button>
+        {canSeeCabinetAndBudget && (
+          <button
+            type="button"
+            className={`tab ${tab === "cabinet" ? "tab-active" : ""}`}
+            data-state={tab === "cabinet" ? "active" : "inactive"}
+            onClick={() => setTab("cabinet")}
+            style={
+              tab === "cabinet"
+                ? { color: "var(--accent)", borderBottomColor: "var(--accent)" }
+                : undefined
+            }
+          >
+            Rapport du Cabinet
+          </button>
+        )}
         <button
           type="button"
           className={`tab ${tab === "general" ? "tab-active" : ""}`}
@@ -1030,19 +1044,21 @@ export function CountryTabs({
         >
           Avantages
         </button>
-        <button
-          type="button"
-          className={`tab ${tab === "budget" ? "tab-active" : ""}`}
-          data-state={tab === "budget" ? "active" : "inactive"}
-          onClick={() => setTab("budget")}
-          style={
-            tab === "budget"
-              ? { color: "var(--accent)", borderBottomColor: "var(--accent)" }
-              : undefined
-          }
-        >
-          Budget
-        </button>
+        {canSeeCabinetAndBudget && (
+          <button
+            type="button"
+            className={`tab ${tab === "budget" ? "tab-active" : ""}`}
+            data-state={tab === "budget" ? "active" : "inactive"}
+            onClick={() => setTab("budget")}
+            style={
+              tab === "budget"
+                ? { color: "var(--accent)", borderBottomColor: "var(--accent)" }
+                : undefined
+            }
+          >
+            Budget
+          </button>
+        )}
         {isPlayerForThisCountry && (
           <button
             type="button"
@@ -1143,6 +1159,8 @@ export function CountryTabs({
           isAdmin={isAdmin}
           effects={resolvedEffects}
           onSaveMilitaryUnit={handleSaveMilitaryUnit}
+          intelLevel={intelLevel}
+          foggedRoster={foggedRoster}
         />
       )}
 

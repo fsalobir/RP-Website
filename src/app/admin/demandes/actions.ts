@@ -296,6 +296,46 @@ export async function acceptRequest(requestId: string): Promise<{ error?: string
   });
   if (applyErr.error) return applyErr;
 
+  if (key === "espionnage") {
+    const targetCountryId = payload.target_country_id;
+    if (targetCountryId) {
+      const { data: intelConfigRow } = await supabase
+        .from("rule_parameters")
+        .select("value")
+        .eq("key", "intel_config")
+        .maybeSingle();
+      const intelConfig = (intelConfigRow?.value ?? {}) as { espionage_intel_gain_base?: number };
+      const gainBase = Number(intelConfig.espionage_intel_gain_base ?? 50);
+      const impactTotal = diceResults?.impact_roll?.total ?? 100;
+      const gain = Math.round(gainBase * impactTotal / 100);
+
+      if (gain > 0) {
+        const { data: existing } = await supabase
+          .from("country_intel")
+          .select("id, intel_level")
+          .eq("observer_country_id", req.country_id)
+          .eq("target_country_id", targetCountryId)
+          .maybeSingle();
+
+        const currentLevel = existing ? Number(existing.intel_level) : 0;
+        const newLevel = Math.min(100, currentLevel + gain);
+
+        await supabase
+          .from("country_intel")
+          .upsert(
+            {
+              observer_country_id: req.country_id,
+              target_country_id: targetCountryId,
+              intel_level: newLevel,
+              display_seed: Math.floor(Math.random() * 2147483647),
+              updated_at: new Date().toISOString(),
+            },
+            { onConflict: "observer_country_id,target_country_id" }
+          );
+      }
+    }
+  }
+
   const { error: upErr } = await supabase
     .from("state_action_requests")
     .update({

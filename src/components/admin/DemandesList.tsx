@@ -104,6 +104,8 @@ type Props = {
   influenceByCountryId?: Record<string, number>;
   relationMap?: Record<string, number>;
   countriesList?: Array<{ id: string; name: string }>;
+  /** Gain base d'intel pour l'action espionnage (règles). Utilisé pour afficher l'impact proportionnel au jet d'impact. */
+  espionageIntelGainBase?: number;
 };
 
 function getRelationFromMap(record: Record<string, number>, countryIdA: string, countryIdB: string): number {
@@ -116,7 +118,15 @@ const panelClass = "rounded-lg border p-6";
 const panelStyle = { background: "var(--background-panel)", borderColor: "var(--border)" };
 
 const effectKindsForDemandes = ALL_EFFECT_KIND_IDS.filter((k) => k !== "state_actions_grant");
-const effectKindsForUp = ["military_unit_extra", "military_unit_tech_rate", "stat_delta"] as const;
+const effectKindsForUp = [
+  "military_unit_extra",
+  "military_unit_tech_rate",
+  "stat_delta",
+  "influence_modifier_global",
+  "influence_modifier_gdp",
+  "influence_modifier_population",
+  "influence_modifier_hard_power",
+] as const;
 const REQUESTS_PER_PAGE = 10;
 
 function normalizeSearchValue(value: string): string {
@@ -137,7 +147,7 @@ function getStatusLabel(status: string): string {
   return status;
 }
 
-export function DemandesList({ requests, rosterUnitIds, targetCountriesById = {}, influenceByCountryId = {}, relationMap = {}, countriesList = [] }: Props) {
+export function DemandesList({ requests, rosterUnitIds, targetCountriesById = {}, influenceByCountryId = {}, relationMap = {}, countriesList = [], espionageIntelGainBase }: Props) {
   const router = useRouter();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -219,6 +229,7 @@ export function DemandesList({ requests, rosterUnitIds, targetCountriesById = {}
           influenceByCountryId={influenceByCountryId}
           relationMap={relationMap}
           countriesList={countriesList}
+          espionageIntelGainBase={espionageIntelGainBase}
           onClose={() => setSelectedId(null)}
           onSuccess={handleSuccess}
           onRefresh={handleRefresh}
@@ -413,6 +424,7 @@ function RequestDetail({
   influenceByCountryId = {},
   relationMap = {},
   countriesList = [],
+  espionageIntelGainBase,
   onClose,
   onSuccess,
   onRefresh,
@@ -424,6 +436,7 @@ function RequestDetail({
   influenceByCountryId?: Record<string, number>;
   relationMap?: Record<string, number>;
   countriesList?: Array<{ id: string; name: string }>;
+  espionageIntelGainBase?: number;
   onClose: () => void;
   onSuccess: () => void;
   onRefresh: () => void;
@@ -880,7 +893,7 @@ function RequestDetail({
                     ? request.state_action_types.params_schema.impact_maximum
                     : getDefaultImpactMaximum(actionKey);
                 const total = request.dice_results!.impact_roll!.total;
-                const impactLabel = getStateActionImpactPreviewLabel(actionKey, impactMax, total);
+                const impactLabel = getStateActionImpactPreviewLabel(actionKey, impactMax, total, espionageIntelGainBase);
                 if (!impactLabel) return null;
                 return (
                   <div className="mb-4 rounded-lg border p-4" style={{ borderColor: "var(--border)", background: "var(--background)" }}>

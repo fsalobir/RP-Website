@@ -1,4 +1,4 @@
-import { createClient } from "@/lib/supabase/server";
+import { createClient, createServiceRoleClient } from "@/lib/supabase/server";
 import { DemandesList } from "@/components/admin/DemandesList";
 import { computeHardPowerByCountry } from "@/lib/hardPower";
 import type { MilitaryBranch } from "@/types/database";
@@ -7,13 +7,14 @@ import { getAllRelationRows, relationRowsToMap } from "@/lib/relations";
 
 export default async function AdminDemandesPage() {
   const supabase = await createClient();
-  const [requestsRes, rosterRes, countriesRes, countriesListRes, cmuRes, rosterLevelsRes, influenceConfigRes, relationRowsRes] = await Promise.all([
-    supabase
+  const serviceSupabase = createServiceRoleClient();
+  const [requestsRes, rosterRes, countriesRes, countriesListRes, cmuRes, rosterLevelsRes, influenceConfigRes, intelConfigRes, relationRowsRes] = await Promise.all([
+    serviceSupabase
       .from("state_action_requests")
       .select(`
         id, country_id, user_id, action_type_id, status, payload, admin_effect_added,
         refund_actions, refusal_message, created_at, resolved_at, resolved_by, dice_results,
-        country:countries(id, name, slug, flag_url, regime),
+        country:countries!country_id(id, name, slug, flag_url, regime),
         state_action_types:state_action_types(key, label_fr, cost, params_schema)
       `)
       .order("created_at", { ascending: false }),
@@ -23,6 +24,7 @@ export default async function AdminDemandesPage() {
     supabase.from("country_military_units").select("country_id, roster_unit_id, current_level, extra_count"),
     supabase.from("military_roster_unit_levels").select("unit_id, level, hard_power").order("unit_id").order("level"),
     supabase.from("rule_parameters").select("value").eq("key", "influence_config").maybeSingle(),
+    supabase.from("rule_parameters").select("value").eq("key", "intel_config").maybeSingle(),
     getAllRelationRows(supabase),
   ]);
 
@@ -90,6 +92,8 @@ export default async function AdminDemandesPage() {
 
   const relationMap: Record<string, number> = Object.fromEntries(relationRowsToMap(relationRowsRes ?? []));
   const countriesList = (countriesListRes.data ?? []) as Array<{ id: string; name: string }>;
+  const intelConfig = (intelConfigRes.data?.value ?? {}) as { espionage_intel_gain_base?: number };
+  const espionageIntelGainBase = Number(intelConfig.espionage_intel_gain_base ?? 50);
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-10">
@@ -106,6 +110,7 @@ export default async function AdminDemandesPage() {
         influenceByCountryId={influenceByCountryId}
         relationMap={relationMap}
         countriesList={countriesList}
+        espionageIntelGainBase={espionageIntelGainBase}
       />
     </div>
   );

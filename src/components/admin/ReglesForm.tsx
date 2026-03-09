@@ -361,6 +361,7 @@ export function ReglesForm({
   const [aiMinorEffectKind, setAiMinorEffectKind] = useState<string>("gdp_growth_base");
   const [aiMinorEffectTarget, setAiMinorEffectTarget] = useState<string | null>(null);
   const [aiMinorEffectValue, setAiMinorEffectValue] = useState<string>("");
+  const [intelOpen, setIntelOpen] = useState(false);
 
   const supabase = createClient();
 
@@ -404,6 +405,7 @@ export function ReglesForm({
   const sphereInfluencePctKey = "sphere_influence_pct";
   const statsDiceModifierRangesKey = "stats_dice_modifier_ranges";
   const ideologyConfigKey = "ideology_config";
+  const intelConfigKey = "intel_config";
 
   const globalGrowthEffectsRule = useMemo(() => items.find((r) => r.key === globalGrowthEffectsKey), [items]);
   const worldDateRule = useMemo(() => items.find((r) => r.key === worldDateKey), [items]);
@@ -431,6 +433,24 @@ export function ReglesForm({
     if (!ideologyConfigRule) return;
     const current = getIdeologyConfigValue();
     updateValue(ideologyConfigRule.id, { ...current, ...patch });
+  }
+
+  const intelConfigRule = useMemo(() => items.find((r) => r.key === intelConfigKey), [items]);
+  type IntelConfigValue = {
+    decay_flat_per_day?: number;
+    decay_pct_per_day?: number;
+    decay_mode?: "flat" | "pct" | "both";
+    espionage_intel_gain_base?: number;
+  };
+  function getIntelConfig(): IntelConfigValue {
+    if (!intelConfigRule?.value || typeof intelConfigRule.value !== "object") {
+      return { decay_flat_per_day: 2, decay_pct_per_day: 5, decay_mode: "flat", espionage_intel_gain_base: 50 };
+    }
+    return intelConfigRule.value as IntelConfigValue;
+  }
+  function updateIntelConfig(patch: Partial<IntelConfigValue>) {
+    if (!intelConfigRule) return;
+    updateValue(intelConfigRule.id, { ...getIntelConfig(), ...patch });
   }
 
   type InfluenceConfigValue = {
@@ -2155,6 +2175,85 @@ export function ReglesForm({
             </CollapsibleBlock>
           )}
           </div>
+
+          {intelConfigRule && (
+            <CollapsibleBlock
+              title="Espionnage / Intelligence"
+              infoContent={<TooltipBody text="Paramètres du brouillard de guerre : decay quotidien du niveau d'intel et gain lors de l'acceptation d'une action d'espionnage." />}
+              open={intelOpen}
+              onToggle={() => setIntelOpen((o) => !o)}
+              variant="section"
+            >
+              <div className="p-4 space-y-4">
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div>
+                    <label className="mb-1 block text-xs text-[var(--foreground-muted)]">
+                      <FormLabel label="Mode de decay" tooltip="Flat : décrémente un nombre fixe par jour. Pct : décrémente un pourcentage du niveau actuel. Both : applique d'abord le flat, puis le pourcentage sur le résultat." />
+                    </label>
+                    <select
+                      value={getIntelConfig().decay_mode ?? "flat"}
+                      onChange={(e) => updateIntelConfig({ decay_mode: e.target.value as "flat" | "pct" | "both" })}
+                      className="w-full rounded border py-1.5 px-2 text-sm"
+                      style={{ borderColor: "var(--border)", background: "var(--background)" }}
+                    >
+                      <option value="flat">Flat (fixe)</option>
+                      <option value="pct">Pourcentage</option>
+                      <option value="both">Les deux (séquentiel)</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-xs text-[var(--foreground-muted)]">
+                      <FormLabel label="Gain espionnage (base)" tooltip="Delta de référence ajouté au niveau d'intel quand le MJ accepte une action d'espionnage. Le gain réel est proportionnel au jet d'impact." />
+                    </label>
+                    <input
+                      type="number"
+                      min={0}
+                      max={100}
+                      value={getIntelConfig().espionage_intel_gain_base ?? 50}
+                      onChange={(e) => updateIntelConfig({ espionage_intel_gain_base: Math.max(0, Math.min(100, Number(e.target.value) || 0)) })}
+                      className="w-full rounded border py-1.5 px-2 text-sm font-mono"
+                      style={{ borderColor: "var(--border)", background: "var(--background)" }}
+                    />
+                  </div>
+                </div>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div>
+                    <label className="mb-1 block text-xs text-[var(--foreground-muted)]">
+                      <FormLabel label="Decay flat / jour" tooltip="Nombre de points d'intel retirés chaque jour (utilisé si le mode est Flat ou Both)." />
+                    </label>
+                    <input
+                      type="number"
+                      min={0}
+                      step={0.5}
+                      value={getIntelConfig().decay_flat_per_day ?? 2}
+                      onChange={(e) => updateIntelConfig({ decay_flat_per_day: Math.max(0, Number(e.target.value) || 0) })}
+                      className="w-full rounded border py-1.5 px-2 text-sm font-mono"
+                      style={{ borderColor: "var(--border)", background: "var(--background)" }}
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-xs text-[var(--foreground-muted)]">
+                      <FormLabel label="Decay pct / jour (%)" tooltip="Pourcentage du niveau actuel retiré chaque jour (utilisé si le mode est Pct ou Both)." />
+                    </label>
+                    <input
+                      type="number"
+                      min={0}
+                      max={100}
+                      step={0.5}
+                      value={getIntelConfig().decay_pct_per_day ?? 5}
+                      onChange={(e) => updateIntelConfig({ decay_pct_per_day: Math.max(0, Math.min(100, Number(e.target.value) || 0)) })}
+                      className="w-full rounded border py-1.5 px-2 text-sm font-mono"
+                      style={{ borderColor: "var(--border)", background: "var(--background)" }}
+                    />
+                  </div>
+                </div>
+                <p className="text-xs text-[var(--foreground-muted)]">
+                  Exemple : avec un decay flat de 2 et un mode « flat », un pays à 50 % d'intel passera à 48 % le lendemain.
+                  Avec un gain base de 50 et un jet d'impact de 70/100, le joueur recevra +35 points d'intel.
+                </p>
+              </div>
+            </CollapsibleBlock>
+          )}
 
         </div>
       )}
