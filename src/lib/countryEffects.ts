@@ -233,6 +233,69 @@ export const EFFECT_KIND_LABELS: Record<string, string> = Object.fromEntries(
   ALL_EFFECT_KIND_IDS.map((id) => [id, EFFECT_KIND_META[id].label])
 );
 
+export type EffectKindOptionGroup = {
+  label: string;
+  options: Array<{ id: EffectKindId; label: string }>;
+};
+
+const EFFECT_KIND_GROUP_LABELS = {
+  budget: "Budget",
+  croissance: "Croissance",
+  diplomatie: "Diplomatie",
+  ideologie: "Idéologie",
+  influence: "Influence",
+  militaire: "Militaire",
+  societe: "Société",
+} as const;
+
+const EFFECT_KIND_GROUP_BY_ID: Record<EffectKindId, keyof typeof EFFECT_KIND_GROUP_LABELS> = {
+  gdp_growth_base: "croissance",
+  gdp_growth_per_stat: "croissance",
+  population_growth_base: "croissance",
+  population_growth_per_stat: "croissance",
+  stat_delta: "societe",
+  budget_ministry_min_pct: "budget",
+  budget_ministry_effect_multiplier: "budget",
+  budget_allocation_cap: "budget",
+  military_unit_extra: "militaire",
+  military_unit_tech_rate: "militaire",
+  military_unit_limit_modifier: "militaire",
+  influence_modifier_global: "influence",
+  influence_modifier_gdp: "influence",
+  influence_modifier_population: "influence",
+  influence_modifier_hard_power: "influence",
+  state_actions_grant: "diplomatie",
+  relation_delta: "diplomatie",
+  ideology_drift_monarchism: "ideologie",
+  ideology_drift_republicanism: "ideologie",
+  ideology_drift_cultism: "ideologie",
+  ideology_snap_monarchism: "ideologie",
+  ideology_snap_republicanism: "ideologie",
+  ideology_snap_cultism: "ideologie",
+};
+
+export function getEffectKindOptionGroups(allowedKinds?: readonly string[]): EffectKindOptionGroup[] {
+  const allowedSet = allowedKinds ? new Set(allowedKinds) : null;
+  const groups = new Map<keyof typeof EFFECT_KIND_GROUP_LABELS, Array<{ id: EffectKindId; label: string }>>();
+
+  for (const id of ALL_EFFECT_KIND_IDS) {
+    if (allowedSet && !allowedSet.has(id)) continue;
+    const groupId = EFFECT_KIND_GROUP_BY_ID[id];
+    if (!groups.has(groupId)) groups.set(groupId, []);
+    groups.get(groupId)!.push({
+      id,
+      label: EFFECT_KIND_LABELS[id] ?? id,
+    });
+  }
+
+  return Array.from(groups.entries())
+    .sort((a, b) => EFFECT_KIND_GROUP_LABELS[a[0]].localeCompare(EFFECT_KIND_GROUP_LABELS[b[0]], "fr"))
+    .map(([groupId, options]) => ({
+      label: EFFECT_KIND_GROUP_LABELS[groupId],
+      options: [...options].sort((a, b) => a.label.localeCompare(b.label, "fr")),
+    }));
+}
+
 /** Sets dérivés pour les formulaires (cible selon le kind). */
 const _STAT = new Set<string>(["stat_delta", "gdp_growth_per_stat", "population_growth_per_stat"]);
 const _BUDGET = new Set<string>(["budget_ministry_min_pct", "budget_ministry_effect_multiplier"]);

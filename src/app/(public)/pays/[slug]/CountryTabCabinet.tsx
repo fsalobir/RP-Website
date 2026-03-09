@@ -1,5 +1,4 @@
 "use client";
-
 import { formatNumber, formatGdp, formatPopulation } from "@/lib/format";
 import { formatWorldDate } from "@/lib/worldDate";
 import { getCabinetPhrases } from "@/lib/cabinetReport";
@@ -17,8 +16,11 @@ type CountryTabCabinetProps = {
   worldDate: { month: number; year: number } | null;
   worldAverages: { pop_avg: number; gdp_avg: number; mil_avg: number; ind_avg: number; sci_avg: number; stab_avg: number } | null;
   lastUpdateLog: CountryUpdateLog | null;
+  fundingByMinistry?: Record<string, { pct: number; minPct: number }> | null;
   /** Influence actuelle (affichée dans le résumé ; pas de tendance calculée). */
   influenceValue?: number | null;
+  previousInfluenceValue?: number | null;
+  lastCronInfluenceAfterValue?: number | null;
   panelClass: string;
   panelStyle: React.CSSProperties;
 };
@@ -32,7 +34,7 @@ function seedFromCountryAndDate(countryId: string, worldDate: { month: number; y
   return h;
 }
 
-const TREND_STABLE_REL = 0.005;
+const TREND_STABLE_REL = 0.001;
 const TREND_STABLE_ABS = 0.01;
 
 function getTrend(current: number, next: number, isRate = false): Trend {
@@ -40,7 +42,13 @@ function getTrend(current: number, next: number, isRate = false): Trend {
     const rel = current !== 0 ? Math.abs((next - current) / current) : 0;
     return rel < TREND_STABLE_REL ? "stable" : next > current ? "up" : "down";
   }
-  return Math.abs(next - current) < TREND_STABLE_ABS ? "stable" : next > current ? "up" : "down";
+  const currentCents = Math.round(current * 100);
+  const nextCents = Math.round(next * 100);
+  return Math.abs(nextCents - currentCents) < Math.round(TREND_STABLE_ABS * 100)
+    ? "stable"
+    : nextCents > currentCents
+      ? "up"
+      : "down";
 }
 
 function TrendIcon({ trend }: { trend: Trend }) {
@@ -53,6 +61,48 @@ function TrendIcon({ trend }: { trend: Trend }) {
   return <span className="ml-1 inline-block text-[var(--foreground-muted)]" aria-hidden>−</span>;
 }
 
+function TrendInline({ trend }: { trend: Trend }) {
+  if (trend === "up") {
+    return <span className="text-emerald-500 dark:text-emerald-400" aria-hidden>▲</span>;
+  }
+  if (trend === "down") {
+    return <span className="text-red-500 dark:text-red-400" aria-hidden>▼</span>;
+  }
+  return <span className="text-[var(--foreground-muted)]" aria-hidden>−</span>;
+}
+
+function formatSummaryStat(value: number | null | undefined): string {
+  if (value == null || Number.isNaN(value)) return "—";
+  return Number(value).toLocaleString("fr-FR", { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+}
+
+function SummaryMetric({
+  label,
+  value,
+  trend,
+  valueClassName = "text-base font-semibold text-[var(--foreground)]",
+}: {
+  label: string;
+  value: string;
+  trend?: Trend | null;
+  valueClassName?: string;
+}) {
+  return (
+    <div className="flex flex-col items-center justify-center gap-1">
+      <span className="text-lg font-medium text-[var(--foreground-muted)]">{label}</span>
+      <span className={valueClassName}>
+        {value}
+        {trend ? <> (<TrendInline trend={trend} />)</> : null}
+      </span>
+    </div>
+  );
+}
+
+function getTrendFromLog(before: number | null | undefined, after: number | null | undefined, isRate = false): Trend | null {
+  if (before == null || after == null) return null;
+  return getTrend(Number(before), Number(after), isRate);
+}
+
 export function CountryTabCabinet({
   breakdown,
   expected,
@@ -60,7 +110,10 @@ export function CountryTabCabinet({
   worldDate,
   worldAverages,
   lastUpdateLog,
+  fundingByMinistry = null,
   influenceValue = null,
+  previousInfluenceValue = null,
+  lastCronInfluenceAfterValue = null,
   panelClass,
   panelStyle,
 }: CountryTabCabinetProps) {
@@ -75,7 +128,14 @@ export function CountryTabCabinet({
   };
   const cabinetBlocks =
     breakdown && expected && worldAverages
-      ? getCabinetPhrases(breakdown, expected, snapshot, worldAverages, seedFromCountryAndDate(c.id, worldDate))
+      ? getCabinetPhrases(
+          breakdown,
+          expected,
+          snapshot,
+          worldAverages,
+          seedFromCountryAndDate(c.id, worldDate),
+          fundingByMinistry ?? undefined
+        )
       : [];
 
   const reportTitleDate = worldDate ? formatWorldDate(worldDate) : "—";
@@ -83,13 +143,26 @@ export function CountryTabCabinet({
   const summaryTrends =
     expected && breakdown
       ? {
-          gdp: getTrend(snapshot.gdp, expected.gdp, true),
-          population: getTrend(snapshot.population, expected.population, true),
-          influence: "stable" as Trend,
-          militarism: getTrend(snapshot.militarism, expected.militarism),
-          science: getTrend(snapshot.science, expected.science),
-          industry: getTrend(snapshot.industry, expected.industry),
-          stability: getTrend(snapshot.stability, expected.stability),
+          gdp: getTrendFromLog(lastUpdateLog?.gdp_before, lastUpdateLog?.gdp_after, true) ?? getTrend(snapshot.gdp, expected.gdp, true),
+          population:
+            getTrendFromLog(lastUpdateLog?.population_before, lastUpdateLog?.population_after, true) ??
+            getTrend(snapshot.population, expected.population, true),
+          influence:
+            previousInfluenceValue != null && influenceValue != null
+              ? getTrend(previousInfluenceValue, influenceValue, true)
+              : null,
+          militarism:
+            getTrendFromLog(lastUpdateLog?.militarism_before, lastUpdateLog?.militarism_after) ??
+            getTrend(snapshot.militarism, expected.militarism),
+          science:
+            getTrendFromLog(lastUpdateLog?.science_before, lastUpdateLog?.science_after) ??
+            getTrend(snapshot.science, expected.science),
+          industry:
+            getTrendFromLog(lastUpdateLog?.industry_before, lastUpdateLog?.industry_after) ??
+            getTrend(snapshot.industry, expected.industry),
+          stability:
+            getTrendFromLog(lastUpdateLog?.stability_before, lastUpdateLog?.stability_after) ??
+            getTrend(snapshot.stability, expected.stability),
         }
       : null;
 
@@ -124,35 +197,52 @@ export function CountryTabCabinet({
                 {summaryTrends && (
                   <div className="mb-6 flex flex-col items-center">
                     <div className="mb-5 grid w-full max-w-2xl grid-cols-1 gap-5 text-center sm:grid-cols-3">
-                      <div className="flex flex-col items-center justify-center gap-1 sm:border-r sm:border-[var(--border)] sm:pr-6">
-                        <span className="text-lg font-medium text-[var(--foreground-muted)]">PIB</span>
-                        <TrendIcon trend={summaryTrends.gdp} />
+                      <div className="sm:border-r sm:border-[var(--border)] sm:pr-6">
+                        <SummaryMetric label="PIB" value={formatGdp(snapshot.gdp)} trend={summaryTrends.gdp} />
                       </div>
-                      <div className="flex flex-col items-center justify-center gap-1 sm:border-r sm:border-[var(--border)] sm:pr-6">
-                        <span className="text-lg font-medium text-[var(--foreground-muted)]">Population</span>
-                        <TrendIcon trend={summaryTrends.population} />
+                      <div className="sm:border-r sm:border-[var(--border)] sm:pr-6">
+                        <SummaryMetric label="Population" value={formatPopulation(snapshot.population)} trend={summaryTrends.population} />
                       </div>
-                      <div className="flex flex-col items-center justify-center gap-1 sm:pr-0">
-                        <span className="text-lg font-medium text-[var(--foreground-muted)]">Influence</span>
-                        <TrendIcon trend={summaryTrends.influence} />
+                      <div className="sm:pr-0">
+                        <SummaryMetric
+                          label="Influence"
+                          value={formatSummaryStat(influenceValue)}
+                          trend={summaryTrends.influence}
+                        />
                       </div>
                     </div>
                     <div className="grid w-full max-w-2xl grid-cols-2 gap-4 text-center text-sm sm:grid-cols-4">
-                      <div className="flex flex-col items-center justify-center gap-1 sm:border-r sm:border-[var(--border)] sm:pr-6">
-                        <span className="text-[var(--foreground-muted)]">Militarisme</span>
-                        <TrendIcon trend={summaryTrends.militarism} />
+                      <div className="sm:border-r sm:border-[var(--border)] sm:pr-6">
+                        <SummaryMetric
+                          label="Militarisme"
+                          value={formatSummaryStat(snapshot.militarism)}
+                          trend={summaryTrends.militarism}
+                          valueClassName="text-sm font-semibold text-[var(--foreground)]"
+                        />
                       </div>
-                      <div className="flex flex-col items-center justify-center gap-1 sm:border-r sm:border-[var(--border)] sm:pr-6">
-                        <span className="text-[var(--foreground-muted)]">Science</span>
-                        <TrendIcon trend={summaryTrends.science} />
+                      <div className="sm:border-r sm:border-[var(--border)] sm:pr-6">
+                        <SummaryMetric
+                          label="Science"
+                          value={formatSummaryStat(snapshot.science)}
+                          trend={summaryTrends.science}
+                          valueClassName="text-sm font-semibold text-[var(--foreground)]"
+                        />
                       </div>
-                      <div className="flex flex-col items-center justify-center gap-1 sm:border-r sm:border-[var(--border)] sm:pr-6">
-                        <span className="text-[var(--foreground-muted)]">Industrie</span>
-                        <TrendIcon trend={summaryTrends.industry} />
+                      <div className="sm:border-r sm:border-[var(--border)] sm:pr-6">
+                        <SummaryMetric
+                          label="Industrie"
+                          value={formatSummaryStat(snapshot.industry)}
+                          trend={summaryTrends.industry}
+                          valueClassName="text-sm font-semibold text-[var(--foreground)]"
+                        />
                       </div>
-                      <div className="flex flex-col items-center justify-center gap-1 sm:pr-0">
-                        <span className="text-[var(--foreground-muted)]">Stabilité</span>
-                        <TrendIcon trend={summaryTrends.stability} />
+                      <div className="sm:pr-0">
+                        <SummaryMetric
+                          label="Stabilité"
+                          value={formatSummaryStat(snapshot.stability)}
+                          trend={summaryTrends.stability}
+                          valueClassName="text-sm font-semibold text-[var(--foreground)]"
+                        />
                       </div>
                     </div>
                     <div
@@ -241,6 +331,14 @@ export function CountryTabCabinet({
                 <span className="mx-1 text-[var(--foreground-muted)]">→</span>
                 <span>{lastUpdateLog.stability_after ?? "—"}</span>
               </div>
+              {(previousInfluenceValue != null || lastCronInfluenceAfterValue != null) && (
+                <div>
+                  <span className="text-[var(--foreground-muted)]">Influence : </span>
+                  <span>{formatSummaryStat(previousInfluenceValue)}</span>
+                  <span className="mx-1 text-[var(--foreground-muted)]">→</span>
+                  <span>{formatSummaryStat(lastCronInfluenceAfterValue ?? influenceValue)}</span>
+                </div>
+              )}
             </div>
           </section>
         )}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   acceptRequest,
@@ -11,8 +11,8 @@ import {
 } from "@/app/admin/demandes/actions";
 import {
   ALL_EFFECT_KIND_IDS,
-  EFFECT_KIND_LABELS,
   getEffectKindValueHelper,
+  getEffectKindOptionGroups,
   normalizeAdminEffectsAdded,
   formatAdminEffectLabel,
   DURATION_DAYS_MAX,
@@ -24,6 +24,11 @@ import type { AdminEffectAdded } from "@/types/database";
 import { formatNumber } from "@/lib/format";
 import { normalizePair } from "@/lib/relations";
 import { getRelationLabel, getRelationColor } from "@/lib/relationScale";
+import {
+  ACTION_KEYS_REQUIRING_IMPACT_ROLL,
+  getDefaultImpactMaximum,
+  getStateActionImpactPreviewLabel,
+} from "@/lib/actionKeys";
 
 type DiceRollResultRow = {
   roll: number;
@@ -111,13 +116,83 @@ const panelStyle = { background: "var(--background-panel)", borderColor: "var(--
 
 const effectKindsForDemandes = ALL_EFFECT_KIND_IDS.filter((k) => k !== "state_actions_grant");
 const effectKindsForUp = ["military_unit_extra", "military_unit_tech_rate", "stat_delta"] as const;
+const REQUESTS_PER_PAGE = 10;
+
+function normalizeSearchValue(value: string): string {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+function getStatusLabel(status: string): string {
+  if (status === "pending") return "en attente";
+  if (status === "accepted") return "acceptee";
+  if (status === "refused") return "refusee";
+  return status;
+}
 
 export function DemandesList({ requests, rosterUnitIds, targetCountriesById = {}, influenceByCountryId = {}, relationMap = {}, countriesList = [] }: Props) {
   const router = useRouter();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
 
-  const selected = requests.find((r) => r.id === selectedId);
+  const sortedRequests = useMemo(() => {
+    return [...requests].sort((a, b) => {
+      const statusA = a.status === "pending" ? 0 : 1;
+      const statusB = b.status === "pending" ? 0 : 1;
+      if (statusA !== statusB) return statusA - statusB;
+      return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+    });
+  }, [requests]);
+
+  const filteredRequests = useMemo(() => {
+    const tokens = normalizeSearchValue(searchQuery).split(" ").filter(Boolean);
+    if (tokens.length === 0) return sortedRequests;
+
+    return sortedRequests.filter((request) => {
+      const targetId = typeof request.payload?.target_country_id === "string" ? request.payload.target_country_id : null;
+      const targetCountry = targetId ? targetCountriesById[targetId] : null;
+      const haystack = normalizeSearchValue([
+        request.state_action_types?.label_fr ?? "",
+        request.state_action_types?.key ?? "",
+        request.country?.name ?? "",
+        targetCountry?.name ?? "",
+        typeof request.payload?.message === "string" ? request.payload.message : "",
+        request.refusal_message ?? "",
+        getStatusLabel(request.status),
+      ].join(" "));
+
+      return tokens.every((token) => haystack.includes(token));
+    });
+  }, [requests, searchQuery, sortedRequests, targetCountriesById]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredRequests.length / REQUESTS_PER_PAGE));
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery]);
+
+  useEffect(() => {
+    if (currentPage > totalPages) setCurrentPage(totalPages);
+  }, [currentPage, totalPages]);
+
+  useEffect(() => {
+    if (selectedId && !filteredRequests.some((request) => request.id === selectedId)) {
+      setSelectedId(null);
+    }
+  }, [filteredRequests, selectedId]);
+
+  const paginatedRequests = useMemo(() => {
+    const start = (currentPage - 1) * REQUESTS_PER_PAGE;
+    return filteredRequests.slice(start, start + REQUESTS_PER_PAGE);
+  }, [currentPage, filteredRequests]);
+
+  const selected = filteredRequests.find((r) => r.id === selectedId) ?? sortedRequests.find((r) => r.id === selectedId);
 
   function handleSuccess() {
     setError(null);
@@ -132,10 +207,47 @@ export function DemandesList({ requests, rosterUnitIds, targetCountriesById = {}
 
   return (
     <div className="space-y-6">
+      {selected && (
+        <RequestDetail
+          request={selected}
+          rosterUnitIds={rosterUnitIds}
+          targetCountriesById={targetCountriesById}
+          influenceByCountryId={influenceByCountryId}
+          relationMap={relationMap}
+          countriesList={countriesList}
+          onClose={() => setSelectedId(null)}
+          onSuccess={handleSuccess}
+          onRefresh={handleRefresh}
+          onError={setError}
+        />
+      )}
+
       <section className={panelClass} style={panelStyle}>
-        <h2 className="mb-4 text-lg font-semibold text-[var(--foreground)]">
-          Demandes (du plus récent au plus ancien)
-        </h2>
+        <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+          <div>
+            <h2 className="text-lg font-semibold text-[var(--foreground)]">
+              Demandes
+            </h2>
+            <p className="mt-1 text-sm text-[var(--foreground-muted)]">
+              Les demandes en attente restent toujours en tête. Affichage par pages de 10.
+            </p>
+          </div>
+          <div className="w-full max-w-xl">
+            <label className="mb-1 block text-sm text-[var(--foreground-muted)]">Recherche dynamique</label>
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Ex: Prise d'influence Russie"
+              className="w-full rounded border bg-[var(--background)] px-3 py-2 text-sm text-[var(--foreground)]"
+              style={{ borderColor: "var(--border)" }}
+            />
+          </div>
+        </div>
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-2 text-sm text-[var(--foreground-muted)]">
+          <span>{filteredRequests.length} demande(s) trouvée(s)</span>
+          <span>Page {currentPage} / {totalPages}</span>
+        </div>
         {error && (
           <p className="mb-4 rounded border border-red-500/50 bg-red-500/10 px-3 py-2 text-sm text-red-400">
             {error}
@@ -153,15 +265,19 @@ export function DemandesList({ requests, rosterUnitIds, targetCountriesById = {}
               </tr>
             </thead>
             <tbody>
-              {requests.map((r) => {
+              {paginatedRequests.map((r) => {
                 const targetId = typeof r.payload?.target_country_id === "string" ? r.payload.target_country_id : null;
                 const targetCountry = targetId ? targetCountriesById[targetId] : null;
+                const isSelected = selectedId === r.id;
                 return (
                   <tr
                     key={r.id}
                     onClick={() => setSelectedId(selectedId === r.id ? null : r.id)}
                     className="cursor-pointer transition-colors hover:bg-[var(--background)]"
-                    style={{ borderColor: "var(--border)" }}
+                    style={{
+                      borderColor: "var(--border)",
+                      background: isSelected ? "var(--background-elevated)" : undefined,
+                    }}
                   >
                     <td className="border-b p-2 text-[var(--foreground)]">
                       {new Date(r.created_at).toLocaleString("fr-FR")}
@@ -216,25 +332,38 @@ export function DemandesList({ requests, rosterUnitIds, targetCountriesById = {}
             </tbody>
           </table>
         </div>
-        {requests.length === 0 && (
+        {filteredRequests.length === 0 && (
           <p className="mt-4 text-sm text-[var(--foreground-muted)]">Aucune demande.</p>
         )}
+        {filteredRequests.length > REQUESTS_PER_PAGE && (
+          <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t pt-4" style={{ borderColor: "var(--border)" }}>
+            <span className="text-sm text-[var(--foreground-muted)]">
+              Affichage {Math.min((currentPage - 1) * REQUESTS_PER_PAGE + 1, filteredRequests.length)}-
+              {Math.min(currentPage * REQUESTS_PER_PAGE, filteredRequests.length)} sur {filteredRequests.length}
+            </span>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
+                disabled={currentPage === 1}
+                className="rounded border px-3 py-1.5 text-sm disabled:opacity-50"
+                style={{ borderColor: "var(--border)" }}
+              >
+                Précédent
+              </button>
+              <button
+                type="button"
+                onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
+                disabled={currentPage === totalPages}
+                className="rounded border px-3 py-1.5 text-sm disabled:opacity-50"
+                style={{ borderColor: "var(--border)" }}
+              >
+                Suivant
+              </button>
+            </div>
+          </div>
+        )}
       </section>
-
-      {selected && (
-        <RequestDetail
-          request={selected}
-          rosterUnitIds={rosterUnitIds}
-          targetCountriesById={targetCountriesById}
-          influenceByCountryId={influenceByCountryId}
-          relationMap={relationMap}
-          countriesList={countriesList}
-          onClose={() => setSelectedId(null)}
-          onSuccess={handleSuccess}
-          onRefresh={handleRefresh}
-          onError={setError}
-        />
-      )}
     </div>
   );
 }
@@ -295,6 +424,9 @@ function RequestDetail({
   const [diceLoading, setDiceLoading] = useState<"success" | "impact" | null>(null);
   const [adminModifierStr, setAdminModifierStr] = useState("0");
   const [adminModifierLabel, setAdminModifierLabel] = useState("");
+  const effectEntries = effectsList.map((effect, index) => ({ effect, index }));
+  const durationEffectEntries = effectEntries.filter(({ effect }) => effect.application !== "immediate");
+  const immediateEffectEntries = effectEntries.filter(({ effect }) => effect.application === "immediate");
 
   const effectLookups = { rosterUnits: rosterUnitIds, countries: countriesList };
 
@@ -384,6 +516,7 @@ function RequestDetail({
   function openAddEffect(isUp: boolean) {
     setEffectFormIsUp(isUp);
     const kind = isUp ? effectKindsForUp[0] : effectKindsForDemandes[0];
+    const otherCountries = countriesList.filter((country) => country.id !== request.country_id);
     const defaultTarget = ["stat_delta", "gdp_growth_per_stat", "population_growth_per_stat"].includes(kind)
       ? "militarism"
       : kind.startsWith("budget_ministry")
@@ -393,7 +526,7 @@ function RequestDetail({
           : ["military_unit_extra", "military_unit_tech_rate"].includes(kind)
             ? (rosterUnitIds[0]?.id ?? null)
             : kind === "relation_delta"
-              ? (countriesList[0]?.id ?? null)
+              ? (otherCountries[0]?.id ?? null)
               : null;
     setEffectForm({
       name: "",
@@ -418,6 +551,62 @@ function RequestDetail({
     setShowEffectForm(true);
   }
 
+  function renderEffectEntries(
+    title: string,
+    entries: Array<{ effect: AdminEffectAdded; index: number }>,
+    emptyLabel: string
+  ) {
+    return (
+      <div className="space-y-2">
+        <div className="flex items-center justify-between gap-3">
+          <h4 className="text-sm font-medium text-[var(--foreground)]">{title}</h4>
+          <span className="text-xs text-[var(--foreground-muted)]">{entries.length}</span>
+        </div>
+        {entries.length === 0 ? (
+          <p className="rounded border px-3 py-2 text-sm text-[var(--foreground-muted)]" style={{ borderColor: "var(--border)", background: "var(--background)" }}>
+            {emptyLabel}
+          </p>
+        ) : (
+          <ul className="space-y-2">
+            {entries.map(({ effect, index }) => (
+              <li
+                key={index}
+                className="flex flex-wrap items-center justify-between gap-2 rounded border py-2 px-3 text-sm"
+                style={{ borderColor: "var(--border)", background: "var(--background)" }}
+              >
+                <span className="min-w-0 flex-1 whitespace-pre-wrap break-words [overflow-wrap:anywhere] text-[var(--foreground)]">
+                  {formatAdminEffectLabel(effect, effectLookups)}
+                </span>
+                <span className="flex shrink-0 items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={() => openEditEffect(index)}
+                    disabled={loading !== null}
+                    className="rounded p-1.5 text-[var(--foreground-muted)] hover:bg-[var(--border)] hover:text-[var(--foreground)] disabled:opacity-50"
+                    title="Modifier"
+                    aria-label="Modifier"
+                  >
+                    <span aria-hidden>✎</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleDeleteEffect(index)}
+                    disabled={loading !== null}
+                    className="rounded p-1.5 text-[var(--foreground-muted)] hover:bg-red-500/20 hover:text-red-400 disabled:opacity-50"
+                    title="Supprimer"
+                    aria-label="Supprimer"
+                  >
+                    <span aria-hidden>🗑</span>
+                  </button>
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    );
+  }
+
   return (
     <section className={panelClass} style={panelStyle}>
       <div className="mb-4 flex items-center justify-between">
@@ -427,9 +616,10 @@ function RequestDetail({
         <button
           type="button"
           onClick={onClose}
-          className="text-sm text-[var(--foreground-muted)] hover:text-[var(--foreground)]"
+          className="rounded border px-3 py-1.5 text-sm font-medium text-[var(--foreground)] hover:bg-red-500/10 hover:text-red-300"
+          style={{ borderColor: "var(--border)" }}
         >
-          Fermer
+          Fermer le détail
         </button>
       </div>
 
@@ -527,7 +717,7 @@ function RequestDetail({
         </dl>
       )}
 
-      {(request.state_action_types?.key === "insulte_diplomatique" || request.state_action_types?.key === "ouverture_diplomatique" || request.state_action_types?.key === "prise_influence") && (
+      {ACTION_KEYS_REQUIRING_IMPACT_ROLL.has(request.state_action_types?.key ?? "") && (
         <div className="mt-4 border-t pt-4" style={{ borderColor: "var(--border)" }}>
           <h3 className="mb-2 text-sm font-medium text-[var(--foreground)]">Jets de dés</h3>
           {isPending && (
@@ -646,11 +836,15 @@ function RequestDetail({
                   )}
                 </div>
               </div>
-              {(request.state_action_types?.key === "prise_influence" || request.state_action_types?.key === "insulte_diplomatique" || request.state_action_types?.key === "ouverture_diplomatique") && (() => {
-                const impactMax = typeof request.state_action_types?.params_schema?.impact_maximum === "number" ? request.state_action_types.params_schema.impact_maximum : (request.state_action_types?.key === "prise_influence" ? 100 : 50);
+              {(() => {
+                const actionKey = request.state_action_types?.key ?? "";
+                const impactMax =
+                  typeof request.state_action_types?.params_schema?.impact_maximum === "number"
+                    ? request.state_action_types.params_schema.impact_maximum
+                    : getDefaultImpactMaximum(actionKey);
                 const total = request.dice_results!.impact_roll!.total;
-                const impactPct = (total / 100) * impactMax;
-                const impactLabel = request.state_action_types?.key === "prise_influence" ? `${Math.round(impactPct)} %` : request.state_action_types?.key === "insulte_diplomatique" ? `−${Math.round(impactPct)}` : `+${Math.round(impactPct)}`;
+                const impactLabel = getStateActionImpactPreviewLabel(actionKey, impactMax, total);
+                if (!impactLabel) return null;
                 return (
                   <div className="mb-4 rounded-lg border p-4" style={{ borderColor: "var(--border)", background: "var(--background)" }}>
                     <p className="text-xs font-medium uppercase tracking-wider text-[var(--foreground-muted)] mb-1">Impact</p>
@@ -667,43 +861,10 @@ function RequestDetail({
         <div className="mt-6 space-y-4 border-t pt-4" style={{ borderColor: "var(--border)" }}>
           <div>
             <h3 className="mb-2 text-sm font-medium text-[var(--foreground)]">Ajouter conséquences optionnelles</h3>
-            {effectsList.length > 0 && (
-              <ul className="mb-3 space-y-2">
-                {effectsList.map((e, index) => (
-                  <li
-                    key={index}
-                    className="flex flex-wrap items-center justify-between gap-2 rounded border py-2 px-3 text-sm"
-                    style={{ borderColor: "var(--border)", background: "var(--background)" }}
-                  >
-                    <span className="min-w-0 flex-1 whitespace-pre-wrap break-words [overflow-wrap:anywhere] text-[var(--foreground)]">
-                      {formatAdminEffectLabel(e, effectLookups)}
-                    </span>
-                    <span className="flex shrink-0 items-center gap-1">
-                      <button
-                        type="button"
-                        onClick={() => openEditEffect(index)}
-                        disabled={loading !== null}
-                        className="rounded p-1.5 text-[var(--foreground-muted)] hover:bg-[var(--border)] hover:text-[var(--foreground)] disabled:opacity-50"
-                        title="Modifier"
-                        aria-label="Modifier"
-                      >
-                        <span aria-hidden>✎</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleDeleteEffect(index)}
-                        disabled={loading !== null}
-                        className="rounded p-1.5 text-[var(--foreground-muted)] hover:bg-red-500/20 hover:text-red-400 disabled:opacity-50"
-                        title="Supprimer"
-                        aria-label="Supprimer"
-                      >
-                        <span aria-hidden>🗑</span>
-                      </button>
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            )}
+            <div className="mb-3 grid gap-4 lg:grid-cols-2">
+              {renderEffectEntries("Effets actifs", durationEffectEntries, "Aucun effet actif ajouté.")}
+              {renderEffectEntries("Effets one-shot", immediateEffectEntries, "Aucun effet one-shot ajouté.")}
+            </div>
             {!showEffectForm ? (
               <div className="flex flex-wrap gap-2">
                 <button
@@ -737,9 +898,7 @@ function RequestDetail({
               />
             )}
           </div>
-          {(request.state_action_types?.key === "prise_influence" ||
-            request.state_action_types?.key === "ouverture_diplomatique" ||
-            request.state_action_types?.key === "insulte_diplomatique") &&
+          {ACTION_KEYS_REQUIRING_IMPACT_ROLL.has(request.state_action_types?.key ?? "") &&
             !request.dice_results?.impact_roll && (
               <p className="text-sm text-amber-500 dark:text-amber-400">
                 Lancez le jet d&apos;impact pour pouvoir accepter cette demande.
@@ -752,9 +911,7 @@ function RequestDetail({
                 onClick={handleAccept}
                 disabled={
                   loading !== null ||
-                  ((request.state_action_types?.key === "prise_influence" ||
-                    request.state_action_types?.key === "ouverture_diplomatique" ||
-                    request.state_action_types?.key === "insulte_diplomatique") &&
+                  (ACTION_KEYS_REQUIRING_IMPACT_ROLL.has(request.state_action_types?.key ?? "") &&
                     !request.dice_results?.impact_roll)
                 }
                 className="rounded bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
@@ -819,6 +976,7 @@ function EffectFormInline({
   isUpForm?: boolean;
 }) {
   const kindsSource = isUpForm ? effectKindsForUp : effectKindsForDemandes;
+  const kindGroups = useMemo(() => getEffectKindOptionGroups(kindsSource), [kindsSource]);
   const kind = (value?.effect_kind ?? kindsSource[0]) as string;
   const needsStat = ["stat_delta", "gdp_growth_per_stat", "population_growth_per_stat"].includes(kind);
   const needsBudget = kind.startsWith("budget_ministry");
@@ -879,8 +1037,12 @@ function EffectFormInline({
           className="rounded border bg-[var(--background)] px-3 py-1.5 text-sm"
           style={{ borderColor: "var(--border)" }}
         >
-          {(isUpForm ? effectKindsForUp : effectKindsForDemandes).map((k) => (
-            <option key={k} value={k}>{EFFECT_KIND_LABELS[k] ?? k}</option>
+          {kindGroups.map((group) => (
+            <optgroup key={group.label} label={group.label}>
+              {group.options.map((option) => (
+                <option key={option.id} value={option.id}>{option.label}</option>
+              ))}
+            </optgroup>
           ))}
         </select>
         {needsStatTarget && (

@@ -4,10 +4,12 @@ import { createClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
 import type { DiceResults, DiceRollResult } from "@/types/database";
 import { computeAiEventDiceRoll } from "@/lib/stateActionDice";
+import { getRelation } from "@/lib/relations";
 import {
   applyStateActionConsequences,
   ACTION_KEYS_REQUIRING_IMPACT_ROLL,
 } from "@/lib/stateActionConsequences";
+import { getStateActionMinRelationRequired } from "@/lib/actionKeys";
 
 async function ensureAdmin() {
   const supabase = await createClient();
@@ -201,6 +203,26 @@ export async function createAiEvent(payload: {
   const { actionTypeId, countryId, targetCountryId } = payload;
   if (targetCountryId === countryId) {
     return { error: "La cible ne doit pas être l'émetteur." };
+  }
+
+  const { data: actionType, error: actionTypeErr } = await supabase
+    .from("state_action_types")
+    .select("key, params_schema")
+    .eq("id", actionTypeId)
+    .single();
+  if (actionTypeErr || !actionType) return { error: actionTypeErr?.message ?? "Type d'action introuvable." };
+
+  const minRelationRequired = getStateActionMinRelationRequired(
+    actionType.key,
+    (actionType.params_schema ?? {}) as Record<string, unknown>
+  );
+  if (minRelationRequired !== null) {
+    const relation = await getRelation(supabase, countryId, targetCountryId);
+    if (relation > minRelationRequired) {
+      return {
+        error: `Relation insuffisamment hostile. Cette action exige une relation de ${minRelationRequired} ou moins.`,
+      };
+    }
   }
 
   const { error: insErr } = await supabase.from("ai_event_requests").insert({

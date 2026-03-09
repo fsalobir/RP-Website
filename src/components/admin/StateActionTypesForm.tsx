@@ -4,6 +4,11 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { updateStateActionType } from "@/app/admin/actions-etat/actions";
 import type { StateActionType } from "@/types/database";
+import {
+  getDefaultImpactMaximum,
+  getStateActionMinRelationRequired,
+  isMilitaryStateActionKey,
+} from "@/lib/actionKeys";
 
 const panelClass = "rounded-lg border p-6";
 const panelStyle = { background: "var(--background-panel)", borderColor: "var(--border)" };
@@ -44,6 +49,7 @@ function defaultEquilibre(params: Record<string, unknown>): EquilibreDesForces {
 type EditState = {
   cost: number;
   impactMaximum: number;
+  minRelationRequired: number;
   statBonus: Record<string, boolean>;
   statBonusUpNombre: Record<string, boolean>;
   statBonusUpTech: Record<string, boolean>;
@@ -55,10 +61,11 @@ type EditState = {
 function initEditForType(type: StateActionType): EditState {
   const params = (type.params_schema ?? {}) as Record<string, unknown>;
   const statBonusFromParams = (params.stat_bonus ?? {}) as Record<string, boolean>;
-  const defaultImpact = type.key === "prise_influence" ? 100 : 50;
+  const defaultImpact = getDefaultImpactMaximum(type.key);
   return {
     cost: type.cost,
     impactMaximum: typeof params.impact_maximum === "number" ? params.impact_maximum : defaultImpact,
+    minRelationRequired: getStateActionMinRelationRequired(type.key, params) ?? 0,
     statBonus: Object.fromEntries(
       STAT_BONUS_KEYS.map(({ key }) => [key, statBonusFromParams[key] !== false])
     ),
@@ -72,7 +79,8 @@ function initEditForType(type: StateActionType): EditState {
 
 function hasChanges(type: StateActionType, edit: EditState): boolean {
   const params = (type.params_schema ?? {}) as Record<string, unknown>;
-  const defaultImpactMax = typeof params.impact_maximum === "number" ? params.impact_maximum : 50;
+  const defaultImpactMax = typeof params.impact_maximum === "number" ? params.impact_maximum : getDefaultImpactMaximum(type.key);
+  const minRelationDefault = getStateActionMinRelationRequired(type.key, params);
   const statBonusFromParams = (params.stat_bonus ?? {}) as Record<string, boolean>;
   const statBonusChanged = STAT_BONUS_KEYS.some(
     ({ key }) => edit.statBonus[key] !== (statBonusFromParams[key] !== false)
@@ -109,6 +117,13 @@ function hasChanges(type: StateActionType, edit: EditState): boolean {
       equilibreChanged
     );
   }
+  if (isMilitaryStateActionKey(type.key)) {
+    return (
+      edit.cost !== type.cost ||
+      edit.impactMaximum !== defaultImpactMax ||
+      edit.minRelationRequired !== (minRelationDefault ?? 0)
+    );
+  }
   return (
     edit.cost !== type.cost ||
     ((type.key === "insulte_diplomatique" || type.key === "ouverture_diplomatique") &&
@@ -119,7 +134,7 @@ function hasChanges(type: StateActionType, edit: EditState): boolean {
 
 function buildPatch(type: StateActionType, edit: EditState): { cost: number; params_schema?: Record<string, unknown> } {
   const params = (type.params_schema ?? {}) as Record<string, unknown>;
-  const defaultImpactMax = typeof params.impact_maximum === "number" ? params.impact_maximum : 50;
+  const defaultImpactMax = typeof params.impact_maximum === "number" ? params.impact_maximum : getDefaultImpactMaximum(type.key);
   const patch: { cost: number; params_schema?: Record<string, unknown> } = { cost: edit.cost };
   if (type.key === "demande_up") {
     patch.params_schema = {
@@ -142,6 +157,14 @@ function buildPatch(type: StateActionType, edit: EditState): { cost: number; par
         ratio_min: edit.equilibreDesForces.ratioMin,
         ratio_max: edit.equilibreDesForces.ratioMax,
       },
+    };
+    return patch;
+  }
+  if (isMilitaryStateActionKey(type.key)) {
+    patch.params_schema = {
+      ...params,
+      impact_maximum: edit.impactMaximum,
+      min_relation_required: edit.minRelationRequired,
     };
     return patch;
   }
@@ -308,6 +331,7 @@ function TypeRow({
   const isDiplo = type.key === "insulte_diplomatique" || type.key === "ouverture_diplomatique";
   const isDemandeUp = type.key === "demande_up";
   const isPriseInfluence = type.key === "prise_influence";
+  const isMilitary = isMilitaryStateActionKey(type.key);
 
   return (
     <li className="rounded border overflow-hidden" style={{ borderColor: "var(--border)" }}>
@@ -345,7 +369,7 @@ function TypeRow({
             style={{ borderColor: "var(--border)" }}
           />
         </div>
-        {(isDiplo || isPriseInfluence) && (
+        {(isDiplo || isPriseInfluence || isMilitary) && (
           <div className="w-32">
             <label className="mb-0.5 block text-xs text-[var(--foreground-muted)]" title={isPriseInfluence ? "Pourcentage maximum d'impact." : "Valeur max de variation de relation par action ; le jet d'impact (0–100) applique ce pourcentage."}>
               Impact max {isPriseInfluence ? "(%)" : ""}
@@ -356,6 +380,22 @@ function TypeRow({
               max={100}
               value={edit.impactMaximum}
               onChange={(e) => onEditChange({ impactMaximum: Number(e.target.value) ?? 50 })}
+              className="w-full rounded border bg-[var(--background)] px-2 py-1 text-sm"
+              style={{ borderColor: "var(--border)" }}
+            />
+          </div>
+        )}
+        {isMilitary && (
+          <div className="w-36">
+            <label className="mb-0.5 block text-xs text-[var(--foreground-muted)]" title="Relation bilatérale maximale requise pour autoriser l'action (ex. -75 = hostilité extrême).">
+              Relation max requise
+            </label>
+            <input
+              type="number"
+              min={-100}
+              max={100}
+              value={edit.minRelationRequired}
+              onChange={(e) => onEditChange({ minRelationRequired: Number(e.target.value) || 0 })}
               className="w-full rounded border bg-[var(--background)] px-2 py-1 text-sm"
               style={{ borderColor: "var(--border)" }}
             />

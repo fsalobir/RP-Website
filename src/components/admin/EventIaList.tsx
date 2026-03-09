@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   acceptAiEvent,
@@ -11,6 +11,7 @@ import {
   processDueAiEvents,
 } from "@/app/admin/event-ia/actions";
 import { ACTION_KEYS_REQUIRING_IMPACT_ROLL } from "@/lib/actionKeys";
+import { getDefaultImpactMaximum, getStateActionImpactPreviewLabel } from "@/lib/actionKeys";
 import { normalizeAdminEffectsAdded, formatAdminEffectLabel } from "@/lib/countryEffects";
 import { normalizePair } from "@/lib/relations";
 import { getRelationLabel, getRelationColor } from "@/lib/relationScale";
@@ -98,6 +99,23 @@ type Props = {
 
 const panelClass = "rounded-lg border p-6";
 const panelStyle = { background: "var(--background-panel)", borderColor: "var(--border)" };
+const EVENTS_PER_PAGE = 10;
+
+function normalizeSearchValue(value: string): string {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+function getStatusLabel(status: string): string {
+  if (status === "pending") return "en attente";
+  if (status === "accepted") return "accepte";
+  if (status === "refused") return "refuse";
+  return status;
+}
 
 export function EventIaList({
   events,
@@ -117,8 +135,61 @@ export function EventIaList({
   const [createLoading, setCreateLoading] = useState(false);
   const [simulateLoading, setSimulateLoading] = useState(false);
   const [processDueLoading, setProcessDueLoading] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
 
-  const selected = events.find((e) => e.id === selectedId);
+  const sortedEvents = useMemo(() => {
+    return [...events].sort((a, b) => {
+      const statusA = a.status === "pending" ? 0 : 1;
+      const statusB = b.status === "pending" ? 0 : 1;
+      if (statusA !== statusB) return statusA - statusB;
+      return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+    });
+  }, [events]);
+
+  const filteredEvents = useMemo(() => {
+    const tokens = normalizeSearchValue(searchQuery).split(" ").filter(Boolean);
+    if (tokens.length === 0) return sortedEvents;
+
+    return sortedEvents.filter((event) => {
+      const targetId = typeof event.payload?.target_country_id === "string" ? event.payload.target_country_id : null;
+      const targetCountry = targetId ? targetCountriesById[targetId] : null;
+      const haystack = normalizeSearchValue([
+        event.state_action_types?.label_fr ?? "",
+        event.state_action_types?.key ?? "",
+        event.country?.name ?? "",
+        targetCountry?.name ?? "",
+        event.refusal_message ?? "",
+        event.source === "cron" ? "cron" : event.source === "manual" ? "manuel" : "",
+        getStatusLabel(event.status),
+      ].join(" "));
+
+      return tokens.every((token) => haystack.includes(token));
+    });
+  }, [searchQuery, sortedEvents, targetCountriesById]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredEvents.length / EVENTS_PER_PAGE));
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery]);
+
+  useEffect(() => {
+    if (currentPage > totalPages) setCurrentPage(totalPages);
+  }, [currentPage, totalPages]);
+
+  useEffect(() => {
+    if (selectedId && !filteredEvents.some((event) => event.id === selectedId)) {
+      setSelectedId(null);
+    }
+  }, [filteredEvents, selectedId]);
+
+  const paginatedEvents = useMemo(() => {
+    const start = (currentPage - 1) * EVENTS_PER_PAGE;
+    return filteredEvents.slice(start, start + EVENTS_PER_PAGE);
+  }, [currentPage, filteredEvents]);
+
+  const selected = filteredEvents.find((e) => e.id === selectedId) ?? sortedEvents.find((e) => e.id === selectedId);
 
   function handleSuccess() {
     setError(null);
@@ -175,39 +246,74 @@ export function EventIaList({
 
   return (
     <div className="space-y-6">
+      {selected && (
+        <EventDetail
+          event={selected}
+          targetCountriesById={targetCountriesById}
+          countriesList={allCountries}
+          relationMap={relationMap}
+          onClose={() => setSelectedId(null)}
+          onSuccess={handleSuccess}
+          onRefresh={handleRefresh}
+          onError={setError}
+        />
+      )}
+
       <section className={panelClass} style={panelStyle}>
-        <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
-          <h2 className="text-lg font-semibold text-[var(--foreground)]">
-            Événements IA (du plus récent au plus ancien)
-          </h2>
-          <div className="flex flex-wrap items-center gap-2">
-            <button
-              type="button"
-              onClick={handleSimulateCron}
-              disabled={simulateLoading}
-              className="rounded border px-3 py-1.5 text-sm font-medium hover:bg-[var(--background)] disabled:opacity-50"
-              style={{ borderColor: "var(--border)" }}
-            >
-              {simulateLoading ? "Passage en cours…" : "Simuler passage IA"}
-            </button>
-            <button
-              type="button"
-              onClick={handleProcessDue}
-              disabled={processDueLoading}
-              className="rounded border px-3 py-1.5 text-sm font-medium hover:bg-[var(--background)] disabled:opacity-50"
-              style={{ borderColor: "var(--border)" }}
-            >
-              {processDueLoading ? "Traitement…" : "Traiter les events IA dus"}
-            </button>
-            <button
-              type="button"
-              onClick={() => setShowCreateModal(true)}
-              className="rounded border px-3 py-1.5 text-sm font-medium hover:bg-[var(--background)]"
-              style={{ borderColor: "var(--border)" }}
-            >
-              Générer un event IA
-            </button>
+        <div className="mb-4 flex flex-col gap-3">
+          <div className="flex flex-col gap-3 xl:flex-row xl:items-end xl:justify-between">
+            <div>
+              <h2 className="text-lg font-semibold text-[var(--foreground)]">
+                Événements IA
+              </h2>
+              <p className="mt-1 text-sm text-[var(--foreground-muted)]">
+                Les événements en attente restent toujours en tête. Affichage par pages de 10.
+              </p>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={handleSimulateCron}
+                disabled={simulateLoading}
+                className="rounded border px-3 py-1.5 text-sm font-medium hover:bg-[var(--background)] disabled:opacity-50"
+                style={{ borderColor: "var(--border)" }}
+              >
+                {simulateLoading ? "Passage en cours…" : "Simuler passage IA"}
+              </button>
+              <button
+                type="button"
+                onClick={handleProcessDue}
+                disabled={processDueLoading}
+                className="rounded border px-3 py-1.5 text-sm font-medium hover:bg-[var(--background)] disabled:opacity-50"
+                style={{ borderColor: "var(--border)" }}
+              >
+                {processDueLoading ? "Traitement…" : "Traiter les events IA dus"}
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowCreateModal(true)}
+                className="rounded border px-3 py-1.5 text-sm font-medium hover:bg-[var(--background)]"
+                style={{ borderColor: "var(--border)" }}
+              >
+                Générer un event IA
+              </button>
+            </div>
           </div>
+          <div className="w-full max-w-xl">
+            <label className="mb-1 block text-sm text-[var(--foreground-muted)]">Recherche dynamique</label>
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Ex: Guerre Russie"
+              className="w-full rounded border bg-[var(--background)] px-3 py-2 text-sm text-[var(--foreground)]"
+              style={{ borderColor: "var(--border)" }}
+            />
+          </div>
+        </div>
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-2 text-sm text-[var(--foreground-muted)]">
+          <span>{filteredEvents.length} événement(s) trouvé(s)</span>
+          <span>Page {currentPage} / {totalPages}</span>
         </div>
         {error && (
           <p className="mb-4 rounded border border-red-500/50 bg-red-500/10 px-3 py-2 text-sm text-red-400">
@@ -228,15 +334,19 @@ export function EventIaList({
               </tr>
             </thead>
             <tbody>
-              {events.map((r) => {
+              {paginatedEvents.map((r) => {
                 const targetId = typeof r.payload?.target_country_id === "string" ? r.payload.target_country_id : null;
                 const targetCountry = targetId ? targetCountriesById[targetId] : null;
+                const isSelected = selectedId === r.id;
                 return (
                   <tr
                     key={r.id}
                     onClick={() => setSelectedId(selectedId === r.id ? null : r.id)}
                     className="cursor-pointer transition-colors hover:bg-[var(--background)]"
-                    style={{ borderColor: "var(--border)" }}
+                    style={{
+                      borderColor: "var(--border)",
+                      background: isSelected ? "var(--background-elevated)" : undefined,
+                    }}
                   >
                     <td className="border-b p-2 text-[var(--foreground)]">
                       {new Date(r.created_at).toLocaleString("fr-FR")}
@@ -295,8 +405,36 @@ export function EventIaList({
             </tbody>
           </table>
         </div>
-        {events.length === 0 && (
+        {filteredEvents.length === 0 && (
           <p className="mt-4 text-sm text-[var(--foreground-muted)]">Aucun événement IA.</p>
+        )}
+        {filteredEvents.length > EVENTS_PER_PAGE && (
+          <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t pt-4" style={{ borderColor: "var(--border)" }}>
+            <span className="text-sm text-[var(--foreground-muted)]">
+              Affichage {Math.min((currentPage - 1) * EVENTS_PER_PAGE + 1, filteredEvents.length)}-
+              {Math.min(currentPage * EVENTS_PER_PAGE, filteredEvents.length)} sur {filteredEvents.length}
+            </span>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
+                disabled={currentPage === 1}
+                className="rounded border px-3 py-1.5 text-sm disabled:opacity-50"
+                style={{ borderColor: "var(--border)" }}
+              >
+                Précédent
+              </button>
+              <button
+                type="button"
+                onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
+                disabled={currentPage === totalPages}
+                className="rounded border px-3 py-1.5 text-sm disabled:opacity-50"
+                style={{ borderColor: "var(--border)" }}
+              >
+                Suivant
+              </button>
+            </div>
+          </div>
         )}
       </section>
 
@@ -387,18 +525,6 @@ export function EventIaList({
         </div>
       )}
 
-      {selected && (
-        <EventDetail
-          event={selected}
-          targetCountriesById={targetCountriesById}
-          countriesList={allCountries}
-          relationMap={relationMap}
-          onClose={() => setSelectedId(null)}
-          onSuccess={handleSuccess}
-          onRefresh={handleRefresh}
-          onError={setError}
-        />
-      )}
     </div>
   );
 }
@@ -499,9 +625,10 @@ function EventDetail({
         <button
           type="button"
           onClick={onClose}
-          className="text-sm text-[var(--foreground-muted)] hover:text-[var(--foreground)]"
+          className="rounded border px-3 py-1.5 text-sm font-medium text-[var(--foreground)] hover:bg-red-500/10 hover:text-red-300"
+          style={{ borderColor: "var(--border)" }}
         >
-          Fermer
+          Fermer le détail
         </button>
       </div>
 
@@ -733,12 +860,12 @@ function EventDetail({
                   {getRollConclusion(event.dice_results.impact_roll.roll, event.dice_results.impact_roll.total)}
                 </p>
               </div>
-              {(actionKey === "prise_influence" || actionKey === "insulte_diplomatique" || actionKey === "ouverture_diplomatique" || actionKey === "escarmouche_militaire" || actionKey === "conflit_arme" || actionKey === "guerre_ouverte") && (() => {
+              {(() => {
                 const paramsSchema = event.state_action_types?.params_schema as Record<string, number> | undefined;
-                const impactMax = typeof paramsSchema?.impact_maximum === "number" ? paramsSchema.impact_maximum : (actionKey === "prise_influence" ? 100 : 50);
+                const impactMax = typeof paramsSchema?.impact_maximum === "number" ? paramsSchema.impact_maximum : getDefaultImpactMaximum(actionKey);
                 const total = event.dice_results!.impact_roll!.total;
-                const impactPct = (total / 100) * impactMax;
-                const impactLabel = actionKey === "prise_influence" ? `${Math.round(impactPct)} %` : actionKey === "insulte_diplomatique" || actionKey === "escarmouche_militaire" || actionKey === "conflit_arme" || actionKey === "guerre_ouverte" ? `−${Math.round(impactPct)}` : `+${Math.round(impactPct)}`;
+                const impactLabel = getStateActionImpactPreviewLabel(actionKey, impactMax, total);
+                if (!impactLabel) return null;
                 return (
                   <div className="mb-4 rounded-lg border p-4" style={{ borderColor: "var(--border)", background: "var(--background)" }}>
                     <p className="mb-1 text-xs font-medium uppercase tracking-wider text-[var(--foreground-muted)]">Impact</p>

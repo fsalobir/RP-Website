@@ -36,6 +36,7 @@ type CountryTabMilitaryProps = {
   mobilisationState?: { score: number; target_score: number } | null;
   mobilisationSetting: string | null;
   mobilisationError: string | null;
+  mobilisationMessage: string | null;
   onMobilisationClick: (threshold: number) => Promise<void>;
   setMobilisationSetting: (v: string | null) => void;
   militaryError: string | null;
@@ -60,6 +61,7 @@ export function CountryTabMilitary({
   mobilisationState,
   mobilisationSetting,
   mobilisationError,
+  mobilisationMessage,
   onMobilisationClick,
   setMobilisationSetting,
   militaryError,
@@ -74,6 +76,15 @@ export function CountryTabMilitary({
   effects,
   onSaveMilitaryUnit,
 }: CountryTabMilitaryProps) {
+  const thresholds = mobilisationConfig?.level_thresholds;
+  const currentScore = mobilisationState?.score ?? 0;
+  const targetScore = mobilisationState?.target_score ?? 0;
+  const currentLevelKey = getMobilisationLevelKey(currentScore, thresholds);
+  const targetLevelKey = getMobilisationLevelKey(targetScore, thresholds);
+  const dailyStep = Math.max(0, mobilisationConfig?.daily_step ?? 0);
+  const scoreDistance = Math.abs(targetScore - currentScore);
+  const daysToTarget = dailyStep > 0 ? Math.ceil(scoreDistance / dailyStep) : null;
+
   return (
     <div className="space-y-6">
       {mobilisationConfig && (
@@ -83,12 +94,7 @@ export function CountryTabMilitary({
           </h2>
           <div className="flex flex-wrap gap-3">
             {MOBILISATION_LEVELS.map((level) => {
-              const thresholds = mobilisationConfig?.level_thresholds;
               const threshold = thresholds?.[level.key] ?? 0;
-              const score = mobilisationState?.score ?? 0;
-              const targetScore = mobilisationState?.target_score ?? 0;
-              const currentLevelKey = getMobilisationLevelKey(score, thresholds);
-              const targetLevelKey = getMobilisationLevelKey(targetScore, thresholds);
               const isCurrent = currentLevelKey === level.key;
               const isTarget = targetLevelKey === level.key;
               const isClickable = canEditCountry && mobilisationSetting === null;
@@ -124,6 +130,18 @@ export function CountryTabMilitary({
               );
             })}
           </div>
+          <p className="mt-3 text-sm text-[var(--foreground-muted)]">
+            {daysToTarget !== null && scoreDistance > 0
+              ? (
+                <strong className="font-semibold text-[var(--foreground)]">
+                  Au rythme actuel de la mobilisation, l'état-major espère atteindre ce palier d'ici {formatNumber(daysToTarget)} jour(s).
+                </strong>
+              )
+              : " L'objectif retenu demeure conforme au niveau déjà atteint pour cette période."}
+          </p>
+          {mobilisationMessage && (
+            <p className="mt-2 text-sm text-[var(--accent)]">{mobilisationMessage}</p>
+          )}
           {mobilisationError && (
             <p className="mt-2 text-sm text-[var(--danger)]">{mobilisationError}</p>
           )}

@@ -5,6 +5,13 @@ import { useRouter } from "next/navigation";
 import { submitStateActionRequest } from "./stateActionsActions";
 import { formatNumber } from "@/lib/format";
 import { getRelationLabel, getRelationColor } from "@/lib/relationScale";
+import {
+  actionRequiresTarget,
+  getDefaultImpactMaximum,
+  getStateActionImpactPreviewLabel,
+  getStateActionMinRelationRequired,
+  isMilitaryStateActionKey,
+} from "@/lib/actionKeys";
 
 const panelClass = "rounded-lg border p-6";
 const panelStyle = { background: "var(--background-panel)", borderColor: "var(--border)" };
@@ -62,9 +69,16 @@ export function CountryTabStateActions({
     setSubmitting(true);
     setError(null);
     const payload: Record<string, unknown> = {};
-    if (modalType.key === "insulte_diplomatique" || modalType.key === "ouverture_diplomatique" || modalType.key === "prise_influence") {
+    if (actionRequiresTarget(modalType.key)) {
       if (!targetCountryId) {
         setError("Veuillez choisir un pays cible.");
+        setSubmitting(false);
+        return;
+      }
+      const targetCountry = countriesForTarget.find((country) => country.id === targetCountryId) ?? null;
+      const minRelationRequired = getStateActionMinRelationRequired(modalType.key, modalType.params_schema);
+      if (minRelationRequired !== null && targetCountry && targetCountry.relation > minRelationRequired) {
+        setError(`Relation insuffisamment hostile. Cette action exige ${minRelationRequired} ou moins.`);
         setSubmitting(false);
         return;
       }
@@ -184,12 +198,16 @@ export function CountryTabStateActions({
                         )}
                         {r.dice_results?.impact_roll && (() => {
                           const key = r.state_action_types?.key;
-                          if (key !== "prise_influence" && key !== "insulte_diplomatique" && key !== "ouverture_diplomatique") return null;
+                          if (!key) return null;
                           const type = types.find((t) => t.id === r.action_type_id);
-                          const impactMax = type?.params_schema && typeof (type.params_schema as Record<string, unknown>).impact_maximum === "number" ? (type.params_schema as Record<string, number>).impact_maximum : (key === "prise_influence" ? 100 : 50);
+                          const paramsSchema = (type?.params_schema ?? {}) as Record<string, unknown>;
+                          const impactMax =
+                            typeof paramsSchema.impact_maximum === "number"
+                              ? Number(paramsSchema.impact_maximum)
+                              : getDefaultImpactMaximum(key);
                           const total = r.dice_results.impact_roll.total;
-                          const impactPct = (total / 100) * impactMax;
-                          const impactLabel = key === "prise_influence" ? `${Math.round(impactPct)} %` : key === "insulte_diplomatique" ? `−${Math.round(impactPct)}` : `+${Math.round(impactPct)}`;
+                          const impactLabel = getStateActionImpactPreviewLabel(key, impactMax, total);
+                          if (!impactLabel) return null;
                           return (
                             <div className="mb-3 rounded border p-3" style={{ borderColor: "var(--border)", background: "var(--background)" }}>
                               <p className="text-xs font-medium uppercase tracking-wider text-[var(--foreground-muted)] mb-1">Impact</p>
@@ -272,6 +290,22 @@ export function CountryTabStateActions({
                 onConfirm={handleConfirm}
                 onCancel={() => setModalType(null)}
               />
+            ) : isMilitaryStateActionKey(modalType.key) ? (
+              <MilitaryActionModalContent
+                actionKey={modalType.key}
+                actionLabel={modalType.label_fr}
+                cost={modalType.cost}
+                paramsSchema={modalType.params_schema}
+                emitterCountry={emitterCountry}
+                targetCountry={targetCountryId ? countriesForTarget.find((c) => c.id === targetCountryId) ?? null : null}
+                countriesForTarget={countriesForTarget}
+                targetCountryId={targetCountryId}
+                onTargetChange={setTargetCountryId}
+                error={error}
+                submitting={submitting}
+                onConfirm={handleConfirm}
+                onCancel={() => setModalType(null)}
+              />
             ) : (
               <>
                 <h3 id="modal-title" className="mb-2 text-lg font-semibold text-[var(--foreground)]">
@@ -280,7 +314,7 @@ export function CountryTabStateActions({
                 <p className="mb-4 text-sm text-[var(--foreground-muted)]">
                   Coût : {modalType.cost} action(s). Confirmez les paramètres ci-dessous.
                 </p>
-                {(modalType.key === "insulte_diplomatique" || modalType.key === "ouverture_diplomatique") && (
+                {actionRequiresTarget(modalType.key) && (
                   <div className="mb-4">
                     <label className="mb-1 block text-sm text-[var(--foreground-muted)]">Pays cible</label>
                     <select
@@ -450,6 +484,84 @@ function OuvertureDiplomatiqueModalContent({
         onConfirm={onConfirm}
         onCancel={onCancel}
         impactText="Si validé par MJ, un jet aura lieu pour estimer la réussite. En fonction de la réussite, un jet aura lieu pour estimer l'impact sur l'amélioration des relations."
+      />
+    </>
+  );
+}
+
+function MilitaryActionModalContent({
+  actionKey,
+  actionLabel,
+  cost,
+  paramsSchema,
+  emitterCountry,
+  targetCountry,
+  countriesForTarget,
+  targetCountryId,
+  onTargetChange,
+  error,
+  submitting,
+  onConfirm,
+  onCancel,
+}: {
+  actionKey: "escarmouche_militaire" | "conflit_arme" | "guerre_ouverte";
+  actionLabel: string;
+  cost: number;
+  paramsSchema: Record<string, unknown> | null;
+  emitterCountry: EmitterCountry;
+  targetCountry: CountryForTarget | null;
+  countriesForTarget: CountryForTarget[];
+  targetCountryId: string;
+  onTargetChange: (id: string) => void;
+  error: string | null;
+  submitting: boolean;
+  onConfirm: () => void;
+  onCancel: () => void;
+}) {
+  const minRelationRequired = getStateActionMinRelationRequired(actionKey, paramsSchema);
+  const description =
+    actionKey === "escarmouche_militaire"
+      ? "Nous déclenchons une action militaire limitée contre ce pays."
+      : actionKey === "conflit_arme"
+        ? "Nous faisons franchir un cap militaire majeur à notre confrontation avec ce pays."
+        : "Nous assumons une guerre ouverte contre ce pays.";
+  const impactText =
+    actionKey === "escarmouche_militaire"
+      ? "Si validé par le MJ, un jet de succès puis un jet d'impact détermineront la dégradation des relations provoquée par l'escarmouche."
+      : actionKey === "conflit_arme"
+        ? "Si validé par le MJ, un jet de succès puis un jet d'impact détermineront l'ampleur de la rupture diplomatique provoquée par le conflit."
+        : "Si validé par le MJ, un jet de succès puis un jet d'impact détermineront la violence de la rupture diplomatique liée à la guerre ouverte.";
+
+  return (
+    <>
+      <h3 id="modal-title" className="text-xl font-semibold text-[var(--foreground)]">
+        {actionLabel}
+      </h3>
+
+      <hr className="my-4" style={{ borderColor: "var(--border)" }} />
+
+      <div className="space-y-1 text-sm text-[var(--foreground-muted)]">
+        <p><strong className="text-[var(--foreground)]">Description :</strong> {description}</p>
+        {minRelationRequired !== null && (
+          <p><strong className="text-[var(--foreground)]">Pré-requis :</strong> relation bilatérale de {minRelationRequired} ou moins.</p>
+        )}
+      </div>
+
+      <hr className="my-4" style={{ borderColor: "var(--border)" }} />
+
+      <DiplomatiqueModalCommon
+        emitterCountry={emitterCountry}
+        targetCountry={targetCountry}
+        countriesForTarget={countriesForTarget}
+        targetCountryId={targetCountryId}
+        onTargetChange={onTargetChange}
+        cost={cost}
+        error={error}
+        submitting={submitting}
+        onConfirm={onConfirm}
+        onCancel={onCancel}
+        impactText={impactText}
+        relationRequirement={minRelationRequired}
       />
     </>
   );
@@ -647,6 +759,7 @@ function DiplomatiqueModalCommon({
   onConfirm,
   onCancel,
   impactText,
+  relationRequirement = null,
 }: {
   emitterCountry: EmitterCountry;
   targetCountry: CountryForTarget | null;
@@ -659,6 +772,7 @@ function DiplomatiqueModalCommon({
   onConfirm: () => void;
   onCancel: () => void;
   impactText: string;
+  relationRequirement?: number | null;
 }) {
   return (
     <>
@@ -692,6 +806,9 @@ function DiplomatiqueModalCommon({
                 <p className="font-medium text-[var(--foreground)]">{targetCountry.name}</p>
                 {targetCountry.regime && <p className="text-xs text-[var(--foreground-muted)]">{targetCountry.regime}</p>}
                 <p className="text-xs text-[var(--accent)]">Influence : {formatNumber(targetCountry.influence)}</p>
+                <p className="text-xs" style={{ color: getRelationColor(targetCountry.relation) }}>
+                  Relation : {targetCountry.relation} ({getRelationLabel(targetCountry.relation)})
+                </p>
               </div>
             </div>
           ) : (
@@ -704,6 +821,19 @@ function DiplomatiqueModalCommon({
 
       <div className="space-y-3 text-sm text-[var(--foreground-muted)]">
         <p>{impactText}</p>
+        {relationRequirement !== null && (
+          <p>
+            Seuil requis : <strong className="text-[var(--foreground)]">{relationRequirement}</strong>
+            {targetCountry ? (
+              <>
+                {" "}· relation actuelle :{" "}
+                <strong style={{ color: getRelationColor(targetCountry.relation) }}>
+                  {targetCountry.relation}
+                </strong>
+              </>
+            ) : null}
+          </p>
+        )}
       </div>
 
       <hr className="my-4" style={{ borderColor: "var(--border)" }} />

@@ -90,7 +90,7 @@ export default async function CountryPage({
   const isPlayerForThisCountry = auth.playerCountryId === country.id;
   const backHref = isAdmin ? "/admin/pays" : "/";
 
-  const [cachedGlobals, macrosRes, limitsRes, countryPerksRes, budgetRes, effectsRes, countriesRes, updateLogsRes, mobilisationRes, countryMilitaryUnitsRes, countryMilitaryUnitsAllRes, assignedPlayerRes, controlRes, countriesListRes] = await Promise.all([
+  const [cachedGlobals, macrosRes, limitsRes, countryPerksRes, budgetRes, effectsRes, countriesRes, controlRes, updateLogsRes, mobilisationRes, countryMilitaryUnitsRes, countryMilitaryUnitsAllRes, assignedPlayerRes, countriesListRes] = await Promise.all([
     getCachedCountryPageGlobals(),
     supabase.from("country_macros").select("*").eq("country_id", country.id),
     supabase
@@ -109,7 +109,7 @@ export default async function CountryPage({
     supabase.from("country_military_units").select("*").eq("country_id", country.id),
     supabase.from("country_military_units").select("country_id, roster_unit_id, current_level, extra_count"),
     supabase.from("country_players").select("email, name").eq("country_id", country.id).maybeSingle(),
-    isAdmin ? supabase.from("countries").select("id, name").order("name") : Promise.resolve({ data: [] as { id: string; name: string }[] }),
+    supabase.from("countries").select("id, name").order("name"),
   ]);
 
   const controlRows = (Array.isArray(controlRes.data) ? controlRes.data : []) as { country_id: string }[];
@@ -167,7 +167,6 @@ export default async function CountryPage({
   const rankPopulation = byPopulation.findIndex((c) => c.id === country.id) + 1 || 0;
   const rankGdp = byGdp.findIndex((c) => c.id === country.id) + 1 || 0;
   const updateLogs = (updateLogsRes.data ?? []) as CountryUpdateLog[];
-
   const ruleParametersByKey: Record<string, { value: unknown }> = {};
   for (const r of ruleParamsData) {
     ruleParametersByKey[r.key] = { value: r.value };
@@ -221,6 +220,43 @@ export default async function CountryPage({
   if (influenceResult && (influenceMods.global !== 1 || influenceMods.gdp !== 1 || influenceMods.population !== 1 || influenceMods.hard_power !== 1)) {
     influenceResult = applyInfluenceModifiers(influenceResult, influenceMods);
   }
+  const latestUpdateLog = updateLogs[0] ?? null;
+  const getInfluenceForCountrySnapshot = (overrides?: { population?: number | null; gdp?: number | null; stability?: number | null }) => {
+    const snapshotCountries = countries.map((c) =>
+      c.id === country.id
+        ? {
+            ...c,
+            population: Number(overrides?.population ?? c.population ?? 0),
+            gdp: Number(overrides?.gdp ?? c.gdp ?? 0),
+            stability: Number(overrides?.stability ?? c.stability ?? 0),
+          }
+        : c
+    );
+    const { byCountry } = computeInfluenceForAll(
+      snapshotCountries,
+      hardPowerByCountry,
+      (influenceConfig ?? {}) as Parameters<typeof computeInfluenceForAll>[2]
+    );
+    let value = byCountry.get(country.id) ?? null;
+    if (value && (influenceMods.global !== 1 || influenceMods.gdp !== 1 || influenceMods.population !== 1 || influenceMods.hard_power !== 1)) {
+      value = applyInfluenceModifiers(value, influenceMods);
+    }
+    return value;
+  };
+  const previousInfluenceResult = latestUpdateLog
+    ? getInfluenceForCountrySnapshot({
+        population: latestUpdateLog.population_before,
+        gdp: latestUpdateLog.gdp_before,
+        stability: latestUpdateLog.stability_before,
+      })
+    : null;
+  const lastCronInfluenceAfterResult = latestUpdateLog
+    ? getInfluenceForCountrySnapshot({
+        population: latestUpdateLog.population_after,
+        gdp: latestUpdateLog.gdp_after,
+        stability: latestUpdateLog.stability_after,
+      })
+    : null;
   if (countriesForTarget.length > 0) {
     const relationRows = await getAllRelationRows(supabase);
     const relationMap = relationRowsToMap(relationRows);
@@ -297,6 +333,8 @@ export default async function CountryPage({
         mobilisationState={mobilisationState}
         worldDate={ruleParametersByKey.world_date?.value as { month: number; year: number } | undefined}
         influenceResult={influenceResult}
+        previousInfluenceValue={previousInfluenceResult?.influence ?? null}
+        lastCronInfluenceAfterValue={lastCronInfluenceAfterResult?.influence ?? null}
         hardPowerByBranch={hardPowerByCountry.get(country.id) ?? null}
         ai_status={country.ai_status ?? null}
         aiMajorEffects={aiMajorEffects}

@@ -2,6 +2,8 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
+import { getRelation } from "@/lib/relations";
+import { actionRequiresTarget, getStateActionMinRelationRequired } from "@/lib/actionKeys";
 
 export async function submitStateActionRequest(
   countryId: string,
@@ -22,11 +24,29 @@ export async function submitStateActionRequest(
 
   const { data: actionType, error: typeErr } = await supabase
     .from("state_action_types")
-    .select("id, cost")
+    .select("id, key, cost, params_schema")
     .eq("id", actionTypeId)
     .single();
   if (typeErr || !actionType) return { error: "Type d'action introuvable." };
+  const actionKey = actionType.key as string;
+  const paramsSchema = (actionType.params_schema ?? {}) as Record<string, unknown>;
   const cost = (actionType.cost ?? 1) as number;
+
+  const targetCountryId = typeof payload.target_country_id === "string" ? payload.target_country_id : null;
+  if (actionRequiresTarget(actionKey)) {
+    if (!targetCountryId) return { error: "Veuillez choisir un pays cible." };
+    if (targetCountryId === countryId) return { error: "La cible ne peut pas être le pays émetteur." };
+  }
+
+  const minRelationRequired = getStateActionMinRelationRequired(actionKey, paramsSchema);
+  if (minRelationRequired !== null && targetCountryId) {
+    const relation = await getRelation(supabase, countryId, targetCountryId);
+    if (relation > minRelationRequired) {
+      return {
+        error: `Relation insuffisamment hostile. Cette action exige une relation de ${minRelationRequired} ou moins.`,
+      };
+    }
+  }
 
   const { data: balanceRow } = await supabase
     .from("country_state_action_balance")

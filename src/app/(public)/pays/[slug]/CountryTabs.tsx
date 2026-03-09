@@ -83,6 +83,8 @@ export function CountryTabs({
   mobilisationState,
   worldDate,
   influenceResult = null,
+  previousInfluenceValue = null,
+  lastCronInfluenceAfterValue = null,
   hardPowerByBranch = null,
   ai_status = null,
   aiMajorEffects = [],
@@ -116,6 +118,8 @@ export function CountryTabs({
   mobilisationState?: { score: number; target_score: number } | null;
   worldDate?: { month: number; year: number };
   influenceResult?: InfluenceResult | null;
+  previousInfluenceValue?: number | null;
+  lastCronInfluenceAfterValue?: number | null;
   hardPowerByBranch?: HardPowerByBranch | null;
   ai_status?: string | null;
   aiMajorEffects?: Array<{ effect_kind: string; effect_target: string | null; value: number }>;
@@ -173,6 +177,7 @@ export function CountryTabs({
   const [militarySubtypeOpen, setMilitarySubtypeOpen] = useState<Record<string, boolean>>({});
   const [mobilisationSetting, setMobilisationSetting] = useState<string | null>(null);
   const [mobilisationError, setMobilisationError] = useState<string | null>(null);
+  const [mobilisationMessage, setMobilisationMessage] = useState<string | null>(null);
   const [generalName, setGeneralName] = useState("");
   const [generalRegime, setGeneralRegime] = useState("");
   const [generalFlagUrl, setGeneralFlagUrl] = useState("");
@@ -320,6 +325,26 @@ export function CountryTabs({
     mobilisationLevelKey,
     rosterUnitsFlat,
   ]);
+
+  const cabinetFundingByMinistry = useMemo(() => {
+    return Object.fromEntries(
+      BUDGET_MINISTRIES.map((ministry) => {
+        const budgetKey = ministry.key.replace(/^pct_/, "budget_");
+        const ruleValue = ruleParametersByKey[budgetKey]?.value;
+        const minPct =
+          ruleValue && typeof ruleValue === "object" && !Array.isArray(ruleValue)
+            ? Number((ruleValue as { min_pct?: unknown }).min_pct ?? 5)
+            : 5;
+        return [
+          budgetKey,
+          {
+            pct: Number(pcts[ministry.key] ?? 0),
+            minPct: Number.isNaN(minPct) ? 5 : Math.max(0, minPct),
+          },
+        ];
+      })
+    ) as Record<string, { pct: number; minPct: number }>;
+  }, [pcts, ruleParametersByKey]);
 
   useEffect(() => {
     militaryEditInitialized.current = false;
@@ -733,9 +758,17 @@ export function CountryTabs({
 
   const handleMobilisationClick = async (threshold: number) => {
     setMobilisationError(null);
-    const result = await setMobilisationTarget(country.id, threshold);
-    if (result.error) setMobilisationError(result.error);
-    else router.refresh();
+    setMobilisationMessage(null);
+    try {
+      const result = await setMobilisationTarget(country.id, threshold);
+      if (result.error) setMobilisationError(result.error);
+      else {
+        setMobilisationMessage("Objectif de mobilisation mis à jour. Les services suivront désormais cette montée en puissance au fil des prochains jours.");
+        router.refresh();
+      }
+    } catch (error) {
+      throw error;
+    }
   };
 
   const handleSaveMilitaryUnit = async (rosterUnitId: string, currentLevel: number, extraCount: number) => {
@@ -1072,6 +1105,7 @@ export function CountryTabs({
           mobilisationState={mobilisationState}
           mobilisationSetting={mobilisationSetting}
           mobilisationError={mobilisationError}
+          mobilisationMessage={mobilisationMessage}
           onMobilisationClick={handleMobilisationClick}
           setMobilisationSetting={setMobilisationSetting}
           militaryError={militaryError}
@@ -1148,7 +1182,10 @@ export function CountryTabs({
           worldDate={worldDate ?? null}
           worldAverages={worldAverages ?? null}
           lastUpdateLog={updateLogs[0] ?? null}
+          fundingByMinistry={cabinetFundingByMinistry}
           influenceValue={influenceResult?.influence ?? null}
+          previousInfluenceValue={previousInfluenceValue}
+          lastCronInfluenceAfterValue={lastCronInfluenceAfterValue}
           panelClass={panelClass}
           panelStyle={panelStyle}
         />

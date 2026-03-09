@@ -26,7 +26,7 @@ function subtypeSuggestions(branch: MilitaryBranch): string[] {
   if (branch === "terre") return ["Infanterie", "Blindé", "Soutien"];
   if (branch === "air") return ["Avions", "Avions lourds", "Hélicoptères"];
   if (branch === "mer") return ["Navires légers", "Navires lourds", "Sous-marins"];
-  return [];
+  return ["Stock stratégique", "Lanceurs"];
 }
 
 function toInt(v: string, fallback = 0) {
@@ -445,7 +445,7 @@ export function RosterEditor({
                                 style={inputStyle}
                                 value={u.sub_type ?? ""}
                                 onChange={(e) => updateUnit(u.id, { sub_type: e.target.value })}
-                                placeholder={u.branch === "strategique" ? "Ex: Dissuasion, Cyber…" : "Ex: Infanterie…"}
+                                placeholder={u.branch === "strategique" ? "Ex: Stock stratégique, Lanceurs…" : "Ex: Infanterie…"}
                                 list={`subtypes-${u.id}`}
                                 disabled={isSaving}
                               />

@@ -8,9 +8,8 @@ import {
   getEffectDescription,
   isEffectDisplayPositive,
   formatDurationRemaining,
-  ALL_EFFECT_KIND_IDS,
-  EFFECT_KIND_LABELS,
   getDefaultTargetForKind,
+  getEffectKindOptionGroups,
   getEffectKindValueHelper,
   STAT_KEYS,
   STAT_LABELS,
@@ -152,6 +151,9 @@ export function CountryTabGeneral({
             | "cultism"
         ]
       : null;
+  const getCountryName = (id: string) =>
+    (id === country.id ? country.name : otherCountriesForRelation.find((c) => c.id === id)?.name) ?? null;
+  const effectKindGroups = getEffectKindOptionGroups();
 
   function getInfluenceIntensity(value: number, maxValue: number): string {
     if (maxValue <= 0) return "légère";
@@ -295,7 +297,12 @@ export function CountryTabGeneral({
                           className="rounded border px-2 py-2 text-[var(--foreground)]"
                           style={{ borderColor: "var(--border-muted)", background: "var(--background-panel)" }}
                         >
-                          <div>{getEffectDescription(effect)}</div>
+                          <div>
+                            {getEffectDescription(effect, {
+                              rosterUnitName: (id) => rosterUnitsFlat.find((u) => u.id === id)?.name_fr ?? null,
+                              countryName: getCountryName,
+                            })}
+                          </div>
                           <div className="mt-1 text-[var(--foreground-muted)]">
                             Durée restante : {formatDurationRemaining(effect)}
                           </div>
@@ -336,7 +343,7 @@ export function CountryTabGeneral({
                   >
                     {getEffectDescription(e, {
                       rosterUnitName: (id) => rosterUnitsFlat.find((u) => u.id === id)?.name_fr ?? null,
-                      countryName: (id) => (id === country.id ? country.name : otherCountriesForRelation.find((c) => c.id === id)?.name) ?? null,
+                      countryName: getCountryName,
                     })}
                   </p>
                   <p className="text-xs text-[var(--foreground-muted)]">
@@ -401,8 +408,12 @@ export function CountryTabGeneral({
                     className="rounded border bg-[var(--background)] px-2 py-1.5 text-sm text-[var(--foreground)]"
                     style={{ borderColor: "var(--border)" }}
                   >
-                    {ALL_EFFECT_KIND_IDS.map((id) => (
-                      <option key={id} value={id}>{EFFECT_KIND_LABELS[id] ?? id}</option>
+                    {effectKindGroups.map((group) => (
+                      <optgroup key={group.label} label={group.label}>
+                        {group.options.map((option) => (
+                          <option key={option.id} value={option.id}>{option.label}</option>
+                        ))}
+                      </optgroup>
                     ))}
                   </select>
                 </div>

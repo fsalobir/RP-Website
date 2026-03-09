@@ -31,10 +31,10 @@ const MAGNITUDE_RATE_LARGE = 0.1;
 
 /** Seuil en deçà duquel la contribution du ministère est considérée comme nulle (magnitude). */
 const MAGNITUDE_RATE_WEAK = 0.001;
-const MAGNITUDE_DELTA_WEAK = 0.02;
+const MAGNITUDE_DELTA_WEAK = 0.005;
 
 /** En deçà de ce seuil, le résultat net est affiché comme « stable » (phrase + ton neutre). Aligné sur CountryTabCabinet : TREND_STABLE_REL = 0.005 (taux), TREND_STABLE_ABS = 0.01 (deltas). */
-const TOTAL_ZERO_EPSILON_RATE = 0.005;
+const TOTAL_ZERO_EPSILON_RATE = 0.001;
 const TOTAL_ZERO_EPSILON_DELTA = 0.01;
 
 /** Stat key → clé sources et optionnellement gravity_info dans expected.inputs. */
@@ -62,12 +62,28 @@ export type FundingLevel = "largely_sufficient" | "sufficient" | "tight" | "insu
 
 export type MagnitudeLevel = "light" | "moderate" | "large" | "massive";
 
+type MinistryFundingContext = {
+  pct: number;
+  minPct: number;
+};
+
 /** Niveau de financement basé uniquement sur les contributions du ministère (données dynamiques). */
 function getFundingLevel(
   inputs: ExpectedNextTickResult["inputs"],
   effects: Array<{ key: string; label: string }>,
-  sourceLabel: string
+  sourceLabel: string,
+  budgetContext?: MinistryFundingContext
 ): FundingLevel {
+  if (budgetContext) {
+    const pct = Math.max(0, budgetContext.pct);
+    const minPct = Math.max(0, budgetContext.minPct);
+    if (minPct <= 0) return pct > 0 ? "largely_sufficient" : "sufficient";
+    const ratio = pct / minPct;
+    if (pct < minPct) return ratio < 0.5 ? "very_insufficient" : "insufficient";
+    if (ratio < 1.1) return "tight";
+    if (ratio < 1.75) return "sufficient";
+    return "largely_sufficient";
+  }
   const isRate = (k: string) => k === "population" || k === "gdp";
   const weakThresh = (k: string) => (isRate(k) ? MAGNITUDE_RATE_WEAK : MAGNITUDE_DELTA_WEAK);
   const pairs: { statKey: string; contribution: number }[] = [];
@@ -86,11 +102,13 @@ function getFundingLevel(
     if (c < thresh && c >= 0) anyBarelyPositive = true;
     if (c <= thresh) allMeaningfullyPositive = false;
   }
-  if (negativeCount >= 2) return "very_insufficient";
-  if (negativeCount === 1) return "insufficient";
-  if (negativeCount === 0 && anyBarelyPositive) return "tight";
-  if (negativeCount === 0 && allMeaningfullyPositive) return "largely_sufficient";
-  return "sufficient";
+  const level =
+    negativeCount >= 2 ? "very_insufficient"
+    : negativeCount === 1 ? "insufficient"
+    : negativeCount === 0 && anyBarelyPositive ? "tight"
+    : negativeCount === 0 && allMeaningfullyPositive ? "largely_sufficient"
+    : "sufficient";
+  return level;
 }
 
 /** Magnitude du mouvement (taux ou delta total) : 4 niveaux. Données dérivées des inputs. */
@@ -497,7 +515,8 @@ export function getCabinetPhrases(
   expected: ExpectedNextTickResult,
   countrySnapshot: CountrySnapshot,
   worldAverages: WorldAverages,
-  seed?: number
+  seed?: number,
+  fundingByMinistry?: Record<string, MinistryFundingContext>
 ): CabinetMinistryBlock[] {
   const inputs = expected.inputs;
   const seedNum = seed ?? 0;
@@ -513,7 +532,7 @@ export function getCabinetPhrases(
     const ministryLabel = BUDGET_MINISTRY_LABELS[ministryKey] ?? ministryKey;
     const paragraphs: Array<{ text: string; tone: CabinetParagraphTone }> = [];
 
-    const fundingLevel = getFundingLevel(inputs, effects, sourceLabel);
+    const fundingLevel = getFundingLevel(inputs, effects, sourceLabel, fundingByMinistry?.[ministryKey]);
     const { key: fundingKey, tone: fundingTone } = getFundingPhraseKeyAndTone(fundingLevel);
     paragraphs.push({
       text: pickVariant(fundingKey, 0, seedNum),
