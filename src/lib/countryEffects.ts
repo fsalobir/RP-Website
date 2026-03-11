@@ -13,9 +13,17 @@
  *    Pour ajouter un nouvel « endroit » (ex. traité, événement) : ajouter une source dans EFFECT_SOURCES.
  *
  * Réutilise BUDGET_MINISTRY_KEYS / BUDGET_MINISTRY_LABELS de ruleParameters.
+ *
+ * 3) Évolution prévue : effets à multiplicateur par stat
+ *    Certains effets de lois pourront à terme avoir une valeur modulée par une stat du pays
+ *    (ex. valeur_effective = value × (stat / 10)). Pour ce faire, ajouter des champs optionnels
+ *    `stat_key` et `stat_multiplier` sur le format d'effet de loi, ou un effect_kind dédié
+ *    (ex. military_unit_limit_modifier_sub_type_per_stat). La résolution se fera dans
+ *    resolveAllLawEffectsForCountry (laws.ts) en lui passant un contexte élargi (stats du pays).
  */
 
 import { BUDGET_MINISTRY_KEYS, BUDGET_MINISTRY_LABELS } from "@/lib/ruleParameters";
+import { resolveAllLawEffectsForCountry, type CountryLawRow as LawRow } from "@/lib/laws";
 import type { AdminEffectAdded, CountryEffect } from "@/types/database";
 
 /** Clés des stats société (pour dropdown et effect_target). */
@@ -77,12 +85,17 @@ export const BUDGET_EFFECT_SUB_LABELS: Record<string, string> = {
 };
 
 /** Sous-type Unité militaire. */
-export const MILITARY_UNIT_EFFECT_SUB_IDS = ["unit_extra", "unit_tech_rate", "limit_modifier"] as const;
+export const MILITARY_UNIT_EFFECT_SUB_IDS = ["unit_extra", "unit_tech_rate", "limit_modifier", "limit_modifier_sub_type", "limit_modifier_roster"] as const;
 export const MILITARY_UNIT_EFFECT_SUB_LABELS: Record<string, string> = {
   unit_extra: "Bonus/Malus extra (nombre d'unités)",
   unit_tech_rate: "Bonus points technologie (par jour)",
-  limit_modifier: "Modificateur de limites (%)",
+  limit_modifier: "Modificateur de limites par branche (%)",
+  limit_modifier_sub_type: "Modificateur de limites par sous-branche/type (%)",
+  limit_modifier_roster: "Modificateur de limites par unité (%)",
 };
+
+/** Clé composite pour cible sous-branche/type : "branch:sub_type" (sub_type peut être vide). */
+export const SUB_TYPE_TARGET_SEP = ":";
 
 /** Branches militaires pour effect_target du modificateur de limites. */
 export const MILITARY_BRANCH_EFFECT_IDS = ["terre", "air", "mer", "strategique"] as const;
@@ -93,16 +106,29 @@ export const MILITARY_BRANCH_EFFECT_LABELS: Record<string, string> = {
   strategique: "Stratégique",
 };
 
-/** Niveaux de mobilisation (ordre pour affichage et dérivation du palier actuel). */
+export function formatSubTypeTargetLabel(branch: string, subType: string | null): string {
+  const branchLabel = MILITARY_BRANCH_EFFECT_LABELS[branch] ?? branch;
+  if (!subType || subType.trim() === "") return `${branchLabel} — (tous)`;
+  return `${branchLabel} — ${subType}`;
+}
+export function parseSubTypeTarget(value: string): { branch: string; subType: string | null } {
+  const i = value.indexOf(SUB_TYPE_TARGET_SEP);
+  if (i < 0) return { branch: value, subType: null };
+  const branch = value.slice(0, i);
+  const subType = value.slice(i + 1);
+  return { branch, subType: subType === "" ? null : subType };
+}
+
+/** @deprecated Utiliser LAW_DEFINITIONS depuis `@/lib/laws` à la place. */
 export const MOBILISATION_LEVELS: { key: string; label: string }[] = [
-  { key: "demobilisation", label: "Démobilisation" },
-  { key: "reserve_active", label: "Réserve Active" },
-  { key: "mobilisation_partielle", label: "Mobilisation Partielle" },
-  { key: "mobilisation_generale", label: "Mobilisation Générale" },
-  { key: "guerre_patriotique", label: "Guerre Patriotique" },
+  { key: "level_1", label: "Démobilisation" },
+  { key: "level_2", label: "Réserve Active" },
+  { key: "level_3", label: "Mobilisation Partielle" },
+  { key: "level_4", label: "Mobilisation Générale" },
+  { key: "level_5", label: "Guerre Patriotique" },
 ];
 
-/** Libellé du palier de mobilisation à partir de sa clé (pour breakdown, tooltips). */
+/** @deprecated Utiliser getLawLevelLabel depuis `@/lib/laws` à la place. */
 export function getMobilisationLevelLabel(key: string | null | undefined): string {
   if (!key) return "—";
   return MOBILISATION_LEVELS.find((l) => l.key === key)?.label ?? key;
@@ -135,6 +161,8 @@ export function buildEffectKeys(
   if (category === "military_unit") {
     if (subChoice === "unit_tech_rate") return { effect_kind: "military_unit_tech_rate", effect_target: target, effect_subtype: null };
     if (subChoice === "limit_modifier") return { effect_kind: "military_unit_limit_modifier", effect_target: target, effect_subtype: null };
+    if (subChoice === "limit_modifier_sub_type") return { effect_kind: "military_unit_limit_modifier_sub_type", effect_target: target, effect_subtype: null };
+    if (subChoice === "limit_modifier_roster") return { effect_kind: "military_unit_limit_modifier_roster", effect_target: target, effect_subtype: null };
     return { effect_kind: "military_unit_extra", effect_target: target, effect_subtype: null };
   }
   if (category === "influence_modifier") {
@@ -154,7 +182,7 @@ export function buildEffectKeys(
 }
 
 /** Types de cible pour un effect_kind. */
-export type EffectTargetType = "none" | "stat" | "budget_ministry" | "military_branch" | "roster_unit" | "country";
+export type EffectTargetType = "none" | "stat" | "budget_ministry" | "military_branch" | "roster_unit" | "military_sub_type" | "country";
 
 /** Format de valeur pour affichage/saisie (formulaires Global, Mobilisation). */
 export type EffectValueFormat =
@@ -185,6 +213,8 @@ export const ALL_EFFECT_KIND_IDS = [
   "military_unit_extra",
   "military_unit_tech_rate",
   "military_unit_limit_modifier",
+  "military_unit_limit_modifier_sub_type",
+  "military_unit_limit_modifier_roster",
   "influence_modifier_global",
   "influence_modifier_gdp",
   "influence_modifier_population",
@@ -213,7 +243,9 @@ export const EFFECT_KIND_META: Record<EffectKindId, EffectKindMeta> = {
   budget_allocation_cap: { targetType: "none", valueFormat: "percent_display", label: "Allocation de Budget Maximum" },
   military_unit_extra: { targetType: "roster_unit", valueFormat: "integer", label: "Unité militaire (bonus/malus extra)" },
   military_unit_tech_rate: { targetType: "roster_unit", valueFormat: "integer", label: "Unité militaire (bonus points tech/jour)" },
-  military_unit_limit_modifier: { targetType: "military_branch", valueFormat: "integer_percent", label: "Unité militaire (modificateur de limites %)" },
+  military_unit_limit_modifier: { targetType: "military_branch", valueFormat: "integer_percent", label: "Modificateur de limites par branche (%)" },
+  military_unit_limit_modifier_sub_type: { targetType: "military_sub_type", valueFormat: "integer_percent", label: "Modificateur de limites par sous-branche/type (%)" },
+  military_unit_limit_modifier_roster: { targetType: "roster_unit", valueFormat: "integer_percent", label: "Modificateur de limites par unité (%)" },
   influence_modifier_global: { targetType: "none", valueFormat: "multiplier", label: "Modificateur d'influence (global)" },
   influence_modifier_gdp: { targetType: "none", valueFormat: "multiplier", label: "Modificateur d'influence (PIB)" },
   influence_modifier_population: { targetType: "none", valueFormat: "multiplier", label: "Modificateur d'influence (population)" },
@@ -260,6 +292,8 @@ const EFFECT_KIND_GROUP_BY_ID: Record<EffectKindId, keyof typeof EFFECT_KIND_GRO
   military_unit_extra: "militaire",
   military_unit_tech_rate: "militaire",
   military_unit_limit_modifier: "militaire",
+  military_unit_limit_modifier_sub_type: "militaire",
+  military_unit_limit_modifier_roster: "militaire",
   influence_modifier_global: "influence",
   influence_modifier_gdp: "influence",
   influence_modifier_population: "influence",
@@ -316,7 +350,8 @@ const _NONE = new Set<string>([
   "ideology_snap_cultism",
 ]);
 const _BRANCH = new Set<string>(["military_unit_limit_modifier"]);
-const _ROSTER = new Set<string>(["military_unit_extra", "military_unit_tech_rate"]);
+const _ROSTER = new Set<string>(["military_unit_extra", "military_unit_tech_rate", "military_unit_limit_modifier_roster"]);
+const _SUB_TYPE = new Set<string>(["military_unit_limit_modifier_sub_type"]);
 const _COUNTRY = new Set<string>(["relation_delta"]);
 
 export const EFFECT_KINDS_WITH_STAT_TARGET: ReadonlySet<string> = _STAT;
@@ -324,6 +359,7 @@ export const EFFECT_KINDS_WITH_BUDGET_TARGET: ReadonlySet<string> = _BUDGET;
 export const EFFECT_KINDS_NO_TARGET: ReadonlySet<string> = _NONE;
 export const EFFECT_KINDS_WITH_BRANCH_TARGET: ReadonlySet<string> = _BRANCH;
 export const EFFECT_KINDS_WITH_ROSTER_UNIT_TARGET: ReadonlySet<string> = _ROSTER;
+export const EFFECT_KINDS_WITH_SUB_TYPE_TARGET: ReadonlySet<string> = _SUB_TYPE;
 export const EFFECT_KINDS_WITH_COUNTRY_TARGET: ReadonlySet<string> = _COUNTRY;
 
 /** Helper valeur pour formulaires (Global, Mobilisation) : libellé, step, conversion affichage ↔ stocké. */
@@ -401,8 +437,10 @@ export function getEffectDescription(e: CountryEffect | ResolvedEffect, options?
   const valueStr = formatEffectValue(e.effect_kind, e.value);
   let targetLabel: string | null = null;
   if (e.effect_target) {
-    if (e.effect_kind === "military_unit_extra" || e.effect_kind === "military_unit_tech_rate")
+    if (e.effect_kind === "military_unit_extra" || e.effect_kind === "military_unit_tech_rate" || e.effect_kind === "military_unit_limit_modifier_roster")
       targetLabel = options?.rosterUnitName?.(e.effect_target) ?? e.effect_target;
+    else if (e.effect_kind === "military_unit_limit_modifier_sub_type" && e.effect_target)
+      targetLabel = (() => { const p = parseSubTypeTarget(e.effect_target); return formatSubTypeTargetLabel(p.branch, p.subType); })();
     else if (e.effect_kind === "military_unit_limit_modifier")
       targetLabel = MILITARY_BRANCH_EFFECT_LABELS[e.effect_target] ?? e.effect_target;
     else
@@ -425,7 +463,9 @@ export function getEffectDescription(e: CountryEffect | ResolvedEffect, options?
   if (e.effect_kind === "stat_delta" && targetLabel) return `Stat — ${targetLabel} : ${valueStr}`;
   if (e.effect_kind === "military_unit_extra" && targetLabel) return `Extra unité — ${targetLabel} : ${valueStr}`;
   if (e.effect_kind === "military_unit_tech_rate" && targetLabel) return `Tech unité — ${targetLabel} : ${valueStr}`;
-  if (e.effect_kind === "military_unit_limit_modifier" && targetLabel) return `Limites — ${targetLabel} : ${valueStr}`;
+  if (e.effect_kind === "military_unit_limit_modifier" && targetLabel) return `Limites branche — ${targetLabel} : ${valueStr}`;
+  if (e.effect_kind === "military_unit_limit_modifier_sub_type" && targetLabel) return `Limites sous-branche/type — ${targetLabel} : ${valueStr}`;
+  if (e.effect_kind === "military_unit_limit_modifier_roster" && targetLabel) return `Limites unité — ${targetLabel} : ${valueStr}`;
   if (e.effect_kind === "influence_modifier_global") return `Modificateur influence (global) : ${valueStr}`;
   if (e.effect_kind === "influence_modifier_gdp") return `Modificateur influence (PIB) : ${valueStr}`;
   if (e.effect_kind === "influence_modifier_population") return `Modificateur influence (population) : ${valueStr}`;
@@ -456,7 +496,7 @@ export function formatEffectValue(effectKind: string | null | undefined, value: 
   }
   if (kind === "military_unit_tech_rate") return `${Number(value)} pts/jour`;
   if (kind === "military_unit_extra") return (Number(value) >= 0 ? "+" : "") + String(Number(value));
-  if (kind === "military_unit_limit_modifier") return `${Number(value) >= 0 ? "+" : ""}${Number(value)} %`;
+  if (kind === "military_unit_limit_modifier" || kind === "military_unit_limit_modifier_sub_type" || kind === "military_unit_limit_modifier_roster") return `${Number(value) >= 0 ? "+" : ""}${Number(value)} %`;
   if (kind.startsWith("influence_modifier_")) return `${(value * 100 - 100).toFixed(0)} %`;
   if (kind === "relation_delta") return `${Number(value) >= 0 ? "+" : ""}${Number(value)}`;
   if (kind.startsWith("ideology_drift_") || kind.startsWith("ideology_snap_")) {
@@ -570,11 +610,17 @@ export function getBudgetMinistryOptions(): { key: string; label: string }[] {
 }
 
 /** Cible par défaut pour un effect_kind (pour formulaire unifié par kind). */
-export function getDefaultTargetForKind(effectKind: string, rosterUnitIds?: string[], countryIds?: string[]): string | null {
+export function getDefaultTargetForKind(
+  effectKind: string,
+  rosterUnitIds?: string[],
+  countryIds?: string[],
+  subTypeTargetKeys?: string[]
+): string | null {
   if (EFFECT_KINDS_WITH_STAT_TARGET.has(effectKind)) return STAT_KEYS[0];
   if (EFFECT_KINDS_WITH_BUDGET_TARGET.has(effectKind)) return getBudgetMinistryOptions()[0]?.key ?? BUDGET_MINISTRY_KEYS[0];
   if (EFFECT_KINDS_WITH_BRANCH_TARGET.has(effectKind)) return MILITARY_BRANCH_EFFECT_IDS[0];
   if (EFFECT_KINDS_WITH_ROSTER_UNIT_TARGET.has(effectKind)) return rosterUnitIds?.[0] ?? null;
+  if (EFFECT_KINDS_WITH_SUB_TYPE_TARGET.has(effectKind)) return subTypeTargetKeys?.[0] ?? MILITARY_BRANCH_EFFECT_IDS[0] + SUB_TYPE_TARGET_SEP;
   if (EFFECT_KINDS_WITH_COUNTRY_TARGET.has(effectKind)) return countryIds?.[0] ?? null;
   return null;
 }
@@ -596,6 +642,8 @@ export function parseEffectToForm(e: CountryEffect): {
   if (e.effect_kind === "military_unit_extra") return { category: "military_unit", subChoice: "unit_extra", target: e.effect_target };
   if (e.effect_kind === "military_unit_tech_rate") return { category: "military_unit", subChoice: "unit_tech_rate", target: e.effect_target };
   if (e.effect_kind === "military_unit_limit_modifier") return { category: "military_unit", subChoice: "limit_modifier", target: e.effect_target };
+  if (e.effect_kind === "military_unit_limit_modifier_sub_type") return { category: "military_unit", subChoice: "limit_modifier_sub_type", target: e.effect_target };
+  if (e.effect_kind === "military_unit_limit_modifier_roster") return { category: "military_unit", subChoice: "limit_modifier_roster", target: e.effect_target };
   if (e.effect_kind === "influence_modifier_global") return { category: "influence_modifier", subChoice: "global", target: null };
   if (e.effect_kind === "influence_modifier_gdp") return { category: "influence_modifier", subChoice: "gdp", target: null };
   if (e.effect_kind === "influence_modifier_population") return { category: "influence_modifier", subChoice: "population", target: null };
@@ -618,7 +666,10 @@ export type ResolvedEffect = {
 export type EffectResolutionContext = {
   countryId: string;
   countryEffects: CountryEffect[];
-  mobilisationLevelEffects: Array<{ effect_kind: string; effect_target: string | null; value: number }>;
+  /** Effets agrégés de toutes les lois (mobilisation + 4 lois sectorielles) pour le niveau courant du pays. */
+  lawLevelEffects: Array<{ effect_kind: string; effect_target: string | null; value: number }>;
+  /** @deprecated Alias pour lawLevelEffects, conservé pour rétrocompat. Utiliser lawLevelEffects. */
+  mobilisationLevelEffects?: Array<{ effect_kind: string; effect_target: string | null; value: number }>;
   globalGrowthEffects: Array<{ effect_kind: string; effect_target: string | null; value: number }>;
   /** Statut IA du pays : 'major' | 'minor' | null. Si fourni, les effets IA correspondants sont inclus. */
   ai_status?: string | null;
@@ -641,8 +692,9 @@ function countryEffectsSource(ctx: EffectResolutionContext): ResolvedEffect[] {
   }));
 }
 
-function mobilisationEffectsSource(ctx: EffectResolutionContext): ResolvedEffect[] {
-  return ctx.mobilisationLevelEffects.map((e) => ({
+function lawLevelEffectsSource(ctx: EffectResolutionContext): ResolvedEffect[] {
+  const effects = ctx.lawLevelEffects ?? ctx.mobilisationLevelEffects ?? [];
+  return effects.map((e) => ({
     effect_kind: e.effect_kind,
     effect_target: e.effect_target ?? null,
     value: Number(e.value),
@@ -682,7 +734,7 @@ function aiEffectsSource(ctx: EffectResolutionContext): ResolvedEffect[] {
 /** Registry de sources d'effets. Ajouter une source ici pour un nouvel « endroit » sans toucher aux consommateurs. */
 export const EFFECT_SOURCES: Array<(ctx: EffectResolutionContext) => ResolvedEffect[]> = [
   countryEffectsSource,
-  mobilisationEffectsSource,
+  lawLevelEffectsSource,
   globalEffectsSource,
   aiEffectsSource,
 ];
@@ -696,11 +748,11 @@ export function getEffectsForCountry(context: EffectResolutionContext): Resolved
   return out;
 }
 
-/** Effets à passer à getExpectedNextTick uniquement (country_effects + mobilisation). Exclut global_growth_effects pour éviter de les compter deux fois (déjà dans getGlobalGrowthRates). */
+/** Effets à passer à getExpectedNextTick uniquement (country_effects + lois). Exclut global_growth_effects pour éviter de les compter deux fois (déjà dans getGlobalGrowthRates). */
 export function getEffectsForCountryTickRates(context: EffectResolutionContext): ResolvedEffect[] {
   return [
     ...countryEffectsSource(context),
-    ...mobilisationEffectsSource(context),
+    ...lawLevelEffectsSource(context),
   ];
 }
 
@@ -757,6 +809,36 @@ export function getLimitModifierPercent(
   return sum;
 }
 
+/** Somme des modificateurs de limite (%) pour une sous-branche/type (effets military_unit_limit_modifier_sub_type). effect_target = "branch:sub_type". */
+export function getSubTypeLimitModifierPercent(
+  effects: Array<{ effect_kind: string; effect_target: string | null; value: number; duration_remaining?: number; duration_kind?: string }>,
+  branch: string,
+  subType: string | null
+): number {
+  const key = `${branch}${SUB_TYPE_TARGET_SEP}${subType ?? ""}`;
+  let sum = 0;
+  for (const e of effects) {
+    if (e.effect_kind === "military_unit_limit_modifier_sub_type" && e.effect_target === key && isEffectActiveByDuration(e)) {
+      sum += Number(e.value);
+    }
+  }
+  return sum;
+}
+
+/** Somme des modificateurs de limite (%) pour une unité roster (effets military_unit_limit_modifier_roster). */
+export function getRosterUnitLimitModifierPercent(
+  effects: Array<{ effect_kind: string; effect_target: string | null; value: number; duration_remaining?: number; duration_kind?: string }>,
+  rosterUnitId: string
+): number {
+  let sum = 0;
+  for (const e of effects) {
+    if (e.effect_kind === "military_unit_limit_modifier_roster" && e.effect_target === rosterUnitId && isEffectActiveByDuration(e)) {
+      sum += Number(e.value);
+    }
+  }
+  return sum;
+}
+
 /** Modificateurs d'influence (multiplier stocké : 1 = 100 %, 1.2 = 120 %). Pour application dans computeInfluence. */
 export type InfluenceModifiers = {
   global: number;
@@ -797,35 +879,25 @@ type CountryEffectRow = {
   duration_remaining?: number;
   duration_kind?: string;
 };
-type MobilisationRow = { country_id: string; score: number | null };
-type MobilisationConfig = { level_thresholds?: Record<string, number> };
-type LevelEffect = { level: string; effect_kind: string; effect_target: string | null; value: number };
 
-/** Dérive le niveau de mobilisation à partir du score (même logique que dans l'app). */
-function getMobilisationLevelKey(score: number, config: MobilisationConfig | null): string | null {
-  if (!config?.level_thresholds) return null;
-  const entries = Object.entries(config.level_thresholds)
-    .filter(([, val]) => typeof val === "number")
-    .sort(([, a], [, b]) => (b as number) - (a as number));
-  const found = entries.find(([, val]) => (val as number) <= score);
-  return found?.[0] ?? null;
-}
+type CountryLawRow = { country_id: string; law_key: string; score: number };
 
 /**
  * Construit la map countryId → InfluenceModifiers pour une liste de pays.
- * Utilisé par les pages liste/classement pour appliquer les modificateurs d'influence après computeInfluenceForAll.
+ * Utilise `country_laws` et le registre centralisé des lois pour résoudre les effets de toutes les lois.
  */
 export function getInfluenceModifiersByCountry(
   countryIds: string[],
   countryEffectsRows: CountryEffectRow[],
-  countryMobilisationRows: MobilisationRow[],
-  mobilisationConfig: MobilisationConfig | null,
-  mobilisationLevelEffects: LevelEffect[],
+  countryLawRows: CountryLawRow[],
+  ruleParametersByKey: Record<string, { value: unknown }>,
   globalGrowthEffects: Array<{ effect_kind: string; effect_target: string | null; value: number }>
 ): Map<string, InfluenceModifiers> {
-  const mobilisationByCountry = new Map<string, number>();
-  for (const r of countryMobilisationRows) {
-    mobilisationByCountry.set(r.country_id, r.score ?? 0);
+  const lawsByCountry = new Map<string, LawRow[]>();
+  for (const r of countryLawRows) {
+    const list = lawsByCountry.get(r.country_id) ?? [];
+    list.push({ country_id: r.country_id, law_key: r.law_key, score: r.score, target_score: 0 });
+    lawsByCountry.set(r.country_id, list);
   }
   const effectsByCountry = new Map<string, CountryEffectRow[]>();
   for (const r of countryEffectsRows) {
@@ -837,11 +909,8 @@ export function getInfluenceModifiersByCountry(
   const isActive = (e: { duration_remaining?: number; duration_kind?: string }) =>
     e.duration_kind === "permanent" || (e.duration_remaining ?? 0) > 0;
   for (const countryId of countryIds) {
-    const score = mobilisationByCountry.get(countryId) ?? 0;
-    const levelKey = getMobilisationLevelKey(score, mobilisationConfig);
-    const mobilisationLevelEffectsForCountry = levelKey
-      ? mobilisationLevelEffects.filter((e) => e.level === levelKey)
-      : [];
+    const lawRows = lawsByCountry.get(countryId) ?? [];
+    const lawEffects = resolveAllLawEffectsForCountry(lawRows, ruleParametersByKey);
     const countryEffects = (effectsByCountry.get(countryId) ?? []).map((e) => ({
       ...e,
       id: "",
@@ -854,11 +923,7 @@ export function getInfluenceModifiersByCountry(
     const context: EffectResolutionContext = {
       countryId,
       countryEffects,
-      mobilisationLevelEffects: mobilisationLevelEffectsForCountry.map((e) => ({
-        effect_kind: e.effect_kind,
-        effect_target: e.effect_target,
-        value: e.value,
-      })),
+      lawLevelEffects: lawEffects,
       globalGrowthEffects,
     };
     const effects = getEffectsForCountry(context);

@@ -485,7 +485,7 @@ export function CountryTabGeneral({
                       onChange={(e) => setEffectTarget(e.target.value || null)}
                       className="rounded border bg-[var(--background)] px-2 py-1.5 text-sm text-[var(--foreground)] min-w-[12rem]"
                       style={{ borderColor: "var(--border)" }}
-                      title="L&apos;autre pays (la relation est entre ce pays et le pays de la fiche)"
+                      title="Pays cible de la relation bilatérale avec ce pays."
                     >
                       <option value="">— Choisir un pays —</option>
                       {otherCountriesForRelation.map((c) => (

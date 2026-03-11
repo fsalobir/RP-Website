@@ -97,7 +97,26 @@ export function buildWorldGeoJSONWithRegionIds(
     properties: { regionId: r.id, name: regionNames[r.id] ?? r.name },
     geometry: r.geometry,
   }));
-  const features = [...regionFeatures, ...orphanFeatures, ...unassigned];
+
+  const regionIdsInAtlas = new Set(numericToRegionId.values());
+  const regionIdToGeometry = new Map<string, unknown>();
+  for (const r of regions) {
+    regionIdToGeometry.set(r.id, r.geometry);
+  }
+  const linkedButNotInAtlas: WorldGeoJSONFeature[] = [];
+  for (const link of regionCountries) {
+    if (regionIdsInAtlas.has(link.region_id)) continue;
+    const geom = regionIdToGeometry.get(link.region_id);
+    if (!geom) continue;
+    linkedButNotInAtlas.push({
+      type: "Feature",
+      id: `linked-${link.region_id}`,
+      properties: { regionId: link.region_id, name: regionNames[link.region_id] ?? "" },
+      geometry: geom,
+    });
+  }
+
+  const features = [...regionFeatures, ...orphanFeatures, ...linkedButNotInAtlas, ...unassigned];
   return { type: "FeatureCollection", features };
 }
 

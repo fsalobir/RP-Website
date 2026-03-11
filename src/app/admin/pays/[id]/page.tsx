@@ -1,8 +1,10 @@
 import { createClient } from "@/lib/supabase/server";
 import { notFound } from "next/navigation";
 import { CountryForm } from "@/components/admin/CountryForm";
-import { MobilisationAdminBlock } from "./MobilisationAdminBlock";
+import { CountryLawsAdminBlock } from "./CountryLawsAdminBlock";
 import { ControlAdminBlock } from "./ControlAdminBlock";
+import { DeleteCountryButton } from "./DeleteCountryButton";
+import { LAW_DEFINITIONS } from "@/lib/laws";
 
 export default async function AdminPaysEditPage({
   params,
@@ -11,17 +13,20 @@ export default async function AdminPaysEditPage({
 }) {
   const { id } = await params;
   const supabase = await createClient();
+
+  const configKeys = LAW_DEFINITIONS.map((d) => d.configRuleKey);
+
   const [
     { data: country, error },
-    mobilisationRes,
-    configRes,
+    lawsRes,
+    configsRes,
     controlRes,
     countriesRes,
     continentsRes,
   ] = await Promise.all([
     supabase.from("countries").select("*").eq("id", id).single(),
-    supabase.from("country_mobilisation").select("score, target_score").eq("country_id", id).maybeSingle(),
-    supabase.from("rule_parameters").select("value").eq("key", "mobilisation_config").maybeSingle(),
+    supabase.from("country_laws").select("law_key, score, target_score").eq("country_id", id),
+    supabase.from("rule_parameters").select("key, value").in("key", configKeys),
     supabase.from("country_control").select("id, controller_country_id, share_pct, is_annexed").eq("country_id", id),
     supabase.from("countries").select("id, name").order("name"),
     supabase.from("continents").select("id, slug, label_fr").order("sort_order"),
@@ -29,14 +34,16 @@ export default async function AdminPaysEditPage({
 
   if (error || !country) notFound();
 
-  const mobilisation = mobilisationRes.data ?? null;
-  const config = configRes.data?.value as { level_thresholds?: Record<string, number> } | undefined;
-  const levelThresholds = config?.level_thresholds;
+  const lawRows = (lawsRes.data ?? []) as Array<{ law_key: string; score: number; target_score: number }>;
+  const configsByKey: Record<string, { level_thresholds?: Record<string, number> }> = {};
+  for (const r of configsRes.data ?? []) {
+    configsByKey[r.key] = r.value as { level_thresholds?: Record<string, number> };
+  }
 
   const controlRows = (controlRes.data ?? []).map((r) => ({
     id: r.id,
     controller_country_id: r.controller_country_id,
-    controller_name: "", // rempli ci-dessous
+    controller_name: "",
     share_pct: Number(r.share_pct),
     is_annexed: !!r.is_annexed,
   }));
@@ -58,17 +65,20 @@ export default async function AdminPaysEditPage({
       </p>
       <CountryForm country={country} continents={continents} />
       <div className="mt-8 space-y-8">
-        <MobilisationAdminBlock
+        <CountryLawsAdminBlock
           countryId={id}
-          initialScore={mobilisation?.score ?? 0}
-          initialTargetScore={mobilisation?.target_score ?? 0}
-          levelThresholds={levelThresholds}
+          lawRows={lawRows}
+          configsByKey={configsByKey}
         />
         <ControlAdminBlock
           countryId={id}
           controls={controlRows}
           otherCountries={otherCountries}
         />
+        <div className="border-t pt-8" style={{ borderColor: "var(--border)" }}>
+          <h2 className="mb-2 text-lg font-semibold text-[var(--foreground)]">Zone dangereuse</h2>
+          <DeleteCountryButton countryId={id} countryName={country.name} />
+        </div>
       </div>
     </div>
   );

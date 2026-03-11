@@ -9,6 +9,7 @@ import {
   type EffectResolutionContext,
   type ResolvedEffect,
 } from "@/lib/countryEffects";
+import { resolveAllLawEffectsForCountry, type CountryLawRow } from "@/lib/laws";
 import { persistWorldIdeologies } from "@/lib/ideologyServer";
 import { normalizeIdeologyScores } from "@/lib/ideology";
 
@@ -221,11 +222,18 @@ export async function randomizeNationalBudgets(): Promise<{ error?: string; upda
   const { data: adminRow } = await supabase.from("admins").select("id").eq("user_id", user.id).single();
   if (!adminRow) return { error: "Réservé aux admins." };
 
-  const [countriesRes, effectsRes, mobilisationRes, rulesRes, budgetsRes] = await Promise.all([
+  const [countriesRes, effectsRes, lawsRes, rulesRes, budgetsRes] = await Promise.all([
     supabase.from("countries").select("id, ai_status"),
     supabase.from("country_effects").select("country_id, effect_kind, effect_target, value, duration_remaining, duration_kind").or("duration_remaining.gt.0,duration_kind.eq.permanent"),
-    supabase.from("country_mobilisation").select("country_id, score"),
-    supabase.from("rule_parameters").select("key, value").in("key", ["mobilisation_config", "mobilisation_level_effects", "global_growth_effects", "ai_major_effects", "ai_minor_effects"]),
+    supabase.from("country_laws").select("country_id, law_key, score, target_score"),
+    supabase.from("rule_parameters").select("key, value").in("key", [
+      "mobilisation_config", "mobilisation_level_effects",
+      "law_auto_industry_config", "law_auto_industry_level_effects",
+      "law_air_industry_config", "law_air_industry_level_effects",
+      "law_naval_industry_config", "law_naval_industry_level_effects",
+      "law_research_config", "law_research_level_effects",
+      "global_growth_effects", "ai_major_effects", "ai_minor_effects",
+    ]),
     supabase.from("country_budget").select("id, country_id, budget_fraction"),
   ]);
 
@@ -237,9 +245,6 @@ export async function randomizeNationalBudgets(): Promise<{ error?: string; upda
   (rulesRes.data ?? []).forEach((r: { key: string; value: unknown }) => {
     rulesByKey[r.key] = { value: r.value };
   });
-  const mobilisationConfig = rulesByKey.mobilisation_config?.value as { level_thresholds?: Record<string, number> } | undefined;
-  const levelThresholds = mobilisationConfig?.level_thresholds;
-  const mobilisationLevelEffectsRaw = rulesByKey.mobilisation_level_effects?.value;
   const globalGrowthEffectsRaw = rulesByKey.global_growth_effects?.value;
   const globalGrowthEffects = buildGlobalGrowthEffects(globalGrowthEffectsRaw);
   const aiMajorEffects = buildAiEffects(rulesByKey.ai_major_effects?.value);
@@ -255,9 +260,11 @@ export async function randomizeNationalBudgets(): Promise<{ error?: string; upda
       duration_remaining: e.duration_remaining,
     });
   });
-  const mobilisationByCountry = new Map<string, number>();
-  (mobilisationRes.data ?? []).forEach((m: { country_id: string; score: number }) => {
-    mobilisationByCountry.set(m.country_id, Number(m.score ?? 0));
+  const lawsByCountry = new Map<string, CountryLawRow[]>();
+  (lawsRes.data ?? []).forEach((m: { country_id: string; law_key: string; score: number; target_score: number }) => {
+    const list = lawsByCountry.get(m.country_id) ?? [];
+    list.push({ country_id: m.country_id, law_key: m.law_key, score: Number(m.score ?? 0), target_score: Number(m.target_score ?? 0) });
+    lawsByCountry.set(m.country_id, list);
   });
   const budgetByCountry = new Map<string, { id: string; budget_fraction: number }>();
   (budgetsRes.data ?? []).forEach((b: { id: string; country_id: string; budget_fraction?: number }) => {
@@ -266,9 +273,8 @@ export async function randomizeNationalBudgets(): Promise<{ error?: string; upda
 
   let updated = 0;
   for (const country of countries) {
-    const score = mobilisationByCountry.get(country.id) ?? 0;
-    const levelKey = getMobilisationLevelKey(score, levelThresholds);
-    const mobilisationLevelEffects = buildMobilisationLevelEffects(levelKey, mobilisationLevelEffectsRaw);
+    const lawRows = lawsByCountry.get(country.id) ?? [];
+    const lawLevelEffects = resolveAllLawEffectsForCountry(lawRows, rulesByKey);
     const countryEffects = (effectsByCountry.get(country.id) ?? []).map((e) => ({
       effect_kind: e.effect_kind,
       effect_target: e.effect_target,
@@ -279,7 +285,7 @@ export async function randomizeNationalBudgets(): Promise<{ error?: string; upda
     const ctx: EffectResolutionContext = {
       countryId: country.id,
       countryEffects: countryEffects as Parameters<typeof getEffectsForCountry>[0]["countryEffects"],
-      mobilisationLevelEffects,
+      lawLevelEffects: lawLevelEffects,
       globalGrowthEffects,
       ai_status: (country as { ai_status?: string | null }).ai_status ?? null,
       aiMajorEffects,
@@ -370,6 +376,30 @@ export async function randomizeCountryIdeologies(): Promise<{ error?: string; up
   revalidatePath("/ideologie");
   revalidateTag("country-page-globals", "max");
   return { updated: countries.length };
+}
+
+/**
+ * Supprime un pays (admin uniquement). Avec confirmation côté client.
+ * Les lignes liées (relations, effets, budget, etc.) sont supprimées en cascade.
+ */
+export async function deleteCountry(countryId: string): Promise<{ error?: string }> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: "Non connecté." };
+  const { data: adminRow } = await supabase.from("admins").select("id").eq("user_id", user.id).single();
+  if (!adminRow) return { error: "Réservé aux admins." };
+
+  const { error } = await supabase.from("countries").delete().eq("id", countryId);
+  if (error) return { error: error.message };
+
+  revalidatePath("/admin/pays");
+  revalidatePath("/");
+  revalidatePath("/classement");
+  revalidatePath("/ideologie");
+  revalidateTag("country-page-globals", "max");
+  return {};
 }
 
 /** Met à jour le statut IA d'un pays (admin uniquement). Refusé si le pays est joué par un joueur. */

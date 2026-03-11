@@ -1,0 +1,202 @@
+{
+  "france": {
+    "name": "France",
+    "regime": "République",
+    "iso2": "fr"
+  },
+  "allemagne": {
+    "name": "Allemagne",
+    "regime": "République fédérale",
+    "iso2": "de"
+  },
+  "royaume-uni": {
+    "name": "Royaume-Uni",
+    "regime": "Monarchie parlementaire",
+    "iso2": "gb"
+  },
+  "italie": {
+    "name": "Italie",
+    "regime": "République",
+    "iso2": "it"
+  },
+  "espagne": {
+    "name": "Espagne",
+    "regime": "Monarchie parlementaire",
+    "iso2": "es"
+  },
+  "russie": {
+    "name": "Russie",
+    "regime": "Fédération",
+    "iso2": "ru"
+  },
+  "chine": {
+    "name": "Chine",
+    "regime": "République populaire",
+    "iso2": "cn"
+  },
+  "japon": {
+    "name": "Japon",
+    "regime": "Monarchie parlementaire",
+    "iso2": "jp"
+  },
+  "inde": {
+    "name": "Inde",
+    "regime": "République fédérale",
+    "iso2": "in"
+  },
+  "etats-unis": {
+    "name": "États-Unis",
+    "regime": "République fédérale",
+    "iso2": "us"
+  },
+  "bresil": {
+    "name": "Brésil",
+    "regime": "République fédérale",
+    "iso2": "br"
+  },
+  "canada": {
+    "name": "Canada",
+    "regime": "Monarchie parlementaire",
+    "iso2": "ca"
+  },
+  "australie": {
+    "name": "Australie",
+    "regime": "Monarchie parlementaire",
+    "iso2": "au"
+  },
+  "mexique": {
+    "name": "Mexique",
+    "regime": "République fédérale",
+    "iso2": "mx"
+  },
+  "indonesie": {
+    "name": "Indonésie",
+    "regime": "République",
+    "iso2": "id"
+  },
+  "turquie": {
+    "name": "Turquie",
+    "regime": "République",
+    "iso2": "tr"
+  },
+  "arabie-saoudite": {
+    "name": "Arabie saoudite",
+    "regime": "Monarchie absolue",
+    "iso2": "sa"
+  },
+  "afrique-du-sud": {
+    "name": "Afrique du Sud",
+    "regime": "République",
+    "iso2": "za"
+  },
+  "nigeria": {
+    "name": "Nigeria",
+    "regime": "République fédérale",
+    "iso2": "ng"
+  },
+  "egypte": {
+    "name": "Égypte",
+    "regime": "République",
+    "iso2": "eg"
+  },
+  "iran": {
+    "name": "Iran",
+    "regime": "République islamique",
+    "iso2": "ir"
+  },
+  "pakistan": {
+    "name": "Pakistan",
+    "regime": "République islamique",
+    "iso2": "pk"
+  },
+  "coree-du-sud": {
+    "name": "Corée du Sud",
+    "regime": "République",
+    "iso2": "kr"
+  },
+  "pologne": {
+    "name": "Pologne",
+    "regime": "République",
+    "iso2": "pl"
+  },
+  "ukraine": {
+    "name": "Ukraine",
+    "regime": "République",
+    "iso2": "ua"
+  },
+  "argentine": {
+    "name": "Argentine",
+    "regime": "République fédérale",
+    "iso2": "ar"
+  },
+  "colombie": {
+    "name": "Colombie",
+    "regime": "République",
+    "iso2": "co"
+  },
+  "thailande": {
+    "name": "Thaïlande",
+    "regime": "Monarchie constitutionnelle",
+    "iso2": "th"
+  },
+  "vietnam": {
+    "name": "Vietnam",
+    "regime": "République socialiste",
+    "iso2": "vn"
+  },
+  "pays-bas": {
+    "name": "Pays-Bas",
+    "regime": "Monarchie parlementaire",
+    "iso2": "nl"
+  },
+  "belgique": {
+    "name": "Belgique",
+    "regime": "Monarchie fédérale",
+    "iso2": "be"
+  },
+  "suede": {
+    "name": "Suède",
+    "regime": "Monarchie parlementaire",
+    "iso2": "se"
+  },
+  "suisse": {
+    "name": "Suisse",
+    "regime": "République fédérale",
+    "iso2": "ch"
+  },
+  "norvege": {
+    "name": "Norvège",
+    "regime": "Monarchie parlementaire",
+    "iso2": "no"
+  },
+  "portugal": {
+    "name": "Portugal",
+    "regime": "République",
+    "iso2": "pt"
+  },
+  "grece": {
+    "name": "Grèce",
+    "regime": "République",
+    "iso2": "gr"
+  },
+  "republique-tcheque": {
+    "name": "République tchèque",
+    "regime": "République",
+    "iso2": "cz"
+  },
+  "roumanie": {
+    "name": "Roumanie",
+    "regime": "République",
+    "iso2": "ro"
+  },
+  "israel": {
+    "name": "Israël",
+    "regime": "République",
+    "iso2": "il"
+  },
+  "emirats-arabes-unis": {
+    "name": "Émirats arabes unis",
+    "regime": "Fédération de monarchies",
+    "iso2": "ae"
+  }
+}

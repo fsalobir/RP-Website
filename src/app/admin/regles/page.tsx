@@ -15,7 +15,7 @@ export default async function AdminReglesPage() {
 
   const [rulesRes, rosterRes, countriesRes, rows, stateActionTypesRes] = await Promise.all([
     supabase.from("rule_parameters").select("*").order("key"),
-    supabase.from("military_roster_units").select("id, name_fr").order("name_fr"),
+    supabase.from("military_roster_units").select("id, name_fr, branch, sub_type").order("branch").order("sub_type").order("name_fr"),
     supabase.from("countries").select("id, name, slug").order("name"),
     getAllRelationRows(supabase),
     supabase.from("state_action_types").select("id, key, label_fr").in("key", AI_EVENT_ACTION_KEYS).order("sort_order"),

@@ -10,7 +10,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "seed:map-regions": "node --env-file=.env.local scripts/seed-map-regions.js"
+    "seed:map-regions": "node --env-file=.env.local scripts/seed-map-regions.js",
+    "generate:orphan-regions": "node scripts/generate-fill-orphan-regions.js"
   },
   "dependencies": {
     "@supabase/ssr": "^0.8.0",

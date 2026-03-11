@@ -22,6 +22,23 @@ export async function GET(request: NextRequest) {
   }
 
   const supabase = createServiceRoleClient();
+
+  const { data: cronPausedRow } = await supabase
+    .from("rule_parameters")
+    .select("value")
+    .eq("key", "cron_paused")
+    .maybeSingle();
+
+  const cronPaused =
+    cronPausedRow?.value != null &&
+    (typeof cronPausedRow.value === "boolean"
+      ? cronPausedRow.value
+      : String(cronPausedRow.value) === "true");
+
+  if (cronPaused) {
+    return NextResponse.json({ ok: true, paused: true });
+  }
+
   const { error } = await supabase.rpc("run_daily_country_update");
 
   if (error) {

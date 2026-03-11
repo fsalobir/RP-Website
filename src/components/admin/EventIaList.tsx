@@ -95,6 +95,10 @@ type Props = {
   aiCountries: { id: string; name: string; flag_url: string | null; ai_status: string | null }[];
   allCountries: { id: string; name: string }[];
   relationMap?: Record<string, number>;
+  /** Config events IA (règles) pour affichage diagnostic. */
+  aiEventsConfig?: Record<string, unknown> | null;
+  /** Dernier passage du cron (valeur brute). */
+  aiEventsLastRun?: string | null;
 };
 
 const panelClass = "rounded-lg border p-6";
@@ -124,6 +128,8 @@ export function EventIaList({
   aiCountries,
   allCountries,
   relationMap = {},
+  aiEventsConfig = null,
+  aiEventsLastRun = null,
 }: Props) {
   const router = useRouter();
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -261,6 +267,28 @@ export function EventIaList({
 
       <section className={panelClass} style={panelStyle}>
         <div className="mb-4 flex flex-col gap-3">
+          {(aiEventsConfig != null || aiEventsLastRun != null) && (
+            <div
+              className="rounded border py-2 px-3 text-sm"
+              style={{ borderColor: "var(--border-muted)", background: "var(--background-elevated)" }}
+              title="Pour modifier : Admin Règles > Events IA"
+            >
+              <span className="font-medium text-[var(--foreground-muted)]">Diagnostic cron : </span>
+              <span className="text-[var(--foreground)]">
+                Dernier run : {aiEventsLastRun ? new Date(aiEventsLastRun).toLocaleString("fr-FR") : "jamais"}
+                {" · "}
+                Par run : {typeof aiEventsConfig?.count_major_per_run === "number" ? aiEventsConfig.count_major_per_run : 0} majeurs, {typeof aiEventsConfig?.count_minor_per_run === "number" ? aiEventsConfig.count_minor_per_run : 0} mineurs
+                {" · "}
+                Actions autorisées : {Array.isArray(aiEventsConfig?.allowed_action_type_keys_major) ? aiEventsConfig.allowed_action_type_keys_major.length : 0} majeures, {Array.isArray(aiEventsConfig?.allowed_action_type_keys_minor) ? aiEventsConfig.allowed_action_type_keys_minor.length : 0} mineures
+              </span>
+              {(typeof aiEventsConfig?.count_major_per_run !== "number" || aiEventsConfig?.count_major_per_run === 0) &&
+                (typeof aiEventsConfig?.count_minor_per_run !== "number" || aiEventsConfig?.count_minor_per_run === 0) && (
+                  <span className="mt-1 block text-[var(--danger)]">
+                    Aucun event généré : activez au moins un quota (majeurs ou mineurs) dans Règles &gt; Events IA.
+                  </span>
+                )}
+            </div>
+          )}
           <div className="flex flex-col gap-3 xl:flex-row xl:items-end xl:justify-between">
             <div>
               <h2 className="text-lg font-semibold text-[var(--foreground)]">

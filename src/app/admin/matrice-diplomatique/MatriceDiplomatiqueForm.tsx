@@ -82,7 +82,7 @@ export function MatriceDiplomatiqueForm({
       <section className="rounded-lg border p-6" style={{ borderColor: "var(--border)", background: "var(--background-panel)" }}>
         <h2 className="mb-4 inline-flex items-center gap-2 text-lg font-semibold text-[var(--foreground)]">
           <span>Modifier une relation</span>
-          <InfoTooltip content={<TooltipBody text="Permet de fixer la relation diplomatique entre deux pays. Cette valeur est utilisée par plusieurs systèmes, notamment l'idéologie et certains événements." />} side="bottom" />
+          <InfoTooltip content={<TooltipBody text="Valeur de la relation entre deux pays. Utilisée par les events IA et l'idéologie." />} side="bottom" />
         </h2>
         <div className="flex flex-wrap items-end gap-4">
           <div className="flex flex-col gap-1">
@@ -110,7 +110,7 @@ export function MatriceDiplomatiqueForm({
           <div className="flex flex-col gap-1">
             <label className="inline-flex items-center gap-1.5 text-sm text-[var(--foreground-muted)]">
               <span>Pays B</span>
-              <InfoTooltip content={<TooltipBody text="Second pays de la relation bilatérale à modifier. Il doit être différent du premier." />} />
+              <InfoTooltip content={<TooltipBody text="Second pays de la paire (doit être différent du premier)." />} />
             </label>
             <select
               value={countryB}
@@ -132,7 +132,7 @@ export function MatriceDiplomatiqueForm({
           <div className="flex flex-col gap-1">
             <label className="inline-flex items-center gap-1.5 text-sm text-[var(--foreground-muted)]">
               <span>Relation ({RELATION_MIN} à {RELATION_MAX})</span>
-              <InfoTooltip content={<TooltipBody text="Mesure la qualité du lien diplomatique entre les deux pays : négative en cas d'hostilité, positive en cas de proximité." />} />
+              <InfoTooltip content={<TooltipBody text="Qualité du lien : négatif = hostilité, positif = proximité. Utilisé par les events IA et l'idéologie." />} />
             </label>
             <div className="flex items-center gap-3">
               <input

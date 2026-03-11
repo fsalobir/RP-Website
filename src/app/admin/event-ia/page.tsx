@@ -15,7 +15,7 @@ const AI_EVENT_ACTION_KEYS = [
 export default async function AdminEventIaPage() {
   const supabase = await createClient();
 
-  const [eventsRes, actionTypesRes, countriesRes, relationRowsRes] = await Promise.all([
+  const [eventsRes, actionTypesRes, countriesRes, relationRowsRes, configRes, lastRunRes] = await Promise.all([
     supabase
       .from("ai_event_requests")
       .select(`
@@ -33,6 +33,8 @@ export default async function AdminEventIaPage() {
       .order("sort_order"),
     supabase.from("countries").select("id, name, flag_url, ai_status").order("name"),
     getAllRelationRows(supabase),
+    supabase.from("rule_parameters").select("value").eq("key", "ai_events_config").maybeSingle(),
+    supabase.from("rule_parameters").select("value").eq("key", "ai_events_last_run").maybeSingle(),
   ]);
 
   const rawEvents = (eventsRes.data ?? []) as Record<string, unknown>[];
@@ -69,6 +71,9 @@ export default async function AdminEventIaPage() {
   const aiCountries = allCountriesList.filter((c) => c.ai_status === "major" || c.ai_status === "minor");
   const allCountries = allCountriesList.map((c) => ({ id: c.id, name: c.name }));
   const relationMap: Record<string, number> = Object.fromEntries(relationRowsToMap(relationRowsRes ?? []));
+  const aiEventsConfig = (configRes.data as { value?: Record<string, unknown> } | null)?.value ?? null;
+  const lastRunRaw = (lastRunRes.data as { value?: string } | null)?.value;
+  const aiEventsLastRun = typeof lastRunRaw === "string" ? lastRunRaw : null;
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-10">
@@ -83,6 +88,8 @@ export default async function AdminEventIaPage() {
         aiCountries={aiCountries}
         allCountries={allCountries}
         relationMap={relationMap}
+        aiEventsConfig={aiEventsConfig}
+        aiEventsLastRun={aiEventsLastRun}
       />
     </div>
   );

@@ -17,10 +17,10 @@ import {
   getLimitModifierPercent,
   getEffectsForCountry,
   getEffectsForCountryTickRates,
-  getMobilisationLevelLabel,
 } from "@/lib/countryEffects";
+import { resolveAllLawEffectsForCountry, getLawLevelKeyFromScore, getLawLevelLabel, LAW_DEFINITIONS, type CountryLawRow } from "@/lib/laws";
 import { getTickBreakdown } from "@/lib/tickBreakdown";
-import { setMobilisationTarget, saveMilitaryUnit, getCountryMilitaryUnits } from "./actions";
+import { saveMilitaryUnit, getCountryMilitaryUnits } from "./actions";
 import type { RosterRowByBranch } from "./countryTabsTypes";
 import type { FoggedRoster } from "@/lib/intelFog";
 import type { InfluenceResult } from "@/lib/influence";
@@ -32,6 +32,7 @@ import { CountryTabBudget } from "./CountryTabBudget";
 import { CountryTabDebug } from "./CountryTabDebug";
 import { CountryTabCabinet } from "./CountryTabCabinet";
 import { CountryTabStateActions } from "./CountryTabStateActions";
+import { CountryTabLaws } from "./CountryTabLaws";
 
 const BUDGET_MINISTRIES = [
   { key: "pct_etat" as const, label: "Ministère d'État", tooltip: "Génère des actions d'état.", group: 1 as const },
@@ -80,8 +81,7 @@ export function CountryTabs({
   ruleParametersByKey,
   worldAverages,
   rosterByBranch,
-  mobilisationConfig,
-  mobilisationState,
+  countryLawRows = [],
   worldDate,
   influenceResult = null,
   previousInfluenceValue = null,
@@ -118,8 +118,7 @@ export function CountryTabs({
   ruleParametersByKey: Record<string, { value: unknown }>;
   worldAverages: { pop_avg: number; gdp_avg: number; mil_avg: number; ind_avg: number; sci_avg: number; stab_avg: number } | null;
   rosterByBranch: Record<MilitaryBranch, RosterRowByBranch[]>;
-  mobilisationConfig?: { level_thresholds?: Record<string, number>; daily_step?: number };
-  mobilisationState?: { score: number; target_score: number } | null;
+  countryLawRows?: CountryLawRow[];
   worldDate?: { month: number; year: number };
   influenceResult?: InfluenceResult | null;
   previousInfluenceValue?: number | null;
@@ -162,7 +161,7 @@ export function CountryTabs({
   const canSeeCabinetAndBudget = isAdmin || isPlayerForThisCountry;
   const rankEmoji = (r: number) => (r === 1 ? "👑" : r === 2 ? "🥈" : r === 3 ? "🥉" : null);
   const router = useRouter();
-  const [tab, setTab] = useState<"general" | "military" | "perks" | "budget" | "cabinet" | "state_actions" | "debug">(canSeeCabinetAndBudget ? "cabinet" : "general");
+  const [tab, setTab] = useState<"general" | "military" | "perks" | "budget" | "laws" | "cabinet" | "state_actions" | "debug">(canSeeCabinetAndBudget ? "cabinet" : "general");
   const [budgetFraction, setBudgetFraction] = useState(DEFAULT_BUDGET_FRACTION);
   const [pcts, setPcts] = useState<Record<BudgetPctKey, number>>(getDefaultPcts);
   const [budgetSaving, setBudgetSaving] = useState(false);
@@ -183,9 +182,7 @@ export function CountryTabs({
   const [militarySavingId, setMilitarySavingId] = useState<string | null>(null);
   const [militaryError, setMilitaryError] = useState<string | null>(null);
   const [militarySubtypeOpen, setMilitarySubtypeOpen] = useState<Record<string, boolean>>({});
-  const [mobilisationSetting, setMobilisationSetting] = useState<string | null>(null);
-  const [mobilisationError, setMobilisationError] = useState<string | null>(null);
-  const [mobilisationMessage, setMobilisationMessage] = useState<string | null>(null);
+  
   const [generalName, setGeneralName] = useState("");
   const [generalRegime, setGeneralRegime] = useState("");
   const [generalFlagUrl, setGeneralFlagUrl] = useState("");
@@ -205,15 +202,18 @@ export function CountryTabs({
     return out;
   }, [rosterByBranch]);
 
+  const lawLevelEffects = useMemo(
+    () => resolveAllLawEffectsForCountry(countryLawRows, ruleParametersByKey),
+    [countryLawRows, ruleParametersByKey]
+  );
+
   const mobilisationLevelKey = useMemo(() => {
-    if (!mobilisationConfig?.level_thresholds || mobilisationState == null) return null;
-    const score = mobilisationState.score ?? 0;
-    const entries = Object.entries(mobilisationConfig.level_thresholds)
-      .filter(([, val]) => typeof val === "number")
-      .sort(([, a], [, b]) => (b as number) - (a as number));
-    const found = entries.find(([, val]) => (val as number) <= score);
-    return found?.[0] ?? null;
-  }, [mobilisationConfig?.level_thresholds, mobilisationState?.score]);
+    const mobRow = countryLawRows.find((r) => r.law_key === "mobilisation");
+    if (!mobRow) return null;
+    const mobDef = LAW_DEFINITIONS.find((d) => d.lawKey === "mobilisation")!;
+    const config = ruleParametersByKey[mobDef.configRuleKey]?.value as { level_thresholds?: Record<string, number> } | undefined;
+    return getLawLevelKeyFromScore(mobRow.score, config?.level_thresholds, mobDef.levels);
+  }, [countryLawRows, ruleParametersByKey]);
 
   const stateActionEffectLookups = useMemo(() => {
     const rosterUnits = rosterByBranch
@@ -244,37 +244,18 @@ export function CountryTabs({
     });
   }, [ruleParametersByKey.global_growth_effects?.value]);
 
-  const mobilisationLevelEffects = useMemo(() => {
-    const raw = ruleParametersByKey.mobilisation_level_effects?.value;
-    if (!Array.isArray(raw) || !mobilisationLevelKey) return [];
-    return raw
-      .filter(
-        (e: unknown): e is { level: string; effect_kind: string; effect_target: string | null; value: number } =>
-          e != null &&
-          typeof (e as { level?: string }).level === "string" &&
-          (e as { level: string }).level === mobilisationLevelKey &&
-          typeof (e as { effect_kind?: unknown }).effect_kind === "string" &&
-          typeof (e as { value?: unknown }).value === "number"
-      )
-      .map((e) => ({
-        effect_kind: e.effect_kind,
-        effect_target: e.effect_target ?? null,
-        value: Number(e.value),
-      }));
-  }, [ruleParametersByKey.mobilisation_level_effects?.value, mobilisationLevelKey]);
-
   const resolvedEffects = useMemo(
     () =>
       getEffectsForCountry({
         countryId: country.id,
         countryEffects: effects,
-        mobilisationLevelEffects,
+        lawLevelEffects,
         globalGrowthEffects,
         ai_status,
         aiMajorEffects,
         aiMinorEffects,
       }),
-    [country.id, effects, mobilisationLevelEffects, globalGrowthEffects, ai_status, aiMajorEffects, aiMinorEffects]
+    [country.id, effects, lawLevelEffects, globalGrowthEffects, ai_status, aiMajorEffects, aiMinorEffects]
   );
 
   const effectsForTick = useMemo(
@@ -282,13 +263,13 @@ export function CountryTabs({
       getEffectsForCountryTickRates({
         countryId: country.id,
         countryEffects: effects,
-        mobilisationLevelEffects,
+        lawLevelEffects,
         globalGrowthEffects,
         ai_status,
         aiMajorEffects,
         aiMinorEffects,
       }),
-    [country.id, effects, mobilisationLevelEffects, globalGrowthEffects, ai_status, aiMajorEffects, aiMinorEffects]
+    [country.id, effects, lawLevelEffects, globalGrowthEffects, ai_status, aiMajorEffects, aiMinorEffects]
   );
 
   const tickBreakdownResult = useMemo(() => {
@@ -316,9 +297,9 @@ export function CountryTabs({
       budgetPcts,
       ruleParametersByKey,
       worldAverages,
-      { countryEffects: effects, mobilisationLevelEffects, globalGrowthEffects, ai_status, aiMajorEffects, aiMinorEffects },
+      { countryEffects: effects, lawLevelEffects, globalGrowthEffects, ai_status, aiMajorEffects, aiMinorEffects },
       {
-        mobilisationLevelName: getMobilisationLevelLabel(mobilisationLevelKey),
+        mobilisationLevelName: getLawLevelLabel("mobilisation", mobilisationLevelKey),
         rosterUnitName: (id) => rosterUnitsFlat.find((u) => u.id === id)?.name_fr ?? null,
         rosterUnitsForExtra: rosterUnitsFlat,
       }
@@ -334,7 +315,7 @@ export function CountryTabs({
     country.stability,
     pcts,
     effects,
-    mobilisationLevelEffects,
+    lawLevelEffects,
     globalGrowthEffects,
     ai_status,
     aiMajorEffects,
@@ -779,33 +760,7 @@ export function CountryTabs({
     setEffectError(null);
   };
 
-  const handleMobilisationClick = async (threshold: number) => {
-    setMobilisationError(null);
-    setMobilisationMessage(null);
-    try {
-      const result = await setMobilisationTarget(country.id, threshold);
-      if (result.error) {
-        setMobilisationError(result.error);
-        setMobilisationSetting(null);
-      } else {
-        setMobilisationMessage("Objectif de mobilisation mis à jour. Les services suivront désormais cette montée en puissance au fil des prochains jours.");
-        await router.refresh();
-      }
-      // En cas de succès, le loader est retiré par le useEffect quand target_score reflète la mise à jour
-    } catch (error) {
-      setMobilisationSetting(null);
-      throw error;
-    }
-  };
-
-  // Retirer le loader de mobilisation uniquement quand les données reçues reflètent la nouvelle cible (surbrillance à jour)
-  useEffect(() => {
-    if (!mobilisationSetting || mobilisationState == null || !mobilisationConfig?.level_thresholds) return;
-    const wantedThreshold = mobilisationConfig.level_thresholds[mobilisationSetting];
-    if (typeof wantedThreshold === "number" && mobilisationState.target_score === wantedThreshold) {
-      setMobilisationSetting(null);
-    }
-  }, [mobilisationState?.target_score, mobilisationSetting, mobilisationConfig?.level_thresholds]);
+  
 
   const handleSaveMilitaryUnit = async (rosterUnitId: string, currentLevel: number, extraCount: number) => {
     setMilitaryError(null);
@@ -1059,6 +1014,19 @@ export function CountryTabs({
             Budget
           </button>
         )}
+        <button
+          type="button"
+          className={`tab ${tab === "laws" ? "tab-active" : ""}`}
+          data-state={tab === "laws" ? "active" : "inactive"}
+          onClick={() => setTab("laws")}
+          style={
+            tab === "laws"
+              ? { color: "var(--accent)", borderBottomColor: "var(--accent)" }
+              : undefined
+          }
+        >
+          Lois
+        </button>
         {isPlayerForThisCountry && (
           <button
             type="button"
@@ -1141,13 +1109,6 @@ export function CountryTabs({
           panelClass={panelClass}
           panelStyle={panelStyle}
           canEditCountry={canEditCountry}
-          mobilisationConfig={mobilisationConfig}
-          mobilisationState={mobilisationState}
-          mobilisationSetting={mobilisationSetting}
-          mobilisationError={mobilisationError}
-          mobilisationMessage={mobilisationMessage}
-          onMobilisationClick={handleMobilisationClick}
-          setMobilisationSetting={setMobilisationSetting}
           militaryError={militaryError}
           militarySubtypeOpen={militarySubtypeOpen}
           setMilitarySubtypeOpen={setMilitarySubtypeOpen}
@@ -1200,6 +1161,19 @@ export function CountryTabs({
           ruleParametersByKey={ruleParametersByKey}
           worldAverages={worldAverages}
           effectsForTick={effectsForTick}
+        />
+      )}
+
+      {tab === "laws" && (
+        <CountryTabLaws
+          countryId={country.id}
+          countrySlug={country.slug ?? ""}
+          panelClass={panelClass}
+          panelStyle={panelStyle}
+          canEditCountry={canEditCountry}
+          countryLawRows={countryLawRows}
+          ruleParametersByKey={ruleParametersByKey}
+          rosterUnitsFlat={rosterUnitsFlat}
         />
       )}
 

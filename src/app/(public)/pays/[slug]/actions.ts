@@ -2,8 +2,10 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
+import { ALL_LAW_KEYS } from "@/lib/laws";
 
-export async function setMobilisationTarget(countryId: string, targetScore: number) {
+export async function setLawTarget(countryId: string, lawKey: string, targetScore: number) {
+  if (!ALL_LAW_KEYS.includes(lawKey)) return { error: "Loi inconnue." };
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Non connecté." };
@@ -15,21 +17,27 @@ export async function setMobilisationTarget(countryId: string, targetScore: numb
 
   if (!adminRow && !playerRow) return { error: "Vous ne pouvez modifier que le pays qui vous est assigné." };
 
-  const { data: existing } = await supabase.from("country_mobilisation").select("score").eq("country_id", countryId).maybeSingle();
-  const { error } = await supabase.from("country_mobilisation").upsert(
+  const { data: existing } = await supabase.from("country_laws").select("score").eq("country_id", countryId).eq("law_key", lawKey).maybeSingle();
+  const { error } = await supabase.from("country_laws").upsert(
     {
       country_id: countryId,
+      law_key: lawKey,
       score: existing?.score ?? 0,
       target_score: target,
       updated_at: new Date().toISOString(),
     },
-    { onConflict: "country_id" }
+    { onConflict: "country_id,law_key" }
   );
 
   if (error) return { error: error.message };
 
   revalidatePath("/pays/[slug]", "page");
   return {};
+}
+
+/** @deprecated Use setLawTarget with lawKey = 'mobilisation' */
+export async function setMobilisationTarget(countryId: string, targetScore: number) {
+  return setLawTarget(countryId, "mobilisation", targetScore);
 }
 
 export async function saveMilitaryUnit(

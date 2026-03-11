@@ -124,7 +124,9 @@ function formatGravityTooltip(
 
 export type TickBreakdownContext = {
   countryEffects: CountryEffect[];
-  mobilisationLevelEffects: Array<{ effect_kind: string; effect_target: string | null; value: number }>;
+  lawLevelEffects: Array<{ effect_kind: string; effect_target: string | null; value: number }>;
+  /** @deprecated Use lawLevelEffects */
+  mobilisationLevelEffects?: Array<{ effect_kind: string; effect_target: string | null; value: number }>;
   globalGrowthEffects: Array<{ effect_kind: string; effect_target: string | null; value: number }>;
   ai_status?: string | null;
   aiMajorEffects?: Array<{ effect_kind: string; effect_target: string | null; value: number }>;
@@ -161,10 +163,12 @@ export function getTickBreakdown(
   const sci = country.science ?? 0;
   const stab = country.stability ?? 0;
 
+  const effectiveLawEffects = context.lawLevelEffects ?? context.mobilisationLevelEffects ?? [];
+
   const resolvedEffects = getEffectsForCountry({
     countryId: "",
     countryEffects: context.countryEffects,
-    mobilisationLevelEffects: context.mobilisationLevelEffects,
+    lawLevelEffects: effectiveLawEffects,
     globalGrowthEffects: context.globalGrowthEffects,
     ai_status: context.ai_status,
     aiMajorEffects: context.aiMajorEffects,
@@ -174,7 +178,7 @@ export function getTickBreakdown(
   const effectsForTick = getEffectsForCountryTickRates({
     countryId: "",
     countryEffects: context.countryEffects,
-    mobilisationLevelEffects: context.mobilisationLevelEffects,
+    lawLevelEffects: effectiveLawEffects,
     globalGrowthEffects: context.globalGrowthEffects,
     ai_status: context.ai_status,
     aiMajorEffects: context.aiMajorEffects,
@@ -232,9 +236,9 @@ export function getTickBreakdown(
     addEffectContributions(e, label, mil, ind, sci, stab, popContributions, gdpContributions, milContributions, indContributions, sciContributions, stabContributions);
   }
 
-  // 3) Mobilisation level effects
-  const mobPrefix = `Mobilisation (${mobilisationLevelName})`;
-  for (const e of context.mobilisationLevelEffects) {
+  // 3) Law level effects (mobilisation + lois sectorielles)
+  const mobPrefix = `Lois (${mobilisationLevelName})`;
+  for (const e of effectiveLawEffects) {
     const resolved: ResolvedEffect = { effect_kind: e.effect_kind, effect_target: e.effect_target, value: e.value, duration_remaining: 1 };
     const label = `${mobPrefix} : ${getEffectDescription(resolved, effectDescOpts)}`;
     addEffectContributions(resolved, label, mil, ind, sci, stab, popContributions, gdpContributions, milContributions, indContributions, sciContributions, stabContributions);
@@ -319,7 +323,7 @@ export function getTickBreakdown(
     .filter((e) => (e.duration_kind === "permanent" || (e.duration_remaining != null && e.duration_remaining > 0)) && !effectKindsAlreadyInBreakdown.has(e.effect_kind))
     .map((e) => ({ description: getEffectDescription(e, effectDescOpts) }));
 
-  const mobilisationEffectsExhaustive: TickBreakdownMobilisationEffectLine[] = context.mobilisationLevelEffects
+  const mobilisationEffectsExhaustive: TickBreakdownMobilisationEffectLine[] = effectiveLawEffects
     .filter((e) => !effectKindsAlreadyInBreakdown.has(e.effect_kind))
     .map((e) => {
       const resolved: ResolvedEffect = {

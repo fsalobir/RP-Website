@@ -17,7 +17,7 @@ export default async function HomePage({
   const showUnauthorized = params.error === "non-autorise";
   const supabase = await createClient();
 
-  const [countriesResult, historyResult, rulesRes, rosterUnitsRes, rosterLevelsRes, countryMilitaryRes, effectsRes, mobilisationRes, controlRes] = await Promise.all([
+  const [countriesResult, historyResult, rulesRes, rosterUnitsRes, rosterLevelsRes, countryMilitaryRes, effectsRes, lawsRes, controlRes] = await Promise.all([
     supabase
       .from("countries")
       .select("id, name, slug, flag_url, regime, population, gdp, militarism, industry, science, stability")
@@ -26,27 +26,34 @@ export default async function HomePage({
       .from("country_history")
       .select("country_id, date, population, gdp, militarism, industry, science, stability")
       .order("date", { ascending: false }),
-    supabase.from("rule_parameters").select("key, value").in("key", ["influence_config", "global_growth_effects", "mobilisation_config", "mobilisation_level_effects"]),
+    supabase.from("rule_parameters").select("key, value").in("key", [
+      "influence_config", "global_growth_effects",
+      "mobilisation_config", "mobilisation_level_effects",
+      "law_auto_industry_config", "law_auto_industry_level_effects",
+      "law_air_industry_config", "law_air_industry_level_effects",
+      "law_naval_industry_config", "law_naval_industry_level_effects",
+      "law_research_config", "law_research_level_effects",
+    ]),
     supabase.from("military_roster_units").select("id, branch, base_count"),
     supabase.from("military_roster_unit_levels").select("unit_id, level, hard_power"),
     supabase.from("country_military_units").select("country_id, roster_unit_id, current_level, extra_count"),
     supabase.from("country_effects").select("country_id, effect_kind, effect_target, value, duration_remaining, duration_kind").or("duration_remaining.gt.0,duration_kind.eq.permanent"),
-    supabase.from("country_mobilisation").select("country_id, score"),
+    supabase.from("country_laws").select("country_id, law_key, score"),
     supabase.from("country_control").select("country_id, controller_country_id, share_pct, is_annexed"),
   ]);
 
   const { data: countries, error } = countriesResult;
   const { data: historyRows, error: historyError } = historyResult;
   const rulesByKey = Object.fromEntries((rulesRes.data ?? []).map((r) => [r.key, r.value]));
+  const ruleParametersByKey: Record<string, { value: unknown }> = {};
+  for (const r of rulesRes.data ?? []) ruleParametersByKey[r.key] = { value: r.value };
   const influenceConfig = rulesByKey.influence_config as Record<string, unknown> | undefined;
   const globalGrowthEffects = (Array.isArray(rulesByKey.global_growth_effects) ? rulesByKey.global_growth_effects : []) as Array<{ effect_kind: string; effect_target: string | null; value: number }>;
-  const mobilisationConfig = rulesByKey.mobilisation_config as { level_thresholds?: Record<string, number> } | undefined;
-  const mobilisationLevelEffects = (Array.isArray(rulesByKey.mobilisation_level_effects) ? rulesByKey.mobilisation_level_effects : []) as Array<{ level: string; effect_kind: string; effect_target: string | null; value: number }>;
   const rosterUnits = (rosterUnitsRes.data ?? []) as Array<{ id: string; branch: MilitaryBranch; base_count: number }>;
   const rosterLevels = (rosterLevelsRes.data ?? []) as Array<{ unit_id: string; level: number; hard_power: number }>;
   const countryMilitaryUnits = (countryMilitaryRes.data ?? []) as Array<{ country_id: string; roster_unit_id: string; current_level: number; extra_count: number }>;
   const countryEffectsRows = (effectsRes.data ?? []) as Array<{ country_id: string; effect_kind: string; effect_target: string | null; value: number; duration_remaining?: number }>;
-  const countryMobilisationRows = (mobilisationRes.data ?? []) as Array<{ country_id: string; score: number | null }>;
+  const countryLawRows = (lawsRes.data ?? []) as Array<{ country_id: string; law_key: string; score: number }>;
   const controlRows = (controlRes.data ?? []) as Array<{ country_id: string; controller_country_id: string; share_pct: number; is_annexed: boolean }>;
   const countryById = new Map((countries ?? []).map((c) => [c.id, c]));
   const sphereByControllerId = new Map<string, Array<{ slug: string; flag_url: string | null; name: string; share_pct: number; is_annexed: boolean }>>();
@@ -98,9 +105,8 @@ export default async function HomePage({
   const influenceModifiersByCountry = getInfluenceModifiersByCountry(
     countryIds,
     countryEffectsRows,
-    countryMobilisationRows,
-    mobilisationConfig ?? null,
-    mobilisationLevelEffects,
+    countryLawRows,
+    ruleParametersByKey,
     globalGrowthEffects
   );
   const influenceByCountry = new Map(

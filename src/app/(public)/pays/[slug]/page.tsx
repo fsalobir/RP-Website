@@ -9,6 +9,7 @@ import { computeHardPowerByCountry } from "@/lib/hardPower";
 import { computeInfluenceForAll, applyInfluenceModifiers } from "@/lib/influence";
 import { getAllRelationRows, relationRowsToMap, getRelationFromMap } from "@/lib/relations";
 import { getEffectsForCountry, getInfluenceModifiersFromEffects } from "@/lib/countryEffects";
+import { resolveAllLawEffectsForCountry, LAW_DEFINITIONS, type CountryLawRow } from "@/lib/laws";
 import { computeFoggedRoster, type FoggedRoster } from "@/lib/intelFog";
 import { fetchWorldIdeologyState } from "@/lib/ideologyServer";
 import type {
@@ -29,6 +30,8 @@ const RULE_KEYS = [
   "budget_defense",
   "budget_interieur",
   "budget_affaires_etrangeres",
+  ...LAW_DEFINITIONS.map((d) => d.configRuleKey),
+  ...LAW_DEFINITIONS.map((d) => d.effectsRuleKey),
 ] as const;
 
 async function fetchCountryPageGlobals() {
@@ -92,7 +95,7 @@ export default async function CountryPage({
   const isPlayerForThisCountry = auth.playerCountryId === country.id;
   const backHref = isAdmin ? "/admin/pays" : "/";
 
-  const [cachedGlobals, macrosRes, limitsRes, countryPerksRes, budgetRes, effectsRes, countriesRes, controlRes, updateLogsRes, mobilisationRes, countryMilitaryUnitsRes, countryMilitaryUnitsAllRes, assignedPlayerRes, countriesListRes] = await Promise.all([
+  const [cachedGlobals, macrosRes, limitsRes, countryPerksRes, budgetRes, effectsRes, countriesRes, controlRes, updateLogsRes, countryLawsRes, countryMilitaryUnitsRes, countryMilitaryUnitsAllRes, assignedPlayerRes, countriesListRes] = await Promise.all([
     getCachedCountryPageGlobals(),
     supabase.from("country_macros").select("*").eq("country_id", country.id),
     supabase
@@ -107,7 +110,7 @@ export default async function CountryPage({
     isAdmin
       ? supabase.from("country_update_logs").select("*").eq("country_id", country.id).order("run_at", { ascending: false }).limit(10)
       : Promise.resolve({ data: [] as CountryUpdateLog[] }),
-    supabase.from("country_mobilisation").select("score, target_score").eq("country_id", country.id).maybeSingle(),
+    supabase.from("country_laws").select("law_key, score, target_score").eq("country_id", country.id),
     supabase.from("country_military_units").select("*").eq("country_id", country.id),
     supabase.from("country_military_units").select("country_id, roster_unit_id, current_level, extra_count"),
     supabase.from("country_players").select("email, name").eq("country_id", country.id).maybeSingle(),
@@ -194,32 +197,21 @@ export default async function CountryPage({
   );
   let influenceResult = influenceByCountry.get(country.id) ?? null;
 
-  const mobilisationConfig = ruleParametersByKey.mobilisation_config?.value as
-    | { level_thresholds?: Record<string, number>; daily_step?: number }
-    | undefined;
-  const mobilisationRow = mobilisationRes.data as { score: number; target_score: number } | null;
-  const mobilisationState = mobilisationRow
-    ? { score: mobilisationRow.score, target_score: mobilisationRow.target_score }
-    : null;
+  const countryLawRows: CountryLawRow[] = ((Array.isArray(countryLawsRes.data) ? countryLawsRes.data : []) as Array<{ law_key: string; score: number; target_score: number }>).map((r) => ({
+    country_id: country.id,
+    law_key: r.law_key,
+    score: Number(r.score ?? 0),
+    target_score: Number(r.target_score ?? 0),
+  }));
+  const lawLevelEffects = resolveAllLawEffectsForCountry(countryLawRows, ruleParametersByKey);
 
   const globalGrowthEffects = (Array.isArray(ruleParametersByKey.global_growth_effects?.value) ? ruleParametersByKey.global_growth_effects.value : []) as Array<{ effect_kind: string; effect_target: string | null; value: number }>;
   const aiMajorEffects = (Array.isArray(ruleParametersByKey.ai_major_effects?.value) ? ruleParametersByKey.ai_major_effects.value : []) as Array<{ effect_kind: string; effect_target: string | null; value: number }>;
   const aiMinorEffects = (Array.isArray(ruleParametersByKey.ai_minor_effects?.value) ? ruleParametersByKey.ai_minor_effects.value : []) as Array<{ effect_kind: string; effect_target: string | null; value: number }>;
-  const mobilisationLevelEffectsRaw = (Array.isArray(ruleParametersByKey.mobilisation_level_effects?.value) ? ruleParametersByKey.mobilisation_level_effects.value : []) as Array<{ level: string; effect_kind: string; effect_target: string | null; value: number }>;
-  const mobilisationLevelKey = (() => {
-    if (!mobilisationConfig?.level_thresholds || mobilisationState == null) return null;
-    const score = mobilisationState.score ?? 0;
-    const entries = Object.entries(mobilisationConfig.level_thresholds)
-      .filter(([, val]) => typeof val === "number")
-      .sort(([, a], [, b]) => (b as number) - (a as number));
-    const found = entries.find(([, val]) => (val as number) <= score);
-    return found?.[0] ?? null;
-  })();
-  const mobilisationLevelEffects = mobilisationLevelKey ? mobilisationLevelEffectsRaw.filter((e) => e.level === mobilisationLevelKey) : [];
   const effectsContext = {
     countryId: country.id,
     countryEffects: effects,
-    mobilisationLevelEffects: mobilisationLevelEffects.map((e) => ({ effect_kind: e.effect_kind, effect_target: e.effect_target, value: e.value })),
+    lawLevelEffects,
     globalGrowthEffects,
     ai_status: country.ai_status ?? null,
     aiMajorEffects,
@@ -371,8 +363,7 @@ export default async function CountryPage({
         rosterByBranch={foggedRoster ? { terre: [], air: [], mer: [], strategique: [] } : rosterByBranch}
         intelLevel={intelLevel}
         foggedRoster={foggedRoster}
-        mobilisationConfig={mobilisationConfig}
-        mobilisationState={mobilisationState}
+        countryLawRows={countryLawRows}
         worldDate={ruleParametersByKey.world_date?.value as { month: number; year: number } | undefined}
         influenceResult={influenceResult}
         previousInfluenceValue={previousInfluenceResult?.influence ?? null}

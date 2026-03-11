@@ -16,6 +16,15 @@ import {
   normalizeAdminEffectsAdded,
   formatAdminEffectLabel,
   DURATION_DAYS_MAX,
+  EFFECT_KINDS_WITH_STAT_TARGET,
+  EFFECT_KINDS_WITH_BUDGET_TARGET,
+  EFFECT_KINDS_WITH_BRANCH_TARGET,
+  EFFECT_KINDS_WITH_ROSTER_UNIT_TARGET,
+  EFFECT_KINDS_WITH_SUB_TYPE_TARGET,
+  EFFECT_KINDS_WITH_COUNTRY_TARGET,
+  formatSubTypeTargetLabel,
+  SUB_TYPE_TARGET_SEP,
+  MILITARY_BRANCH_EFFECT_IDS,
 } from "@/lib/countryEffects";
 import { STAT_LABELS } from "@/lib/countryEffects";
 import { getBudgetMinistryOptions } from "@/lib/countryEffects";
@@ -97,9 +106,13 @@ type RequestRow = {
   state_action_types?: { key: string; label_fr: string; cost: number; params_schema?: Record<string, unknown> | null } | null;
 };
 
+type RosterUnitForSubType = { id: string; name_fr: string; branch?: string; sub_type?: string | null };
+
 type Props = {
   requests: RequestRow[];
   rosterUnitIds: { id: string; name_fr: string }[];
+  /** Unités avec branch/sub_type pour le sélecteur d'effet « modificateur par sous-branche/type ». */
+  rosterUnits?: RosterUnitForSubType[];
   targetCountriesById?: Record<string, { name: string; flag_url: string | null; regime?: string | null }>;
   influenceByCountryId?: Record<string, number>;
   relationMap?: Record<string, number>;
@@ -117,16 +130,8 @@ function getRelationFromMap(record: Record<string, number>, countryIdA: string, 
 const panelClass = "rounded-lg border p-6";
 const panelStyle = { background: "var(--background-panel)", borderColor: "var(--border)" };
 
+/** Liste complète des effets disponibles (actifs et one-shot) dans les demandes et ailleurs. Exclut state_actions_grant. */
 const effectKindsForDemandes = ALL_EFFECT_KIND_IDS.filter((k) => k !== "state_actions_grant");
-const effectKindsForUp = [
-  "military_unit_extra",
-  "military_unit_tech_rate",
-  "stat_delta",
-  "influence_modifier_global",
-  "influence_modifier_gdp",
-  "influence_modifier_population",
-  "influence_modifier_hard_power",
-] as const;
 const REQUESTS_PER_PAGE = 10;
 
 function normalizeSearchValue(value: string): string {
@@ -147,7 +152,7 @@ function getStatusLabel(status: string): string {
   return status;
 }
 
-export function DemandesList({ requests, rosterUnitIds, targetCountriesById = {}, influenceByCountryId = {}, relationMap = {}, countriesList = [], espionageIntelGainBase }: Props) {
+export function DemandesList({ requests, rosterUnitIds, rosterUnits = [], targetCountriesById = {}, influenceByCountryId = {}, relationMap = {}, countriesList = [], espionageIntelGainBase }: Props) {
   const router = useRouter();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -225,6 +230,7 @@ export function DemandesList({ requests, rosterUnitIds, targetCountriesById = {}
         <RequestDetail
           request={selected}
           rosterUnitIds={rosterUnitIds}
+          rosterUnits={rosterUnits}
           targetCountriesById={targetCountriesById}
           influenceByCountryId={influenceByCountryId}
           relationMap={relationMap}
@@ -420,6 +426,7 @@ function StatusBadge({ status }: { status: string }) {
 function RequestDetail({
   request,
   rosterUnitIds,
+  rosterUnits = [],
   targetCountriesById = {},
   influenceByCountryId = {},
   relationMap = {},
@@ -432,6 +439,7 @@ function RequestDetail({
 }: {
   request: RequestRow;
   rosterUnitIds: { id: string; name_fr: string }[];
+  rosterUnits?: RosterUnitForSubType[];
   targetCountriesById?: Record<string, { name: string; flag_url: string | null; regime?: string | null }>;
   influenceByCountryId?: Record<string, number>;
   relationMap?: Record<string, number>;
@@ -544,7 +552,7 @@ function RequestDetail({
 
   function openAddEffect(isUp: boolean) {
     setEffectFormIsUp(isUp);
-    const kind = isUp ? effectKindsForUp[0] : effectKindsForDemandes[0];
+    const kind = effectKindsForDemandes[0];
     const otherCountries = countriesList.filter((country) => country.id !== request.country_id);
     const defaultTarget = ["stat_delta", "gdp_growth_per_stat", "population_growth_per_stat"].includes(kind)
       ? "militarism"
@@ -939,6 +947,7 @@ function RequestDetail({
                 value={effectForm}
                 onChange={setEffectForm}
                 rosterUnitIds={rosterUnitIds}
+                rosterUnits={rosterUnits}
                 countriesList={countriesList}
                 requestCountryId={request.country_id}
                 onSave={() => handleSaveEffect(effectFormIsUp)}
@@ -1008,6 +1017,7 @@ function EffectFormInline({
   value,
   onChange,
   rosterUnitIds,
+  rosterUnits = [],
   countriesList = [],
   requestCountryId,
   onSave,
@@ -1018,6 +1028,7 @@ function EffectFormInline({
   value: AdminEffectAdded | null;
   onChange: (v: AdminEffectAdded) => void;
   rosterUnitIds: { id: string; name_fr: string }[];
+  rosterUnits?: RosterUnitForSubType[];
   countriesList?: Array<{ id: string; name: string }>;
   requestCountryId?: string;
   onSave: () => void;
@@ -1025,16 +1036,30 @@ function EffectFormInline({
   saving: boolean;
   isUpForm?: boolean;
 }) {
-  const kindsSource = isUpForm ? effectKindsForUp : effectKindsForDemandes;
+  const kindsSource = effectKindsForDemandes;
   const kindGroups = useMemo(() => getEffectKindOptionGroups(kindsSource), [kindsSource]);
+  const subTypeOptions = useMemo(() => {
+    const seen = new Set<string>();
+    const list: { value: string; label: string }[] = [];
+    for (const u of rosterUnits) {
+      const branch = u.branch ?? "terre";
+      const subType = u.sub_type ?? null;
+      const value = `${branch}${SUB_TYPE_TARGET_SEP}${subType ?? ""}`;
+      if (seen.has(value)) continue;
+      seen.add(value);
+      list.push({ value, label: formatSubTypeTargetLabel(branch, subType) });
+    }
+    return list.sort((a, b) => a.label.localeCompare(b.label, "fr"));
+  }, [rosterUnits]);
   const kind = (value?.effect_kind ?? kindsSource[0]) as string;
-  const needsStat = ["stat_delta", "gdp_growth_per_stat", "population_growth_per_stat"].includes(kind);
-  const needsBudget = kind.startsWith("budget_ministry");
-  const needsBranch = kind === "military_unit_limit_modifier";
-  const needsRoster = ["military_unit_extra", "military_unit_tech_rate"].includes(kind);
-  const needsCountry = kind === "relation_delta";
+  const needsStat = EFFECT_KINDS_WITH_STAT_TARGET.has(kind);
+  const needsBudget = EFFECT_KINDS_WITH_BUDGET_TARGET.has(kind);
+  const needsBranch = EFFECT_KINDS_WITH_BRANCH_TARGET.has(kind);
+  const needsRoster = EFFECT_KINDS_WITH_ROSTER_UNIT_TARGET.has(kind);
+  const needsSubType = EFFECT_KINDS_WITH_SUB_TYPE_TARGET.has(kind);
+  const needsCountry = EFFECT_KINDS_WITH_COUNTRY_TARGET.has(kind);
   const otherCountries = requestCountryId ? countriesList.filter((c) => c.id !== requestCountryId) : countriesList;
-  const defaultTarget = needsStat ? "militarism" : needsBudget ? (getBudgetMinistryOptions()[0]?.key ?? null) : needsBranch ? "terre" : needsRoster ? (rosterUnitIds[0]?.id ?? null) : needsCountry ? (otherCountries[0]?.id ?? null) : null;
+  const defaultTarget = needsStat ? "militarism" : needsBudget ? (getBudgetMinistryOptions()[0]?.key ?? null) : needsBranch ? MILITARY_BRANCH_EFFECT_IDS[0] : needsRoster ? (rosterUnitIds[0]?.id ?? null) : needsSubType ? (subTypeOptions[0]?.value ?? MILITARY_BRANCH_EFFECT_IDS[0] + SUB_TYPE_TARGET_SEP) : needsCountry ? (otherCountries[0]?.id ?? null) : null;
 
   const effect: AdminEffectAdded = value ?? {
     name: "",
@@ -1058,6 +1083,7 @@ function EffectFormInline({
   const needsBudgetTarget = needsBudget;
   const needsBranchTarget = needsBranch;
   const needsRosterTarget = needsRoster;
+  const needsSubTypeTarget = needsSubType;
   const needsCountryTarget = needsCountry;
 
   return (
@@ -1076,12 +1102,13 @@ function EffectFormInline({
           value={effect.effect_kind}
           onChange={(e) => {
             const newKind = e.target.value;
-            const needS = ["stat_delta", "gdp_growth_per_stat", "population_growth_per_stat"].includes(newKind);
-            const needB = newKind.startsWith("budget_ministry");
-            const needBr = newKind === "military_unit_limit_modifier";
-            const needR = ["military_unit_extra", "military_unit_tech_rate"].includes(newKind);
-            const needC = newKind === "relation_delta";
-            const t = needS ? "militarism" : needB ? (getBudgetMinistryOptions()[0]?.key ?? null) : needBr ? "terre" : needR ? (rosterUnitIds[0]?.id ?? null) : needC ? (otherCountries[0]?.id ?? null) : null;
+            const needS = EFFECT_KINDS_WITH_STAT_TARGET.has(newKind);
+            const needB = EFFECT_KINDS_WITH_BUDGET_TARGET.has(newKind);
+            const needBr = EFFECT_KINDS_WITH_BRANCH_TARGET.has(newKind);
+            const needR = EFFECT_KINDS_WITH_ROSTER_UNIT_TARGET.has(newKind);
+            const needSub = EFFECT_KINDS_WITH_SUB_TYPE_TARGET.has(newKind);
+            const needC = EFFECT_KINDS_WITH_COUNTRY_TARGET.has(newKind);
+            const t = needS ? "militarism" : needB ? (getBudgetMinistryOptions()[0]?.key ?? null) : needBr ? MILITARY_BRANCH_EFFECT_IDS[0] : needR ? (rosterUnitIds[0]?.id ?? null) : needSub ? (subTypeOptions[0]?.value ?? MILITARY_BRANCH_EFFECT_IDS[0] + SUB_TYPE_TARGET_SEP) : needC ? (otherCountries[0]?.id ?? null) : null;
             onChange({ ...effect, effect_kind: newKind, effect_target: t, effect_subtype: null });
           }}
           className="rounded border bg-[var(--background)] px-3 py-1.5 text-sm"
@@ -1140,6 +1167,19 @@ function EffectFormInline({
           >
             {rosterUnitIds.map((u) => (
               <option key={u.id} value={u.id}>{u.name_fr}</option>
+            ))}
+          </select>
+        )}
+        {needsSubTypeTarget && (
+          <select
+            value={effect.effect_target ?? ""}
+            onChange={(e) => onChange({ ...effect, effect_target: e.target.value || null })}
+            className="rounded border bg-[var(--background)] px-3 py-1.5 text-sm min-w-[10rem]"
+            style={{ borderColor: "var(--border)" }}
+            title="Branche et sous-type militaire"
+          >
+            {subTypeOptions.map((opt) => (
+              <option key={opt.value} value={opt.value}>{opt.label}</option>
             ))}
           </select>
         )}

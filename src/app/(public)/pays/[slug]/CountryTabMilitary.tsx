@@ -3,7 +3,7 @@
 import type { MilitaryBranch } from "@/types/database";
 import { formatNumber } from "@/lib/format";
 import { Tooltip } from "@/components/ui/Tooltip";
-import { getUnitExtraEffectSum, MOBILISATION_LEVELS, type ResolvedEffect } from "@/lib/countryEffects";
+import { getUnitExtraEffectSum, type ResolvedEffect } from "@/lib/countryEffects";
 import type { RosterRowByBranch } from "./countryTabsTypes";
 import type { FoggedRoster, FoggedBranchEstimate, FoggedUnitEstimate } from "@/lib/intelFog";
 
@@ -14,32 +14,11 @@ const BRANCH_LABELS: Record<MilitaryBranch, string> = {
   strategique: "Stratégique",
 };
 
-function getMobilisationLevelKey(score: number, thresholds: Record<string, number> | undefined): string {
-  if (!thresholds) return "demobilisation";
-  let best = "demobilisation";
-  let bestVal = -1;
-  for (const { key } of MOBILISATION_LEVELS) {
-    const t = thresholds[key] ?? 0;
-    if (t <= score && t >= bestVal) {
-      best = key;
-      bestVal = t;
-    }
-  }
-  return best;
-}
-
 type CountryTabMilitaryProps = {
   countryId: string;
   panelClass: string;
   panelStyle: React.CSSProperties;
   canEditCountry: boolean;
-  mobilisationConfig?: { level_thresholds?: Record<string, number>; daily_step?: number };
-  mobilisationState?: { score: number; target_score: number } | null;
-  mobilisationSetting: string | null;
-  mobilisationError: string | null;
-  mobilisationMessage: string | null;
-  onMobilisationClick: (threshold: number) => Promise<void>;
-  setMobilisationSetting: (v: string | null) => void;
   militaryError: string | null;
   militarySubtypeOpen: Record<string, boolean>;
   setMilitarySubtypeOpen: React.Dispatch<React.SetStateAction<Record<string, boolean>>>;
@@ -60,13 +39,6 @@ export function CountryTabMilitary({
   panelClass,
   panelStyle,
   canEditCountry,
-  mobilisationConfig,
-  mobilisationState,
-  mobilisationSetting,
-  mobilisationError,
-  mobilisationMessage,
-  onMobilisationClick,
-  setMobilisationSetting,
   militaryError,
   militarySubtypeOpen,
   setMilitarySubtypeOpen,
@@ -81,14 +53,6 @@ export function CountryTabMilitary({
   intelLevel = null,
   foggedRoster = null,
 }: CountryTabMilitaryProps) {
-  const thresholds = mobilisationConfig?.level_thresholds;
-  const currentScore = mobilisationState?.score ?? 0;
-  const targetScore = mobilisationState?.target_score ?? 0;
-  const currentLevelKey = getMobilisationLevelKey(currentScore, thresholds);
-  const targetLevelKey = getMobilisationLevelKey(targetScore, thresholds);
-  const dailyStep = Math.max(0, mobilisationConfig?.daily_step ?? 0);
-  const scoreDistance = Math.abs(targetScore - currentScore);
-  const daysToTarget = dailyStep > 0 ? Math.ceil(scoreDistance / dailyStep) : null;
 
   if (foggedRoster != null && intelLevel != null) {
     return (
@@ -120,85 +84,6 @@ export function CountryTabMilitary({
 
   return (
     <div className="space-y-6">
-      {mobilisationConfig && (
-        <section className={panelClass} style={panelStyle}>
-          <h2 className="mb-4 text-lg font-semibold text-[var(--foreground)]">
-            Mobilisation
-          </h2>
-          <div className="relative min-h-[4.5rem]">
-            <div
-              className={`flex flex-wrap gap-3 transition-[filter] duration-200 ${mobilisationSetting ? "pointer-events-none select-none blur-[3px]" : ""}`}
-              aria-busy={!!mobilisationSetting}
-              aria-live="polite"
-            >
-              {MOBILISATION_LEVELS.map((level) => {
-                const threshold = thresholds?.[level.key] ?? 0;
-                const isCurrent = currentLevelKey === level.key;
-                const isTarget = targetLevelKey === level.key;
-                const isSetting = mobilisationSetting === level.key;
-                return (
-                  <button
-                    key={level.key}
-                    type="button"
-                    disabled={!canEditCountry || !!mobilisationSetting}
-                    onClick={async () => {
-                      if (!canEditCountry) return;
-                      setMobilisationSetting(level.key);
-                      await onMobilisationClick(threshold);
-                      // Le loader est retiré par le parent quand mobilisationState reflète la mise à jour (ou en cas d'erreur)
-                    }}
-                    className="flex h-16 w-36 shrink-0 items-center justify-center rounded border px-2 py-1 text-center text-sm font-medium transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
-                    style={{
-                      borderColor: isCurrent
-                        ? "var(--accent)"
-                        : isTarget
-                          ? "var(--accent-muted)"
-                          : "var(--border)",
-                      background: isCurrent
-                        ? "var(--accent-muted)"
-                        : isTarget
-                          ? "var(--background-elevated)"
-                          : "var(--background-panel)",
-                      color: "var(--foreground)",
-                    }}
-                  >
-                    {isSetting ? "…" : level.label}
-                  </button>
-                );
-              })}
-            </div>
-            {mobilisationSetting && (
-              <div
-                className="absolute inset-0 flex items-center justify-center rounded-lg bg-[var(--background-panel)]/70"
-                aria-hidden
-              >
-                <span
-                  className="text-4xl animate-spin"
-                  style={{ filter: "drop-shadow(0 0 4px var(--background))" }}
-                  title="Mise à jour en cours…"
-                >
-                  ⏳
-                </span>
-              </div>
-            )}
-          </div>
-          <p className="mt-3 text-sm text-[var(--foreground-muted)]">
-            {daysToTarget !== null && scoreDistance > 0
-              ? (
-                <strong className="font-semibold text-[var(--foreground)]">
-                  Au rythme actuel de la mobilisation, l'état-major espère atteindre ce palier d'ici {formatNumber(daysToTarget)} jour(s).
-                </strong>
-              )
-              : " L'objectif retenu demeure conforme au niveau déjà atteint pour cette période."}
-          </p>
-          {mobilisationMessage && (
-            <p className="mt-2 text-sm text-[var(--accent)]">{mobilisationMessage}</p>
-          )}
-          {mobilisationError && (
-            <p className="mt-2 text-sm text-[var(--danger)]">{mobilisationError}</p>
-          )}
-        </section>
-      )}
       {militaryError && (
         <p className="text-sm text-[var(--danger)]">{militaryError}</p>
       )}

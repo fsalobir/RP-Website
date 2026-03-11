@@ -75,7 +75,10 @@ export async function deleteCountryControl(controlId: string, countryId: string)
   return {};
 }
 
-export async function updateMobilisationScore(countryId: string, score: number) {
+export async function updateLawScore(countryId: string, lawKey: string, score: number) {
+  const { ALL_LAW_KEYS } = await import("@/lib/laws");
+  if (!ALL_LAW_KEYS.includes(lawKey)) return { error: "Loi inconnue." };
+
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Non connecté." };
@@ -84,15 +87,16 @@ export async function updateMobilisationScore(countryId: string, score: number) 
 
   const clamped = Math.max(0, Math.min(500, Math.round(score)));
 
-  const { data: existing } = await supabase.from("country_mobilisation").select("target_score").eq("country_id", countryId).maybeSingle();
-  const { error } = await supabase.from("country_mobilisation").upsert(
+  const { data: existing } = await supabase.from("country_laws").select("target_score").eq("country_id", countryId).eq("law_key", lawKey).maybeSingle();
+  const { error } = await supabase.from("country_laws").upsert(
     {
       country_id: countryId,
+      law_key: lawKey,
       score: clamped,
       target_score: existing?.target_score ?? clamped,
       updated_at: new Date().toISOString(),
     },
-    { onConflict: "country_id" }
+    { onConflict: "country_id,law_key" }
   );
 
   if (error) return { error: error.message };
@@ -100,4 +104,9 @@ export async function updateMobilisationScore(countryId: string, score: number) 
   revalidatePath(`/admin/pays/${countryId}`);
   revalidatePath("/admin/pays");
   return {};
+}
+
+/** @deprecated Use updateLawScore */
+export async function updateMobilisationScore(countryId: string, score: number) {
+  return updateLawScore(countryId, "mobilisation", score);
 }

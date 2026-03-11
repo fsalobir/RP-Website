@@ -17,21 +17,27 @@ import {
 import { DEFAULT_IDEOLOGY_CONFIG, getIdeologyConfig as parseIdeologyConfig, type IdeologyConfig } from "@/lib/ideology";
 import { MOIS_LABELS } from "@/lib/worldDate";
 import {
+  getEffectKindOptionGroups,
   ALL_EFFECT_KIND_IDS,
+  EFFECT_KINDS_WITH_COUNTRY_TARGET,
   EFFECT_KIND_LABELS,
   EFFECT_KINDS_WITH_STAT_TARGET,
   EFFECT_KINDS_WITH_BUDGET_TARGET,
   EFFECT_KINDS_NO_TARGET,
   EFFECT_KINDS_WITH_BRANCH_TARGET,
   EFFECT_KINDS_WITH_ROSTER_UNIT_TARGET,
+  EFFECT_KINDS_WITH_SUB_TYPE_TARGET,
   STAT_KEYS,
   STAT_LABELS,
   MILITARY_BRANCH_EFFECT_IDS,
   MILITARY_BRANCH_EFFECT_LABELS,
+  SUB_TYPE_TARGET_SEP,
+  formatSubTypeTargetLabel,
   getBudgetMinistryOptions,
   getEffectKindValueHelper,
   formatEffectValue,
 } from "@/lib/countryEffects";
+import { LAW_DEFINITIONS, type LawDefinition } from "@/lib/laws";
 import { MatriceDiplomatiqueForm } from "@/app/admin/matrice-diplomatique/MatriceDiplomatiqueForm";
 import { InfoTooltip } from "@/components/ui/InfoTooltip";
 
@@ -240,7 +246,7 @@ function CollapsibleBlock({
   const isSection = variant === "section";
   return (
     <div
-      className={isSection ? "mb-8 rounded-lg border-2 last:mb-0" : "border-b"}
+      className={isSection ? "rounded-lg border-2" : "border-b"}
       style={{
         borderColor: isSection ? "var(--border)" : "var(--border-muted)",
         background: isSection ? "var(--background-panel)" : undefined,
@@ -318,7 +324,7 @@ export function ReglesForm({
   stateActionTypesForAi = [],
 }: {
   rules: RuleParameter[];
-  rosterUnits?: { id: string; name_fr: string }[];
+  rosterUnits?: { id: string; name_fr: string; branch?: string; sub_type?: string | null }[];
   countries?: CountryForMatrice[];
   relationMap?: Record<string, number>;
   stateActionTypesForAi?: { id: string; key: string; label_fr: string }[];
@@ -326,29 +332,29 @@ export function ReglesForm({
   const [items, setItems] = useState(rules);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [globalGrowthOpen, setGlobalGrowthOpen] = useState(true);
+  const [globalGrowthOpen, setGlobalGrowthOpen] = useState(false);
   const [globalEffectFormOpen, setGlobalEffectFormOpen] = useState(false);
   const [globalEffectEditIndex, setGlobalEffectEditIndex] = useState<number | null>(null);
   const [globalEffectKind, setGlobalEffectKind] = useState<string>("gdp_growth_base");
   const [globalEffectTarget, setGlobalEffectTarget] = useState<string | null>(null);
   const [globalEffectValue, setGlobalEffectValue] = useState<string>("");
-  const [budgetOpen, setBudgetOpen] = useState(true);
+  const [budgetOpen, setBudgetOpen] = useState(false);
   const [budgetMinistryOpen, setBudgetMinistryOpen] = useState<Record<string, boolean>>(() =>
-    Object.fromEntries(BUDGET_MINISTRY_KEYS.map((k) => [k, true]))
+    Object.fromEntries(BUDGET_MINISTRY_KEYS.map((k) => [k, false]))
   );
   const [simulatorMinistry, setSimulatorMinistry] = useState<string>(BUDGET_MINISTRY_KEYS[0]);
   const [simulatorBase, setSimulatorBase] = useState<string>("5");
   const [simulatorWorldAvg, setSimulatorWorldAvg] = useState<string>("5");
   const [simulatorAllocationPct, setSimulatorAllocationPct] = useState<number>(10);
-  const [mobilisationOpen, setMobilisationOpen] = useState(false);
+  const [lawSectionsOpen, setLawSectionsOpen] = useState<Record<string, boolean>>({});
   const [worldDateOpen, setWorldDateOpen] = useState(false);
   const [influenceOpen, setInfluenceOpen] = useState(false);
   const [sphereOpen, setSphereOpen] = useState(false);
   const [statsOpen, setStatsOpen] = useState(false);
-  const [matriceOpen, setMatriceOpen] = useState(true);
-  const [diplomatieOpen, setDiplomatieOpen] = useState(true);
-  const [effetsGlobauxOpen, setEffetsGlobauxOpen] = useState(true);
-  const [loisOpen, setLoisOpen] = useState(true);
+  const [matriceOpen, setMatriceOpen] = useState(false);
+  const [diplomatieOpen, setDiplomatieOpen] = useState(false);
+  const [effetsGlobauxOpen, setEffetsGlobauxOpen] = useState(false);
+  const [loisOpen, setLoisOpen] = useState(false);
   const [ideologyOpen, setIdeologyOpen] = useState(false);
   const [aiOpen, setAiOpen] = useState(false);
   const [aiMajorFormOpen, setAiMajorFormOpen] = useState(false);
@@ -375,25 +381,57 @@ export function ReglesForm({
     if (items.length === 0) return;
     setError(null);
     setSaving(true);
-    let hadError = false;
-    for (const row of items) {
-      const { error: err } = await supabase
-        .from("rule_parameters")
-        .update({ value: row.value })
-        .eq("id", row.id);
-      if (err) {
-        setError(err.message);
-        hadError = true;
-        break;
+    try {
+      let hadError = false;
+      for (const row of items) {
+        const { error: err } = await supabase
+          .from("rule_parameters")
+          .update({ value: row.value })
+          .eq("id", row.id);
+        if (err) {
+          setError(err.message);
+          hadError = true;
+          break;
+        }
       }
+      if (!hadError) {
+        try {
+          await revalidateCountryPageGlobals();
+        } catch (revalidateErr) {
+          console.warn("Revalidation du cache échouée (données tout de même enregistrées):", revalidateErr);
+        }
+      }
+    } catch (e) {
+      const message = e instanceof Error ? e.message : String(e);
+      const isNetworkError = /failed to fetch|network|load failed/i.test(message);
+      setError(
+        isNetworkError
+          ? "Erreur réseau ou serveur injoignable. Vérifiez votre connexion, que le serveur tourne et que Supabase est accessible."
+          : message || "Erreur lors de l'enregistrement."
+      );
+    } finally {
+      setSaving(false);
     }
-    if (!hadError) {
-      await revalidateCountryPageGlobals();
-    }
-    setSaving(false);
   }
 
   const rulesByKey = useMemo(() => new Map(items.map((r) => [r.key, r])), [items]);
+
+  /** Options (branch:sub_type) pour les effets « modificateur par sous-branche/type », triées par branche puis sous-type. */
+  const subTypeOptions = useMemo(() => {
+    const seen = new Set<string>();
+    const list: { value: string; label: string }[] = [];
+    const units = rosterUnits ?? [];
+    for (const u of units) {
+      const branch = u.branch ?? "terre";
+      const subType = u.sub_type ?? null;
+      const value = `${branch}${SUB_TYPE_TARGET_SEP}${subType ?? ""}`;
+      if (seen.has(value)) continue;
+      seen.add(value);
+      list.push({ value, label: formatSubTypeTargetLabel(branch, subType) });
+    }
+    return list.sort((a, b) => a.label.localeCompare(b.label, "fr"));
+  }, [rosterUnits]);
+
   const mobilisationConfigKey = "mobilisation_config";
   const mobilisationEffectsKey = "mobilisation_level_effects";
   const globalGrowthEffectsKey = "global_growth_effects";
@@ -410,6 +448,7 @@ export function ReglesForm({
   const globalGrowthEffectsRule = useMemo(() => items.find((r) => r.key === globalGrowthEffectsKey), [items]);
   const worldDateRule = useMemo(() => items.find((r) => r.key === worldDateKey), [items]);
   const worldDateAdvanceRule = useMemo(() => items.find((r) => r.key === worldDateAdvanceKey), [items]);
+  const cronPausedRule = useMemo(() => items.find((r) => r.key === "cron_paused"), [items]);
   const influenceConfigRule = useMemo(() => items.find((r) => r.key === influenceConfigKey), [items]);
   const sphereInfluencePctRule = useMemo(() => items.find((r) => r.key === sphereInfluencePctKey), [items]);
   const ideologyConfigRule = useMemo(() => items.find((r) => r.key === ideologyConfigKey), [items]);
@@ -500,10 +539,13 @@ export function ReglesForm({
     if (EFFECT_KINDS_WITH_BUDGET_TARGET.has(effectKind)) return getBudgetMinistryOptions()[0]?.key ?? BUDGET_MINISTRY_KEYS[0];
     if (EFFECT_KINDS_WITH_BRANCH_TARGET.has(effectKind)) return MILITARY_BRANCH_EFFECT_IDS[0];
     if (EFFECT_KINDS_WITH_ROSTER_UNIT_TARGET.has(effectKind)) return rosterUnits[0]?.id ?? null;
+    if (EFFECT_KINDS_WITH_SUB_TYPE_TARGET.has(effectKind)) return subTypeOptions[0]?.value ?? MILITARY_BRANCH_EFFECT_IDS[0] + SUB_TYPE_TARGET_SEP;
+    if (EFFECT_KINDS_WITH_COUNTRY_TARGET.has(effectKind)) return null;
     return null;
   }
   function openAddGlobalEffect() {
-    const firstKind = ALL_EFFECT_KIND_IDS[0];
+    const firstGroup = getEffectKindOptionGroups()[0];
+    const firstKind = firstGroup?.options[0]?.id ?? ALL_EFFECT_KIND_IDS[0];
     setGlobalEffectKind(firstKind);
     setGlobalEffectTarget(getDefaultTargetForKindGlobal(firstKind));
     setGlobalEffectValue("");
@@ -622,7 +664,8 @@ export function ReglesForm({
     updateValue(rule.id, arr);
   }
   function openAddAiEffect(which: "major" | "minor") {
-    const firstKind = ALL_EFFECT_KIND_IDS[0];
+    const firstGroup = getEffectKindOptionGroups()[0];
+    const firstKind = firstGroup?.options[0]?.id ?? ALL_EFFECT_KIND_IDS[0];
     const defTarget = getDefaultTargetForKindGlobal(firstKind);
     if (which === "major") {
       setAiMajorEffectKind(firstKind);
@@ -698,8 +741,8 @@ export function ReglesForm({
     setAiEffects(rule, getAiEffects(rule).filter((_, i) => i !== index));
   }
 
-  const mobilisationConfigRule = useMemo(() => items.find((r) => r.key === mobilisationConfigKey), [items]);
-  const mobilisationEffectsRule = useMemo(() => items.find((r) => r.key === mobilisationEffectsKey), [items]);
+  const mobilisationConfigRule = useMemo(() => items.find((r) => r.key === "mobilisation_config"), [items]);
+  const mobilisationEffectsRule = useMemo(() => items.find((r) => r.key === "mobilisation_level_effects"), [items]);
   const statsDiceModifierRangesRule = useMemo(() => items.find((r) => r.key === statsDiceModifierRangesKey), [items]);
 
   type StatsDiceModifierRangesValue = Record<string, { min: number; max: number }>;
@@ -724,65 +767,43 @@ export function ReglesForm({
     });
   }
 
-  type MobilisationConfigValue = {
-    level_thresholds?: Record<string, number>;
-    daily_step?: number;
-  };
-  function getMobilisationConfig(): MobilisationConfigValue {
-    if (mobilisationConfigRule?.value && typeof mobilisationConfigRule.value === "object" && mobilisationConfigRule.value !== null) {
-      return mobilisationConfigRule.value as MobilisationConfigValue;
+  type LawConfigValue = { level_thresholds?: Record<string, number>; daily_step?: number };
+  type LawLevelEffect = { level: string; effect_kind: string; effect_target: string | null; value: number };
+
+  function getLawConfigRule(def: LawDefinition) { return items.find((r) => r.key === def.configRuleKey); }
+  function getLawEffectsRule(def: LawDefinition) { return items.find((r) => r.key === def.effectsRuleKey); }
+  function getLawConfig(def: LawDefinition): LawConfigValue {
+    const rule = getLawConfigRule(def);
+    if (rule?.value && typeof rule.value === "object" && rule.value !== null) {
+      return rule.value as LawConfigValue;
     }
-    return {
-      level_thresholds: {
-        demobilisation: 0,
-        reserve_active: 200,
-        mobilisation_partielle: 300,
-        mobilisation_generale: 400,
-        guerre_patriotique: 500,
-      },
-      daily_step: 20,
-    };
+    const defaultThresholds: Record<string, number> = {};
+    def.levels.forEach((l, i) => { defaultThresholds[l.key] = i * 100; });
+    return { level_thresholds: defaultThresholds, daily_step: 20 };
   }
-
-  const MOBILISATION_LEVEL_KEYS = [
-    "demobilisation",
-    "reserve_active",
-    "mobilisation_partielle",
-    "mobilisation_generale",
-    "guerre_patriotique",
-  ] as const;
-  const MOBILISATION_LEVEL_LABELS: Record<string, string> = {
-    demobilisation: "Démobilisation",
-    reserve_active: "Réserve Active",
-    mobilisation_partielle: "Mobilisation Partielle",
-    mobilisation_generale: "Mobilisation Générale",
-    guerre_patriotique: "Guerre Patriotique",
-  };
-
-  function updateMobilisationConfig(updates: Partial<MobilisationConfigValue>) {
-    if (!mobilisationConfigRule) return;
-    const current = getMobilisationConfig();
-    updateValue(mobilisationConfigRule.id, { ...current, ...updates });
+  function updateLawConfig(def: LawDefinition, updates: Partial<LawConfigValue>) {
+    const rule = getLawConfigRule(def);
+    if (!rule) return;
+    const current = getLawConfig(def);
+    updateValue(rule.id, { ...current, ...updates });
   }
-  function updateMobilisationThreshold(key: string, value: number) {
-    const current = getMobilisationConfig();
-    const level_thresholds = { ...(current.level_thresholds ?? {}), [key]: value };
-    updateMobilisationConfig({ level_thresholds });
+  function updateLawThreshold(def: LawDefinition, levelKey: string, value: number) {
+    const current = getLawConfig(def);
+    const level_thresholds = { ...(current.level_thresholds ?? {}), [levelKey]: value };
+    updateLawConfig(def, { level_thresholds });
   }
-
-  type MobilisationLevelEffect = { level: string; effect_kind: string; effect_target: string | null; value: number };
-  function getMobilisationLevelEffects(): MobilisationLevelEffect[] {
-    if (mobilisationEffectsRule?.value && Array.isArray(mobilisationEffectsRule.value)) {
-      return mobilisationEffectsRule.value as MobilisationLevelEffect[];
-    }
+  function getLawLevelEffects(def: LawDefinition): LawLevelEffect[] {
+    const rule = getLawEffectsRule(def);
+    if (rule?.value && Array.isArray(rule.value)) return rule.value as LawLevelEffect[];
     return [];
   }
-  function setMobilisationLevelEffects(arr: MobilisationLevelEffect[]) {
-    if (!mobilisationEffectsRule) return;
-    updateValue(mobilisationEffectsRule.id, arr);
+  function setLawLevelEffects(def: LawDefinition, arr: LawLevelEffect[]) {
+    const rule = getLawEffectsRule(def);
+    if (!rule) return;
+    updateValue(rule.id, arr);
   }
-  function getMobilisationEffectsForLevel(levelKey: string): { effect: MobilisationLevelEffect; globalIndex: number }[] {
-    const all = getMobilisationLevelEffects();
+  function getLawEffectsForLevel(def: LawDefinition, levelKey: string) {
+    const all = getLawLevelEffects(def);
     return all.map((e, i) => ({ effect: e, globalIndex: i })).filter(({ effect }) => effect.level === levelKey);
   }
   function getDefaultTargetForKind(effectKind: string): string | null {
@@ -790,17 +811,17 @@ export function ReglesForm({
     if (EFFECT_KINDS_WITH_BUDGET_TARGET.has(effectKind)) return getBudgetMinistryOptions()[0]?.key ?? BUDGET_MINISTRY_KEYS[0];
     if (EFFECT_KINDS_WITH_BRANCH_TARGET.has(effectKind)) return MILITARY_BRANCH_EFFECT_IDS[0];
     if (EFFECT_KINDS_WITH_ROSTER_UNIT_TARGET.has(effectKind)) return rosterUnits[0]?.id ?? null;
+    if (EFFECT_KINDS_WITH_SUB_TYPE_TARGET.has(effectKind)) return subTypeOptions[0]?.value ?? MILITARY_BRANCH_EFFECT_IDS[0] + SUB_TYPE_TARGET_SEP;
     return null;
   }
-  function addMobilisationEffect(level: string) {
-    setMobilisationLevelEffects([...getMobilisationLevelEffects(), { level, effect_kind: "stat_delta", effect_target: "militarism", value: 0 }]);
+  function addLawEffect(def: LawDefinition, level: string) {
+    setLawLevelEffects(def, [...getLawLevelEffects(def), { level, effect_kind: "stat_delta", effect_target: "militarism", value: 0 }]);
   }
-  function removeMobilisationEffect(index: number) {
-    const arr = getMobilisationLevelEffects().filter((_, i) => i !== index);
-    setMobilisationLevelEffects(arr);
+  function removeLawEffect(def: LawDefinition, index: number) {
+    setLawLevelEffects(def, getLawLevelEffects(def).filter((_, i) => i !== index));
   }
-  function updateMobilisationEffect(index: number, patch: Partial<MobilisationLevelEffect>) {
-    const arr = getMobilisationLevelEffects();
+  function updateLawEffect(def: LawDefinition, index: number, patch: Partial<LawLevelEffect>) {
+    const arr = getLawLevelEffects(def);
     const next = arr.map((e, i) => {
       if (i !== index) return e;
       const merged = { ...e, ...patch };
@@ -809,7 +830,7 @@ export function ReglesForm({
       }
       return merged;
     });
-    setMobilisationLevelEffects(next);
+    setLawLevelEffects(def, next);
   }
 
   function getBudgetValue(r: RuleParameter): BudgetMinistryValue {
@@ -890,12 +911,12 @@ export function ReglesForm({
   const inputClassNarrow =
     "w-full max-w-20 rounded border bg-[var(--background)] px-1.5 py-1 font-mono text-xs text-[var(--foreground)] focus:border-[var(--accent)] focus:outline-none focus:ring-1 focus:ring-[var(--accent)]";
   const inputStyle = { borderColor: "var(--border)" };
-  const genericEffectTypeTooltip = "Choisit la mécanique exacte appliquée par ce réglage : croissance, stat, budget, unité, influence, relation ou idéologie.";
-  const genericStatTooltip = "Choisit la statistique du pays concernée par l'effet.";
-  const genericBudgetTooltip = "Choisit le ministère concerné par l'effet.";
-  const genericBranchTooltip = "Choisit la branche militaire ciblée par l'effet.";
-  const genericUnitTooltip = "Choisit l'unité militaire précise touchée par l'effet.";
-  const genericEffectValueTooltip = "Règle l'intensité de l'effet sélectionné. Une valeur plus élevée renforce son impact à chaque application.";
+  const genericEffectTypeTooltip = "Type de mécanique appliquée (croissance, stat, budget, unité, influence, relation ou idéologie).";
+  const genericStatTooltip = "Statistique du pays concernée (militarisme, industrie, science, stabilité).";
+  const genericBudgetTooltip = "Ministère concerné par l'effet.";
+  const genericBranchTooltip = "Branche militaire ciblée (terre, air, mer, stratégique).";
+  const genericUnitTooltip = "Unité militaire précise touchée par l'effet.";
+  const genericEffectValueTooltip = "Intensité de l'effet. Plus la valeur est élevée, plus l'impact est fort à chaque application.";
   const sphereWarning = "Ce réglage existe dans l'admin, mais son branchement réel doit être vérifié en test avant de le considérer comme pleinement fiable.";
 
   const ruleForMinistry = rulesByKey.get(simulatorMinistry);
@@ -955,13 +976,13 @@ export function ReglesForm({
         </div>
       ) : (
         <div
-          className="rounded-lg border overflow-hidden p-4"
+          className="rounded-lg border overflow-hidden p-4 flex flex-col gap-4"
           style={{ background: "var(--background-panel)", borderColor: "var(--border)" }}
         >
           {items.length > 0 && (
             <CollapsibleBlock
               title="Effets Globaux"
-              infoContent={<TooltipBody text="Réglages qui s'appliquent à l'ensemble du monde. Ils servent à fixer le climat général de la simulation, sans cibler un pays en particulier." />}
+              infoContent={<TooltipBody text="Réglages appliqués à tous les pays. Ils définissent le climat général de la simulation." />}
               open={effetsGlobauxOpen}
               onToggle={() => setEffetsGlobauxOpen((o) => !o)}
               variant="section"
@@ -969,7 +990,7 @@ export function ReglesForm({
               {globalGrowthEffectsRule && (
             <CollapsibleBlock
               title="Global [Appliqué à tous les pays]"
-              infoContent={<TooltipBody text="Liste des effets économiques et structurels communs à tous les pays à chaque passage du monde. C'est la météo générale de la campagne." />}
+              infoContent={<TooltipBody text="Effets appliqués à tous les pays à chaque passage du monde (croissance, stats, budget, etc.)." />}
               open={globalGrowthOpen}
               onToggle={() => setGlobalGrowthOpen((o) => !o)}
             >
@@ -1028,8 +1049,12 @@ export function ReglesForm({
                         className={inputClass}
                         style={inputStyle}
                       >
-                        {ALL_EFFECT_KIND_IDS.map((k) => (
-                          <option key={k} value={k}>{EFFECT_KIND_LABELS[k] ?? k}</option>
+                        {getEffectKindOptionGroups().map((group) => (
+                          <optgroup key={group.label} label={group.label}>
+                            {group.options.map((opt) => (
+                              <option key={opt.id} value={opt.id}>{opt.label}</option>
+                            ))}
+                          </optgroup>
                         ))}
                       </select>
                     </div>
@@ -1101,6 +1126,23 @@ export function ReglesForm({
                         </select>
                       </div>
                     )}
+                    {EFFECT_KINDS_WITH_SUB_TYPE_TARGET.has(globalEffectKind) && (
+                      <div>
+                        <label className="mb-0.5 block text-xs text-[var(--foreground-muted)]">
+                          <FormLabel label="Sous-branche/type" tooltip="Branche et sous-type militaire ciblé." />
+                        </label>
+                        <select
+                          value={globalEffectTarget ?? subTypeOptions[0]?.value ?? ""}
+                          onChange={(ev) => setGlobalEffectTarget(ev.target.value || null)}
+                          className={inputClass}
+                          style={inputStyle}
+                        >
+                          {subTypeOptions.map((opt) => (
+                            <option key={opt.value} value={opt.value}>{opt.label}</option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
                     <div>
                       <label className="mb-0.5 block text-xs text-[var(--foreground-muted)]">
                         <FormLabel label={getEffectKindValueHelper(globalEffectKind).valueLabel} tooltip={genericEffectValueTooltip} />
@@ -1140,7 +1182,7 @@ export function ReglesForm({
               {statsDiceModifierRangesRule && (
                 <CollapsibleBlock
                   title="Statistiques"
-                  infoContent={<TooltipBody text="Définit comment les stats du pays se traduisent en bonus ou malus lors des jets admin et des événements IA." />}
+                  infoContent={<TooltipBody text="Bonus ou malus aux jets (dés) selon les stats du pays, pour les demandes joueurs et les events IA." />}
                   open={statsOpen}
                   onToggle={() => setStatsOpen((o) => !o)}
                 >
@@ -1178,11 +1220,25 @@ export function ReglesForm({
               {worldDateRule && worldDateAdvanceRule && (
                 <CollapsibleBlock
                   title="Date"
-                  infoContent={<TooltipBody text="Règle la date officielle de l'univers de jeu et la vitesse à laquelle elle avance au fil des passages du monde." />}
+                  infoContent={<TooltipBody text="Date officielle de l'univers et nombre de mois avançant à chaque passage du monde." />}
                   open={worldDateOpen}
                   onToggle={() => setWorldDateOpen((o) => !o)}
                 >
                   <div className="p-3 space-y-3">
+                    {cronPausedRule && (
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          id="cron-paused"
+                          checked={cronPausedRule.value === true || String(cronPausedRule.value) === "true"}
+                          onChange={(e) => updateValue(cronPausedRule.id, e.target.checked)}
+                          className="rounded"
+                        />
+                        <label htmlFor="cron-paused" className="text-sm text-[var(--foreground)]">
+                          Jeu en pause (le cron ne s&apos;exécute plus automatiquement ; les jours restent passables manuellement)
+                        </label>
+                      </div>
+                    )}
                     <p className="text-xs text-[var(--foreground-muted)]">
                       Date du monde affichée aux joueurs (ex. Rapport du Cabinet). À chaque passage du cron, la date avance du nombre de mois indiqué dans la temporalité (0 = date figée).
                     </p>
@@ -1251,14 +1307,14 @@ export function ReglesForm({
           {items.length > 0 && (
           <CollapsibleBlock
             title="Lois"
-            infoContent={<TooltipBody text="Réunit les réglages structurels des ministères, du budget et de la mobilisation. Ces règles influencent directement l'évolution des pays." />}
+            infoContent={<TooltipBody text="Réglages des ministères, du budget et de la mobilisation. Ils influencent directement l'évolution des pays." />}
             open={loisOpen}
             onToggle={() => setLoisOpen((o) => !o)}
             variant="section"
           >
           <CollapsibleBlock
             title="Paramètres Budget"
-            infoContent={<TooltipBody text="Définit comment chaque ministère réagit au financement : seuil minimal, bonus en cas d'effort suffisant, et malus en cas de sous-financement." />}
+            infoContent={<TooltipBody text="Pour chaque ministère : seuil minimal, bonus si assez financé, malus si sous-financé." />}
             open={budgetOpen}
             onToggle={() => setBudgetOpen((o) => !o)}
           >
@@ -1268,14 +1324,14 @@ export function ReglesForm({
               if (!r) return null;
               const val = getBudgetValue(r);
               const effectsList = val.effects ?? [];
-              const isOpen = budgetMinistryOpen[key] ?? true;
+              const isOpen = budgetMinistryOpen[key] ?? false;
               return (
                 <CollapsibleBlock
                   key={r.id}
                   title={BUDGET_MINISTRY_LABELS[key] ?? key}
                   open={isOpen}
                   onToggle={() =>
-                    setBudgetMinistryOpen((prev) => ({ ...prev, [key]: !(prev[key] ?? true) }))
+                    setBudgetMinistryOpen((prev) => ({ ...prev, [key]: !(prev[key] ?? false) }))
                   }
                 >
                   <div className="p-3 space-y-3" style={{ borderColor: "var(--border-muted)" }}>
@@ -1492,164 +1548,198 @@ export function ReglesForm({
             </div>
           </CollapsibleBlock>
 
-          {mobilisationConfigRule && mobilisationEffectsRule && (
-            <CollapsibleBlock
-              title="Mobilisation"
-              infoContent={<TooltipBody text="Transforme le score de mobilisation en paliers politiques et militaires, puis applique les effets correspondants lors de la mise à jour du monde." />}
-              open={mobilisationOpen}
-              onToggle={() => setMobilisationOpen((o) => !o)}
-            >
-              <div className="p-3 space-y-4">
-                <p className="text-xs text-[var(--foreground-muted)]">
-                  Les paramètres et effets de mobilisation sont lus par le cron à chaque exécution. Toute modification enregistrée ici sera prise en compte à la prochaine mise à jour quotidienne.
-                </p>
-                <div>
-                  <div className="text-xs font-medium text-[var(--foreground-muted)] mb-2">
-                    <TitleWithInfo title="Seuils par palier (score 0–500)" tooltip="Chaque valeur indique à partir de quel score le pays entre dans ce palier de mobilisation." className="inline-flex items-center gap-1.5" />
+          {LAW_DEFINITIONS.map((def) => {
+            const configRule = getLawConfigRule(def);
+            const effectsRule = getLawEffectsRule(def);
+            if (!configRule || !effectsRule) return null;
+            const isOpen = lawSectionsOpen[def.lawKey] ?? false;
+            return (
+              <CollapsibleBlock
+                key={def.lawKey}
+                title={def.title_fr}
+                infoContent={<TooltipBody text={`Seuils, pas quotidien et effets par palier pour la loi « ${def.title_fr} ».`} />}
+                open={isOpen}
+                onToggle={() => setLawSectionsOpen((o) => ({ ...o, [def.lawKey]: !o[def.lawKey] }))}
+              >
+                <div className="p-3 space-y-4">
+                  <p className="text-xs text-[var(--foreground-muted)]">
+                    Les paramètres et effets sont lus par le cron à chaque exécution. Toute modification enregistrée ici sera prise en compte à la prochaine mise à jour quotidienne.
+                  </p>
+                  <div>
+                    <div className="text-xs font-medium text-[var(--foreground-muted)] mb-2">
+                      <TitleWithInfo title="Seuils par palier (score 0–500)" tooltip="Chaque valeur indique à partir de quel score le pays entre dans ce palier." className="inline-flex items-center gap-1.5" />
+                    </div>
+                    <div className="grid gap-2 grid-cols-2 sm:grid-cols-3 lg:grid-cols-5">
+                      {def.levels.map((level) => {
+                        const config = getLawConfig(def);
+                        const thresholds = config.level_thresholds ?? {};
+                        const val = thresholds[level.key] ?? 0;
+                        return (
+                          <div key={level.key} className="flex flex-col gap-0.5">
+                            <label className="text-xs text-[var(--foreground-muted)]">
+                              <FormLabel label={level.label} tooltip={`Score minimal pour le palier « ${level.label} ».`} />
+                            </label>
+                            <input
+                              type="number"
+                              min={0}
+                              max={500}
+                              value={val}
+                              onChange={(e) => updateLawThreshold(def, level.key, Math.max(0, Math.min(500, Number(e.target.value) || 0)))}
+                              className="rounded border py-1.5 px-2 text-sm w-20 font-mono"
+                              style={{ borderColor: "var(--border)", background: "var(--background)" }}
+                            />
+                          </div>
+                        );
+                      })}
+                    </div>
                   </div>
-                  <div className="grid gap-2 grid-cols-2 sm:grid-cols-3 lg:grid-cols-5">
-                    {MOBILISATION_LEVEL_KEYS.map((key) => {
-                      const config = getMobilisationConfig();
-                      const thresholds = config.level_thresholds ?? {};
-                      const val = thresholds[key] ?? 0;
+                  <div className="space-y-4">
+                    {def.levels.map((level) => {
+                      const effectsWithIndex = getLawEffectsForLevel(def, level.key);
                       return (
-                        <div key={key} className="flex flex-col gap-0.5">
-                          <label className="text-xs text-[var(--foreground-muted)]">
-                            <FormLabel label={MOBILISATION_LEVEL_LABELS[key]} tooltip={`Score minimal nécessaire pour atteindre le palier « ${MOBILISATION_LEVEL_LABELS[key]} ».`} />
-                          </label>
-                          <input
-                            type="number"
-                            min={0}
-                            max={500}
-                            value={val}
-                            onChange={(e) => updateMobilisationThreshold(key, Math.max(0, Math.min(500, Number(e.target.value) || 0)))}
-                            className="rounded border py-1.5 px-2 text-sm w-20 font-mono"
-                            style={{ borderColor: "var(--border)", background: "var(--background)" }}
-                          />
+                        <div key={level.key} className="rounded border p-3" style={{ borderColor: "var(--border-muted)" }}>
+                          <div className="text-sm font-medium text-[var(--foreground)] mb-2">
+                            <TitleWithInfo title={level.label} tooltip={`Effets actifs lorsque le pays est dans le palier « ${level.label} ».`} className="inline-flex items-center gap-2" />
+                          </div>
+                          <ul className="space-y-2">
+                            {effectsWithIndex.map(({ effect: e, globalIndex: idx }) => {
+                              const valueHelper = getEffectKindValueHelper(e.effect_kind);
+                              const inputValue = valueHelper.storedToDisplay(Number(e.value));
+                              const needsStatTarget = EFFECT_KINDS_WITH_STAT_TARGET.has(e.effect_kind);
+                              const needsBudgetTarget = EFFECT_KINDS_WITH_BUDGET_TARGET.has(e.effect_kind);
+                              const needsBranchTarget = EFFECT_KINDS_WITH_BRANCH_TARGET.has(e.effect_kind);
+                              const needsRosterTarget = EFFECT_KINDS_WITH_ROSTER_UNIT_TARGET.has(e.effect_kind);
+                              const needsSubTypeTarget = EFFECT_KINDS_WITH_SUB_TYPE_TARGET.has(e.effect_kind);
+                              const onValueChange = (val: number) => updateLawEffect(def, idx, { value: valueHelper.displayToStored(val) });
+                              return (
+                                <li key={idx} className="flex flex-wrap items-center gap-2 text-sm">
+                                  <select
+                                    value={e.effect_kind}
+                                    onChange={(ev) => updateLawEffect(def, idx, { effect_kind: ev.target.value })}
+                                    className="rounded border bg-[var(--background)] px-1.5 py-1 text-[var(--foreground)] text-xs"
+                                    style={{ borderColor: "var(--border)", maxWidth: "240px" }}
+                                  >
+                                    {getEffectKindOptionGroups().map((group) => (
+                                      <optgroup key={group.label} label={group.label}>
+                                        {group.options.map((opt) => (
+                                          <option key={opt.id} value={opt.id}>{opt.label}</option>
+                                        ))}
+                                      </optgroup>
+                                    ))}
+                                  </select>
+                                  {needsStatTarget && (
+                                    <select
+                                      value={e.effect_target ?? STAT_KEYS[0]}
+                                      onChange={(ev) => updateLawEffect(def, idx, { effect_target: ev.target.value || null })}
+                                      className="rounded border bg-[var(--background)] px-1.5 py-1 text-[var(--foreground)]"
+                                      style={{ borderColor: "var(--border)" }}
+                                    >
+                                      {STAT_KEYS.map((k) => (
+                                        <option key={k} value={k}>{STAT_LABELS[k]}</option>
+                                      ))}
+                                    </select>
+                                  )}
+                                  {needsBudgetTarget && (
+                                    <select
+                                      value={e.effect_target ?? getBudgetMinistryOptions()[0]?.key ?? ""}
+                                      onChange={(ev) => updateLawEffect(def, idx, { effect_target: ev.target.value || null })}
+                                      className="rounded border bg-[var(--background)] px-1.5 py-1 text-[var(--foreground)]"
+                                      style={{ borderColor: "var(--border)" }}
+                                    >
+                                      {getBudgetMinistryOptions().map(({ key, label }) => (
+                                        <option key={key} value={key}>{label}</option>
+                                      ))}
+                                    </select>
+                                  )}
+                                  {needsBranchTarget && (
+                                    <select
+                                      value={e.effect_target ?? MILITARY_BRANCH_EFFECT_IDS[0]}
+                                      onChange={(ev) => updateLawEffect(def, idx, { effect_target: ev.target.value || null })}
+                                      className="rounded border bg-[var(--background)] px-1.5 py-1 text-[var(--foreground)]"
+                                      style={{ borderColor: "var(--border)" }}
+                                    >
+                                      {MILITARY_BRANCH_EFFECT_IDS.map((b) => (
+                                        <option key={b} value={b}>{MILITARY_BRANCH_EFFECT_LABELS[b]}</option>
+                                      ))}
+                                    </select>
+                                  )}
+                                  {needsRosterTarget && (
+                                    <select
+                                      value={e.effect_target ?? rosterUnits[0]?.id ?? ""}
+                                      onChange={(ev) => updateLawEffect(def, idx, { effect_target: ev.target.value || null })}
+                                      className="rounded border bg-[var(--background)] px-1.5 py-1 text-[var(--foreground)]"
+                                      style={{ borderColor: "var(--border)", minWidth: "140px" }}
+                                    >
+                                      {rosterUnits.map((u) => (
+                                        <option key={u.id} value={u.id}>{u.name_fr}</option>
+                                      ))}
+                                    </select>
+                                  )}
+                                  {needsSubTypeTarget && (
+                                    <select
+                                      value={e.effect_target ?? subTypeOptions[0]?.value ?? ""}
+                                      onChange={(ev) => updateLawEffect(def, idx, { effect_target: ev.target.value || null })}
+                                      className="rounded border bg-[var(--background)] px-1.5 py-1 text-[var(--foreground)]"
+                                      style={{ borderColor: "var(--border)", minWidth: "160px" }}
+                                    >
+                                      {subTypeOptions.map((opt) => (
+                                        <option key={opt.value} value={opt.value}>{opt.label}</option>
+                                      ))}
+                                    </select>
+                                  )}
+                                  <label className="flex items-center gap-1">
+                                    <span className="text-[var(--foreground-muted)] shrink-0">
+                                      <FormLabel label={valueHelper.valueLabel} tooltip={genericEffectValueTooltip} />
+                                    </span>
+                                    <input
+                                      type="number"
+                                      step={valueHelper.valueStep}
+                                      value={inputValue}
+                                      onChange={(ev) => onValueChange(Number(ev.target.value) || 0)}
+                                      className="w-20 rounded border bg-[var(--background)] px-1.5 py-1 font-mono text-[var(--foreground)]"
+                                      style={{ borderColor: "var(--border)" }}
+                                    />
+                                  </label>
+                                  <button
+                                    type="button"
+                                    onClick={() => removeLawEffect(def, idx)}
+                                    className="text-[var(--danger)] hover:underline"
+                                  >
+                                    Supprimer
+                                  </button>
+                                </li>
+                              );
+                            })}
+                          </ul>
+                          <button
+                            type="button"
+                            onClick={() => addLawEffect(def, level.key)}
+                            className="mt-1 text-xs text-[var(--accent)] hover:underline"
+                          >
+                            Ajouter un effet
+                          </button>
                         </div>
                       );
                     })}
                   </div>
                 </div>
-                <div className="space-y-4">
-                  {MOBILISATION_LEVEL_KEYS.map((levelKey) => {
-                    const effectsWithIndex = getMobilisationEffectsForLevel(levelKey);
-                    return (
-                      <div key={levelKey} className="rounded border p-3" style={{ borderColor: "var(--border-muted)" }}>
-                        <div className="text-sm font-medium text-[var(--foreground)] mb-2">
-                          <TitleWithInfo title={MOBILISATION_LEVEL_LABELS[levelKey]} tooltip={`Effets appliqués quand un pays se trouve dans le palier « ${MOBILISATION_LEVEL_LABELS[levelKey]} ».`} className="inline-flex items-center gap-2" />
-                        </div>
-                        <ul className="space-y-2">
-                          {effectsWithIndex.map(({ effect: e, globalIndex: idx }) => {
-                            const valueHelper = getEffectKindValueHelper(e.effect_kind);
-                            const inputValue = valueHelper.storedToDisplay(Number(e.value));
-                            const needsStatTarget = EFFECT_KINDS_WITH_STAT_TARGET.has(e.effect_kind);
-                            const needsBudgetTarget = EFFECT_KINDS_WITH_BUDGET_TARGET.has(e.effect_kind);
-                            const needsBranchTarget = EFFECT_KINDS_WITH_BRANCH_TARGET.has(e.effect_kind);
-                            const needsRosterTarget = EFFECT_KINDS_WITH_ROSTER_UNIT_TARGET.has(e.effect_kind);
-                            const onValueChange = (val: number) => updateMobilisationEffect(idx, { value: valueHelper.displayToStored(val) });
-                            return (
-                              <li key={idx} className="flex flex-wrap items-center gap-2 text-sm">
-                                {needsStatTarget && (
-                                  <select
-                                    value={e.effect_target ?? STAT_KEYS[0]}
-                                    onChange={(ev) => updateMobilisationEffect(idx, { effect_target: ev.target.value || null })}
-                                    className="rounded border bg-[var(--background)] px-1.5 py-1 text-[var(--foreground)]"
-                                    style={{ borderColor: "var(--border)" }}
-                                  >
-                                    {STAT_KEYS.map((k) => (
-                                      <option key={k} value={k}>{STAT_LABELS[k]}</option>
-                                    ))}
-                                  </select>
-                                )}
-                                {needsBudgetTarget && (
-                                  <select
-                                    value={e.effect_target ?? getBudgetMinistryOptions()[0]?.key ?? ""}
-                                    onChange={(ev) => updateMobilisationEffect(idx, { effect_target: ev.target.value || null })}
-                                    className="rounded border bg-[var(--background)] px-1.5 py-1 text-[var(--foreground)]"
-                                    style={{ borderColor: "var(--border)" }}
-                                  >
-                                    {getBudgetMinistryOptions().map(({ key, label }) => (
-                                      <option key={key} value={key}>{label}</option>
-                                    ))}
-                                  </select>
-                                )}
-                                {needsBranchTarget && (
-                                  <select
-                                    value={e.effect_target ?? MILITARY_BRANCH_EFFECT_IDS[0]}
-                                    onChange={(ev) => updateMobilisationEffect(idx, { effect_target: ev.target.value || null })}
-                                    className="rounded border bg-[var(--background)] px-1.5 py-1 text-[var(--foreground)]"
-                                    style={{ borderColor: "var(--border)" }}
-                                  >
-                                    {MILITARY_BRANCH_EFFECT_IDS.map((b) => (
-                                      <option key={b} value={b}>{MILITARY_BRANCH_EFFECT_LABELS[b]}</option>
-                                    ))}
-                                  </select>
-                                )}
-                                {needsRosterTarget && (
-                                  <select
-                                    value={e.effect_target ?? rosterUnits[0]?.id ?? ""}
-                                    onChange={(ev) => updateMobilisationEffect(idx, { effect_target: ev.target.value || null })}
-                                    className="rounded border bg-[var(--background)] px-1.5 py-1 text-[var(--foreground)]"
-                                    style={{ borderColor: "var(--border)", minWidth: "140px" }}
-                                  >
-                                    {rosterUnits.map((u) => (
-                                      <option key={u.id} value={u.id}>{u.name_fr}</option>
-                                    ))}
-                                  </select>
-                                )}
-                                <label className="flex items-center gap-1">
-                                  <span className="text-[var(--foreground-muted)] shrink-0">
-                                    <FormLabel label={valueHelper.valueLabel} tooltip={genericEffectValueTooltip} />
-                                  </span>
-                                  <input
-                                    type="number"
-                                    step={valueHelper.valueStep}
-                                    value={inputValue}
-                                    onChange={(ev) => onValueChange(Number(ev.target.value) || 0)}
-                                    className="w-20 rounded border bg-[var(--background)] px-1.5 py-1 font-mono text-[var(--foreground)]"
-                                    style={{ borderColor: "var(--border)" }}
-                                  />
-                                </label>
-                                <button
-                                  type="button"
-                                  onClick={() => removeMobilisationEffect(idx)}
-                                  className="text-[var(--danger)] hover:underline"
-                                >
-                                  Supprimer
-                                </button>
-                              </li>
-                            );
-                          })}
-                        </ul>
-                        <button
-                          type="button"
-                          onClick={() => addMobilisationEffect(levelKey)}
-                          className="mt-1 text-xs text-[var(--accent)] hover:underline"
-                        >
-                          Ajouter un effet
-                        </button>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            </CollapsibleBlock>
-          )}
+              </CollapsibleBlock>
+            );
+          })}
           </CollapsibleBlock>
           )}
 
           {(countriesForMatrice && relationMapForMatrice) && (
             <CollapsibleBlock
               title="Diplomatie"
-              infoContent={<TooltipBody text="Réunit les règles qui structurent les relations entre pays : perception mutuelle, poids international, emprise sur d'autres pays et certains effets de voisinage." />}
+              infoContent={<TooltipBody text="Relations entre pays : perception mutuelle, influence, emprise et effets de voisinage." />}
               open={diplomatieOpen}
               onToggle={() => setDiplomatieOpen((o) => !o)}
               variant="section"
             >
               <CollapsibleBlock
                 title="Matrice diplomatique"
-                infoContent={<TooltipBody text="Permet de fixer la relation bilatérale entre deux pays. Cette valeur influence plusieurs systèmes, dont certains événements et l'idéologie." />}
+                infoContent={<TooltipBody text="Valeur de la relation entre deux pays. Utilisée par les events IA et le calcul d'idéologie." />}
                 open={matriceOpen}
                 onToggle={() => setMatriceOpen((o) => !o)}
               >
@@ -1660,7 +1750,7 @@ export function ReglesForm({
               {items.length > 0 && influenceConfigRule && (
                 <CollapsibleBlock
                   title="Influence"
-                  infoContent={<TooltipBody text="Détermine comment se calcule le poids international d'un pays à partir de son économie, de sa population, de sa puissance militaire et de sa stabilité." />}
+                  infoContent={<TooltipBody text="Calcul du poids international : PIB, population, puissance militaire et stabilité." />}
                   open={influenceOpen}
                   onToggle={() => setInfluenceOpen((o) => !o)}
                 >
@@ -1776,7 +1866,7 @@ export function ReglesForm({
           {items.length > 0 && ideologyConfigRule && (
             <CollapsibleBlock
               title="Idéologie"
-              infoContent={<TooltipBody text="Règle la vitesse et la force du glissement idéologique des pays, désormais uniquement via les voisins et les effets idéologiques actifs." />}
+              infoContent={<TooltipBody text="Vitesse du glissement idéologique des pays (voisins et effets actifs)." />}
               open={ideologyOpen}
               onToggle={() => setIdeologyOpen((o) => !o)}
               variant="section"
@@ -1884,11 +1974,11 @@ export function ReglesForm({
             </CollapsibleBlock>
           )}
 
-          <div className="mt-8 pt-8 border-t" style={{ borderColor: "var(--border-muted)" }}>
+          <div>
           {aiMajorEffectsRule && aiMinorEffectsRule && (
             <CollapsibleBlock
               title="Intelligence Artificielle"
-              infoContent={<TooltipBody text="Règle le rythme d'action des pays sans joueur et les avantages ou handicaps permanents accordés aux IA majeures et mineures." />}
+              infoContent={<TooltipBody text="Rythme de génération des events IA et effets permanents pour les IA majeures et mineures." />}
               open={aiOpen}
               onToggle={() => setAiOpen((o) => !o)}
               variant="section"
@@ -1919,7 +2009,7 @@ export function ReglesForm({
                     <div className="grid gap-4 sm:grid-cols-2">
                       <div>
                         <label className="mb-1 block text-xs text-[var(--foreground-muted)]">
-                          <FormLabel label="Intervalle (heures)" tooltip="Temps minimum entre deux générations automatiques d'actions IA." />
+                          <FormLabel label="Intervalle (heures)" tooltip="Délai minimum entre deux passages du cron qui génère les events IA." />
                         </label>
                         <input
                           type="number"
@@ -2118,13 +2208,18 @@ export function ReglesForm({
                             <FormLabel label="Type d'effet" tooltip={genericEffectTypeTooltip} />
                           </label>
                           <select value={aiMajorEffectKind} onChange={(ev) => { const k = ev.target.value; setAiMajorEffectKind(k); setAiMajorEffectTarget(getDefaultTargetForKindGlobal(k)); }} className={inputClass} style={inputStyle}>
-                            {ALL_EFFECT_KIND_IDS.map((k) => (<option key={k} value={k}>{EFFECT_KIND_LABELS[k] ?? k}</option>))}
+                            {getEffectKindOptionGroups().map((group) => (
+                              <optgroup key={group.label} label={group.label}>
+                                {group.options.map((opt) => (<option key={opt.id} value={opt.id}>{opt.label}</option>))}
+                              </optgroup>
+                            ))}
                           </select>
                         </div>
                         {EFFECT_KINDS_WITH_STAT_TARGET.has(aiMajorEffectKind) && (<div><label className="mb-0.5 block text-xs text-[var(--foreground-muted)]"><FormLabel label="Stat" tooltip={genericStatTooltip} /></label><select value={aiMajorEffectTarget ?? STAT_KEYS[0]} onChange={(ev) => setAiMajorEffectTarget(ev.target.value || null)} className={inputClass} style={inputStyle}>{STAT_KEYS.map((k) => (<option key={k} value={k}>{STAT_LABELS[k]}</option>))}</select></div>)}
                         {EFFECT_KINDS_WITH_BUDGET_TARGET.has(aiMajorEffectKind) && (<div><label className="mb-0.5 block text-xs text-[var(--foreground-muted)]"><FormLabel label="Ministère" tooltip={genericBudgetTooltip} /></label><select value={aiMajorEffectTarget ?? getBudgetMinistryOptions()[0]?.key ?? ""} onChange={(ev) => setAiMajorEffectTarget(ev.target.value || null)} className={inputClass} style={inputStyle}>{getBudgetMinistryOptions().map(({ key, label }) => (<option key={key} value={key}>{label}</option>))}</select></div>)}
                         {EFFECT_KINDS_WITH_BRANCH_TARGET.has(aiMajorEffectKind) && (<div><label className="mb-0.5 block text-xs text-[var(--foreground-muted)]"><FormLabel label="Branche" tooltip={genericBranchTooltip} /></label><select value={aiMajorEffectTarget ?? MILITARY_BRANCH_EFFECT_IDS[0]} onChange={(ev) => setAiMajorEffectTarget(ev.target.value || null)} className={inputClass} style={inputStyle}>{MILITARY_BRANCH_EFFECT_IDS.map((b) => (<option key={b} value={b}>{MILITARY_BRANCH_EFFECT_LABELS[b]}</option>))}</select></div>)}
                         {EFFECT_KINDS_WITH_ROSTER_UNIT_TARGET.has(aiMajorEffectKind) && (<div><label className="mb-0.5 block text-xs text-[var(--foreground-muted)]"><FormLabel label="Unité" tooltip={genericUnitTooltip} /></label><select value={aiMajorEffectTarget ?? rosterUnits[0]?.id ?? ""} onChange={(ev) => setAiMajorEffectTarget(ev.target.value || null)} className={inputClass} style={inputStyle}>{rosterUnits.map((u) => (<option key={u.id} value={u.id}>{u.name_fr}</option>))}</select></div>)}
+                        {EFFECT_KINDS_WITH_SUB_TYPE_TARGET.has(aiMajorEffectKind) && (<div><label className="mb-0.5 block text-xs text-[var(--foreground-muted)]"><FormLabel label="Sous-branche/type" tooltip="Branche et sous-type militaire." /></label><select value={aiMajorEffectTarget ?? subTypeOptions[0]?.value ?? ""} onChange={(ev) => setAiMajorEffectTarget(ev.target.value || null)} className={inputClass} style={inputStyle}>{subTypeOptions.map((opt) => (<option key={opt.value} value={opt.value}>{opt.label}</option>))}</select></div>)}
                         <div><label className="mb-0.5 block text-xs text-[var(--foreground-muted)]"><FormLabel label={getEffectKindValueHelper(aiMajorEffectKind).valueLabel} tooltip={genericEffectValueTooltip} /></label><input type="number" step={getEffectKindValueHelper(aiMajorEffectKind).valueStep} value={aiMajorEffectValue} onChange={(e) => setAiMajorEffectValue(e.target.value)} className={inputClassNarrow} style={inputStyle} /></div>
                         <div className="flex gap-2"><button type="button" onClick={() => saveAiEffectForm("major")} className="rounded py-1.5 px-3 text-sm font-medium" style={{ background: "var(--accent)", color: "#0f1419" }}>Enregistrer</button><button type="button" onClick={() => setAiMajorFormOpen(false)} className="rounded border py-1.5 px-3 text-sm" style={{ borderColor: "var(--border)" }}>Annuler</button></div>
                       </div>
@@ -2158,13 +2253,18 @@ export function ReglesForm({
                             <FormLabel label="Type d'effet" tooltip={genericEffectTypeTooltip} />
                           </label>
                           <select value={aiMinorEffectKind} onChange={(ev) => { const k = ev.target.value; setAiMinorEffectKind(k); setAiMinorEffectTarget(getDefaultTargetForKindGlobal(k)); }} className={inputClass} style={inputStyle}>
-                            {ALL_EFFECT_KIND_IDS.map((k) => (<option key={k} value={k}>{EFFECT_KIND_LABELS[k] ?? k}</option>))}
+                            {getEffectKindOptionGroups().map((group) => (
+                              <optgroup key={group.label} label={group.label}>
+                                {group.options.map((opt) => (<option key={opt.id} value={opt.id}>{opt.label}</option>))}
+                              </optgroup>
+                            ))}
                           </select>
                         </div>
                         {EFFECT_KINDS_WITH_STAT_TARGET.has(aiMinorEffectKind) && (<div><label className="mb-0.5 block text-xs text-[var(--foreground-muted)]"><FormLabel label="Stat" tooltip={genericStatTooltip} /></label><select value={aiMinorEffectTarget ?? STAT_KEYS[0]} onChange={(ev) => setAiMinorEffectTarget(ev.target.value || null)} className={inputClass} style={inputStyle}>{STAT_KEYS.map((k) => (<option key={k} value={k}>{STAT_LABELS[k]}</option>))}</select></div>)}
                         {EFFECT_KINDS_WITH_BUDGET_TARGET.has(aiMinorEffectKind) && (<div><label className="mb-0.5 block text-xs text-[var(--foreground-muted)]"><FormLabel label="Ministère" tooltip={genericBudgetTooltip} /></label><select value={aiMinorEffectTarget ?? getBudgetMinistryOptions()[0]?.key ?? ""} onChange={(ev) => setAiMinorEffectTarget(ev.target.value || null)} className={inputClass} style={inputStyle}>{getBudgetMinistryOptions().map(({ key, label }) => (<option key={key} value={key}>{label}</option>))}</select></div>)}
                         {EFFECT_KINDS_WITH_BRANCH_TARGET.has(aiMinorEffectKind) && (<div><label className="mb-0.5 block text-xs text-[var(--foreground-muted)]"><FormLabel label="Branche" tooltip={genericBranchTooltip} /></label><select value={aiMinorEffectTarget ?? MILITARY_BRANCH_EFFECT_IDS[0]} onChange={(ev) => setAiMinorEffectTarget(ev.target.value || null)} className={inputClass} style={inputStyle}>{MILITARY_BRANCH_EFFECT_IDS.map((b) => (<option key={b} value={b}>{MILITARY_BRANCH_EFFECT_LABELS[b]}</option>))}</select></div>)}
                         {EFFECT_KINDS_WITH_ROSTER_UNIT_TARGET.has(aiMinorEffectKind) && (<div><label className="mb-0.5 block text-xs text-[var(--foreground-muted)]"><FormLabel label="Unité" tooltip={genericUnitTooltip} /></label><select value={aiMinorEffectTarget ?? rosterUnits[0]?.id ?? ""} onChange={(ev) => setAiMinorEffectTarget(ev.target.value || null)} className={inputClass} style={inputStyle}>{rosterUnits.map((u) => (<option key={u.id} value={u.id}>{u.name_fr}</option>))}</select></div>)}
+                        {EFFECT_KINDS_WITH_SUB_TYPE_TARGET.has(aiMinorEffectKind) && (<div><label className="mb-0.5 block text-xs text-[var(--foreground-muted)]"><FormLabel label="Sous-branche/type" tooltip="Branche et sous-type militaire." /></label><select value={aiMinorEffectTarget ?? subTypeOptions[0]?.value ?? ""} onChange={(ev) => setAiMinorEffectTarget(ev.target.value || null)} className={inputClass} style={inputStyle}>{subTypeOptions.map((opt) => (<option key={opt.value} value={opt.value}>{opt.label}</option>))}</select></div>)}
                         <div><label className="mb-0.5 block text-xs text-[var(--foreground-muted)]"><FormLabel label={getEffectKindValueHelper(aiMinorEffectKind).valueLabel} tooltip={genericEffectValueTooltip} /></label><input type="number" step={getEffectKindValueHelper(aiMinorEffectKind).valueStep} value={aiMinorEffectValue} onChange={(e) => setAiMinorEffectValue(e.target.value)} className={inputClassNarrow} style={inputStyle} /></div>
                         <div className="flex gap-2"><button type="button" onClick={() => saveAiEffectForm("minor")} className="rounded py-1.5 px-3 text-sm font-medium" style={{ background: "var(--accent)", color: "#0f1419" }}>Enregistrer</button><button type="button" onClick={() => setAiMinorFormOpen(false)} className="rounded border py-1.5 px-3 text-sm" style={{ borderColor: "var(--border)" }}>Annuler</button></div>
                       </div>
@@ -2179,7 +2279,7 @@ export function ReglesForm({
           {intelConfigRule && (
             <CollapsibleBlock
               title="Espionnage / Intelligence"
-              infoContent={<TooltipBody text="Paramètres du brouillard de guerre : decay quotidien du niveau d'intel et gain lors de l'acceptation d'une action d'espionnage." />}
+              infoContent={<TooltipBody text="Brouillard de guerre : baisse quotidienne du niveau d'intel et gain lors d'une action d'espionnage acceptée." />}
               open={intelOpen}
               onToggle={() => setIntelOpen((o) => !o)}
               variant="section"

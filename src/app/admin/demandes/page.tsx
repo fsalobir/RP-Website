@@ -18,7 +18,7 @@ export default async function AdminDemandesPage() {
         state_action_types:state_action_types(key, label_fr, cost, params_schema)
       `)
       .order("created_at", { ascending: false }),
-    supabase.from("military_roster_units").select("id, name_fr, branch, base_count").order("name_fr"),
+    supabase.from("military_roster_units").select("id, name_fr, branch, sub_type, base_count").order("branch").order("sub_type").order("name_fr"),
     supabase.from("countries").select("id, population, gdp, stability"),
     supabase.from("countries").select("id, name").order("name"),
     supabase.from("country_military_units").select("country_id, roster_unit_id, current_level, extra_count"),
@@ -57,7 +57,8 @@ export default async function AdminDemandesPage() {
     } as RequestRow;
   });
 
-  const rosterUnitIds = (rosterRes.data ?? []) as { id: string; name_fr: string }[];
+  const rosterUnits = (rosterRes.data ?? []) as Array<{ id: string; name_fr: string; branch: MilitaryBranch; sub_type: string | null; base_count: number }>;
+const rosterUnitIds = rosterUnits.map((u) => ({ id: u.id, name_fr: u.name_fr }));
 
   const targetCountryIds = new Set<string>();
   for (const r of requests) {
@@ -79,7 +80,6 @@ export default async function AdminDemandesPage() {
 
   const countries = (countriesRes.data ?? []) as Array<{ id: string; population: number; gdp: number; stability: number }>;
   const countryMilitaryUnitsAll = (cmuRes.data ?? []) as Array<{ country_id: string; roster_unit_id: string; current_level: number; extra_count: number }>;
-  const rosterUnits = (rosterRes.data ?? []) as Array<{ id: string; branch: MilitaryBranch; base_count: number }>;
   const rosterLevels = (rosterLevelsRes.data ?? []) as Array<{ unit_id: string; level: number; hard_power: number }>;
   const influenceConfig = (influenceConfigRes.data?.value ?? {}) as Parameters<typeof computeInfluenceForAll>[2];
   const hardPowerByCountry = computeHardPowerByCountry(countryMilitaryUnitsAll, rosterUnits, rosterLevels);
@@ -106,6 +106,7 @@ export default async function AdminDemandesPage() {
       <DemandesList
         requests={requests}
         rosterUnitIds={rosterUnitIds}
+        rosterUnits={rosterUnits}
         targetCountriesById={targetCountriesById}
         influenceByCountryId={influenceByCountryId}
         relationMap={relationMap}

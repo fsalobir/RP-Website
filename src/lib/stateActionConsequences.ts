@@ -120,6 +120,20 @@ export async function applyImmediateEffect(
     return {};
   }
 
+  if (kind === "relation_delta" && target) {
+    const current = await getRelation(supabase, countryId, target);
+    const [a, b] = normalizePair(countryId, target);
+    const newValue = clampRelation(current + value);
+    const { error: relErr } = await supabase
+      .from("country_relations")
+      .upsert(
+        { country_a_id: a, country_b_id: b, value: newValue, updated_at: new Date().toISOString() },
+        { onConflict: "country_a_id,country_b_id" }
+      );
+    if (relErr) return { error: relErr.message };
+    return {};
+  }
+
   if (
     kind === "ideology_snap_monarchism" ||
     kind === "ideology_snap_republicanism" ||
@@ -369,32 +383,27 @@ export async function applyStateActionConsequences({
       : "";
 
   const discordKey = `${actionKey}_accepted`;
-  dispatchToDiscord(
-    discordKey,
-    {
-      country_id: countryId,
-      country_name: countryName,
-      action_label: actionLabel,
-      resolution_date: resolutionDate,
-      date: resolutionDate,
-      dice_success: diceSuccess ? "true" : "false",
-      dice_success_label: diceSuccess ? "Succès" : "Échec",
-      ...(actionKey === "demande_up"
-        ? {
-            up_kind: upKind,
-            up_summary: diceSuccess ? upSummary : "Aucun effet",
-          }
-        : {
-            target_country_id: targetCountryId ?? undefined,
-            target_country_name: targetCountryName,
-            impact_magnitude_text: discordImpactMagnitude ?? undefined,
-            impact_value: discordImpactValue != null ? discordImpactValue : undefined,
-            impact_label: discordImpactLabel,
-          }),
-      admin_effects_summary: adminEffectsSummary,
-    },
-    supabase
-  ).catch(() => {});
+  const basePayload: Record<string, string | number | null | undefined> = {
+    country_id: countryId,
+    country_name: countryName,
+    action_label: actionLabel,
+    resolution_date: resolutionDate,
+    date: resolutionDate,
+    dice_success: diceSuccess ? "true" : "false",
+    dice_success_label: diceSuccess ? "Succès" : "Échec",
+    admin_effects_summary: adminEffectsSummary,
+  };
+  if (actionKey === "demande_up") {
+    basePayload.up_kind = upKind;
+    basePayload.up_summary = diceSuccess ? upSummary : "Aucun effet";
+  } else {
+    if (targetCountryId) basePayload.target_country_id = targetCountryId;
+    if (targetCountryName) basePayload.target_country_name = targetCountryName;
+    if (discordImpactMagnitude != null) basePayload.impact_magnitude_text = discordImpactMagnitude;
+    if (discordImpactValue != null) basePayload.impact_value = discordImpactValue;
+    if (discordImpactMagnitude != null) basePayload.impact_label = discordImpactLabel;
+  }
+  dispatchToDiscord(discordKey, basePayload, supabase).catch(() => {});
 
   return {};
 }
