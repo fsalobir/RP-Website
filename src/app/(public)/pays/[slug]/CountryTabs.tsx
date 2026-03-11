@@ -33,6 +33,7 @@ import { CountryTabDebug } from "./CountryTabDebug";
 import { CountryTabCabinet } from "./CountryTabCabinet";
 import { CountryTabStateActions } from "./CountryTabStateActions";
 import { CountryTabLaws } from "./CountryTabLaws";
+import { InfoTooltipWithWikiLink } from "@/components/ui/InfoTooltipWithWikiLink";
 
 const BUDGET_MINISTRIES = [
   { key: "pct_etat" as const, label: "Ministère d'État", tooltip: "Génère des actions d'état.", group: 1 as const },
@@ -944,7 +945,7 @@ export function CountryTabs({
         </div>
       )}
 
-      <div className="tab-list mb-6" style={{ borderColor: "var(--border)" }}>
+      <div className="tab-list mb-6 flex flex-wrap items-center gap-2" style={{ borderColor: "var(--border)" }}>
         {canSeeCabinetAndBudget && (
           <button
             type="button"
@@ -1057,6 +1058,13 @@ export function CountryTabs({
             Debug
           </button>
         )}
+        <span className="ml-2 inline-flex items-center self-center" onClick={(e) => e.stopPropagation()}>
+          <InfoTooltipWithWikiLink
+            text="La fiche pays se lit onglet par onglet : Rapport du Cabinet, Généralités, Militaire, Avantages, Budget, Lois et Actions d'État (selon votre accès)."
+            wikiSectionId="fiche-pays-onglets"
+            side="bottom"
+          />
+        </span>
       </div>
 
       {tab === "general" && (

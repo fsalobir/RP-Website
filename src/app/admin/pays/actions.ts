@@ -428,3 +428,22 @@ export async function updateCountryAiStatus(
   revalidatePath("/");
   return {};
 }
+
+/** Met à jour le continent d'un pays (admin uniquement). */
+export async function updateCountryContinent(
+  countryId: string,
+  continentId: string | null
+): Promise<{ error?: string }> {
+  const supabase = await createClient();
+  const { data: adminRow } = await supabase.from("admins").select("id").limit(1).single();
+  if (!adminRow) return { error: "Non autorisé." };
+
+  const { error } = await supabase
+    .from("countries")
+    .update({ continent_id: continentId || null, updated_at: new Date().toISOString() })
+    .eq("id", countryId);
+  if (error) return { error: error.message };
+  revalidatePath("/admin/pays");
+  revalidatePath("/");
+  return {};
+}

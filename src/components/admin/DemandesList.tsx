@@ -479,6 +479,8 @@ function RequestDetail({
 
   const payload = request.payload ?? {};
   const isAdminActionable = request.status === "pending";
+  /** Admin peut refuser même en attente cible (alliance / coopération militaire) pour éviter que les demandes pourrissent. */
+  const adminCanRefuse = request.status === "pending" || request.status === "pending_target";
   const targetId = typeof payload.target_country_id === "string" ? payload.target_country_id : null;
   const targetCountry = targetId ? targetCountriesById[targetId] : null;
   const hasTarget = targetCountry != null;
@@ -494,7 +496,7 @@ function RequestDetail({
   }
 
   async function handleRefuse() {
-    if (!isAdminActionable) return;
+    if (!adminCanRefuse) return;
     setLoading("refuse");
     onError("");
     const res = await refuseRequest(request.id, refund, refusalMsg);
@@ -915,8 +917,9 @@ function RequestDetail({
         </div>
       )}
 
-      {isAdminActionable && (
+      {(isAdminActionable || request.status === "pending_target") && (
         <div className="mt-6 space-y-4 border-t pt-4" style={{ borderColor: "var(--border)" }}>
+          {isAdminActionable && (
           <div>
             <h3 className="mb-2 text-sm font-medium text-[var(--foreground)]">Ajouter conséquences optionnelles</h3>
             <div className="mb-3 grid gap-4 lg:grid-cols-2">
@@ -957,8 +960,10 @@ function RequestDetail({
               />
             )}
           </div>
+          )}
           {ACTION_KEYS_REQUIRING_IMPACT_ROLL.has(request.state_action_types?.key ?? "") &&
-            !request.dice_results?.impact_roll && (
+            !request.dice_results?.impact_roll &&
+            isAdminActionable && (
               <p className="text-sm text-amber-500 dark:text-amber-400">
                 Lancez le jet d&apos;impact pour pouvoir accepter cette demande.
               </p>
@@ -969,6 +974,7 @@ function RequestDetail({
                 type="button"
                 onClick={handleAccept}
                 disabled={
+                  !isAdminActionable ||
                   loading !== null ||
                   (ACTION_KEYS_REQUIRING_IMPACT_ROLL.has(request.state_action_types?.key ?? "") &&
                     !request.dice_results?.impact_roll)

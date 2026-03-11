@@ -25,7 +25,6 @@ const defaultCountry: Partial<Country> = {
   stability: 0,
   population: 0,
   gdp: 0,
-  growth: 0,
 };
 
 type Continent = { id: string; slug: string; label_fr: string };
@@ -51,7 +50,6 @@ export function CountryForm({
     stability: country?.stability ?? defaultCountry.stability ?? 0,
     population: country?.population ?? defaultCountry.population ?? 0,
     gdp: country?.gdp ?? defaultCountry.gdp ?? 0,
-    growth: country?.growth ?? defaultCountry.growth ?? 0,
   });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -105,7 +103,6 @@ export function CountryForm({
       stability: Number(form.stability),
       population: Number(form.population),
       gdp: Number(form.gdp),
-      growth: Number(form.growth),
     };
     if (isEdit && country) {
       const { error: err } = await supabase.from("countries").update(row).eq("id", country.id);
@@ -263,7 +260,7 @@ export function CountryForm({
 
       <section className={panelClass} style={panelStyle}>
         <h2 className="mb-4 text-lg font-semibold text-[var(--foreground)]">Macros</h2>
-        <div className="grid gap-4 sm:grid-cols-3">
+        <div className="grid gap-4 sm:grid-cols-2">
           <div>
             <label className="mb-1 block text-sm text-[var(--foreground-muted)]">Population</label>
             <input
@@ -283,17 +280,6 @@ export function CountryForm({
               step={0.01}
               value={form.gdp}
               onChange={(e) => update("gdp", e.target.valueAsNumber ?? 0)}
-              className={inputClass}
-              style={inputStyle}
-            />
-          </div>
-          <div>
-            <label className="mb-1 block text-sm text-[var(--foreground-muted)]">Croissance (%)</label>
-            <input
-              type="number"
-              step={0.01}
-              value={form.growth}
-              onChange={(e) => update("growth", e.target.valueAsNumber ?? 0)}
               className={inputClass}
               style={inputStyle}
             />

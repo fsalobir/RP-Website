@@ -166,7 +166,7 @@ export default async function HomePage({
           </Link>
         </div>
       ) : (
-        <CountriesTable rows={rows} />
+        <CountriesTable rows={rows} showSearch showWikiTooltips />
       )}
     </div>
   );

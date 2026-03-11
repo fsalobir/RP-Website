@@ -44,6 +44,9 @@ export function PublicNav({
           <Link href="/ideologie" className={navLinkClass}>
             <span aria-hidden className="mr-1.5">△</span>Idéologie
           </Link>
+          <Link href="/wiki" className={navLinkClass}>
+            <span aria-hidden className="mr-1.5">📖</span>Wiki
+          </Link>
           <div className={separatorClass} role="separator" />
           {isLoggedIn ? (
             <>

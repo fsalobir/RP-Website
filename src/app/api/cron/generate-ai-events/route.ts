@@ -1,6 +1,6 @@
 /**
  * Route API pour déclencher la génération des events IA (run_ai_events_cron).
- * À appeler par un cron externe (ex. cron-job.org) ou manuellement pour tester.
+ * À appeler par un cron externe ou manuellement pour tester.
  * Protégée par CRON_SECRET (en-tête x-cron-secret ou query secret).
  * Query ?force=true : appelle run_ai_events_cron(p_force=true) pour ignorer l'intervalle.
  * La réponse inclut un résumé de config pour diagnostiquer pourquoi 0 event est généré.

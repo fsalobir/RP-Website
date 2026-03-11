@@ -5,7 +5,7 @@ import { ResetStatsButton } from "./ResetStatsButton";
 import { AdvanceDayButton } from "./AdvanceDayButton";
 import { RandomizeBudgetsButton } from "./RandomizeBudgetsButton";
 import { RandomizeIdeologiesButton } from "./RandomizeIdeologiesButton";
-import { updateCountryAiStatus } from "./actions";
+import { updateCountryAiStatus, updateCountryContinent } from "./actions";
 
 function normId(id: string | null | undefined): string {
   return String(id ?? "").trim().toLowerCase();
@@ -16,33 +16,28 @@ export default async function AdminPaysListPage() {
   const [
     { data: countries },
     { data: countryPlayers },
-    { data: historyRows, error: historyError },
+    { data: continents },
   ] = await Promise.all([
     supabase
       .from("countries")
-      .select("id, name, slug, flag_url, regime, population, gdp, militarism, industry, science, stability, ai_status")
+      .select("id, name, slug, flag_url, regime, population, gdp, militarism, industry, science, stability, ai_status, continent_id")
       .order("name"),
-    supabase.from("country_players").select("country_id"),
-    supabase
-      .from("country_history")
-      .select("country_id, date, population, gdp, militarism, industry, science, stability")
-      .order("date", { ascending: false }),
+    supabase.from("country_players").select("country_id, name").order("country_id"),
+    supabase.from("continents").select("id, slug, label_fr").order("sort_order"),
   ]);
 
-  const latestByCountry = new Map<string, NonNullable<typeof historyRows>[number]>();
-  if (historyRows?.length && !historyError) {
-    for (const row of historyRows) {
-      const id = normId(row.country_id);
-      if (id && !latestByCountry.has(id)) {
-        latestByCountry.set(id, row);
-      }
-    }
+  const playerNameByCountryId: Record<string, string> = {};
+  for (const p of countryPlayers ?? []) {
+    const row = p as { country_id: string; name: string | null };
+    const name = row.name?.trim() || null;
+    if (row.country_id) playerNameByCountryId[row.country_id] = name ?? "—";
   }
 
   const rows =
     countries?.map((c) => ({
       country: c,
-      prev: latestByCountry.get(normId(c.id)) ?? null,
+      prev: null,
+      influence: null as number | null,
     })) ?? [];
 
   const countryIdsWithPlayer = (countryPlayers ?? []).map((p) => (p as { country_id: string }).country_id);
@@ -87,7 +82,17 @@ export default async function AdminPaysListPage() {
           </Link>
         </div>
       ) : (
-        <CountriesTable rows={rows} showModifierButton showAiStatusColumn updateAiStatusAction={updateCountryAiStatus} countryIdsWithPlayer={countryIdsWithPlayer} />
+        <CountriesTable
+          rows={rows}
+          showModifierButton
+          showAiStatusColumn
+          updateAiStatusAction={updateCountryAiStatus}
+          countryIdsWithPlayer={countryIdsWithPlayer}
+          adminLayout
+          playerNameByCountryId={playerNameByCountryId}
+          continents={continents ?? []}
+          updateCountryContinentAction={updateCountryContinent}
+        />
       )}
     </div>
   );

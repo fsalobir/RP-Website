@@ -3,6 +3,7 @@
 import { useState, useMemo } from "react";
 import Link from "next/link";
 import { formatNumber, formatGdp, formatPopulation } from "@/lib/format";
+import { InfoTooltipWithWikiLink } from "@/components/ui/InfoTooltipWithWikiLink";
 
 type CountryForClassement = {
   id: string;
@@ -146,7 +147,7 @@ export function ClassementContent({ rows }: { rows: Row[] }) {
 
   return (
     <div>
-      <div className="tab-list mb-6" style={{ borderColor: "var(--border)" }}>
+      <div className="tab-list mb-6 flex flex-wrap items-center gap-2" style={{ borderColor: "var(--border)" }}>
         <button
           type="button"
           className={tabClass(mainTab === "global")}
@@ -174,6 +175,13 @@ export function ClassementContent({ rows }: { rows: Row[] }) {
         >
           Economique
         </button>
+        <span className="ml-2 inline-flex items-center" onClick={(e) => e.stopPropagation()}>
+          <InfoTooltipWithWikiLink
+            text="Rangs des pays par influence, puissance militaire ou indicateurs économiques. Les flèches indiquent l'évolution du rang."
+            wikiSectionId="classement-metrics"
+            side="bottom"
+          />
+        </span>
       </div>
 
       {mainTab === "global" && (

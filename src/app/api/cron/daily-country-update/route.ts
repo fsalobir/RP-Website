@@ -1,6 +1,6 @@
 /**
  * Route API pour déclencher le passage de jour (run_daily_country_update).
- * À appeler par un cron externe (ex. cron-job.org, une fois par jour).
+ * À appeler par un cron externe ou manuellement pour tester.
  * Protégée par CRON_SECRET (en-tête x-cron-secret ou query secret).
  */
 

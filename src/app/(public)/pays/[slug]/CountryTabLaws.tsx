@@ -95,7 +95,7 @@ function LawCard({
   const router = useRouter();
   const [settingLevel, setSettingLevel] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [expanded, setExpanded] = useState(true);
+  const [expanded, setExpanded] = useState(false);
   const pendingTarget = useRef<number | null>(null);
   const startedAt = useRef<number | null>(null);
 

@@ -8,7 +8,29 @@ import {
   type MapRegionCountryRow,
 } from "@/lib/mapRegions";
 import { buildWorldGeoJSONWithRegionIds } from "@/lib/buildWorldGeoJSON";
-import { RelationMapClient } from "./RelationMapClient";
+import { RelationMapClient, type SphereData } from "./RelationMapClient";
+
+const SPHERE_EMPIRE_COLORS = [
+  "#f97316",
+  "#06b6d4",
+  "#8b5cf6",
+  "#22c55e",
+  "#f43f5e",
+  "#eab308",
+  "#14b8a6",
+  "#3b82f6",
+  "#a855f7",
+  "#84cc16",
+  "#f59e0b",
+  "#ef4444",
+];
+
+type ControlRow = {
+  country_id: string;
+  controller_country_id: string;
+  share_pct: number;
+  is_annexed: boolean;
+};
 
 function deriveControlStatus(
   controls: { share_pct: number; is_annexed: boolean }[]
@@ -33,12 +55,7 @@ export default async function CartePage() {
   const regions = (regionsRes.data ?? []) as MapRegionRow[];
   const regionCountries = (regionCountriesRes.data ?? []) as MapRegionCountryRow[];
   const countries = (countriesRes.data ?? []) as { id: string; slug: string; name: string }[];
-  const controlRows = (controlRes.data ?? []) as Array<{
-    country_id: string;
-    controller_country_id: string;
-    share_pct: number;
-    is_annexed: boolean;
-  }>;
+  const controlRows = (controlRes.data ?? []) as ControlRow[];
 
   const regionNames: Record<string, string> = {};
   regions.forEach((r) => {
@@ -98,6 +115,75 @@ export default async function CartePage() {
     regionControl[rc.region_id] = { status, controllerName, controllerRegionId };
   }
 
+  const countryNames: Record<string, string> = {};
+  countries.forEach((country) => {
+    countryNames[country.id] = country.name;
+  });
+
+  function resolveEffectiveEmpireId(countryId: string): string {
+    const visited = new Set<string>();
+    let current = countryId;
+    while (!visited.has(current)) {
+      visited.add(current);
+      const controls = controlsByCountry.get(current) ?? [];
+      if (controls.length !== 1) return current;
+      const sole = controls[0];
+      if (Number(sole.share_pct) < 100) return current;
+      if (!sole.controller_country_id || sole.controller_country_id === current) return current;
+      current = sole.controller_country_id;
+    }
+    return current;
+  }
+
+  const sphereCountryControl: SphereData["countryControl"] = {};
+  const empireCoreCountryIds = new Set<string>();
+  controlsByCountry.forEach((controls, countryId) => {
+    const aggregatedByEmpire = new Map<string, number>();
+    for (const control of controls) {
+      const share = Math.max(0, Number(control.share_pct) || 0);
+      if (share <= 0) continue;
+      const effectiveEmpireId = resolveEffectiveEmpireId(control.controller_country_id);
+      const prev = aggregatedByEmpire.get(effectiveEmpireId) ?? 0;
+      aggregatedByEmpire.set(effectiveEmpireId, prev + share);
+    }
+    const slices = Array.from(aggregatedByEmpire.entries())
+      .map(([controllerId, sharePct]) => ({
+        controllerId,
+        sharePct,
+      }))
+      .map((control) => ({
+        controllerId: control.controllerId,
+        sharePct: Math.max(0, Number(control.sharePct) || 0),
+      }))
+      .filter((slice) => slice.sharePct > 0);
+    if (slices.length === 0) return;
+    slices.forEach((slice) => empireCoreCountryIds.add(slice.controllerId));
+    const is100Single = slices.length === 1 && slices[0].sharePct >= 100;
+    sphereCountryControl[countryId] = {
+      is100Single,
+      controllerId: is100Single ? slices[0].controllerId : undefined,
+      slices: slices
+        .sort((a, b) => b.sharePct - a.sharePct)
+        .map((slice) => ({ controllerId: slice.controllerId, sharePct: Math.min(100, slice.sharePct) })),
+    };
+  });
+
+  const empireIds = Array.from(empireCoreCountryIds).sort((a, b) =>
+    (countryNames[a] ?? a).localeCompare(countryNames[b] ?? b, "fr")
+  );
+  const empires = empireIds.map((id, index) => ({
+    id,
+    name: countryNames[id] ?? "Empire inconnu",
+    color: SPHERE_EMPIRE_COLORS[index % SPHERE_EMPIRE_COLORS.length],
+  }));
+
+  const sphereData: SphereData = {
+    empires,
+    countryControl: sphereCountryControl,
+    countryNames,
+    empireCoreCountryIds: Array.from(empireCoreCountryIds),
+  };
+
   return (
     <div className="mx-auto max-w-6xl px-4 py-10">
       <h1 className="mb-2 text-2xl font-bold text-[var(--foreground)]">
@@ -113,6 +199,7 @@ export default async function CartePage() {
         regionCountryNames={regionCountryNames}
         defaultSelectedRegionId={defaultSelectedRegionId}
         regionControl={regionControl}
+        sphereData={sphereData}
       />
     </div>
   );

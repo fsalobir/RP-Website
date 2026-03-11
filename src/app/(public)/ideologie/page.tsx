@@ -1,6 +1,7 @@
 import { createServiceRoleClient } from "@/lib/supabase/server";
 import { IdeologyTriangle } from "@/components/ideology/IdeologyTriangle";
 import { fetchWorldIdeologyState } from "@/lib/ideologyServer";
+import { IdeologieHeader } from "./IdeologieHeader";
 
 export const dynamic = "force-dynamic";
 
@@ -35,13 +36,7 @@ export default async function IdeologiePage() {
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-10">
-      <div className="mb-8">
-        <h1 className="text-2xl font-bold text-[var(--foreground)]">Idéologie</h1>
-        <p className="mt-1 text-[var(--foreground-muted)]">
-          Panorama immersif du monde selon les trois grands pôles idéologiques : Monarchisme, Républicanisme et Cultisme.
-        </p>
-      </div>
-
+      <IdeologieHeader />
       <IdeologyTriangle entries={entries} />
     </div>
   );

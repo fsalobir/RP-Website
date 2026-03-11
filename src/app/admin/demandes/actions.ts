@@ -368,7 +368,8 @@ export async function refuseRequest(
     .single();
 
   if (fetchErr || !req) return { error: fetchErr?.message ?? "Requête introuvable." };
-  if (req.status !== "pending") return { error: "Cette demande a déjà été traitée." };
+  if (req.status !== "pending" && req.status !== "pending_target")
+    return { error: "Cette demande a déjà été traitée." };
 
   const refPayload = (req.payload ?? {}) as Record<string, string>;
   const refTargetCountryId = typeof refPayload.target_country_id === "string" ? refPayload.target_country_id : undefined;

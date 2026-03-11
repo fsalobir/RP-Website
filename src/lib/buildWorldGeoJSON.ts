@@ -58,6 +58,7 @@ export function buildWorldGeoJSONWithRegionIds(
   }
 
   const numericToRegionId = new Map<number, string>();
+  const numericToCountryId = new Map<number, string>();
   for (const link of regionCountries) {
     const slug = countryIdToSlug.get(link.country_id);
     if (!slug) continue;
@@ -66,6 +67,7 @@ export function buildWorldGeoJSONWithRegionIds(
     const numeric = ISO2_TO_NUMERIC[iso2.toLowerCase()];
     if (numeric == null) continue;
     numericToRegionId.set(numeric, link.region_id);
+    numericToCountryId.set(numeric, link.country_id);
   }
 
   const byRegionId = new Map<string, WorldGeoJSONFeature[]>();
@@ -74,11 +76,12 @@ export function buildWorldGeoJSONWithRegionIds(
   for (const f of fc.features) {
     const numeric = f.id != null ? Number(f.id) : null;
     const regionId = numeric != null ? (numericToRegionId.get(numeric) ?? null) : null;
+    const countryId = numeric != null ? (numericToCountryId.get(numeric) ?? null) : null;
     const name = regionId ? (regionNames[regionId] ?? "") : (f.properties?.name as string) ?? "";
     const feat: WorldGeoJSONFeature = {
       type: "Feature",
       id: f.id,
-      properties: { regionId, name },
+      properties: { regionId, countryId, name },
       geometry: f.geometry,
     };
     if (regionId != null) {
@@ -94,7 +97,7 @@ export function buildWorldGeoJSONWithRegionIds(
   const orphanFeatures: WorldGeoJSONFeature[] = orphanRegions.map((r) => ({
     type: "Feature" as const,
     id: `orphan-${r.id}`,
-    properties: { regionId: r.id, name: regionNames[r.id] ?? r.name },
+    properties: { regionId: r.id, countryId: null, name: regionNames[r.id] ?? r.name },
     geometry: r.geometry,
   }));
 
@@ -111,7 +114,7 @@ export function buildWorldGeoJSONWithRegionIds(
     linkedButNotInAtlas.push({
       type: "Feature",
       id: `linked-${link.region_id}`,
-      properties: { regionId: link.region_id, name: regionNames[link.region_id] ?? "" },
+      properties: { regionId: link.region_id, countryId: link.country_id, name: regionNames[link.region_id] ?? "" },
       geometry: geom,
     });
   }
@@ -128,7 +131,7 @@ function oneFeaturePerCountry(
   const result: WorldGeoJSONFeature[] = [];
   byRegionId.forEach((list, regionId) => {
     const name = regionNames[regionId] ?? "";
-    list.forEach((f) => result.push({ type: "Feature", id: f.id, properties: { regionId, name }, geometry: f.geometry }));
+    list.forEach((f) => result.push({ type: "Feature", id: f.id, properties: { regionId, countryId: f.properties.countryId ?? null, name }, geometry: f.geometry }));
   });
   return result;
 }

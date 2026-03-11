@@ -8,17 +8,34 @@ type TooltipProps = {
   children: React.ReactNode;
   /** Optionnel : position préférée (par défaut au-dessus) */
   side?: "top" | "bottom";
+  /** Délai en ms avant fermeture au leave. Défaut 120. */
+  closeDelay?: number;
+  /** Si true, le tooltip reste ouvert pour permettre de cliquer un lien à l’intérieur : pas de fermeture au leave du déclencheur ni du contenu, seulement au clic en dehors (ou au clic sur l’icône). */
+  interactive?: boolean;
 };
 
 /**
  * Tooltip : affiché au survol (desktop) ou au clic (mobile).
  * Réutilisable partout dans l’app.
  */
-export function Tooltip({ content, children, side = "top" }: TooltipProps) {
+const DEFAULT_CLOSE_DELAY = 120;
+const FADE_OUT_MS = 200;
+const INTERACTIVE_AUTO_CLOSE_MS = 2000;
+
+export function Tooltip({
+  content,
+  children,
+  side = "top",
+  closeDelay = DEFAULT_CLOSE_DELAY,
+  interactive = false,
+}: TooltipProps) {
   const [open, setOpen] = useState(false);
+  const [closing, setClosing] = useState(false);
   const wrapperRef = useRef<HTMLSpanElement>(null);
   const tooltipRef = useRef<HTMLSpanElement>(null);
   const closeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const autoCloseTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const fadeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [position, setPosition] = useState<{ top: number; left: number; ready: boolean }>({
     top: 0,
     left: 0,
@@ -32,16 +49,44 @@ export function Tooltip({ content, children, side = "top" }: TooltipProps) {
     }
   }, []);
 
+  const clearAutoCloseTimeout = useCallback(() => {
+    if (autoCloseTimeoutRef.current) {
+      clearTimeout(autoCloseTimeoutRef.current);
+      autoCloseTimeoutRef.current = null;
+    }
+  }, []);
+
+  const requestClose = useCallback(() => {
+    clearCloseTimeout();
+    clearAutoCloseTimeout();
+    setClosing(true);
+  }, [clearCloseTimeout, clearAutoCloseTimeout]);
+
   const openTooltip = useCallback(() => {
     clearCloseTimeout();
-    setPosition((prev) => ({ ...prev, ready: false }));
-    setOpen(true);
-  }, [clearCloseTimeout]);
+    clearAutoCloseTimeout();
+    setClosing(false);
+    setOpen((wasOpen) => {
+      if (!wasOpen) setPosition((prev) => ({ ...prev, ready: false }));
+      return true;
+    });
+  }, [clearCloseTimeout, clearAutoCloseTimeout]);
 
   const closeTooltipSoon = useCallback(() => {
     clearCloseTimeout();
-    closeTimeoutRef.current = setTimeout(() => setOpen(false), 120);
-  }, [clearCloseTimeout]);
+    closeTimeoutRef.current = setTimeout(() => requestClose(), closeDelay);
+  }, [clearCloseTimeout, closeDelay, requestClose]);
+
+  const handleTriggerLeave = useCallback(() => {
+    if (interactive) return;
+    closeTooltipSoon();
+  }, [interactive, closeTooltipSoon]);
+
+  /** Au survol du contenu du tooltip : annuler une fermeture programmée sans toucher à position (évite de mettre ready: false et de faire disparaître le tooltip). */
+  const handleTooltipContentEnter = useCallback(() => {
+    clearCloseTimeout();
+    clearAutoCloseTimeout();
+  }, [clearCloseTimeout, clearAutoCloseTimeout]);
 
   const updatePosition = useCallback(() => {
     if (!wrapperRef.current || !tooltipRef.current || typeof window === "undefined") return;
@@ -73,7 +118,7 @@ export function Tooltip({ content, children, side = "top" }: TooltipProps) {
       const insideTrigger = wrapperRef.current?.contains(target) ?? false;
       const insideTooltip = tooltipRef.current?.contains(target) ?? false;
       if (!insideTrigger && !insideTooltip) {
-        setOpen(false);
+        requestClose();
       }
     }
     document.addEventListener("mousedown", handleClickOutside);
@@ -82,7 +127,7 @@ export function Tooltip({ content, children, side = "top" }: TooltipProps) {
       document.removeEventListener("mousedown", handleClickOutside);
       document.removeEventListener("touchstart", handleClickOutside);
     };
-  }, [open]);
+  }, [open, requestClose]);
 
   useLayoutEffect(() => {
     if (!open) return;
@@ -99,22 +144,51 @@ export function Tooltip({ content, children, side = "top" }: TooltipProps) {
   }, [open, updatePosition]);
 
   useEffect(() => {
-    return () => clearCloseTimeout();
-  }, [clearCloseTimeout]);
+    if (closing) {
+      fadeTimeoutRef.current = setTimeout(() => {
+        setOpen(false);
+        setClosing(false);
+        fadeTimeoutRef.current = null;
+      }, FADE_OUT_MS);
+      return () => {
+        if (fadeTimeoutRef.current) clearTimeout(fadeTimeoutRef.current);
+      };
+    }
+  }, [closing]);
+
+  useEffect(() => {
+    if (open && interactive) {
+      autoCloseTimeoutRef.current = setTimeout(() => requestClose(), INTERACTIVE_AUTO_CLOSE_MS);
+      return () => clearAutoCloseTimeout();
+    }
+  }, [open, interactive, requestClose, clearAutoCloseTimeout]);
+
+  useEffect(() => {
+    return () => {
+      clearCloseTimeout();
+      clearAutoCloseTimeout();
+      if (fadeTimeoutRef.current) clearTimeout(fadeTimeoutRef.current);
+    };
+  }, [clearCloseTimeout, clearAutoCloseTimeout]);
 
   return (
     <span
       ref={wrapperRef}
       className="inline-flex cursor-help"
       onMouseEnter={openTooltip}
-      onMouseLeave={closeTooltipSoon}
+      onMouseLeave={handleTriggerLeave}
       onClick={(e) => {
         e.preventDefault();
         e.stopPropagation();
         clearCloseTimeout();
+        clearAutoCloseTimeout();
         setOpen((o) => {
-          if (!o) setPosition((prev) => ({ ...prev, ready: false }));
-          return !o;
+          if (o) {
+            requestClose();
+            return true;
+          }
+          setPosition((prev) => ({ ...prev, ready: false }));
+          return true;
         });
       }}
     >
@@ -124,7 +198,7 @@ export function Tooltip({ content, children, side = "top" }: TooltipProps) {
             <span
               ref={tooltipRef}
               role="tooltip"
-              onMouseEnter={openTooltip}
+              onMouseEnter={handleTooltipContentEnter}
               onMouseLeave={closeTooltipSoon}
               className="block rounded border px-3 py-2 text-sm shadow-xl"
               style={{
@@ -136,6 +210,8 @@ export function Tooltip({ content, children, side = "top" }: TooltipProps) {
                 maxWidth: "min(34rem, calc(100vw - 24px))",
                 whiteSpace: "normal",
                 visibility: position.ready ? "visible" : "hidden",
+                opacity: closing ? 0 : 1,
+                transition: `opacity ${FADE_OUT_MS}ms ease-out`,
                 background: "var(--background-elevated)",
                 borderColor: "var(--border)",
                 color: "var(--foreground)",

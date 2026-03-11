@@ -1,32 +1,59 @@
-/**
- * Route API appelée par un cron externe pour exécuter le job « Process due AI events » :
- * applique les conséquences (relations, influence, effets, Discord) pour les events IA
- * acceptés dont scheduled_trigger_at est passé (ou null) et consequences_applied_at non renseigné.
- * Réservation via processing_started_at pour éviter le double traitement (appels parallèles).
- * Timeout retry : 10 min (lignes en cours sans consequences_applied_at re-sélectionnables).
- * Protégée par CRON_SECRET (en-tête ou query).
- */
+import { createClient } from "npm:@supabase/supabase-js@2";
+import { applyStateActionConsequences, ACTION_KEYS_REQUIRING_IMPACT_ROLL } from "./_shared/stateActionConsequences.ts";
+import { computeAiEventDiceRoll } from "./_shared/stateActionDice.ts";
+import type { DiceResults } from "./_shared/types.ts";
 
-import { NextRequest, NextResponse } from "next/server";
-import { createServiceRoleClient } from "@/lib/supabase/server";
-import { applyStateActionConsequences, ACTION_KEYS_REQUIRING_IMPACT_ROLL } from "@/lib/stateActionConsequences";
-import { computeAiEventDiceRoll } from "@/lib/stateActionDice";
-import type { DiceResults } from "@/types/database";
+type ActionTypeRow = { key: string; label_fr: string; params_schema: Record<string, number> };
 
-function getCronSecret(request: NextRequest): string | null {
-  const header = request.headers.get("x-cron-secret") ?? request.headers.get("authorization")?.replace(/^Bearer\s+/i, "");
-  if (header) return header;
-  return request.nextUrl.searchParams.get("secret");
+function isTruthy(value: string | undefined | null): boolean {
+  if (!value) return false;
+  const v = value.trim().toLowerCase();
+  return v === "1" || v === "true" || v === "yes" || v === "on";
 }
 
-export async function GET(request: NextRequest) {
-  const secret = getCronSecret(request);
-  const expected = process.env.CRON_SECRET;
-  if (!expected || secret !== expected) {
-    return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
+function getDryRun(request: Request): boolean {
+  const url = new URL(request.url);
+  const qp = url.searchParams.get("dry_run");
+  if (qp) return isTruthy(qp);
+  const header = request.headers.get("x-dry-run");
+  if (header) return isTruthy(header);
+  return false;
+}
+
+function isAuthorized(request: Request): boolean {
+  const expected = Deno.env.get("PROCESS_DUE_EDGE_SECRET");
+  if (!expected) return false;
+  const provided = request.headers.get("x-process-secret");
+  return provided === expected;
+}
+
+Deno.serve(async (request) => {
+  if (request.method !== "GET" && request.method !== "POST") {
+    return new Response(JSON.stringify({ error: "Méthode non supportée" }), { status: 405 });
+  }
+  if (!isAuthorized(request)) {
+    return new Response(JSON.stringify({ error: "Non autorisé" }), { status: 401 });
   }
 
-  const supabase = createServiceRoleClient();
+  const edgeEnabled = isTruthy(Deno.env.get("PROCESS_DUE_EDGE_ENABLED"));
+  const dryRun = getDryRun(request);
+  if (!edgeEnabled) {
+    return new Response(JSON.stringify({ ok: true, skipped: true, reason: "PROCESS_DUE_EDGE_ENABLED=false" }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+
+  const url = Deno.env.get("NEXT_PUBLIC_SUPABASE_URL") ?? Deno.env.get("SUPABASE_URL");
+  const serviceRole = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  if (!url || !serviceRole) {
+    return new Response(JSON.stringify({ ok: false, error: "NEXT_PUBLIC_SUPABASE_URL ou SUPABASE_SERVICE_ROLE_KEY manquant" }), {
+      status: 500,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+
+  const supabase = createClient(url, serviceRole, { auth: { persistSession: false } });
 
   const now = new Date();
   const retryAfterMs = 10 * 60 * 1000;
@@ -49,10 +76,12 @@ export async function GET(request: NextRequest) {
     .limit(50);
 
   if (fetchErr) {
-    return NextResponse.json({ error: fetchErr.message }, { status: 500 });
+    return new Response(JSON.stringify({ ok: false, error: fetchErr.message }), {
+      status: 500,
+      headers: { "Content-Type": "application/json" },
+    });
   }
 
-  type ActionTypeRow = { key: string; label_fr: string; params_schema: Record<string, number> };
   const list = (rows ?? []) as Array<{
     id: string;
     country_id: string;
@@ -64,9 +93,17 @@ export async function GET(request: NextRequest) {
 
   let processed = 0;
   let failed = 0;
+  let skippedByReservation = 0;
+  let refusedBySuccessRoll = 0;
   const errors: { id: string; error: string }[] = [];
+  const dryRunIds: string[] = [];
 
   for (const row of list) {
+    if (dryRun) {
+      dryRunIds.push(row.id);
+      continue;
+    }
+
     const { data: reserved } = await supabase
       .from("ai_event_requests")
       .update({ processing_started_at: new Date().toISOString() })
@@ -77,6 +114,7 @@ export async function GET(request: NextRequest) {
       .single();
 
     if (!reserved) {
+      skippedByReservation++;
       continue;
     }
 
@@ -114,6 +152,7 @@ export async function GET(request: NextRequest) {
             resolved_at: new Date().toISOString(),
           })
           .eq("id", row.id);
+        refusedBySuccessRoll++;
         continue;
       }
       diceResults = { success_roll: successResult };
@@ -176,5 +215,18 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  return NextResponse.json({ ok: true, processed, failed, total: list.length, errors });
-}
+  return new Response(
+    JSON.stringify({
+      ok: true,
+      dry_run: dryRun,
+      processed,
+      failed,
+      total: list.length,
+      skippedByReservation,
+      refusedBySuccessRoll,
+      dryRunIds: dryRun ? dryRunIds : undefined,
+      errors,
+    }),
+    { status: 200, headers: { "Content-Type": "application/json" } }
+  );
+});

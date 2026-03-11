@@ -1,4 +1,3 @@
-import type { SupabaseClient } from "@supabase/supabase-js";
 import { getRelationFromMap } from "./relations";
 import type { CountryRelationRow } from "./relations";
 
@@ -31,7 +30,7 @@ export type GeoJSONFeatureCollection = {
 export type WorldGeoJSONFeature = {
   type: "Feature";
   id?: string | number;
-  properties: { regionId: string | null; name: string };
+  properties: { regionId: string | null; countryId: string | null; name: string };
   geometry: unknown;
 };
 

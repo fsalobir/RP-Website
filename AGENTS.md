@@ -2,7 +2,7 @@
 
 ## Résumé
 - **Projet :** Site web de simulation de conflit moderne (nations, règles, indicateurs dynamiques).
-- **Stack :** Next.js (App Router), TypeScript, Tailwind, Supabase (DB + Auth + Storage + futur cron).
+- **Stack :** Next.js (App Router), TypeScript, Tailwind, Supabase (DB + Auth + Storage). Les passages automatiques (jour + génération IA) sont pilotés côté **Supabase** via **pg_cron** (migrations SQL). Détails : `supabase/CRON.md`.
 - **Langue :** Interface 100 % en français.
 - **Design :** Tableau de bord type QG militaire : fond sombre, panneaux, accents verts, lisible et sobre.
 
