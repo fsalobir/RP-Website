@@ -41,12 +41,13 @@ function HighlightMatches({
         if (React.isValidElement(child)) {
           const isFrag = child.type === React.Fragment;
           const fragSym = typeof Symbol !== "undefined" && "for" in Symbol ? Symbol.for("react.fragment") : null;
-          const isFragBySym = fragSym != null && child.type === fragSym;
+          const isFragBySym = fragSym != null && typeof child.type === "symbol" && child.type === fragSym;
+          const childProps = (child as React.ReactElement<{ children?: React.ReactNode }>).props;
           if (isFrag || isFragBySym)
-            return <HighlightMatches terms={terms}>{child.props.children}</HighlightMatches>;
-          if (child.props.children != null)
+            return <HighlightMatches terms={terms}>{childProps.children}</HighlightMatches>;
+          if (childProps.children != null)
             return React.cloneElement(child, {}, (
-              <HighlightMatches terms={terms}>{child.props.children}</HighlightMatches>
+              <HighlightMatches terms={terms}>{childProps.children}</HighlightMatches>
             ) as React.ReactNode);
         }
         return child;
