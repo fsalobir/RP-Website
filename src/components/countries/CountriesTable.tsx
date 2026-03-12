@@ -285,7 +285,7 @@ export function CountriesTable({
                 >
                   <td className="p-3 relative align-middle">
                     <Link
-                      href={`/pays/${c.slug}`}
+                      href={adminLayout ? `/admin/pays/${c.id}` : `/pays/${c.slug}`}
                       className="flex items-center gap-3 font-medium text-[var(--foreground)] hover:text-[var(--accent)] cursor-pointer relative z-[1] min-h-[2rem]"
                       style={{ isolation: "isolate" }}
                     >

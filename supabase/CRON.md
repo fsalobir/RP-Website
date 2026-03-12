@@ -114,6 +114,36 @@ Cela permet de couper le traitement en urgence sans modifier le schéma.
 
 ---
 
+## Le cron IA ne se déclenche pas tout seul
+
+Si « Simuler passage IA » fonctionne en admin mais que la date « Dernier run » ne change jamais sans action manuelle, le **déclenchement automatique** (pg_cron) ne tourne pas. À faire dans l’ordre :
+
+1. **Extensions**  
+   Supabase → Database → Extensions : activer **pg_cron** (et **pg_net** si tu utilises process-ai-events-due).
+
+2. **Présence du job**  
+   SQL Editor :
+   ```sql
+   SELECT jobid, jobname, schedule, command FROM cron.job WHERE jobname = 'ai-events-generation';
+   ```
+   - Aucune ligne → le job n’existe pas. Appliquer (ou réappliquer) les migrations de scheduling, par ex. `089_schedule_pg_cron_jobs.sql` puis `114_reconcile_pg_cron_jobs.sql`.
+   - Une ligne avec `schedule` = `0 * * * *` et `command` qui appelle `run_ai_events_cron()` → le job est bien défini.
+
+3. **Exécutions récentes**  
+   ```sql
+   SELECT jobname, start_time, end_time, status, return_message
+   FROM cron.job_run_details
+   WHERE jobname = 'ai-events-generation'
+   ORDER BY start_time DESC LIMIT 20;
+   ```
+   - Aucune exécution récente → pg_cron ne lance pas le job (vérifier l’extension, le projet, ou réappliquer les migrations).
+   - Des exécutions avec `status` = 'succeeded' mais `ai_events_last_run` ne change pas → la fonction sort sans rien faire (config : `interval_hours`, quotas, cibles ; voir section « Events IA: pourquoi ça ne tourne pas » ci-dessus).
+
+4. **Recréer les jobs**  
+   Si le job a disparu ou a été modifié : réexécuter `114_reconcile_pg_cron_jobs.sql` (ou `089_schedule_pg_cron_jobs.sql`) dans le SQL Editor.
+
+---
+
 ## Recréer les jobs si besoin
 
 Si les jobs ont disparu, appliquer/rejouer les migrations de scheduling (`089_schedule_pg_cron_jobs.sql`, `115_schedule_process_due_edge_function.sql`) ou la migration de réconciliation la plus récente.

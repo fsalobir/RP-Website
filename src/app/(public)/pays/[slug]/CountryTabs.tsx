@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useMemo, useRef } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import type { Country } from "@/types/database";
 import type { MilitaryBranch } from "@/types/database";
 import type { CountryBudget } from "@/types/database";
@@ -70,6 +71,9 @@ export function CountryTabs({
   macros,
   limits,
   perksDef,
+  perkCategories = [],
+  activePerkIds = new Set<string>(),
+  perkEffects = [],
   unlockedPerkIds,
   budget,
   effects,
@@ -91,7 +95,7 @@ export function CountryTabs({
   ai_status = null,
   aiMajorEffects = [],
   aiMinorEffects = [],
-  sphereData = { totalPopulation: 0, totalGdp: 0, countries: [] },
+  sphereData = { totalPopulation: 0, totalGdp: 0, masterInfluence: 0, totalInfluence: 0, countries: [] },
   ideologySummary = null,
   stateActionTypes = [],
   stateActionBalance = 0,
@@ -106,7 +110,24 @@ export function CountryTabs({
   country: Country;
   macros: { key: string; value: number }[];
   limits: { limit_value: number; military_unit_types: { name_fr: string; branch: MilitaryBranch } | null }[];
-  perksDef: { id: string; name_fr: string; description_fr: string | null; modifier: string | null; min_militarism: number | null; min_industry: number | null; min_science: number | null; min_stability: number | null }[];
+  perksDef: Array<{
+    id: string;
+    name_fr: string;
+    description_fr: string | null;
+    modifier: string | null;
+    min_militarism: number | null;
+    min_industry: number | null;
+    min_science: number | null;
+    min_stability: number | null;
+    category_id?: string | null;
+    icon_url?: string | null;
+    icon_size?: number | null;
+    perk_categories?: { id: string; name_fr: string; sort_order: number } | null;
+    perk_effects?: Array<{ effect_kind: string; effect_target: string | null; effect_subtype?: string | null; value: number }>;
+  }>;
+  perkCategories?: Array<{ id: string; name_fr: string; sort_order: number }>;
+  activePerkIds?: Set<string>;
+  perkEffects?: Array<{ effect_kind: string; effect_target: string | null; value: number; sourceLabel?: string }>;
   unlockedPerkIds: Set<string>;
   budget: CountryBudget | null;
   effects: CountryEffect[];
@@ -128,7 +149,26 @@ export function CountryTabs({
   ai_status?: string | null;
   aiMajorEffects?: Array<{ effect_kind: string; effect_target: string | null; value: number }>;
   aiMinorEffects?: Array<{ effect_kind: string; effect_target: string | null; value: number }>;
-  sphereData?: { totalPopulation: number; totalGdp: number; countries: Array<{ id: string; name: string; slug: string; population: number | null; gdp: number | null }> };
+  sphereData?: {
+    totalPopulation: number;
+    totalGdp: number;
+    masterInfluence: number;
+    totalInfluence: number;
+    countries: Array<{
+      id: string;
+      name: string;
+      slug: string;
+      flag_url: string | null;
+      population: number | null;
+      gdp: number | null;
+      share_pct: number;
+      is_annexed: boolean;
+      controlStatus: "Contesté" | "Occupé" | "Annexé";
+      influenceGiven: number;
+      contributionPopulation: number;
+      contributionGdp: number;
+    }>;
+  };
   ideologySummary?: {
     scores: { monarchism: number; republicanism: number; cultism: number };
     drift: { monarchism: number; republicanism: number; cultism: number };
@@ -255,8 +295,9 @@ export function CountryTabs({
         ai_status,
         aiMajorEffects,
         aiMinorEffects,
+        perkEffects,
       }),
-    [country.id, effects, lawLevelEffects, globalGrowthEffects, ai_status, aiMajorEffects, aiMinorEffects]
+    [country.id, effects, lawLevelEffects, globalGrowthEffects, ai_status, aiMajorEffects, aiMinorEffects, perkEffects]
   );
 
   const effectsForTick = useMemo(
@@ -836,21 +877,31 @@ export function CountryTabs({
           )}
         </div>
         {canEditCountry && !generalEditMode && (
-          <button
-            type="button"
-            onClick={() => {
-              setGeneralName(country.name ?? "");
-              setGeneralRegime(country.regime ?? "");
-              setGeneralFlagUrl(country.flag_url ?? "");
-              setGeneralFlagFile(null);
-              setGeneralFlagPreview(null);
-              setGeneralError(null);
-              setGeneralEditMode(true);
-            }}
-            className="shrink-0 rounded border border-[var(--border)] bg-[var(--background-elevated)] px-3 py-1.5 text-sm text-[var(--foreground-muted)] hover:text-[var(--accent)] hover:border-[var(--accent-muted)]"
-          >
-            Éditer
-          </button>
+          <>
+            <button
+              type="button"
+              onClick={() => {
+                setGeneralName(country.name ?? "");
+                setGeneralRegime(country.regime ?? "");
+                setGeneralFlagUrl(country.flag_url ?? "");
+                setGeneralFlagFile(null);
+                setGeneralFlagPreview(null);
+                setGeneralError(null);
+                setGeneralEditMode(true);
+              }}
+              className="shrink-0 rounded border border-[var(--border)] bg-[var(--background-elevated)] px-3 py-1.5 text-sm text-[var(--foreground-muted)] hover:text-[var(--accent)] hover:border-[var(--accent-muted)]"
+            >
+              Éditer
+            </button>
+            {isAdmin && (
+              <Link
+                href={`/admin/pays/${country.id}`}
+                className="shrink-0 rounded border border-[var(--border)] bg-[var(--accent)] px-3 py-1.5 text-sm font-medium text-[#0f1419] hover:opacity-90"
+              >
+                [Admin] Editer
+              </Link>
+            )}
+          </>
         )}
       </div>
 
@@ -1104,10 +1155,12 @@ export function CountryTabs({
           onSaveEffect={handleSaveEffect}
           onCloseEffectForm={handleCloseEffectForm}
           influenceResult={influenceResult}
+          displayInfluence={sphereData.totalInfluence != null ? Math.round(sphereData.totalInfluence) : (influenceResult?.influence != null ? Math.round(influenceResult.influence) : null)}
           hardPowerByBranch={localHardPowerByBranch ?? hardPowerByBranch}
           sphereData={sphereData}
           ideologySummary={ideologySummary}
           otherCountriesForRelation={otherCountriesForRelation}
+          resolvedEffects={resolvedEffects}
         />
       )}
 
@@ -1136,7 +1189,10 @@ export function CountryTabs({
       {tab === "perks" && (
         <CountryTabPerks
           perksDef={perksDef}
-          unlockedPerkIds={unlockedPerkIds}
+          perkCategories={perkCategories}
+          activePerkIds={activePerkIds}
+          rosterUnitsFlat={rosterUnitsFlat}
+          country={country}
           panelClass={panelClass}
           panelStyle={panelStyle}
         />
@@ -1209,7 +1265,7 @@ export function CountryTabs({
           worldAverages={worldAverages ?? null}
           lastUpdateLog={updateLogs[0] ?? null}
           fundingByMinistry={cabinetFundingByMinistry}
-          influenceValue={influenceResult?.influence ?? null}
+          influenceValue={sphereData.totalInfluence != null ? Math.round(sphereData.totalInfluence) : (influenceResult?.influence ?? null)}
           previousInfluenceValue={previousInfluenceValue}
           lastCronInfluenceAfterValue={lastCronInfluenceAfterValue}
           panelClass={panelClass}

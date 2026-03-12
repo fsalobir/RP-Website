@@ -84,7 +84,6 @@ export default async function AdminPaysListPage() {
       ) : (
         <CountriesTable
           rows={rows}
-          showModifierButton
           showAiStatusColumn
           updateAiStatusAction={updateCountryAiStatus}
           countryIdsWithPlayer={countryIdsWithPlayer}

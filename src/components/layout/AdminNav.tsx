@@ -25,6 +25,9 @@ export function AdminNav() {
           <Link href="/admin/regles" className={navLinkClass}>
             <span aria-hidden className="mr-1.5">⚙️</span>Règles
           </Link>
+          <Link href="/admin/avantages" className={navLinkClass}>
+            <span aria-hidden className="mr-1.5">⭐</span>Avantages
+          </Link>
           <Link href="/admin" className={navLinkClass}>
             <span aria-hidden className="mr-1.5">🏠</span>Accueil
           </Link>

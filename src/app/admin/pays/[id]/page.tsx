@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { notFound } from "next/navigation";
+import Link from "next/link";
 import { CountryForm } from "@/components/admin/CountryForm";
 import { CountryLawsAdminBlock } from "./CountryLawsAdminBlock";
 import { ControlAdminBlock } from "./ControlAdminBlock";
@@ -57,12 +58,23 @@ export default async function AdminPaysEditPage({
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-10">
-      <h1 className="mb-2 text-2xl font-bold text-[var(--foreground)]">
-        Modifier {country.name}
-      </h1>
-      <p className="mb-8 text-[var(--foreground-muted)]">
-        Généralités, société, macros, militaire, contrôle et avantages.
-      </p>
+      <div className="mb-2 flex flex-wrap items-center justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-[var(--foreground)]">
+            Modifier {country.name}
+          </h1>
+          <p className="mt-1 text-[var(--foreground-muted)]">
+            Généralités, société, macros, militaire, contrôle et avantages.
+          </p>
+        </div>
+        <Link
+          href="/admin/pays"
+          className="shrink-0 rounded border border-[var(--border)] bg-[var(--background-elevated)] px-4 py-2 text-sm font-medium text-[var(--foreground)] hover:bg-[var(--background)] hover:text-[var(--accent)]"
+        >
+          Retour liste
+        </Link>
+      </div>
+      <div className="mb-8" />
       <CountryForm country={country} continents={continents} />
       <div className="mt-8 space-y-8">
         <CountryLawsAdminBlock

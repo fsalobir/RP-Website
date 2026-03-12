@@ -54,7 +54,7 @@ export async function fetchWorldIdeologyState(supabase: SupabaseClient): Promise
         "ideology_snap_cultism",
       ])
       .or("duration_remaining.gt.0,duration_kind.eq.permanent"),
-    supabase.from("rule_parameters").select("key, value").in("key", ["ideology_config", "influence_config"]),
+    supabase.from("rule_parameters").select("key, value").in("key", ["ideology_config", "influence_config", "sphere_influence_pct"]),
     supabase.from("military_roster_units").select("id, branch, base_count"),
     supabase.from("military_roster_unit_levels").select("unit_id, level, hard_power"),
     supabase.from("country_military_units").select("country_id, roster_unit_id, current_level, extra_count"),
@@ -107,6 +107,11 @@ export async function fetchWorldIdeologyState(supabase: SupabaseClient): Promise
   const rulesByKey = Object.fromEntries((rulesRes.data ?? []).map((row) => [row.key, row.value]));
   const ideologyConfig = getIdeologyConfig(rulesByKey.ideology_config);
   const influenceConfig = (rulesByKey.influence_config ?? {}) as Parameters<typeof computeInfluenceForAll>[2];
+  const rawSphere = rulesByKey.sphere_influence_pct;
+  const sphereInfluencePct =
+    rawSphere && typeof rawSphere === "object" && !Array.isArray(rawSphere)
+      ? (rawSphere as { contested?: number; occupied?: number; annexed?: number })
+      : undefined;
   const hardPowerByCountry = computeHardPowerByCountry(
     (countryMilitaryRes.data ?? []) as Array<{ country_id: string; roster_unit_id: string; current_level: number; extra_count: number }>,
     (rosterUnitsRes.data ?? []) as Array<{ id: string; branch: MilitaryBranch; base_count: number }>,
@@ -128,6 +133,7 @@ export async function fetchWorldIdeologyState(supabase: SupabaseClient): Promise
     neighborIdsByCountry,
     controlRows: (controlRes.data ?? []) as Array<{ country_id: string; controller_country_id: string; share_pct: number; is_annexed: boolean }>,
     effectsByCountry,
+    sphereInfluencePct,
   });
 
   return {

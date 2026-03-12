@@ -99,6 +99,10 @@ type Props = {
   aiEventsConfig?: Record<string, unknown> | null;
   /** Dernier passage du cron (valeur brute). */
   aiEventsLastRun?: string | null;
+  /** Diagnostic pg_cron (RPC get_ai_events_cron_diagnostic). */
+  cronDiagnostic?: Record<string, unknown> | null;
+  /** Erreur lors de l'appel diagnostic. */
+  cronDiagnosticError?: string | null;
 };
 
 const panelClass = "rounded-lg border p-6";
@@ -130,6 +134,8 @@ export function EventIaList({
   relationMap = {},
   aiEventsConfig = null,
   aiEventsLastRun = null,
+  cronDiagnostic = null,
+  cronDiagnosticError = null,
 }: Props) {
   const router = useRouter();
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -287,6 +293,64 @@ export function EventIaList({
                     Aucun event généré : activez au moins un quota (majeurs ou mineurs) dans Règles &gt; Events IA.
                   </span>
                 )}
+              <p className="mt-2 text-xs text-[var(--foreground-muted)]">
+                Le cron <strong>automatique</strong> est exécuté par Supabase (pg_cron), pas par cette app. Si la date « Dernier run » ne se met pas à jour toute seule, vérifier dans le projet Supabase : Extensions → activer <code>pg_cron</code> ; SQL Editor → voir <code>supabase/CRON.md</code> pour les requêtes (jobs <code>ai-events-generation</code> et <code>cron.job_run_details</code>).
+              </p>
+              {cronDiagnosticError && (
+                <p className="mt-2 text-xs text-[var(--danger)]">
+                  Diagnostic pg_cron : {cronDiagnosticError}
+                </p>
+              )}
+              {cronDiagnostic && !cronDiagnosticError && (
+                <div className="mt-3 rounded border py-2 px-3 text-xs" style={{ borderColor: "var(--border)", background: "var(--background)" }}>
+                  <span className="font-medium text-[var(--foreground-muted)]">Diagnostic pg_cron : </span>
+                  <span className="text-[var(--foreground)]">
+                    {cronDiagnostic.pg_cron_enabled === false ? (
+                      <>Extension non activée. {typeof cronDiagnostic.hint === "string" ? cronDiagnostic.hint : ""}</>
+                    ) : (
+                      <>
+                        Job présent : {cronDiagnostic.job_exists ? "oui" : "non"}
+                        {cronDiagnostic.job_schedule != null && ` · Schedule : ${String(cronDiagnostic.job_schedule)}`}
+                        {" · "}
+                        Exécutions enregistrées : {Array.isArray(cronDiagnostic.recent_runs) ? cronDiagnostic.recent_runs.length : 0}
+                        {Array.isArray(cronDiagnostic.recent_runs) && cronDiagnostic.recent_runs.length > 0 && (
+                          <> (dernière : {String((cronDiagnostic.recent_runs[0] as { start_time?: string })?.start_time ?? "—")})</>
+                        )}
+                      </>
+                    )}
+                  </span>
+                  {Array.isArray(cronDiagnostic.recent_runs) && cronDiagnostic.recent_runs.length > 0 && (() => {
+                    const last = cronDiagnostic.recent_runs[0] as { status?: string; return_message?: string };
+                    return (
+                      <p className="mt-1 text-[var(--foreground)]">
+                        Dernière exécution pg_cron : status = <strong>{last?.status ?? "—"}</strong>
+                        {last?.return_message != null && last.return_message !== "" && (
+                          <> · return_message = <span className="text-[var(--danger)]">{String(last.return_message)}</span></>
+                        )}
+                      </p>
+                    );
+                  })()}
+                  {cronDiagnostic.error != null && (
+                    <p className="mt-1 text-[var(--danger)]">{String(cronDiagnostic.error)}</p>
+                  )}
+                  {cronDiagnostic.last_check != null && typeof cronDiagnostic.last_check === "object" && (
+                    <div className="mt-2 rounded border py-1.5 px-2" style={{ borderColor: "var(--border-muted)", background: "var(--background)" }}>
+                      <span className="font-medium text-[var(--foreground-muted)]">Dernier passage fonction : </span>
+                      <span className="text-[var(--foreground)]">
+                        {(cronDiagnostic.last_check as { at?: string }).at
+                          ? new Date((cronDiagnostic.last_check as { at: string }).at).toLocaleString("fr-FR")
+                          : "—"}
+                        {" · "}
+                        would_skip = {(cronDiagnostic.last_check as { would_skip?: boolean }).would_skip === true ? "oui" : "non"}
+                        {(cronDiagnostic.last_check as { reason?: string }).reason != null && ` · raison: ${String((cronDiagnostic.last_check as { reason: string }).reason)}`}
+                        {(cronDiagnostic.last_check as { diff_seconds?: number }).diff_seconds != null && ` · diff_seconds = ${Number((cronDiagnostic.last_check as { diff_seconds: number }).diff_seconds)}`}
+                        {(cronDiagnostic.last_check as { interval_hours?: number }).interval_hours != null && ` · interval_hours = ${Number((cronDiagnostic.last_check as { interval_hours: number }).interval_hours)}`}
+                        {(cronDiagnostic.last_check as { last_run_raw?: string }).last_run_raw != null && ` · last_run_raw = ${String((cronDiagnostic.last_check as { last_run_raw: string }).last_run_raw)}`}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           )}
           <div className="flex flex-col gap-3 xl:flex-row xl:items-end xl:justify-between">

@@ -660,6 +660,10 @@ export type ResolvedEffect = {
   duration_remaining?: number;
   /** Présent pour les effets issus de country_effects ; 'permanent' = n'expire jamais. */
   duration_kind?: string;
+  /** Source de l'effet pour affichage (ex. Généralités). */
+  source?: "country" | "law" | "global" | "perk" | "ai";
+  /** Libellé affiché (ex. "Avantage : Complexe militaro-industriel"). */
+  sourceLabel?: string;
 };
 
 /** Contexte pour résoudre les effets applicables à un pays (sources enregistrées). */
@@ -676,7 +680,9 @@ export type EffectResolutionContext = {
   /** Effets appliqués aux pays IA majeurs (règle ai_major_effects). */
   aiMajorEffects?: Array<{ effect_kind: string; effect_target: string | null; value: number }>;
   /** Effets appliqués aux pays IA mineurs (règle ai_minor_effects). */
-  aiMinorEffects?: Array<{ effect_kind: string; effect_target: string | null; value: number }>;
+  aiMinorEffects?: Array<{ effect_kind: string; effect_target: string | null; value: number; sourceLabel?: string }>;
+  /** Effets des avantages actifs pour ce pays (précalculés côté page). */
+  perkEffects?: Array<{ effect_kind: string; effect_target: string | null; value: number; sourceLabel?: string }>;
 };
 
 /** Pseudo-durée pour les effets globaux/mobilisation (toujours actifs). */
@@ -689,6 +695,8 @@ function countryEffectsSource(ctx: EffectResolutionContext): ResolvedEffect[] {
     value: Number(e.value),
     duration_remaining: e.duration_remaining,
     duration_kind: e.duration_kind,
+    source: "country" as const,
+    sourceLabel: e.name || "Effet actif",
   }));
 }
 
@@ -699,6 +707,8 @@ function lawLevelEffectsSource(ctx: EffectResolutionContext): ResolvedEffect[] {
     effect_target: e.effect_target ?? null,
     value: Number(e.value),
     duration_remaining: PERMANENT_DURATION,
+    source: "law" as const,
+    sourceLabel: "Loi",
   }));
 }
 
@@ -708,6 +718,8 @@ function globalEffectsSource(ctx: EffectResolutionContext): ResolvedEffect[] {
     effect_target: e.effect_target ?? null,
     value: Number(e.value),
     duration_remaining: PERMANENT_DURATION,
+    source: "global" as const,
+    sourceLabel: "Global",
   }));
 }
 
@@ -718,6 +730,8 @@ function aiEffectsSource(ctx: EffectResolutionContext): ResolvedEffect[] {
       effect_target: e.effect_target ?? null,
       value: Number(e.value),
       duration_remaining: PERMANENT_DURATION,
+      source: "ai" as const,
+      sourceLabel: e.sourceLabel ?? "IA",
     }));
   }
   if (ctx.ai_status === "minor" && ctx.aiMinorEffects?.length) {
@@ -726,9 +740,24 @@ function aiEffectsSource(ctx: EffectResolutionContext): ResolvedEffect[] {
       effect_target: e.effect_target ?? null,
       value: Number(e.value),
       duration_remaining: PERMANENT_DURATION,
+      source: "ai" as const,
+      sourceLabel: e.sourceLabel ?? "IA",
     }));
   }
   return [];
+}
+
+function perkEffectsSource(ctx: EffectResolutionContext): ResolvedEffect[] {
+  const effects = ctx.perkEffects ?? [];
+  return effects.map((e) => ({
+    effect_kind: e.effect_kind,
+    effect_target: e.effect_target ?? null,
+    value: Number(e.value),
+    duration_remaining: PERMANENT_DURATION,
+    duration_kind: "permanent",
+    source: "perk" as const,
+    sourceLabel: e.sourceLabel ?? "Avantage",
+  }));
 }
 
 /** Registry de sources d'effets. Ajouter une source ici pour un nouvel « endroit » sans toucher aux consommateurs. */
@@ -736,6 +765,7 @@ export const EFFECT_SOURCES: Array<(ctx: EffectResolutionContext) => ResolvedEff
   countryEffectsSource,
   lawLevelEffectsSource,
   globalEffectsSource,
+  perkEffectsSource,
   aiEffectsSource,
 ];
 

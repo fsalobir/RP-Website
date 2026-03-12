@@ -10,8 +10,10 @@ import { computeInfluenceForAll, applyInfluenceModifiers } from "@/lib/influence
 import { getAllRelationRows, relationRowsToMap, getRelationFromMap } from "@/lib/relations";
 import { getEffectsForCountry, getInfluenceModifiersFromEffects } from "@/lib/countryEffects";
 import { resolveAllLawEffectsForCountry, LAW_DEFINITIONS, type CountryLawRow } from "@/lib/laws";
+import { isPerkActive } from "@/lib/perkRequirements";
 import { computeFoggedRoster, type FoggedRoster } from "@/lib/intelFog";
 import { fetchWorldIdeologyState } from "@/lib/ideologyServer";
+import { getEffectiveSpherePct, type SphereInfluencePct } from "@/lib/ideology";
 import type {
   CountryUpdateLog,
   MilitaryBranch,
@@ -36,11 +38,11 @@ const RULE_KEYS = [
 
 async function fetchCountryPageGlobals() {
   const supabase = createAnonClientForCache();
-  const [ruleRes, rosterUnitsRes, rosterLevelsRes, perksRes] = await Promise.all([
+  const [ruleRes, rosterUnitsRes, rosterLevelsRes, perkCategoriesRes, perksRes] = await Promise.all([
     supabase
       .from("rule_parameters")
       .select("key, value")
-      .in("key", [...RULE_KEYS, "mobilisation_config", "mobilisation_level_effects", "world_date", "influence_config", "ai_major_effects", "ai_minor_effects"]),
+      .in("key", [...RULE_KEYS, "mobilisation_config", "mobilisation_level_effects", "world_date", "influence_config", "sphere_influence_pct", "ai_major_effects", "ai_minor_effects"]),
     supabase
       .from("military_roster_units")
       .select("*")
@@ -52,12 +54,14 @@ async function fetchCountryPageGlobals() {
       .select("*")
       .order("unit_id")
       .order("level"),
-    supabase.from("perks").select("*").order("sort_order"),
+    supabase.from("perk_categories").select("*").order("sort_order"),
+    supabase.from("perks").select("*, perk_categories(*), perk_effects(*), perk_requirements(*)").order("sort_order"),
   ]);
   return {
     ruleParamsData: ruleRes.data ?? [],
     rosterUnits: (rosterUnitsRes.data ?? []) as MilitaryRosterUnit[],
     rosterLevels: (rosterLevelsRes.data ?? []) as MilitaryRosterUnitLevel[],
+    perkCategories: perkCategoriesRes.data ?? [],
     perksDef: perksRes.data ?? [],
   };
 }
@@ -106,7 +110,7 @@ export default async function CountryPage({
     supabase.from("country_budget").select("*").eq("country_id", country.id).maybeSingle(),
     supabase.from("country_effects").select("*").eq("country_id", country.id).or("duration_remaining.gt.0,duration_kind.eq.permanent"),
     supabase.from("countries").select("id, population, gdp, militarism, industry, science, stability"),
-    supabase.from("country_control").select("country_id").eq("controller_country_id", country.id),
+    supabase.from("country_control").select("country_id, share_pct, is_annexed").eq("controller_country_id", country.id),
     isAdmin
       ? supabase.from("country_update_logs").select("*").eq("country_id", country.id).order("run_at", { ascending: false }).limit(10)
       : Promise.resolve({ data: [] as CountryUpdateLog[] }),
@@ -117,16 +121,40 @@ export default async function CountryPage({
     supabase.from("countries").select("id, name").order("name"),
   ]);
 
-  const controlRows = (Array.isArray(controlRes.data) ? controlRes.data : []) as { country_id: string }[];
+  const controlRows = (Array.isArray(controlRes.data) ? controlRes.data : []) as Array<{ country_id: string; share_pct: number; is_annexed: boolean }>;
   const controlledIds = [...new Set(controlRows.map((r) => r.country_id))];
   const sphereCountries =
     controlledIds.length > 0
-      ? (await supabase.from("countries").select("id, name, slug, population, gdp").in("id", controlledIds)).data ?? []
+      ? (await supabase.from("countries").select("id, name, slug, flag_url, population, gdp").in("id", controlledIds)).data ?? []
       : [];
-  const sphereData = {
-    totalPopulation: sphereCountries.reduce((s, c) => s + Number(c.population ?? 0), 0),
-    totalGdp: sphereCountries.reduce((s, c) => s + Number(c.gdp ?? 0), 0),
-    countries: sphereCountries as Array<{ id: string; name: string; slug: string; population: number | null; gdp: number | null }>,
+  // sphereData : somme impériale (pays maître + parts proportionnelles au contrôle). Enrichi plus bas.
+  const masterPop = Number(country.population ?? 0);
+  const masterGdp = Number(country.gdp ?? 0);
+  let sphereData: {
+    totalPopulation: number;
+    totalGdp: number;
+    masterInfluence: number;
+    totalInfluence: number;
+    countries: Array<{
+      id: string;
+      name: string;
+      slug: string;
+      flag_url: string | null;
+      population: number | null;
+      gdp: number | null;
+      share_pct: number;
+      is_annexed: boolean;
+      controlStatus: "Contesté" | "Occupé" | "Annexé";
+      influenceGiven: number;
+      contributionPopulation: number;
+      contributionGdp: number;
+    }>;
+  } = {
+    totalPopulation: masterPop,
+    totalGdp: masterGdp,
+    masterInfluence: 0,
+    totalInfluence: 0,
+    countries: [],
   };
 
   let stateActionTypes: Array<{ id: string; key: string; label_fr: string; cost: number; params_schema: Record<string, unknown> | null }> = [];
@@ -162,7 +190,7 @@ export default async function CountryPage({
     }));
   }
 
-  const { ruleParamsData, rosterUnits, rosterLevels, perksDef } = cachedGlobals;
+  const { ruleParamsData, rosterUnits, rosterLevels, perkCategories, perksDef } = cachedGlobals;
 
   const playerRow = assignedPlayerRes.data as { email?: string; name?: string } | null;
   const assignedPlayerEmail = (playerRow?.name?.trim() || playerRow?.email) ?? null;
@@ -171,6 +199,9 @@ export default async function CountryPage({
   const limits = limitsRes.data ?? [];
   const countryMilitaryUnits = (Array.isArray(countryMilitaryUnitsRes.data) ? countryMilitaryUnitsRes.data : []) as CountryMilitaryUnit[];
   const unlockedPerkIds = new Set((countryPerksRes.data ?? []).map((p) => p.perk_id));
+
+  const activePerkIds = new Set<string>();
+  const perkEffects: Array<{ effect_kind: string; effect_target: string | null; value: number; sourceLabel: string }> = [];
   const budget = budgetRes.data ?? null;
   const effects = effectsRes.data ?? [];
 
@@ -197,12 +228,84 @@ export default async function CountryPage({
   );
   let influenceResult = influenceByCountry.get(country.id) ?? null;
 
+  if (sphereCountries.length > 0) {
+    const sphereInfluencePct = ruleParametersByKey.sphere_influence_pct?.value as SphereInfluencePct | undefined;
+    const controlByCountryId = new Map(controlRows.map((r) => [r.country_id, r]));
+    const deriveControlStatus = (share_pct: number, is_annexed: boolean): "Contesté" | "Occupé" | "Annexé" => {
+      if (is_annexed) return "Annexé";
+      if (share_pct >= 100) return "Occupé";
+      return "Contesté";
+    };
+    let sumContributionPop = 0;
+    let sumContributionGdp = 0;
+    const countries = (sphereCountries as Array<{ id: string; name: string; slug: string; flag_url: string | null; population: number | null; gdp: number | null }>).map((c) => {
+      const control = controlByCountryId.get(c.id) ?? { share_pct: 0, is_annexed: false };
+      const share_pct = Number(control.share_pct ?? 0);
+      const is_annexed = !!control.is_annexed;
+      const pop = Number(c.population ?? 0);
+      const gdp = Number(c.gdp ?? 0);
+      const controlRow = { country_id: c.id, controller_country_id: country.id, share_pct, is_annexed };
+      const effectivePct = getEffectiveSpherePct(controlRow, sphereInfluencePct);
+      const contributionPopulation = (pop * share_pct * effectivePct) / 10000;
+      const contributionGdp = (gdp * share_pct * effectivePct) / 10000;
+      sumContributionPop += contributionPopulation;
+      sumContributionGdp += contributionGdp;
+      const rawInfluence = influenceByCountry.get(c.id)?.influence ?? 0;
+      const influenceGiven = Math.round((rawInfluence * (share_pct / 100) * (effectivePct / 100)));
+      return {
+        ...c,
+        share_pct,
+        is_annexed,
+        controlStatus: deriveControlStatus(share_pct, is_annexed),
+        influenceGiven,
+        contributionPopulation,
+        contributionGdp,
+      };
+    });
+    sphereData = {
+      ...sphereData,
+      totalPopulation: masterPop + sumContributionPop,
+      totalGdp: masterGdp + sumContributionGdp,
+      countries,
+    };
+  }
+
   const countryLawRows: CountryLawRow[] = ((Array.isArray(countryLawsRes.data) ? countryLawsRes.data : []) as Array<{ law_key: string; score: number; target_score: number }>).map((r) => ({
     country_id: country.id,
     law_key: r.law_key,
     score: Number(r.score ?? 0),
     target_score: Number(r.target_score ?? 0),
   }));
+
+  const perkActivationContext = {
+    country: {
+      militarism: country.militarism ?? null,
+      industry: country.industry ?? null,
+      science: country.science ?? null,
+      stability: country.stability ?? null,
+      gdp: country.gdp ?? null,
+      population: country.population ?? null,
+    },
+    influenceValue: influenceByCountry.get(country.id)?.influence ?? null,
+    countryLawRows,
+    ruleParametersByKey,
+  };
+  for (const perk of perksDef as Array<{ id: string; name_fr: string; perk_effects?: Array<{ effect_kind: string; effect_target: string | null; value: number }>; perk_requirements?: Array<{ requirement_kind: string; requirement_target: string | null; value: number }> }>) {
+    if (isPerkActive(perk, perkActivationContext)) activePerkIds.add(perk.id);
+  }
+  for (const perk of perksDef as Array<{ id: string; name_fr: string; perk_effects?: Array<{ effect_kind: string; effect_target: string | null; value: number }> }>) {
+    if (!activePerkIds.has(perk.id) || !perk.perk_effects?.length) continue;
+    const sourceLabel = `Avantage : ${perk.name_fr}`;
+    for (const e of perk.perk_effects) {
+      perkEffects.push({
+        effect_kind: e.effect_kind,
+        effect_target: e.effect_target ?? null,
+        value: Number(e.value),
+        sourceLabel,
+      });
+    }
+  }
+
   const lawLevelEffects = resolveAllLawEffectsForCountry(countryLawRows, ruleParametersByKey);
 
   const globalGrowthEffects = (Array.isArray(ruleParametersByKey.global_growth_effects?.value) ? ruleParametersByKey.global_growth_effects.value : []) as Array<{ effect_kind: string; effect_target: string | null; value: number }>;
@@ -216,12 +319,15 @@ export default async function CountryPage({
     ai_status: country.ai_status ?? null,
     aiMajorEffects,
     aiMinorEffects,
+    perkEffects,
   };
   const resolvedEffects = getEffectsForCountry(effectsContext);
   const influenceMods = getInfluenceModifiersFromEffects(resolvedEffects, (e) => e.duration_kind === "permanent" || (e.duration_remaining ?? 0) > 0);
   if (influenceResult && (influenceMods.global !== 1 || influenceMods.gdp !== 1 || influenceMods.population !== 1 || influenceMods.hard_power !== 1)) {
     influenceResult = applyInfluenceModifiers(influenceResult, influenceMods);
   }
+  sphereData.masterInfluence = influenceResult?.influence ?? 0;
+  sphereData.totalInfluence = sphereData.masterInfluence + sphereData.countries.reduce((s, c) => s + c.influenceGiven, 0);
   const latestUpdateLog = updateLogs[0] ?? null;
   const getInfluenceForCountrySnapshot = (overrides?: { population?: number | null; gdp?: number | null; stability?: number | null }) => {
     const snapshotCountries = countries.map((c) =>
@@ -349,6 +455,9 @@ export default async function CountryPage({
         macros={macros}
         limits={limits}
         perksDef={perksDef}
+        perkCategories={perkCategories}
+        activePerkIds={activePerkIds}
+        perkEffects={perkEffects}
         unlockedPerkIds={unlockedPerkIds}
         budget={budget}
         effects={effects}
@@ -384,7 +493,7 @@ export default async function CountryPage({
           name: country.name ?? "",
           flag_url: country.flag_url ?? null,
           regime: country.regime ?? null,
-          influence: influenceResult != null ? Math.round(influenceResult.influence) : null,
+          influence: Math.round(sphereData.totalInfluence),
         }}
       />
     </div>

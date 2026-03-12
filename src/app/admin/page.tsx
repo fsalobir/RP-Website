@@ -3,16 +3,18 @@ import Link from "next/link";
 
 export default async function AdminDashboardPage() {
   const supabase = await createClient();
-  const [countriesRes, rulesRes, rosterRes, playersRes] = await Promise.all([
+  const [countriesRes, rulesRes, rosterRes, playersRes, perksRes] = await Promise.all([
     supabase.from("countries").select("id", { count: "exact", head: true }),
     supabase.from("rule_parameters").select("id", { count: "exact", head: true }),
     supabase.from("military_roster_units").select("id", { count: "exact", head: true }),
     supabase.from("country_players").select("user_id", { count: "exact", head: true }),
+    supabase.from("perks").select("id", { count: "exact", head: true }),
   ]);
   const countriesCount = countriesRes.count ?? 0;
   const rulesCount = rulesRes.count ?? 0;
   const rosterCount = rosterRes.count ?? 0;
   const playersCount = playersRes.count ?? 0;
+  const perksCount = perksRes.count ?? 0;
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-10">
@@ -121,6 +123,24 @@ export default async function AdminDashboardPage() {
           </p>
           <p className="mt-2 text-sm text-[var(--foreground-muted)]">
             Paramètres de simulation (cron)
+          </p>
+        </Link>
+        <Link
+          href="/admin/avantages"
+          className="rounded-lg border p-6 transition-colors hover:border-[var(--accent-muted)]"
+          style={{
+            background: "var(--background-panel)",
+            borderColor: "var(--border)",
+          }}
+        >
+          <h2 className="text-lg font-semibold text-[var(--foreground)]">
+            Avantages
+          </h2>
+          <p className="mt-1 text-2xl font-mono font-semibold tabular-nums text-[var(--accent)]">
+            {perksCount}
+          </p>
+          <p className="mt-2 text-sm text-[var(--foreground-muted)]">
+            Catégories et avantages (bonus conditionnés par les stats)
           </p>
         </Link>
         <Link

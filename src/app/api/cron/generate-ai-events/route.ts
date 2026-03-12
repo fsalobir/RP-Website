@@ -18,17 +18,17 @@ function getCronSecret(request: NextRequest): string | null {
 export async function GET(request: NextRequest) {
   const secret = getCronSecret(request);
   const expected = process.env.CRON_SECRET;
-  if (!expected || secret !== expected) {
-    return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
-  }
+   if (!expected || secret !== expected) {
+     return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
+   }
 
   const force = request.nextUrl.searchParams.get("force") === "true";
   const supabase = createServiceRoleClient();
   const { error } = await supabase.rpc("run_ai_events_cron", { p_force: force });
 
-  if (error) {
-    return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
-  }
+   if (error) {
+     return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
+   }
 
   const [configRes, lastRunRes] = await Promise.all([
     supabase.from("rule_parameters").select("value").eq("key", "ai_events_config").maybeSingle(),

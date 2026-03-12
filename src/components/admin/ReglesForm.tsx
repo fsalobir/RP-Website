@@ -917,7 +917,6 @@ export function ReglesForm({
   const genericBranchTooltip = "Branche militaire ciblée (terre, air, mer, stratégique).";
   const genericUnitTooltip = "Unité militaire précise touchée par l'effet.";
   const genericEffectValueTooltip = "Intensité de l'effet. Plus la valeur est élevée, plus l'impact est fort à chaque application.";
-  const sphereWarning = "Ce réglage existe dans l'admin, mais son branchement réel doit être vérifié en test avant de le considérer comme pleinement fiable.";
 
   const ruleForMinistry = rulesByKey.get(simulatorMinistry);
   const simulatorParams = ruleForMinistry ? getBudgetValue(ruleForMinistry) : null;
@@ -1826,10 +1825,8 @@ export function ReglesForm({
                         "Occupé : contrôle fort, sans intégration totale.",
                         "Annexé : contrôle maximal.",
                       ]}
-                      warning={sphereWarning}
                     />
                   }
-                  infoWarning
                   open={sphereOpen}
                   onToggle={() => setSphereOpen((o) => !o)}
                 >
@@ -1840,19 +1837,19 @@ export function ReglesForm({
                     <div className="flex flex-wrap gap-x-6 gap-y-3">
                       <div className="flex flex-col gap-0.5">
                         <label className="text-xs text-[var(--foreground-muted)]">
-                          <FormLabel label="Contesté %" tooltip="Part d'influence transmise quand le contrôle du pays reste disputé." warning={sphereWarning} />
+                          <FormLabel label="Contesté %" tooltip="Part d'influence transmise quand le contrôle du pays reste disputé." />
                         </label>
                         <input type="number" min={0} max={100} value={getSphereInfluencePct().contested ?? 50} onChange={(e) => updateSphereInfluencePct({ contested: Math.max(0, Math.min(100, Number(e.target.value) || 0)) })} className="rounded border py-1.5 px-2 text-sm w-20 font-mono" style={{ borderColor: "var(--border)", background: "var(--background)" }} />
                       </div>
                       <div className="flex flex-col gap-0.5">
                         <label className="text-xs text-[var(--foreground-muted)]">
-                          <FormLabel label="Occupé %" tooltip="Part d'influence transmise quand le pays est occupé mais pas encore annexé." warning={sphereWarning} />
+                          <FormLabel label="Occupé %" tooltip="Part d'influence transmise quand le pays est occupé mais pas encore annexé." />
                         </label>
                         <input type="number" min={0} max={100} value={getSphereInfluencePct().occupied ?? 80} onChange={(e) => updateSphereInfluencePct({ occupied: Math.max(0, Math.min(100, Number(e.target.value) || 0)) })} className="rounded border py-1.5 px-2 text-sm w-20 font-mono" style={{ borderColor: "var(--border)", background: "var(--background)" }} />
                       </div>
                       <div className="flex flex-col gap-0.5">
                         <label className="text-xs text-[var(--foreground-muted)]">
-                          <FormLabel label="Annexé %" tooltip="Part d'influence transmise quand le pays est considéré comme entièrement annexé." warning={sphereWarning} />
+                          <FormLabel label="Annexé %" tooltip="Part d'influence transmise quand le pays est considéré comme entièrement annexé." />
                         </label>
                         <input type="number" min={0} max={100} value={getSphereInfluencePct().annexed ?? 100} onChange={(e) => updateSphereInfluencePct({ annexed: Math.max(0, Math.min(100, Number(e.target.value) || 0)) })} className="rounded border py-1.5 px-2 text-sm w-20 font-mono" style={{ borderColor: "var(--border)", background: "var(--background)" }} />
                       </div>
@@ -2013,9 +2010,11 @@ export function ReglesForm({
                         </label>
                         <input
                           type="number"
-                          min={1}
+                          min={0.01}
+                          max={168}
+                          step={0.001}
                           value={getAiEventsConfig().interval_hours ?? 1}
-                          onChange={(e) => updateAiEventsConfig({ interval_hours: Math.max(1, Number(e.target.value) || 1) })}
+                          onChange={(e) => updateAiEventsConfig({ interval_hours: Math.max(0.01, Number(e.target.value) || 0.01) })}
                           className="w-full rounded border px-2 py-1.5 text-sm"
                           style={{ borderColor: "var(--border)" }}
                         />

@@ -77,6 +77,23 @@ export type IdeologyControlRow = {
   is_annexed: boolean;
 };
 
+/** Pourcentages d'influence attribués à l'overlord par statut (règle sphere_influence_pct). */
+export type SphereInfluencePct = { contested?: number; occupied?: number; annexed?: number };
+
+const DEFAULT_SPHERE_PCT: Required<SphereInfluencePct> = { contested: 50, occupied: 80, annexed: 100 };
+
+/** Retourne le % d'influence effectif pour le facteur de contrôle (Contesté / Occupé / Annexé). */
+export function getEffectiveSpherePct(
+  controlRow: IdeologyControlRow,
+  sphereInfluencePct?: SphereInfluencePct | null
+): number {
+  const pct = sphereInfluencePct ?? DEFAULT_SPHERE_PCT;
+  if (controlRow.is_annexed) return num(pct.annexed, DEFAULT_SPHERE_PCT.annexed);
+  const share = num(controlRow.share_pct, 0);
+  if (share >= 100) return num(pct.occupied, DEFAULT_SPHERE_PCT.occupied);
+  return num(pct.contested, DEFAULT_SPHERE_PCT.contested);
+}
+
 export type IdeologyCountryResult = {
   countryId: string;
   scores: IdeologyScores;
@@ -244,6 +261,8 @@ export function computeWorldIdeologies(params: {
   neighborIdsByCountry?: Map<string, string[]>;
   controlRows?: IdeologyControlRow[];
   effectsByCountry?: Map<string, IdeologyEffectTotals>;
+  /** Règle sphere_influence_pct : % d'influence attribué à l'overlord (Contesté / Occupé / Annexé). */
+  sphereInfluencePct?: SphereInfluencePct | null;
 }): Map<string, IdeologyCountryResult> {
   const config = params.config ?? DEFAULT_IDEOLOGY_CONFIG;
   const relationMap = params.relationMap ?? new Map<string, number>();
@@ -251,6 +270,7 @@ export function computeWorldIdeologies(params: {
   const neighborIdsByCountry = params.neighborIdsByCountry ?? new Map<string, string[]>();
   const controlRows = params.controlRows ?? [];
   const effectsByCountry = params.effectsByCountry ?? new Map<string, IdeologyEffectTotals>();
+  const sphereInfluencePct = params.sphereInfluencePct ?? null;
 
   const countriesById = new Map(params.countries.map((country) => [country.id, country]));
   const priorByCountry = new Map(params.countries.map((country) => [country.id, getStoredOrNeutralIdeology(country)]));
@@ -280,9 +300,8 @@ export function computeWorldIdeologies(params: {
       const relationFactor = 1 + (relation / 100) * config.relation_pull_weight;
       const influenceFactor = 1 + (num(influenceByCountry.get(neighborId), 0) / maxInfluence) * config.influence_pull_weight;
       const controlRow = (controllersByCountry.get(country.id) ?? []).find((row) => row.controller_country_id === neighborId);
-      const controlFactor = controlRow
-        ? 1 + ((controlRow.is_annexed ? 100 : num(controlRow.share_pct, 0)) / 100) * config.control_pull_weight
-        : 1;
+      const effectivePct = controlRow ? getEffectiveSpherePct(controlRow, sphereInfluencePct) : 0;
+      const controlFactor = controlRow ? 1 + (effectivePct / 100) * config.control_pull_weight : 1;
       const totalWeight = Math.max(0.05, relationFactor * influenceFactor * controlFactor);
       const neighborScoresRaw = priorByCountry.get(neighborId) ?? normalizeIdeologyScores({});
       const weightedPull = scaleScores(neighborScoresRaw, totalWeight);

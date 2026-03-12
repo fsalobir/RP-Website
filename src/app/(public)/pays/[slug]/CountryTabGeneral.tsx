@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import type { Country } from "@/types/database";
 import type { CountryEffect } from "@/types/database";
@@ -24,6 +25,153 @@ import {
   DURATION_DAYS_MAX,
 } from "@/lib/countryEffects";
 import { IDEOLOGY_LABELS } from "@/lib/ideology";
+
+/** Palette étendue pour les camemberts de sphère (pays maître + nombreux pays contrôlés). */
+const SPHERE_PIE_COLORS = [
+  "var(--accent)",
+  "#0ea5e9",
+  "#8b5cf6",
+  "#e11d48",
+  "#f59e0b",
+  "#10b981",
+  "#ec4899",
+  "#06b6d4",
+  "#84cc16",
+  "#f97316",
+  "#6366f1",
+  "#14b8a6",
+  "#a855f7",
+  "#ef4444",
+  "#eab308",
+  "#22c55e",
+  "#f43f5e",
+  "#0d9488",
+  "#c026d3",
+  "#dc2626",
+  "#ca8a04",
+  "#16a34a",
+  "#be185d",
+  "#0891b2",
+  "#7c3aed",
+  "#b91c1c",
+  "#a16207",
+  "#15803d",
+  "#9d174d",
+  "#0e7490",
+  "#6d28d9",
+  "#991b1b",
+  "#854d0e",
+  "#166534",
+  "#831843",
+  "#155e75",
+  "#5b21b6",
+  "#7f1d1d",
+  "#713f12",
+  "#14532d",
+  "#701a75",
+  "#164e63",
+];
+
+function slicePath(cx: number, cy: number, r: number, startAngle: number, endAngle: number): string {
+  const x1 = cx + r * Math.cos(startAngle);
+  const y1 = cy + r * Math.sin(startAngle);
+  const x2 = cx + r * Math.cos(endAngle);
+  const y2 = cy + r * Math.sin(endAngle);
+  const large = endAngle - startAngle > Math.PI ? 1 : 0;
+  return `M ${cx} ${cy} L ${x1} ${y1} A ${r} ${r} 0 ${large} 1 ${x2} ${y2} Z`;
+}
+
+function SpherePieChart({
+  slices,
+  total,
+  title,
+  size = 180,
+  showLegend = false,
+  formatValue,
+}: {
+  slices: Array<{ name: string; flag_url: string | null; slug: string; value: number; colorIndex: number }>;
+  total: number;
+  title: string;
+  size?: number;
+  showLegend?: boolean;
+  /** Pour l'infobulle au survol (part % et valeur formatée). */
+  formatValue?: (v: number) => string;
+}) {
+  const [hoverTooltip, setHoverTooltip] = useState<{ text: string; x: number; y: number } | null>(null);
+  const cx = size / 2;
+  const cy = size / 2;
+  const r = size / 2 - 4;
+  let angle = -Math.PI / 2;
+  return (
+    <div className="relative flex flex-col items-center gap-2">
+      <span className="text-sm font-semibold text-[var(--foreground-muted)]">{title}</span>
+      <svg
+        width={size}
+        height={size}
+        className="shrink-0 cursor-pointer"
+        style={{ transform: "rotate(0deg)" }}
+        aria-label={title}
+        onMouseLeave={() => setHoverTooltip(null)}
+      >
+        {slices.filter((s) => s.value > 0).map((s) => {
+          const startAngle = angle;
+          const sweep = total > 0 ? (s.value / total) * 2 * Math.PI : 0;
+          angle += sweep;
+          const share = total > 0 ? (s.value / total) * 100 : 0;
+          const tooltipText = formatValue
+            ? `${s.name}: ${share.toFixed(1)} % · ${formatValue(s.value)}`
+            : `${s.name}: ${share.toFixed(1)} %`;
+          return (
+            <path
+              key={`${s.slug}-${s.colorIndex}`}
+              d={slicePath(cx, cy, r, startAngle, startAngle + sweep)}
+              fill={SPHERE_PIE_COLORS[s.colorIndex % SPHERE_PIE_COLORS.length]}
+              stroke="var(--background-panel)"
+              strokeWidth={1.5}
+              style={{ cursor: "pointer" }}
+              onMouseEnter={(e) => setHoverTooltip({ text: tooltipText, x: e.clientX, y: e.clientY })}
+            />
+          );
+        })}
+      </svg>
+      {hoverTooltip && (
+        <div
+          className="pointer-events-none fixed z-[100] rounded border px-2 py-1 text-xs shadow-lg"
+          style={{
+            left: hoverTooltip.x + 10,
+            top: hoverTooltip.y + 10,
+            background: "var(--background-panel)",
+            borderColor: "var(--border)",
+            color: "var(--foreground)",
+          }}
+        >
+          {hoverTooltip.text}
+        </div>
+      )}
+      {showLegend && (
+        <ul className="w-full space-y-1 text-xs">
+          {slices.map((s) => (
+            <li key={`${s.slug}-${s.colorIndex}`} className="flex items-center gap-2">
+              <span
+                className="h-3 w-3 shrink-0 rounded-sm"
+                style={{ backgroundColor: SPHERE_PIE_COLORS[s.colorIndex % SPHERE_PIE_COLORS.length] }}
+              />
+              {s.flag_url ? (
+                <Link href={`/pays/${s.slug}`} className="shrink-0">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={s.flag_url} alt="" width={16} height={11} className="inline-block h-[11px] w-4 rounded object-cover align-middle" />
+                </Link>
+              ) : null}
+              <Link href={`/pays/${s.slug}`} className="truncate text-[var(--foreground-muted)] hover:text-[var(--accent)] hover:underline">
+                {s.name}
+              </Link>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
 
 type CountryTabGeneralProps = {
   country: Country;
@@ -61,8 +209,29 @@ type CountryTabGeneralProps = {
   onSaveEffect: () => Promise<void>;
   onCloseEffectForm: () => void;
   influenceResult?: import("@/lib/influence").InfluenceResult | null;
+  /** Influence totale affichée (propre + sphère). Si fourni, remplace influenceResult.influence pour le chiffre principal. */
+  displayInfluence?: number | null;
   hardPowerByBranch?: import("@/lib/hardPower").HardPowerByBranch | null;
-  sphereData?: { totalPopulation: number; totalGdp: number; countries: Array<{ id: string; name: string; slug: string; population: number | null; gdp: number | null }> };
+  sphereData?: {
+    totalPopulation: number;
+    totalGdp: number;
+    masterInfluence: number;
+    totalInfluence: number;
+    countries: Array<{
+      id: string;
+      name: string;
+      slug: string;
+      flag_url: string | null;
+      population: number | null;
+      gdp: number | null;
+      share_pct: number;
+      is_annexed: boolean;
+      controlStatus: "Contesté" | "Occupé" | "Annexé";
+      influenceGiven: number;
+      contributionPopulation: number;
+      contributionGdp: number;
+    }>;
+  };
   ideologySummary?: {
     scores: { monarchism: number; republicanism: number; cultism: number };
     drift: { monarchism: number; republicanism: number; cultism: number };
@@ -83,6 +252,8 @@ type CountryTabGeneralProps = {
     };
   } | null;
   otherCountriesForRelation?: Array<{ id: string; name: string }>;
+  /** Effets résolus (toutes sources, dont avantages) pour afficher la section « Effets des avantages actifs ». */
+  resolvedEffects?: import("@/lib/countryEffects").ResolvedEffect[];
 };
 
 export function CountryTabGeneral({
@@ -121,10 +292,12 @@ export function CountryTabGeneral({
   onSaveEffect,
   onCloseEffectForm,
   influenceResult = null,
+  displayInfluence = null,
   hardPowerByBranch = null,
-  sphereData = { totalPopulation: 0, totalGdp: 0, countries: [] },
+  sphereData = { totalPopulation: 0, totalGdp: 0, masterInfluence: 0, totalInfluence: 0, countries: [] },
   ideologySummary = null,
   otherCountriesForRelation = [],
+  resolvedEffects = [],
 }: CountryTabGeneralProps) {
   const ideologyEffects = effects.filter(
     (effect) => effect.effect_kind.startsWith("ideology_drift_") || effect.effect_kind.startsWith("ideology_snap_")
@@ -182,18 +355,23 @@ export function CountryTabGeneral({
             </dt>
             <dd className="stat-value mt-0.5 text-2xl font-bold text-[var(--foreground)]">{formatGdp(country.gdp)}</dd>
           </div>
-          {influenceResult != null && (
+          {(influenceResult != null || displayInfluence != null) && (
             <div className="text-center">
               <dt className="text-sm font-semibold text-[var(--foreground-muted)]">
                 <strong className="text-[var(--foreground)]">Influence</strong>
+                {displayInfluence != null && displayInfluence !== influenceResult?.influence && (
+                  <span className="ml-1 text-xs font-normal" title="Inclut l'influence de la sphère (pays contrôlés).">(avec sphère)</span>
+                )}
               </dt>
-              <dd className="stat-value mt-0.5 text-2xl font-bold text-[var(--accent)]">{formatNumber(Math.round(influenceResult.influence))}</dd>
-              <dl className="mt-2 flex flex-wrap justify-center gap-x-4 gap-y-1 text-xs text-[var(--foreground-muted)]">
-                <span>PIB : {formatNumber(Math.round(influenceResult.componentsAfterGravity.gdp))}</span>
-                <span>Population : {formatNumber(Math.round(influenceResult.componentsAfterGravity.population))}</span>
-                <span>Stabilité : ×{Number(influenceResult.componentsAfterGravity.stabilityMultiplier).toLocaleString("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-                <span>Hard Power : {formatNumber(Math.round(influenceResult.componentsAfterGravity.military))}</span>
-              </dl>
+              <dd className="stat-value mt-0.5 text-2xl font-bold text-[var(--accent)]">{formatNumber(Math.round(displayInfluence ?? influenceResult?.influence ?? 0))}</dd>
+              {influenceResult != null && (
+                <dl className="mt-2 flex flex-wrap justify-center gap-x-4 gap-y-1 text-xs text-[var(--foreground-muted)]">
+                  <span>PIB : {formatNumber(Math.round(influenceResult.componentsAfterGravity.gdp))}</span>
+                  <span>Population : {formatNumber(Math.round(influenceResult.componentsAfterGravity.population))}</span>
+                  <span>Stabilité : ×{Number(influenceResult.componentsAfterGravity.stabilityMultiplier).toLocaleString("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                  <span>Hard Power : {formatNumber(Math.round(influenceResult.componentsAfterGravity.military))}</span>
+                </dl>
+              )}
             </div>
           )}
         </div>
@@ -371,6 +549,32 @@ export function CountryTabGeneral({
               </li>
             ))}
           </ul>
+        )}
+        {resolvedEffects.filter((e) => e.source === "perk").length > 0 && (
+          <div className="mt-6">
+            <h4 className="mb-2 text-sm font-semibold text-[var(--foreground)]">Effets des avantages actifs</h4>
+            <ul className="space-y-2">
+              {resolvedEffects
+                .filter((e) => e.source === "perk")
+                .map((e, i) => (
+                  <li
+                    key={i}
+                    className="rounded border py-2 px-3 text-sm"
+                    style={{ borderColor: "var(--border-muted)" }}
+                  >
+                    <span className="text-[var(--foreground-muted)]">{e.sourceLabel ?? "Avantage"}</span>
+                    <p
+                      className={`mt-0.5 ${isEffectDisplayPositive(e) ? "text-[var(--accent)]" : "text-[var(--danger)]"}`}
+                    >
+                      {getEffectDescription(e, {
+                        rosterUnitName: (id) => rosterUnitsFlat.find((u) => u.id === id)?.name_fr ?? null,
+                        countryName: getCountryName,
+                      })}
+                    </p>
+                  </li>
+                ))}
+            </ul>
+          </div>
         )}
         {isAdmin && (
           <div className="mt-4 border-t pt-4" style={{ borderColor: "var(--border-muted)" }}>
@@ -649,51 +853,118 @@ export function CountryTabGeneral({
         </div>
       </section>
 
-      {(sphereData.countries.length > 0) && (
-        <section className={panelClass} style={panelStyle}>
-          <h3 className="mb-4 text-lg font-semibold text-[var(--foreground)]">
-            Sphère
-          </h3>
-          <div
-            className="mb-6 rounded-lg border p-4"
-            style={{ borderColor: "var(--border)", background: "var(--background-elevated)" }}
-          >
-            <span className="block text-sm font-semibold text-[var(--foreground-muted)] mb-2">
-              Notre Sphère
-            </span>
-            <div className="flex flex-wrap gap-x-6 gap-y-1 text-[var(--foreground)]">
-              <span>
-                <strong>Population :</strong> {formatNumber(sphereData.totalPopulation)}
-              </span>
-              <span>
-                <strong>PIB :</strong> {formatGdp(sphereData.totalGdp)}
-              </span>
+      {(sphereData.totalPopulation > 0 || sphereData.totalGdp > 0 || sphereData.totalInfluence > 0) && (() => {
+        const orderStatus: Record<"Annexé" | "Occupé" | "Contesté", number> = { Annexé: 0, Occupé: 1, Contesté: 2 };
+        const sortedCountries = [...sphereData.countries].sort((a, b) => {
+          const diff = orderStatus[a.controlStatus] - orderStatus[b.controlStatus];
+          return diff !== 0 ? diff : a.name.localeCompare(b.name, "fr");
+        });
+        const canonicalOrder: Array<{ name: string; flag_url: string | null; slug: string; colorIndex: number }> = [
+          { name: country.name, flag_url: country.flag_url ?? null, slug: country.slug, colorIndex: 0 },
+          ...sortedCountries.map((c, i) => ({ name: c.name, flag_url: c.flag_url, slug: c.slug, colorIndex: i + 1 })),
+        ];
+        const slicesPop = canonicalOrder.map((item, i) => ({
+          ...item,
+          value: item.colorIndex === 0 ? Number(country.population ?? 0) : sortedCountries[i - 1]!.contributionPopulation,
+        }));
+        const slicesGdp = canonicalOrder.map((item, i) => ({
+          ...item,
+          value: item.colorIndex === 0 ? Number(country.gdp ?? 0) : sortedCountries[i - 1]!.contributionGdp,
+        }));
+        const slicesInfluence = canonicalOrder.map((item, i) => ({
+          ...item,
+          value: item.colorIndex === 0 ? sphereData.masterInfluence : sortedCountries[i - 1]!.influenceGiven,
+        }));
+        return (
+          <section className={panelClass} style={panelStyle}>
+            <h3 className="mb-4 text-lg font-semibold text-[var(--foreground)]">
+              Sphère
+            </h3>
+            <p className="mb-4 text-sm text-[var(--foreground-muted)]">
+              Somme impériale (pays maître + parts proportionnelles). Pour les pays contrôlés : part = % contrôle × multiplicateur de la règle (Contesté / Occupé / Annexé).
+            </p>
+            <div
+              className="mb-4 flex flex-wrap justify-center gap-10 rounded-lg border p-6"
+              style={{ borderColor: "var(--border)", background: "var(--background-elevated)" }}
+            >
+              <SpherePieChart slices={slicesPop} total={sphereData.totalPopulation} title="Population" showLegend={false} formatValue={formatNumber} />
+              <SpherePieChart slices={slicesGdp} total={sphereData.totalGdp} title="PIB" showLegend={false} formatValue={(v) => formatGdp(v)} />
+              <SpherePieChart slices={slicesInfluence} total={sphereData.totalInfluence} title="Influence" showLegend={false} formatValue={formatNumber} />
             </div>
-          </div>
-          <ul className="space-y-3">
-            {sphereData.countries.map((c) => (
-              <li
-                key={c.id}
-                className="flex flex-wrap items-center gap-x-4 gap-y-1 rounded border py-2 px-3"
-                style={{ borderColor: "var(--border-muted)" }}
-              >
-                <Link
-                  href={`/pays/${c.slug}`}
-                  className="font-medium text-[var(--accent)] hover:underline"
-                >
-                  {c.name}
-                </Link>
-                <span className="text-sm text-[var(--foreground-muted)]">
-                  Population : {formatNumber(c.population ?? 0)}
-                </span>
-                <span className="text-sm text-[var(--foreground-muted)]">
-                  PIB : {formatGdp(c.gdp ?? 0)}
-                </span>
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
+            <div className="mb-6 rounded border p-3" style={{ borderColor: "var(--border-muted)", background: "var(--background-elevated)" }}>
+              <p className="mb-2 text-xs font-semibold text-[var(--foreground-muted)]">Légende</p>
+              <ul className="flex flex-wrap gap-x-6 gap-y-1 text-xs">
+                {canonicalOrder.map((item) => (
+                  <li key={item.slug} className="flex items-center gap-2">
+                    <span
+                      className="h-3 w-3 shrink-0 rounded-sm"
+                      style={{ backgroundColor: SPHERE_PIE_COLORS[item.colorIndex % SPHERE_PIE_COLORS.length] }}
+                    />
+                    {item.flag_url ? (
+                      <Link href={`/pays/${item.slug}`} className="shrink-0">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={item.flag_url} alt="" width={16} height={11} className="inline-block h-[11px] w-4 rounded object-cover align-middle" />
+                      </Link>
+                    ) : null}
+                    <Link href={`/pays/${item.slug}`} className="text-[var(--foreground-muted)] hover:text-[var(--accent)] hover:underline">
+                      {item.name}
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </div>
+            {sphereData.countries.length > 0 && (
+              <div className="overflow-x-auto rounded border" style={{ borderColor: "var(--border-muted)" }}>
+                <table className="w-full min-w-[420px] text-left text-sm">
+                  <thead>
+                    <tr className="border-b text-[var(--foreground-muted)]" style={{ borderColor: "var(--border)" }}>
+                      <th className="p-3 font-semibold">Pays</th>
+                      <th className="p-3 font-semibold">Niveau</th>
+                      <th className="p-3 font-semibold text-right">Population (part)</th>
+                      <th className="p-3 font-semibold text-right">PIB (part)</th>
+                      <th className="p-3 font-semibold text-right">Influence</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {sortedCountries.map((c) => (
+                      <tr key={c.id} className="border-b last:border-b-0" style={{ borderColor: "var(--border-muted)" }}>
+                        <td className="p-3">
+                          <div className="flex items-center gap-2">
+                            {c.flag_url ? (
+                              <Link href={`/pays/${c.slug}`} className="shrink-0">
+                                {/* eslint-disable-next-line @next/next/no-img-element */}
+                                <img src={c.flag_url} alt="" width={24} height={16} className="h-4 w-6 rounded object-cover" style={{ border: "1px solid var(--border)" }} />
+                              </Link>
+                            ) : null}
+                            <Link href={`/pays/${c.slug}`} className="font-medium text-[var(--accent)] hover:underline">
+                              {c.name}
+                            </Link>
+                          </div>
+                        </td>
+                        <td className="p-3 text-[var(--foreground-muted)]">
+                          {c.controlStatus}
+                          {c.controlStatus === "Contesté" && ` (${c.share_pct} %)`}
+                          {c.controlStatus === "Occupé" && " (100 %)"}
+                          {c.controlStatus === "Annexé" && " (100 %)"}
+                        </td>
+                        <td className="p-3 text-right font-mono text-[var(--foreground)]" title="Part comptée dans la sphère (proportionnelle au % de contrôle).">
+                          {formatNumber(c.contributionPopulation)}
+                        </td>
+                        <td className="p-3 text-right font-mono text-[var(--foreground)]" title="Part comptée dans la sphère (proportionnelle au % de contrôle).">
+                          {formatGdp(c.contributionGdp)}
+                        </td>
+                        <td className="p-3 text-right font-mono text-[var(--foreground)]" title="Influence apportée = influence du pays × % contrôle × multiplicateur règle (Contesté/Occupé/Annexé).">
+                          {formatNumber(c.influenceGiven)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </section>
+        );
+      })()}
     </div>
   );
 }

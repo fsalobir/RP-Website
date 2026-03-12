@@ -86,6 +86,14 @@ export interface CountryMilitaryLimit {
   limit_value: number
 }
 
+export interface PerkCategory {
+  id: string
+  name_fr: string
+  sort_order: number
+  created_at: string
+  updated_at: string
+}
+
 export interface Perk {
   id: string
   name_fr: string
@@ -96,6 +104,33 @@ export interface Perk {
   min_science: number | null
   min_stability: number | null
   sort_order: number
+  category_id: string | null
+  icon_url: string | null
+  /** Taille d'affichage de l'icône en pixels (carré). Défaut 48. */
+  icon_size: number | null
+  created_at?: string
+  updated_at?: string
+}
+
+export interface PerkEffect {
+  id: string
+  perk_id: string
+  effect_kind: string
+  effect_target: string | null
+  effect_subtype: string | null
+  value: number
+  created_at: string
+  updated_at: string
+}
+
+export interface PerkRequirement {
+  id: string
+  perk_id: string
+  requirement_kind: string
+  requirement_target: string | null
+  value: number
+  created_at: string
+  updated_at: string
 }
 
 export interface CountryPerk {

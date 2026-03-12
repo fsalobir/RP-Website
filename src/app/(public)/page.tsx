@@ -4,6 +4,7 @@ import { CountriesTable } from "@/components/countries/CountriesTable";
 import { computeHardPowerByCountry } from "@/lib/hardPower";
 import { computeInfluenceForAll, applyInfluenceModifiers } from "@/lib/influence";
 import { getInfluenceModifiersByCountry } from "@/lib/countryEffects";
+import { getEffectiveSpherePct, type SphereInfluencePct } from "@/lib/ideology";
 import type { MilitaryBranch } from "@/types/database";
 
 export const revalidate = 3600;
@@ -27,7 +28,7 @@ export default async function HomePage({
       .select("country_id, date, population, gdp, militarism, industry, science, stability")
       .order("date", { ascending: false }),
     supabase.from("rule_parameters").select("key, value").in("key", [
-      "influence_config", "global_growth_effects",
+      "influence_config", "sphere_influence_pct", "global_growth_effects",
       "mobilisation_config", "mobilisation_level_effects",
       "law_auto_industry_config", "law_auto_industry_level_effects",
       "law_air_industry_config", "law_air_industry_level_effects",
@@ -119,13 +120,30 @@ export default async function HomePage({
     })
   );
 
+  const sphereInfluencePct = rulesByKey.sphere_influence_pct as SphereInfluencePct | undefined;
+  const sphereInfluenceBonusByController = new Map<string, number>();
+  for (const r of controlRows) {
+    const controllerId = r.controller_country_id;
+    const targetInfluence = influenceByCountry.get(r.country_id)?.influence ?? 0;
+    const controlRow = { country_id: r.country_id, controller_country_id: controllerId, share_pct: Number(r.share_pct ?? 0), is_annexed: !!r.is_annexed };
+    const effectivePct = getEffectiveSpherePct(controlRow, sphereInfluencePct);
+    const influenceGiven = targetInfluence * (controlRow.share_pct / 100) * (effectivePct / 100);
+    const prev = sphereInfluenceBonusByController.get(controllerId) ?? 0;
+    sphereInfluenceBonusByController.set(controllerId, prev + influenceGiven);
+  }
+
   const rows =
-    countries?.map((c) => ({
-      country: c,
-      prev: latestByCountry.get(normId(c.id)) ?? null,
-      influence: influenceByCountry.get(c.id)?.influence ?? null,
-      sphere: sphereByControllerId.get(c.id) ?? [],
-    })) ?? [];
+    countries?.map((c) => {
+      const baseInfluence = influenceByCountry.get(c.id)?.influence ?? null;
+      const sphereBonus = sphereInfluenceBonusByController.get(c.id) ?? 0;
+      const totalInfluence = baseInfluence != null ? Math.round(baseInfluence + sphereBonus) : null;
+      return {
+        country: c,
+        prev: latestByCountry.get(normId(c.id)) ?? null,
+        influence: totalInfluence,
+        sphere: sphereByControllerId.get(c.id) ?? [],
+      };
+    }) ?? [];
 
   const panelStyle = {
     background: "var(--background-panel)",
