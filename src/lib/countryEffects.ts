@@ -579,8 +579,12 @@ export function formatAdminEffectShortForDiscord(
   return valueStr;
 }
 
-/** True si l’effet doit s’afficher en vert (bonus). Minimum forcé = toujours rouge (dépense forcée). */
-export function isEffectDisplayPositive(e: CountryEffect): boolean {
+/** True si l’effet doit s’afficher en vert (bonus). Minimum forcé = toujours rouge (dépense forcée).
+ * Accepte indifféremment un CountryEffect complet ou un effet « résolu » minimal (effect_kind + value).
+ */
+export function isEffectDisplayPositive(
+  e: Pick<CountryEffect, "effect_kind" | "value"> | CountryEffect
+): boolean {
   if (e.effect_kind === "budget_ministry_min_pct") return false;
   return Number(e.value) > 0;
 }
@@ -731,7 +735,7 @@ function aiEffectsSource(ctx: EffectResolutionContext): ResolvedEffect[] {
       value: Number(e.value),
       duration_remaining: PERMANENT_DURATION,
       source: "ai" as const,
-      sourceLabel: e.sourceLabel ?? "IA",
+      sourceLabel: "IA",
     }));
   }
   if (ctx.ai_status === "minor" && ctx.aiMinorEffects?.length) {
@@ -741,7 +745,7 @@ function aiEffectsSource(ctx: EffectResolutionContext): ResolvedEffect[] {
       value: Number(e.value),
       duration_remaining: PERMANENT_DURATION,
       source: "ai" as const,
-      sourceLabel: e.sourceLabel ?? "IA",
+      sourceLabel: "IA",
     }));
   }
   return [];
