@@ -175,7 +175,7 @@ export function AvantagesManager({
     setPerkIconUrl("");
     setPerkIconFile(null);
     setPerkIconSize(48);
-    setPerkSortOrder(perks.length);
+    setPerkSortOrder(perks.length + 1);
     setPerkEffects([]);
     setPerkRequirements([]);
     setRequirementFormOpen(false);
@@ -193,7 +193,7 @@ export function AvantagesManager({
     setPerkIconUrl(p.icon_url ?? "");
     setPerkIconFile(null);
     setPerkIconSize(p.icon_size ?? 48);
-    setPerkSortOrder(p.sort_order ?? 0);
+    setPerkSortOrder((p.sort_order ?? 0) + 1);
     setPerkEffects(
       (p.perk_effects ?? []).map((e) => ({
         effect_kind: e.effect_kind,
@@ -233,7 +233,7 @@ export function AvantagesManager({
     formData.set("category_id", perkCategoryId);
     formData.set("icon_url", iconUrl ?? "");
     formData.set("icon_size", String(perkIconSize));
-    formData.set("sort_order", String(perkSortOrder));
+    formData.set("sort_order", String(Math.max(1, perkSortOrder)));
     const result = editingPerkId
       ? await updatePerk(editingPerkId, formData, perkEffects, perkRequirements)
       : await createPerk(formData, perkEffects, perkRequirements);
