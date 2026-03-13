@@ -36,7 +36,11 @@ import { CountryTabStateActions } from "./CountryTabStateActions";
 import { CountryTabLaws } from "./CountryTabLaws";
 import { CountryTabEtatMajor } from "./CountryTabEtatMajor";
 import { InfoTooltipWithWikiLink } from "@/components/ui/InfoTooltipWithWikiLink";
-import type { CountryEtatMajorFocus } from "@/types/database";
+/** Subset of CountryEtatMajorFocus used by the page (only the 4 focus roster ids). */
+export type EtatMajorFocusForTabs = Pick<
+  import("@/types/database").CountryEtatMajorFocus,
+  "design_roster_unit_id" | "recrutement_roster_unit_id" | "procuration_roster_unit_id" | "stock_roster_unit_id"
+> | null;
 
 const BUDGET_MINISTRIES = [
   { key: "pct_etat" as const, label: "Ministère d'État", tooltip: "Génère des actions d'état.", group: 1 as const },
@@ -202,7 +206,7 @@ export function CountryTabs({
   emitterCountry?: { name: string; flag_url: string | null; regime: string | null; influence: number | null };
   intelLevel?: number | null;
   foggedRoster?: FoggedRoster | null;
-  etatMajorFocus?: CountryEtatMajorFocus | null;
+  etatMajorFocus?: EtatMajorFocusForTabs;
 }) {
   const canEditCountry = isAdmin || isPlayerForThisCountry;
   const canSeeCabinetAndBudget = isAdmin || isPlayerForThisCountry;
