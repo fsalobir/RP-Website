@@ -39,6 +39,7 @@ export type BudgetPcts = {
   pct_defense: number;
   pct_interieur: number;
   pct_affaires_etrangeres: number;
+  pct_procuration_militaire: number;
 };
 
 export type CountryEffectInput = {

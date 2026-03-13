@@ -23,6 +23,7 @@ const BUDGET_PCT_KEYS = [
   "pct_defense",
   "pct_interieur",
   "pct_affaires_etrangeres",
+  "pct_procuration_militaire",
 ] as const;
 
 type BudgetPcts = Record<(typeof BUDGET_PCT_KEYS)[number], number>;
@@ -93,6 +94,7 @@ function randomizeBudgetPcts(forcedMinPcts: Record<string, number>, allocationCa
     pct_defense: Math.max(0, forcedMinPcts.pct_defense ?? 0),
     pct_interieur: Math.max(0, forcedMinPcts.pct_interieur ?? 0),
     pct_affaires_etrangeres: Math.max(0, forcedMinPcts.pct_affaires_etrangeres ?? 0),
+    pct_procuration_militaire: Math.max(0, forcedMinPcts.pct_procuration_militaire ?? 0),
   };
   const sumMin = BUDGET_PCT_KEYS.reduce((s, k) => s + mins[k], 0);
   if (sumMin >= effectiveCap) {

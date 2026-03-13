@@ -77,8 +77,44 @@ export async function getCountryMilitaryUnits(countryId: string) {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("country_military_units")
-    .select("roster_unit_id, current_level, extra_count")
+    .select("roster_unit_id, current_level, extra_count, recrutement_points, procuration_points, stock_points")
     .eq("country_id", countryId);
-  if (error) return { error: error.message, units: [] as { roster_unit_id: string; current_level: number; extra_count: number }[] };
-  return { units: (data ?? []) as { roster_unit_id: string; current_level: number; extra_count: number }[] };
+  if (error) return { error: error.message, units: [] as { roster_unit_id: string; current_level: number; extra_count: number; recrutement_points: number; procuration_points: number; stock_points: number }[] };
+  return { units: (data ?? []) as { roster_unit_id: string; current_level: number; extra_count: number; recrutement_points: number; procuration_points: number; stock_points: number }[] };
+}
+
+export type EtatMajorFocusPayload = {
+  design_roster_unit_id: string | null;
+  recrutement_roster_unit_id: string | null;
+  procuration_roster_unit_id: string | null;
+  stock_roster_unit_id: string | null;
+};
+
+export async function saveEtatMajorFocus(countryId: string, slug: string, focus: EtatMajorFocusPayload) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Non connecté." };
+
+  const { data: adminRow } = await supabase.from("admins").select("id").eq("user_id", user.id).single();
+  const { data: playerRow } = await supabase.from("country_players").select("country_id").eq("user_id", user.id).eq("country_id", countryId).maybeSingle();
+  if (!adminRow && !playerRow) return { error: "Vous ne pouvez modifier que le pays qui vous est assigné." };
+
+  const { error } = await supabase
+    .from("country_etat_major_focus")
+    .upsert(
+      {
+        country_id: countryId,
+        design_roster_unit_id: focus.design_roster_unit_id || null,
+        recrutement_roster_unit_id: focus.recrutement_roster_unit_id || null,
+        procuration_roster_unit_id: focus.procuration_roster_unit_id || null,
+        stock_roster_unit_id: focus.stock_roster_unit_id || null,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: "country_id" }
+    );
+
+  if (error) return { error: error.message };
+
+  revalidatePath(`/pays/${slug}`, "page");
+  return {};
 }

@@ -14,6 +14,8 @@ export const RULE_KEY_LABELS: Record<string, string> = {
   budget_defense: "Ministère de la Défense",
   budget_interieur: "Ministère de l'Intérieur",
   budget_affaires_etrangeres: "Ministère des Affaires étrangères",
+  budget_procuration_militaire: "Procuration Militaire",
+  etat_major_config: "État Major",
   world_date: "Date du monde",
   world_date_advance_months: "Mois par mise à jour (temporalité)",
   cron_paused: "Jeu en pause (cron désactivé)",
@@ -39,9 +41,13 @@ export const RULE_SECTIONS: RuleSection[] = [
       "budget_defense",
       "budget_interieur",
       "budget_affaires_etrangeres",
+      "budget_procuration_militaire",
     ],
   },
 ];
+
+/** Section État Major (config min/max points par tick). */
+export const ETAT_MAJOR_CONFIG_KEYS = ["etat_major_config"] as const;
 
 /** Clés des ministères budget (pour rendu structuré). */
 export const BUDGET_MINISTRY_KEYS = [
@@ -54,6 +60,7 @@ export const BUDGET_MINISTRY_KEYS = [
   "budget_defense",
   "budget_interieur",
   "budget_affaires_etrangeres",
+  "budget_procuration_militaire",
 ];
 
 /** Libellés des ministères budget. */
@@ -67,6 +74,7 @@ export const BUDGET_MINISTRY_LABELS: Record<string, string> = {
   budget_defense: "Ministère de la Défense",
   budget_interieur: "Ministère de l'Intérieur",
   budget_affaires_etrangeres: "Ministère des Affaires étrangères",
+  budget_procuration_militaire: "Procuration Militaire",
 };
 
 /** Types d’effet budget (agrégats : population, PIB, stats). */
@@ -125,6 +133,7 @@ export const BUDGET_MINISTRY_EFFECTS: Record<string, { key: string; label: strin
     { key: "stability", label: "Stabilité" },
     { key: "gdp", label: "PIB" },
   ],
+  budget_procuration_militaire: [{ key: "procuration", label: "Points Procuration (État Major)" }],
 };
 
 export type BudgetMinistryValue = {

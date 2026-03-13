@@ -32,6 +32,7 @@ const RULE_KEYS = [
   "budget_defense",
   "budget_interieur",
   "budget_affaires_etrangeres",
+  "etat_major_config",
   ...LAW_DEFINITIONS.map((d) => d.configRuleKey),
   ...LAW_DEFINITIONS.map((d) => d.effectsRuleKey),
 ] as const;
@@ -99,7 +100,7 @@ export default async function CountryPage({
   const isPlayerForThisCountry = auth.playerCountryId === country.id;
   const backHref = isAdmin ? "/admin/pays" : "/";
 
-  const [cachedGlobals, macrosRes, limitsRes, countryPerksRes, budgetRes, effectsRes, countriesRes, controlRes, updateLogsRes, countryLawsRes, countryMilitaryUnitsRes, countryMilitaryUnitsAllRes, assignedPlayerRes, countriesListRes] = await Promise.all([
+  const [cachedGlobals, macrosRes, limitsRes, countryPerksRes, budgetRes, effectsRes, countriesRes, controlRes, updateLogsRes, countryLawsRes, countryMilitaryUnitsRes, countryMilitaryUnitsAllRes, assignedPlayerRes, countriesListRes, etatMajorFocusRes] = await Promise.all([
     getCachedCountryPageGlobals(),
     supabase.from("country_macros").select("*").eq("country_id", country.id),
     supabase
@@ -119,6 +120,7 @@ export default async function CountryPage({
     supabase.from("country_military_units").select("country_id, roster_unit_id, current_level, extra_count"),
     supabase.from("country_players").select("email, name").eq("country_id", country.id).maybeSingle(),
     supabase.from("countries").select("id, name").order("name"),
+    supabase.from("country_etat_major_focus").select("design_roster_unit_id, recrutement_roster_unit_id, procuration_roster_unit_id, stock_roster_unit_id").eq("country_id", country.id).maybeSingle(),
   ]);
 
   const controlRows = (Array.isArray(controlRes.data) ? controlRes.data : []) as Array<{ country_id: string; share_pct: number; is_annexed: boolean }>;
@@ -198,6 +200,7 @@ export default async function CountryPage({
   const macros = macrosRes.data ?? [];
   const limits = limitsRes.data ?? [];
   const countryMilitaryUnits = (Array.isArray(countryMilitaryUnitsRes.data) ? countryMilitaryUnitsRes.data : []) as CountryMilitaryUnit[];
+  const etatMajorFocus = etatMajorFocusRes.data as { design_roster_unit_id: string | null; recrutement_roster_unit_id: string | null; procuration_roster_unit_id: string | null; stock_roster_unit_id: string | null } | null;
   const unlockedPerkIds = new Set((countryPerksRes.data ?? []).map((p) => p.perk_id));
 
   const activePerkIds = new Set<string>();
@@ -410,7 +413,13 @@ export default async function CountryPage({
       const levels = rosterLevels
         .filter((l) => l.unit_id === unit.id)
         .sort((a, b) => a.level - b.level)
-        .map((l) => ({ level: l.level, manpower: l.manpower, hard_power: (l as { hard_power?: number }).hard_power ?? 0 }));
+        .map((l) => ({
+          level: l.level,
+          manpower: l.manpower,
+          hard_power: (l as MilitaryRosterUnitLevel).hard_power ?? 0,
+          mobilization_cost: (l as MilitaryRosterUnitLevel).mobilization_cost ?? 100,
+          science_required: Number((l as MilitaryRosterUnitLevel).science_required ?? 0),
+        }));
       tempRoster[unit.branch].push({ unit, countryState, levels });
     }
     for (const b of ["terre", "air", "mer", "strategique"] as const) {
@@ -432,7 +441,13 @@ export default async function CountryPage({
     const levels = rosterLevels
       .filter((l) => l.unit_id === unit.id)
       .sort((a, b) => a.level - b.level)
-      .map((l) => ({ level: l.level, manpower: l.manpower, hard_power: (l as { hard_power?: number }).hard_power ?? 0 }));
+      .map((l) => ({
+      level: l.level,
+      manpower: l.manpower,
+      hard_power: (l as MilitaryRosterUnitLevel).hard_power ?? 0,
+      mobilization_cost: (l as MilitaryRosterUnitLevel).mobilization_cost ?? 100,
+      science_required: Number((l as MilitaryRosterUnitLevel).science_required ?? 0),
+    }));
     rosterByBranch[unit.branch].push({ unit, countryState, levels });
   }
   for (const b of branches) {
@@ -481,6 +496,7 @@ export default async function CountryPage({
         ai_status={country.ai_status ?? null}
         aiMajorEffects={aiMajorEffects}
         aiMinorEffects={aiMinorEffects}
+        etatMajorFocus={etatMajorFocus}
         sphereData={sphereData}
         ideologySummary={ideologySummary}
         stateActionTypes={stateActionTypes}

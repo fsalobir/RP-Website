@@ -227,6 +227,10 @@ export const ALL_EFFECT_KIND_IDS = [
   "ideology_snap_monarchism",
   "ideology_snap_republicanism",
   "ideology_snap_cultism",
+  "procuration_points_per_day",
+  "recrutement_bonus_percent",
+  "design_bonus_percent",
+  "procuration_bonus_percent",
 ] as const;
 
 export type EffectKindId = (typeof ALL_EFFECT_KIND_IDS)[number];
@@ -258,6 +262,10 @@ export const EFFECT_KIND_META: Record<EffectKindId, EffectKindMeta> = {
   ideology_snap_monarchism: { targetType: "none", valueFormat: "raw", label: "Impulsion idéologique (Monarchisme)" },
   ideology_snap_republicanism: { targetType: "none", valueFormat: "raw", label: "Impulsion idéologique (Républicanisme)" },
   ideology_snap_cultism: { targetType: "none", valueFormat: "raw", label: "Impulsion idéologique (Cultisme)" },
+  procuration_points_per_day: { targetType: "none", valueFormat: "integer", label: "Points de Procuration (par jour)" },
+  recrutement_bonus_percent: { targetType: "none", valueFormat: "percent_display", label: "Bonus de Recrutement (%)" },
+  design_bonus_percent: { targetType: "none", valueFormat: "percent_display", label: "Bonus de Design (%)" },
+  procuration_bonus_percent: { targetType: "none", valueFormat: "percent_display", label: "Bonus de Procuration (%)" },
 };
 
 /** Libellé court pour effect_kind (affichage liste). Dérivé des métadonnées, avec fallback. */
@@ -306,6 +314,10 @@ const EFFECT_KIND_GROUP_BY_ID: Record<EffectKindId, keyof typeof EFFECT_KIND_GRO
   ideology_snap_monarchism: "ideologie",
   ideology_snap_republicanism: "ideologie",
   ideology_snap_cultism: "ideologie",
+  procuration_points_per_day: "militaire",
+  recrutement_bonus_percent: "militaire",
+  design_bonus_percent: "militaire",
+  procuration_bonus_percent: "militaire",
 };
 
 export function getEffectKindOptionGroups(allowedKinds?: readonly string[]): EffectKindOptionGroup[] {
@@ -348,6 +360,10 @@ const _NONE = new Set<string>([
   "ideology_snap_monarchism",
   "ideology_snap_republicanism",
   "ideology_snap_cultism",
+  "procuration_points_per_day",
+  "recrutement_bonus_percent",
+  "design_bonus_percent",
+  "procuration_bonus_percent",
 ]);
 const _BRANCH = new Set<string>(["military_unit_limit_modifier"]);
 const _ROSTER = new Set<string>(["military_unit_extra", "military_unit_tech_rate", "military_unit_limit_modifier_roster"]);
@@ -405,7 +421,7 @@ export function getEffectKindValueHelper(effectKind: string): {
       };
     case "integer":
       return {
-        valueLabel: effectKind === "military_unit_tech_rate" ? "Pts/jour" : "Extra",
+        valueLabel: effectKind === "military_unit_tech_rate" || effectKind === "procuration_points_per_day" ? "Pts/jour" : "Extra",
         valueStep: 1,
         displayToStored: (x) => Math.floor(x),
         storedToDisplay: (x) => Number(x),
@@ -501,6 +517,10 @@ export function formatEffectValue(effectKind: string | null | undefined, value: 
   if (kind === "relation_delta") return `${Number(value) >= 0 ? "+" : ""}${Number(value)}`;
   if (kind.startsWith("ideology_drift_") || kind.startsWith("ideology_snap_")) {
     return `${Number(value) >= 0 ? "+" : ""}${Number(value).toFixed(2)}`;
+  }
+  if (kind === "procuration_points_per_day") return `${Number(value)} pts/jour`;
+  if (kind === "recrutement_bonus_percent" || kind === "design_bonus_percent" || kind === "procuration_bonus_percent") {
+    return `${Number(value) >= 0 ? "+" : ""}${Number(value)} %`;
   }
   return String(value);
 }

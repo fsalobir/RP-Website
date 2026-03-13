@@ -271,6 +271,7 @@ export function CountryTabBudget({
           pct_defense: pcts.pct_defense ?? 0,
           pct_interieur: pcts.pct_interieur ?? 0,
           pct_affaires_etrangeres: pcts.pct_affaires_etrangeres ?? 0,
+          pct_procuration_militaire: pcts.pct_procuration_militaire ?? 0,
         };
         const expected = getExpectedNextTick(
           snapshot,

@@ -66,6 +66,10 @@ export interface MilitaryRosterUnitLevel {
   level: number
   manpower: number
   hard_power: number
+  /** Coût en points pour acquérir un extra à ce niveau (Recrutement, Procuration, Stock). */
+  mobilization_cost: number
+  /** Seuil de science pour débloquer ce niveau en Design. */
+  science_required: number
   created_at: string
 }
 
@@ -75,6 +79,12 @@ export interface CountryMilitaryUnit {
   roster_unit_id: string
   current_level: number
   extra_count: number
+  /** Points accumulés vers le prochain extra (Recrutement État Major). */
+  recrutement_points: number
+  /** Points accumulés vers le prochain extra (Procuration État Major). */
+  procuration_points: number
+  /** Points accumulés vers le prochain extra (Stock Stratégique État Major). */
+  stock_points: number
   created_at: string
   updated_at: string
 }
@@ -153,7 +163,17 @@ export interface CountryBudget {
   pct_defense: number
   pct_interieur: number
   pct_affaires_etrangeres: number
+  pct_procuration_militaire: number
   created_at: string
+  updated_at: string
+}
+
+export interface CountryEtatMajorFocus {
+  country_id: string
+  design_roster_unit_id: string | null
+  recrutement_roster_unit_id: string | null
+  procuration_roster_unit_id: string | null
+  stock_roster_unit_id: string | null
   updated_at: string
 }
 

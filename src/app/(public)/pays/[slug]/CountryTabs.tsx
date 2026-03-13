@@ -34,7 +34,9 @@ import { CountryTabDebug } from "./CountryTabDebug";
 import { CountryTabCabinet } from "./CountryTabCabinet";
 import { CountryTabStateActions } from "./CountryTabStateActions";
 import { CountryTabLaws } from "./CountryTabLaws";
+import { CountryTabEtatMajor } from "./CountryTabEtatMajor";
 import { InfoTooltipWithWikiLink } from "@/components/ui/InfoTooltipWithWikiLink";
+import type { CountryEtatMajorFocus } from "@/types/database";
 
 const BUDGET_MINISTRIES = [
   { key: "pct_etat" as const, label: "Ministère d'État", tooltip: "Génère des actions d'état.", group: 1 as const },
@@ -46,6 +48,7 @@ const BUDGET_MINISTRIES = [
   { key: "pct_infrastructure" as const, label: "Ministère de l'Infrastructure", tooltip: "Augmente modérément le PIB et l'industrie.", group: 3 as const },
   { key: "pct_industrie" as const, label: "Ministère de l'Industrie", tooltip: "Augmente significativement le niveau d'industrie.", group: 3 as const },
   { key: "pct_defense" as const, label: "Ministère de la Défense", tooltip: "Augmente significativement le niveau de militarisme.", group: 3 as const },
+  { key: "pct_procuration_militaire" as const, label: "Procuration Militaire", tooltip: "Points de procuration pour l'État Major (unités Soutien, Air, Mer).", group: 3 as const },
 ];
 
 type BudgetPctKey = (typeof BUDGET_MINISTRIES)[number]["key"];
@@ -63,6 +66,7 @@ function getDefaultPcts(): Record<BudgetPctKey, number> {
     pct_defense: 0,
     pct_interieur: 0,
     pct_affaires_etrangeres: 0,
+    pct_procuration_militaire: 0,
   };
 }
 
@@ -106,6 +110,7 @@ export function CountryTabs({
   emitterCountry = { name: "", flag_url: null, regime: null, influence: null },
   intelLevel = null,
   foggedRoster = null,
+  etatMajorFocus = null,
 }: {
   country: Country;
   macros: { key: string; value: number }[];
@@ -197,12 +202,13 @@ export function CountryTabs({
   emitterCountry?: { name: string; flag_url: string | null; regime: string | null; influence: number | null };
   intelLevel?: number | null;
   foggedRoster?: FoggedRoster | null;
+  etatMajorFocus?: CountryEtatMajorFocus | null;
 }) {
   const canEditCountry = isAdmin || isPlayerForThisCountry;
   const canSeeCabinetAndBudget = isAdmin || isPlayerForThisCountry;
   const rankEmoji = (r: number) => (r === 1 ? "👑" : r === 2 ? "🥈" : r === 3 ? "🥉" : null);
   const router = useRouter();
-  const [tab, setTab] = useState<"general" | "military" | "perks" | "budget" | "laws" | "cabinet" | "state_actions" | "debug">(canSeeCabinetAndBudget ? "cabinet" : "general");
+  const [tab, setTab] = useState<"general" | "military" | "etat_major" | "perks" | "budget" | "laws" | "cabinet" | "state_actions" | "debug">(canSeeCabinetAndBudget ? "cabinet" : "general");
   const [budgetFraction, setBudgetFraction] = useState(DEFAULT_BUDGET_FRACTION);
   const [pcts, setPcts] = useState<Record<BudgetPctKey, number>>(getDefaultPcts);
   const [budgetSaving, setBudgetSaving] = useState(false);
@@ -410,7 +416,7 @@ export function CountryTabs({
   }, []);
 
   useEffect(() => {
-    if (!canSeeCabinetAndBudget && (tab === "cabinet" || tab === "budget")) {
+    if (!canSeeCabinetAndBudget && (tab === "cabinet" || tab === "budget" || tab === "etat_major")) {
       setTab("general");
     }
   }, [canSeeCabinetAndBudget, tab]);
@@ -526,7 +532,7 @@ export function CountryTabs({
     if (!budget) return;
     setBudgetFraction(Number(budget.budget_fraction) || DEFAULT_BUDGET_FRACTION);
     const forcedMinPctsInit = getForcedMinPcts(resolvedEffects);
-    const raw = {
+    const raw: Record<string, number> = {
       pct_etat: Number(budget.pct_etat) || 0,
       pct_education: Number(budget.pct_education) || 0,
       pct_recherche: Number(budget.pct_recherche) || 0,
@@ -536,6 +542,7 @@ export function CountryTabs({
       pct_defense: Number(budget.pct_defense) || 0,
       pct_interieur: Number(budget.pct_interieur) || 0,
       pct_affaires_etrangeres: Number(budget.pct_affaires_etrangeres) || 0,
+      pct_procuration_militaire: Number((budget as { pct_procuration_militaire?: number }).pct_procuration_militaire) || 0,
     };
     BUDGET_MINISTRIES.forEach((m) => {
       const minVal = forcedMinPctsInit[m.key] ?? 0;
@@ -777,6 +784,7 @@ export function CountryTabs({
             pct_defense: Number(current.pct_defense) || 0,
             pct_interieur: Number(current.pct_interieur) || 0,
             pct_affaires_etrangeres: Number(current.pct_affaires_etrangeres) || 0,
+            pct_procuration_militaire: Number((current as { pct_procuration_militaire?: number }).pct_procuration_militaire) || 0,
           };
           const total = BUDGET_MINISTRIES.reduce((s, m) => s + curPcts[m.key], 0);
           if (total > 0) {
@@ -1038,6 +1046,21 @@ export function CountryTabs({
         >
           Militaire
         </button>
+        {canSeeCabinetAndBudget && (
+          <button
+            type="button"
+            className={`tab ${tab === "etat_major" ? "tab-active" : ""}`}
+            data-state={tab === "etat_major" ? "active" : "inactive"}
+            onClick={() => setTab("etat_major")}
+            style={
+              tab === "etat_major"
+                ? { color: "var(--accent)", borderBottomColor: "var(--accent)" }
+                : undefined
+            }
+          >
+            État Major
+          </button>
+        )}
         <button
           type="button"
           className={`tab ${tab === "perks" ? "tab-active" : ""}`}
@@ -1183,6 +1206,22 @@ export function CountryTabs({
           onSaveMilitaryUnit={handleSaveMilitaryUnit}
           intelLevel={intelLevel}
           foggedRoster={foggedRoster}
+        />
+      )}
+
+      {tab === "etat_major" && canSeeCabinetAndBudget && (
+        <CountryTabEtatMajor
+          countryId={country.id}
+          countrySlug={country.slug ?? ""}
+          country={country}
+          etatMajorFocus={etatMajorFocus}
+          rosterByBranch={rosterByBranch}
+          ruleParametersByKey={ruleParametersByKey}
+          resolvedEffects={resolvedEffects}
+          pctProcurationMilitaire={pcts.pct_procuration_militaire ?? 0}
+          panelClass={panelClass}
+          panelStyle={panelStyle}
+          canEditCountry={canEditCountry}
         />
       )}
 

@@ -368,6 +368,7 @@ export function ReglesForm({
   const [aiMinorEffectTarget, setAiMinorEffectTarget] = useState<string | null>(null);
   const [aiMinorEffectValue, setAiMinorEffectValue] = useState<string>("");
   const [intelOpen, setIntelOpen] = useState(false);
+  const [etatMajorOpen, setEtatMajorOpen] = useState(false);
 
   const supabase = createClient();
 
@@ -1546,6 +1547,88 @@ export function ReglesForm({
               </div>
             </div>
           </CollapsibleBlock>
+
+          {(() => {
+            const etatMajorRule = items.find((r) => r.key === "etat_major_config");
+            if (!etatMajorRule) return null;
+            const raw = typeof etatMajorRule.value === "object" && etatMajorRule.value !== null && !Array.isArray(etatMajorRule.value)
+              ? (etatMajorRule.value as Record<string, unknown>)
+              : {};
+            const design = (raw.design as Record<string, number>) ?? { min_points_per_tick: 1, max_points_per_tick: 10 };
+            const recrutement = (raw.recrutement as Record<string, number>) ?? { min_points_per_tick: 1, max_points_per_tick: 10 };
+            const stock = (raw.stock as Record<string, number>) ?? { min_points_per_tick: 1, max_points_per_tick: 10 };
+            const procuration = (raw.procuration as Record<string, number>) ?? { base_points_per_tick: 0, points_per_pct_budget: 0.5 };
+            const updateEtatMajor = (path: string, field: string, val: number) => {
+              const next = { ...raw };
+              const seg = path === "design" ? design : path === "recrutement" ? recrutement : path === "stock" ? stock : procuration;
+              (next[path] as Record<string, number>) = { ...seg, [field]: val };
+              updateValue(etatMajorRule.id, next);
+            };
+            return (
+              <CollapsibleBlock
+                key="etat_major"
+                title="État Major"
+                infoContent={<TooltipBody text="Points par tick : Design (industrie), Recrutement (militarisme), Stock (science), Procuration (budget)." />}
+                open={etatMajorOpen}
+                onToggle={() => setEtatMajorOpen((o) => !o)}
+              >
+                <div className="pl-4 ml-2 border-l-2 space-y-4 p-3" style={{ borderColor: "var(--border-muted)" }}>
+                  <div>
+                    <div className="mb-1 text-xs font-medium text-[var(--foreground-muted)]">Bureau de Design (industrie)</div>
+                    <div className="flex flex-wrap gap-4">
+                      <label className="flex items-center gap-2">
+                        <span className="text-xs text-[var(--foreground-muted)]">Min pts/tick</span>
+                        <input type="number" min={0} step={0.5} value={design.min_points_per_tick ?? 1} onChange={(e) => updateEtatMajor("design", "min_points_per_tick", Number(e.target.value) || 0)} className={`${inputClassNarrow} w-20`} style={inputStyle} />
+                      </label>
+                      <label className="flex items-center gap-2">
+                        <span className="text-xs text-[var(--foreground-muted)]">Max pts/tick</span>
+                        <input type="number" min={0} step={0.5} value={design.max_points_per_tick ?? 10} onChange={(e) => updateEtatMajor("design", "max_points_per_tick", Number(e.target.value) || 0)} className={`${inputClassNarrow} w-20`} style={inputStyle} />
+                      </label>
+                    </div>
+                  </div>
+                  <div>
+                    <div className="mb-1 text-xs font-medium text-[var(--foreground-muted)]">Recrutement (militarisme)</div>
+                    <div className="flex flex-wrap gap-4">
+                      <label className="flex items-center gap-2">
+                        <span className="text-xs text-[var(--foreground-muted)]">Min pts/tick</span>
+                        <input type="number" min={0} step={0.5} value={recrutement.min_points_per_tick ?? 1} onChange={(e) => updateEtatMajor("recrutement", "min_points_per_tick", Number(e.target.value) || 0)} className={`${inputClassNarrow} w-20`} style={inputStyle} />
+                      </label>
+                      <label className="flex items-center gap-2">
+                        <span className="text-xs text-[var(--foreground-muted)]">Max pts/tick</span>
+                        <input type="number" min={0} step={0.5} value={recrutement.max_points_per_tick ?? 10} onChange={(e) => updateEtatMajor("recrutement", "max_points_per_tick", Number(e.target.value) || 0)} className={`${inputClassNarrow} w-20`} style={inputStyle} />
+                      </label>
+                    </div>
+                  </div>
+                  <div>
+                    <div className="mb-1 text-xs font-medium text-[var(--foreground-muted)]">Stock stratégique (science)</div>
+                    <div className="flex flex-wrap gap-4">
+                      <label className="flex items-center gap-2">
+                        <span className="text-xs text-[var(--foreground-muted)]">Min pts/tick</span>
+                        <input type="number" min={0} step={0.5} value={stock.min_points_per_tick ?? 1} onChange={(e) => updateEtatMajor("stock", "min_points_per_tick", Number(e.target.value) || 0)} className={`${inputClassNarrow} w-20`} style={inputStyle} />
+                      </label>
+                      <label className="flex items-center gap-2">
+                        <span className="text-xs text-[var(--foreground-muted)]">Max pts/tick</span>
+                        <input type="number" min={0} step={0.5} value={stock.max_points_per_tick ?? 10} onChange={(e) => updateEtatMajor("stock", "max_points_per_tick", Number(e.target.value) || 0)} className={`${inputClassNarrow} w-20`} style={inputStyle} />
+                      </label>
+                    </div>
+                  </div>
+                  <div>
+                    <div className="mb-1 text-xs font-medium text-[var(--foreground-muted)]">Procuration (budget %)</div>
+                    <div className="flex flex-wrap gap-4">
+                      <label className="flex items-center gap-2">
+                        <span className="text-xs text-[var(--foreground-muted)]">Base pts/tick</span>
+                        <input type="number" min={0} step={0.5} value={procuration.base_points_per_tick ?? 0} onChange={(e) => updateEtatMajor("procuration", "base_points_per_tick", Number(e.target.value) || 0)} className={`${inputClassNarrow} w-20`} style={inputStyle} />
+                      </label>
+                      <label className="flex items-center gap-2">
+                        <span className="text-xs text-[var(--foreground-muted)]">Pts par % budget</span>
+                        <input type="number" min={0} step={0.1} value={procuration.points_per_pct_budget ?? 0.5} onChange={(e) => updateEtatMajor("procuration", "points_per_pct_budget", Number(e.target.value) || 0)} className={`${inputClassNarrow} w-20`} style={inputStyle} />
+                      </label>
+                    </div>
+                  </div>
+                </div>
+              </CollapsibleBlock>
+            );
+          })()}
 
           {LAW_DEFINITIONS.map((def) => {
             const configRule = getLawConfigRule(def);
