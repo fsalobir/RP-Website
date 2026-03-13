@@ -9,6 +9,7 @@ import {
   rollD100ForAiEvent,
   simulateAiEventsCron,
   processDueAiEvents,
+  clearAiEvents,
 } from "@/app/admin/event-ia/actions";
 import { ACTION_KEYS_REQUIRING_IMPACT_ROLL } from "@/lib/actionKeys";
 import { getDefaultImpactMaximum, getStateActionImpactPreviewLabel } from "@/lib/actionKeys";
@@ -147,6 +148,7 @@ export function EventIaList({
   const [createLoading, setCreateLoading] = useState(false);
   const [simulateLoading, setSimulateLoading] = useState(false);
   const [processDueLoading, setProcessDueLoading] = useState(false);
+  const [clearLoading, setClearLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
 
@@ -252,6 +254,16 @@ export function EventIaList({
     setError(null);
     const res = await processDueAiEvents();
     setProcessDueLoading(false);
+    if (res.error) setError(res.error);
+    else router.refresh();
+  }
+
+  async function handleClearAll() {
+    if (!confirm("Vider complètement la liste d'événements IA ?")) return;
+    setClearLoading(true);
+    setError(null);
+    const res = await clearAiEvents();
+    setClearLoading(false);
     if (res.error) setError(res.error);
     else router.refresh();
   }
@@ -388,6 +400,15 @@ export function EventIaList({
                 style={{ borderColor: "var(--border)" }}
               >
                 Générer un event IA
+              </button>
+              <button
+                type="button"
+                onClick={handleClearAll}
+                disabled={clearLoading || events.length === 0}
+                className="rounded border px-3 py-1.5 text-sm font-medium text-[var(--danger)] hover:bg-[var(--background)] disabled:opacity-50"
+                style={{ borderColor: "var(--border-muted)" }}
+              >
+                {clearLoading ? "Vidage…" : "Vider la liste"}
               </button>
             </div>
           </div>

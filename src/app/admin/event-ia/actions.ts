@@ -400,3 +400,19 @@ export async function processDueAiEvents(): Promise<{
   revalidatePath("/");
   return { processed, failed, total: list.length };
 }
+
+/** Supprime tous les events IA (debug / nettoyage). Réservé aux admins. */
+export async function clearAiEvents(): Promise<{ error?: string; deleted?: number }> {
+  const { supabase, error: authError } = await ensureAdmin();
+  if (authError || !supabase) return { error: authError ?? "Non autorisé." };
+
+  const { count, error } = await supabase
+    .from("ai_event_requests")
+    .delete({ count: "exact" })
+    .not("id", "is", null); // supprime toutes les lignes (id IS NOT NULL)
+
+  if (error) return { error: error.message };
+
+  revalidatePath("/admin/event-ia");
+  return { deleted: count ?? 0 };
+}
