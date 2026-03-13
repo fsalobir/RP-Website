@@ -38,11 +38,11 @@ type Row = {
   hard_power_total?: number;
 };
 
-const panelStyle = {
-  background: "var(--background-panel)",
-  border: "1px solid var(--border)",
-  borderRadius: "var(--radius)",
-};
+/** Style glass (arrière-plan bourse) pour panneaux et tableaux */
+const glassPanelClass = "rounded-2xl border border-white/25 bg-white/15 shadow-xl backdrop-blur-xl";
+const glassTitleClass = "text-lg font-semibold text-white drop-shadow-[0_2px_4px_rgba(0,0,0,0.6)]";
+const glassMutedClass = "text-white/85";
+const glassBorderClass = "border-white/20";
 
 function getNum(v: number | string | null | undefined): number {
   if (v == null || v === "") return 0;
@@ -102,18 +102,15 @@ function useRanked(rows: Row[], metricKey: MetricKey): { row: Row; rank: number;
   }, [rows, metricKey]);
 }
 
-function EvolutionCell({ rank, prev_rank }: { rank: number; prev_rank: number | null }) {
+function EvolutionCell({ rank, prev_rank, glass = false }: { rank: number; prev_rank: number | null; glass?: boolean }) {
   if (prev_rank == null || prev_rank === rank) {
-    return <td className="p-3 text-[var(--foreground-muted)]">—</td>;
+    return <td className={`p-3 ${glass ? "text-white/85" : "text-[var(--foreground-muted)]"}`}>—</td>;
   }
   const up = rank < prev_rank;
+  const color = glass ? (up ? "#86efac" : "#fca5a5") : (up ? "var(--accent)" : "var(--danger)");
   return (
     <td className="p-3" title={up ? "Rang en hausse" : "Rang en baisse"}>
-      <span
-        className="text-lg leading-none"
-        style={{ color: up ? "var(--accent)" : "var(--danger)" }}
-        aria-hidden
-      >
+      <span className="text-lg leading-none" style={{ color }} aria-hidden>
         {up ? "▲" : "▼"}
       </span>
     </td>
@@ -140,38 +137,32 @@ export function ClassementContent({ rows }: { rows: Row[] }) {
   const rankedPopulation = useRanked(rows, "population");
   const rankedGdp = useRanked(rows, "gdp");
 
-  const tabClass = (active: boolean) =>
-    `tab ${active ? "tab-active" : ""}`;
-  const tabStyle = (active: boolean) =>
-    active ? { color: "var(--accent)", borderBottomColor: "var(--accent)" } : undefined;
+  const tabButtonClass = (active: boolean) =>
+    `rounded-xl px-4 py-2.5 text-sm font-semibold transition-colors ${
+      active ? "bg-white/25 text-white shadow-inner" : "text-white/90 hover:bg-white/15 hover:text-white"
+    }`;
 
   return (
     <div>
-      <div className="tab-list mb-6 flex flex-wrap items-center gap-2" style={{ borderColor: "var(--border)" }}>
+      <div className={`mb-6 flex flex-wrap items-center gap-2 ${glassPanelClass} p-2`}>
         <button
           type="button"
-          className={tabClass(mainTab === "global")}
-          data-state={mainTab === "global" ? "active" : "inactive"}
+          className={tabButtonClass(mainTab === "global")}
           onClick={() => setMainTab("global")}
-          style={tabStyle(mainTab === "global")}
         >
           Classement
         </button>
         <button
           type="button"
-          className={tabClass(mainTab === "militaire")}
-          data-state={mainTab === "militaire" ? "active" : "inactive"}
+          className={tabButtonClass(mainTab === "militaire")}
           onClick={() => setMainTab("militaire")}
-          style={tabStyle(mainTab === "militaire")}
         >
           Militaire
         </button>
         <button
           type="button"
-          className={tabClass(mainTab === "economique")}
-          data-state={mainTab === "economique" ? "active" : "inactive"}
+          className={tabButtonClass(mainTab === "economique")}
           onClick={() => setMainTab("economique")}
-          style={tabStyle(mainTab === "economique")}
         >
           Economique
         </button>
@@ -186,28 +177,27 @@ export function ClassementContent({ rows }: { rows: Row[] }) {
 
       {mainTab === "global" && (
         <div className="space-y-8">
-          <section>
-            <h2 className="mb-4 text-lg font-semibold text-[var(--foreground)]">
+          <section className={`${glassPanelClass} p-6`}>
+            <h2 className={`mb-4 ${glassTitleClass}`}>
               Les 3 grandes puissances
             </h2>
             <div className="grid gap-4 sm:grid-cols-3">
               {top3.length === 0 ? (
-                <p className="col-span-3 text-[var(--foreground-muted)]">Aucun pays en base.</p>
+                <p className={`col-span-3 ${glassMutedClass}`}>Aucun pays en base.</p>
               ) : (
                 top3.map(({ row, rank, prev_rank }) => (
                   <Link
                     key={row.country.id}
                     href={`/pays/${row.country.slug}`}
-                    className="flex items-center gap-4 rounded-lg border p-4 transition-colors hover:border-[var(--accent)]"
-                    style={{ ...panelStyle, borderColor: "var(--border)" }}
+                    className="flex items-center gap-4 rounded-xl border border-white/25 bg-white/10 p-4 backdrop-blur-sm transition-colors hover:bg-white/20 hover:border-white/35"
                   >
-                    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-lg font-bold text-[var(--foreground-muted)]" style={{ background: "var(--background-elevated)" }}>
+                    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-lg font-bold text-white/90 bg-white/20">
                       {rank}
                     </span>
                     {prev_rank != null && prev_rank !== rank && (
                       <span
                         className="text-lg leading-none"
-                        style={{ color: rank < prev_rank ? "var(--accent)" : "var(--danger)" }}
+                        style={{ color: rank < prev_rank ? "#86efac" : "#fca5a5" }}
                         aria-hidden
                       >
                         {rank < prev_rank ? "▲" : "▼"}
@@ -217,12 +207,12 @@ export function ClassementContent({ rows }: { rows: Row[] }) {
                       // eslint-disable-next-line @next/next/no-img-element
                       <img src={row.country.flag_url} alt="" width={48} height={32} className="h-8 w-12 rounded object-cover" />
                     ) : (
-                      <div className="h-8 w-12 rounded bg-[var(--background-elevated)]" />
+                      <div className="h-8 w-12 rounded bg-white/20" />
                     )}
                     <div className="min-w-0 flex-1">
-                      <span className="font-medium text-[var(--foreground)]">{row.country.name}</span>
+                      <span className="font-medium text-white">{row.country.name}</span>
                       {row.influence != null && !Number.isNaN(row.influence) && (
-                        <p className="text-xs text-[var(--foreground-muted)]">
+                        <p className={`text-xs ${glassMutedClass}`}>
                           Influence : {Number(row.influence).toLocaleString("fr-FR", { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
                         </p>
                       )}
@@ -232,70 +222,68 @@ export function ClassementContent({ rows }: { rows: Row[] }) {
               )}
             </div>
           </section>
-          <section>
-            <h2 className="mb-4 text-lg font-semibold text-[var(--foreground)]">
+          <section className={`${glassPanelClass} overflow-hidden`}>
+            <h2 className={`mb-0 px-6 pt-6 pb-4 ${glassTitleClass}`}>
               Autres nations
             </h2>
-            <div className="rounded-lg border overflow-hidden" style={panelStyle}>
-              {rest.length === 0 ? (
-                <p className="p-6 text-center text-[var(--foreground-muted)]">Aucune autre nation.</p>
-              ) : (
-                <table className="w-full text-left text-sm">
-                  <thead>
-                    <tr className="border-b" style={{ borderColor: "var(--border)" }}>
-                      <th className="p-3 font-medium text-[var(--foreground-muted)]">Rang</th>
-                      <th className="p-3 font-medium text-[var(--foreground-muted)]"></th>
-                      <th className="p-3 font-medium text-[var(--foreground-muted)]">Pays</th>
-                      <th className="p-3 font-medium text-[var(--foreground-muted)]">Influence</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {rest.map(({ row, rank, prev_rank }) => (
-                      <tr key={row.country.id} className="border-b" style={{ borderColor: "var(--border-muted)" }}>
-                        <td className="p-3 font-mono text-[var(--foreground-muted)]">{rank}</td>
-                        <td className="p-3">
-                          {prev_rank != null && prev_rank !== rank ? (
-                            <span
-                              className="text-lg leading-none"
-                              style={{ color: rank < prev_rank ? "var(--accent)" : "var(--danger)" }}
-                              aria-hidden
-                            >
-                              {rank < prev_rank ? "▲" : "▼"}
-                            </span>
-                          ) : (
-                            <span className="text-[var(--foreground-muted)]">—</span>
-                          )}
-                        </td>
-                        <td className="p-3">
-                          <Link
-                            href={`/pays/${row.country.slug}`}
-                            className="flex items-center gap-2 text-[var(--foreground)] hover:text-[var(--accent)]"
+            {rest.length === 0 ? (
+              <p className={`p-6 text-center ${glassMutedClass}`}>Aucune autre nation.</p>
+            ) : (
+              <table className="w-full text-left text-sm">
+                <thead>
+                  <tr className={`border-b ${glassBorderClass}`}>
+                    <th className={`p-3 font-medium ${glassMutedClass}`}>Rang</th>
+                    <th className={`p-3 font-medium ${glassMutedClass}`}></th>
+                    <th className={`p-3 font-medium ${glassMutedClass}`}>Pays</th>
+                    <th className={`p-3 font-medium ${glassMutedClass}`}>Influence</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {rest.map(({ row, rank, prev_rank }) => (
+                    <tr key={row.country.id} className={`border-b ${glassBorderClass}`}>
+                      <td className={`p-3 font-mono ${glassMutedClass}`}>{rank}</td>
+                      <td className="p-3">
+                        {prev_rank != null && prev_rank !== rank ? (
+                          <span
+                            className="text-lg leading-none"
+                            style={{ color: rank < prev_rank ? "#86efac" : "#fca5a5" }}
+                            aria-hidden
                           >
-                            {row.country.flag_url ? (
-                              // eslint-disable-next-line @next/next/no-img-element
-                              <img src={row.country.flag_url} alt="" width={24} height={16} className="h-4 w-6 rounded object-cover" />
-                            ) : (
-                              <div className="h-4 w-6 rounded bg-[var(--background-elevated)]" />
-                            )}
-                            {row.country.name}
-                          </Link>
-                        </td>
-                        <td className="p-3 font-mono text-[var(--foreground-muted)]">
-                          {row.influence != null && !Number.isNaN(row.influence) ? Number(row.influence).toLocaleString("fr-FR", { minimumFractionDigits: 0, maximumFractionDigits: 2 }) : "—"}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              )}
-            </div>
+                            {rank < prev_rank ? "▲" : "▼"}
+                          </span>
+                        ) : (
+                          <span className={glassMutedClass}>—</span>
+                        )}
+                      </td>
+                      <td className="p-3">
+                        <Link
+                          href={`/pays/${row.country.slug}`}
+                          className="flex items-center gap-2 text-white hover:text-white/95"
+                        >
+                          {row.country.flag_url ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img src={row.country.flag_url} alt="" width={24} height={16} className="h-4 w-6 rounded object-cover" />
+                          ) : (
+                            <div className="h-4 w-6 rounded bg-white/20" />
+                          )}
+                          {row.country.name}
+                        </Link>
+                      </td>
+                      <td className={`p-3 font-mono ${glassMutedClass}`}>
+                        {row.influence != null && !Number.isNaN(row.influence) ? Number(row.influence).toLocaleString("fr-FR", { minimumFractionDigits: 0, maximumFractionDigits: 2 }) : "—"}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
           </section>
         </div>
       )}
 
       {mainTab === "militaire" && (
-        <div>
-          <div className="mb-4 flex gap-2 border-b pb-2" style={{ borderColor: "var(--border-muted)" }}>
+        <div className={`${glassPanelClass} overflow-hidden`}>
+          <div className="flex flex-wrap gap-2 p-4 pb-2 border-b border-white/20">
             {([
               { key: "militarism" as const, label: "Militarisme" },
               { key: "terre" as const, label: "Terrestre (HP)" },
@@ -307,155 +295,147 @@ export function ClassementContent({ rows }: { rows: Row[] }) {
                 key={key}
                 type="button"
                 onClick={() => setMilitaireSub(key)}
-                className="rounded px-3 py-1.5 text-sm font-medium transition-colors"
-                style={{
-                  background: militaireSub === key ? "var(--accent)" : "var(--background-elevated)",
-                  color: militaireSub === key ? "#0f1419" : "var(--foreground-muted)",
-                }}
+                className={`rounded-xl px-3 py-1.5 text-sm font-medium transition-colors ${
+                  militaireSub === key ? "bg-white/25 text-white" : "text-white/85 hover:bg-white/15 hover:text-white"
+                }`}
               >
                 {label}
               </button>
             ))}
           </div>
-          <div className="rounded-lg border overflow-hidden" style={panelStyle}>
-            <table className="w-full text-left text-sm">
-              <thead>
-                <tr className="border-b" style={{ borderColor: "var(--border)" }}>
-                  <th className="p-3 font-medium text-[var(--foreground-muted)]">Rang</th>
-                  <th className="p-3 w-10 font-medium text-[var(--foreground-muted)]" title="Évolution du rang">Évol.</th>
-                  <th className="p-3 font-medium text-[var(--foreground-muted)]">Pays</th>
-                  <th className="p-3 font-medium text-[var(--foreground-muted)]">Score</th>
+          <table className="w-full text-left text-sm">
+            <thead>
+              <tr className={`border-b ${glassBorderClass}`}>
+                <th className={`p-3 font-medium ${glassMutedClass}`}>Rang</th>
+                <th className={`p-3 w-10 font-medium ${glassMutedClass}`} title="Évolution du rang">Évol.</th>
+                <th className={`p-3 font-medium ${glassMutedClass}`}>Pays</th>
+                <th className={`p-3 font-medium ${glassMutedClass}`}>Score</th>
+              </tr>
+            </thead>
+            <tbody>
+              {(militaireSub === "militarism" ? rankedMilitaire : militaireSub === "terre" ? rankedHPTerre : militaireSub === "air" ? rankedHPAir : militaireSub === "mer" ? rankedHPMer : rankedHPStrategique).map(({ row, rank, prev_rank }) => (
+                <tr key={row.country.id} className={`border-b ${glassBorderClass}`}>
+                  <td className={`p-3 font-mono ${glassMutedClass}`}>{rank}</td>
+                  <EvolutionCell rank={rank} prev_rank={prev_rank} glass />
+                  <td className="p-3">
+                    <Link href={`/pays/${row.country.slug}`} className="flex items-center gap-2 text-white hover:text-white/95">
+                      {row.country.flag_url ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={row.country.flag_url} alt="" width={24} height={16} className="h-4 w-6 rounded object-cover" />
+                      ) : (
+                        <div className="h-4 w-6 rounded bg-white/20" />
+                      )}
+                      {row.country.name}
+                    </Link>
+                  </td>
+                  <td className={`p-3 font-mono ${glassMutedClass}`}>
+                    {militaireSub === "militarism"
+                      ? (row.country.militarism != null ? Number(row.country.militarism).toFixed(2) : "—")
+                      : (militaireSub === "terre" ? (row.hard_power_terre ?? 0) : militaireSub === "air" ? (row.hard_power_air ?? 0) : militaireSub === "mer" ? (row.hard_power_mer ?? 0) : (row.hard_power_strategique ?? 0)).toLocaleString("fr-FR")}
+                  </td>
                 </tr>
-              </thead>
-              <tbody>
-                {(militaireSub === "militarism" ? rankedMilitaire : militaireSub === "terre" ? rankedHPTerre : militaireSub === "air" ? rankedHPAir : militaireSub === "mer" ? rankedHPMer : rankedHPStrategique).map(({ row, rank, prev_rank }) => (
-                  <tr key={row.country.id} className="border-b" style={{ borderColor: "var(--border-muted)" }}>
-                    <td className="p-3 font-mono text-[var(--foreground-muted)]">{rank}</td>
-                    <EvolutionCell rank={rank} prev_rank={prev_rank} />
-                    <td className="p-3">
-                      <Link href={`/pays/${row.country.slug}`} className="flex items-center gap-2 text-[var(--foreground)] hover:text-[var(--accent)]">
-                        {row.country.flag_url ? (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img src={row.country.flag_url} alt="" width={24} height={16} className="h-4 w-6 rounded object-cover" />
-                        ) : (
-                          <div className="h-4 w-6 rounded bg-[var(--background-elevated)]" />
-                        )}
-                        {row.country.name}
-                      </Link>
-                    </td>
-                    <td className="p-3 font-mono text-[var(--foreground-muted)]">
-                      {militaireSub === "militarism"
-                        ? (row.country.militarism != null ? Number(row.country.militarism).toFixed(2) : "—")
-                        : (militaireSub === "terre" ? (row.hard_power_terre ?? 0) : militaireSub === "air" ? (row.hard_power_air ?? 0) : militaireSub === "mer" ? (row.hard_power_mer ?? 0) : (row.hard_power_strategique ?? 0)).toLocaleString("fr-FR")}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            {rows.length === 0 && (
-              <p className="p-6 text-center text-[var(--foreground-muted)]">Aucun pays.</p>
-            )}
-          </div>
+              ))}
+            </tbody>
+          </table>
+          {rows.length === 0 && (
+            <p className={`p-6 text-center ${glassMutedClass}`}>Aucun pays.</p>
+          )}
         </div>
       )}
 
       {mainTab === "economique" && (
-        <div>
-          <div className="mb-4 flex gap-2 border-b pb-2" style={{ borderColor: "var(--border-muted)" }}>
+        <div className={`${glassPanelClass} overflow-hidden`}>
+          <div className="flex flex-wrap gap-2 p-4 pb-2 border-b border-white/20">
             {(["population", "gdp"] as const).map((cat) => (
               <button
                 key={cat}
                 type="button"
                 onClick={() => setEconomiqueSub(cat)}
-                className="rounded px-3 py-1.5 text-sm font-medium transition-colors"
-                style={{
-                  background: economiqueSub === cat ? "var(--accent)" : "var(--background-elevated)",
-                  color: economiqueSub === cat ? "#0f1419" : "var(--foreground-muted)",
-                }}
+                className={`rounded-xl px-3 py-1.5 text-sm font-medium transition-colors ${
+                  economiqueSub === cat ? "bg-white/25 text-white" : "text-white/85 hover:bg-white/15 hover:text-white"
+                }`}
               >
                 {cat === "gdp" ? "PIB" : "Population"}
               </button>
             ))}
           </div>
-          <div className="rounded-lg border overflow-hidden" style={panelStyle}>
-            <table className="w-full text-left text-sm">
-              <thead>
-                <tr className="border-b" style={{ borderColor: "var(--border)" }}>
-                  <th className="p-3 font-medium text-[var(--foreground-muted)]">Rang</th>
-                  <th className="p-3 w-10 font-medium text-[var(--foreground-muted)]" title="Évolution du rang">Évol.</th>
-                  <th className="p-3 font-medium text-[var(--foreground-muted)]">Pays</th>
-                  <th className="p-3 font-medium text-[var(--foreground-muted)]">Score</th>
-                </tr>
-              </thead>
-              <tbody>
-                {economiqueSub === "population" &&
-                  rankedPopulation.map(({ row, rank, prev_rank }) => {
-                    const pop = row.country.population ?? 0;
-                    const prevPop = row.prev ? getNum(row.prev.population) : null;
-                    const diff = prevPop != null ? pop - prevPop : null;
-                    const isUp = diff != null && diff > 0;
-                    const isDown = diff != null && diff < 0;
-                    return (
-                      <tr key={row.country.id} className="border-b" style={{ borderColor: "var(--border-muted)" }}>
-                        <td className="p-3 font-mono text-[var(--foreground-muted)]">{rank}</td>
-                        <EvolutionCell rank={rank} prev_rank={prev_rank} />
-                        <td className="p-3">
-                          <Link href={`/pays/${row.country.slug}`} className="flex items-center gap-2 text-[var(--foreground)] hover:text-[var(--accent)]">
-                            {row.country.flag_url ? (
-                              // eslint-disable-next-line @next/next/no-img-element
-                              <img src={row.country.flag_url} alt="" width={24} height={16} className="h-4 w-6 rounded object-cover" />
-                            ) : (
-                              <div className="h-4 w-6 rounded bg-[var(--background-elevated)]" />
-                            )}
-                            {row.country.name}
-                          </Link>
-                        </td>
-                        <td className="p-3 font-mono">
-                          <span className="tabular-nums text-[var(--foreground)]">
-                            {pop ? formatPopulation(pop) : "—"}
-                          </span>
-                          {diff != null && diff !== 0 && (
-                            <span
-                              className="ml-1 font-mono text-xs"
-                              style={{
-                                color: isUp ? "var(--accent)" : isDown ? "var(--danger)" : undefined,
-                              }}
-                              title={isUp ? "En hausse" : "En baisse"}
-                            >
-                              ({isUp ? "+" : ""}{formatPopulation(diff)})
-                            </span>
-                          )}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                {economiqueSub === "gdp" &&
-                  rankedGdp.map(({ row, rank, prev_rank }) => (
-                    <tr key={row.country.id} className="border-b" style={{ borderColor: "var(--border-muted)" }}>
-                      <td className="p-3 font-mono text-[var(--foreground-muted)]">{rank}</td>
-                      <EvolutionCell rank={rank} prev_rank={prev_rank} />
+          <table className="w-full text-left text-sm">
+            <thead>
+              <tr className={`border-b ${glassBorderClass}`}>
+                <th className={`p-3 font-medium ${glassMutedClass}`}>Rang</th>
+                <th className={`p-3 w-10 font-medium ${glassMutedClass}`} title="Évolution du rang">Évol.</th>
+                <th className={`p-3 font-medium ${glassMutedClass}`}>Pays</th>
+                <th className={`p-3 font-medium ${glassMutedClass}`}>Score</th>
+              </tr>
+            </thead>
+            <tbody>
+              {economiqueSub === "population" &&
+                rankedPopulation.map(({ row, rank, prev_rank }) => {
+                  const pop = row.country.population ?? 0;
+                  const prevPop = row.prev ? getNum(row.prev.population) : null;
+                  const diff = prevPop != null ? pop - prevPop : null;
+                  const isUp = diff != null && diff > 0;
+                  const isDown = diff != null && diff < 0;
+                  return (
+                    <tr key={row.country.id} className={`border-b ${glassBorderClass}`}>
+                      <td className={`p-3 font-mono ${glassMutedClass}`}>{rank}</td>
+                      <EvolutionCell rank={rank} prev_rank={prev_rank} glass />
                       <td className="p-3">
-                        <Link href={`/pays/${row.country.slug}`} className="flex items-center gap-2 text-[var(--foreground)] hover:text-[var(--accent)]">
+                        <Link href={`/pays/${row.country.slug}`} className="flex items-center gap-2 text-white hover:text-white/95">
                           {row.country.flag_url ? (
                             // eslint-disable-next-line @next/next/no-img-element
                             <img src={row.country.flag_url} alt="" width={24} height={16} className="h-4 w-6 rounded object-cover" />
                           ) : (
-                            <div className="h-4 w-6 rounded bg-[var(--background-elevated)]" />
+                            <div className="h-4 w-6 rounded bg-white/20" />
                           )}
                           {row.country.name}
                         </Link>
                       </td>
-                      <td className="p-3 font-mono text-[var(--foreground-muted)]">
-                        {formatGdp(row.country.gdp)}
+                      <td className="p-3 font-mono">
+                        <span className="tabular-nums text-white">
+                          {pop ? formatPopulation(pop) : "—"}
+                        </span>
+                        {diff != null && diff !== 0 && (
+                          <span
+                            className="ml-1 font-mono text-xs"
+                            style={{
+                              color: isUp ? "#86efac" : isDown ? "#fca5a5" : undefined,
+                            }}
+                            title={isUp ? "En hausse" : "En baisse"}
+                          >
+                            ({isUp ? "+" : ""}{formatPopulation(diff)})
+                          </span>
+                        )}
                       </td>
                     </tr>
-                  ))}
-              </tbody>
-            </table>
-            {rows.length === 0 && (
-              <p className="p-6 text-center text-[var(--foreground-muted)]">Aucun pays.</p>
-            )}
-          </div>
+                  );
+                })}
+              {economiqueSub === "gdp" &&
+                rankedGdp.map(({ row, rank, prev_rank }) => (
+                  <tr key={row.country.id} className={`border-b ${glassBorderClass}`}>
+                    <td className={`p-3 font-mono ${glassMutedClass}`}>{rank}</td>
+                    <EvolutionCell rank={rank} prev_rank={prev_rank} glass />
+                    <td className="p-3">
+                      <Link href={`/pays/${row.country.slug}`} className="flex items-center gap-2 text-white hover:text-white/95">
+                        {row.country.flag_url ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img src={row.country.flag_url} alt="" width={24} height={16} className="h-4 w-6 rounded object-cover" />
+                        ) : (
+                          <div className="h-4 w-6 rounded bg-white/20" />
+                        )}
+                        {row.country.name}
+                      </Link>
+                    </td>
+                    <td className={`p-3 font-mono ${glassMutedClass}`}>
+                      {formatGdp(row.country.gdp)}
+                    </td>
+                  </tr>
+                ))}
+            </tbody>
+          </table>
+          {rows.length === 0 && (
+            <p className={`p-6 text-center ${glassMutedClass}`}>Aucun pays.</p>
+          )}
         </div>
       )}
     </div>

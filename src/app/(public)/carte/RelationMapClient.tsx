@@ -151,11 +151,10 @@ export function RelationMapClient({
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center gap-3">
-        <span className="text-sm text-[var(--foreground-muted)]">Affichage :</span>
         <button
           type="button"
           onClick={() => setMapFilter("relations")}
-          className="rounded border px-3 py-1.5 text-sm font-medium transition-colors"
+          className="rounded-lg border-2 px-5 py-2.5 text-base font-semibold transition-colors"
           style={{
             borderColor: mapFilter === "relations" ? "var(--accent)" : "var(--border)",
             background: mapFilter === "relations" ? "var(--accent-muted)" : "transparent",
@@ -167,7 +166,7 @@ export function RelationMapClient({
         <button
           type="button"
           onClick={() => setMapFilter("spheres")}
-          className="rounded border px-3 py-1.5 text-sm font-medium transition-colors"
+          className="rounded-lg border-2 px-5 py-2.5 text-base font-semibold transition-colors"
           style={{
             borderColor: mapFilter === "spheres" ? "var(--accent)" : "var(--border)",
             background: mapFilter === "spheres" ? "var(--accent-muted)" : "transparent",
@@ -176,19 +175,12 @@ export function RelationMapClient({
         >
           Sphères d&apos;influence
         </button>
-      </div>
-      <p className="flex items-center gap-2 text-sm text-[var(--foreground-muted)]">
-        <span>
-          {mapFilter === "relations"
-            ? "Cliquez sur une région pour afficher ses relations avec les autres. Couleur : rouge = hostile, vert = amical (moyenne entre pays des régions). Les pays non présents en base sont en gris."
-            : "Vue de consultation des sphères d'influence : une couleur par empire, gris pour l'influence non prise, hachures proportionnelles pour les pays contestés."}
-        </span>
         <InfoTooltipWithWikiLink
           text="Deux modes : Relations (niveau d'amitié entre régions) et Sphères d'influence (qui domine quelle région). Cliquez sur une région pour le détail."
           wikiSectionId="carte-modes"
           side="bottom"
         />
-      </p>
+      </div>
       {!hasData && (
         <p className="rounded border border-amber-500/50 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
           Données géographiques indisponibles. Vérifiez que le paquet <code className="rounded bg-black/20 px-1">world-atlas</code> est installé et que le serveur peut y accéder.
@@ -209,6 +201,35 @@ export function RelationMapClient({
         className="relative overflow-hidden rounded-lg border"
         style={{ borderColor: "var(--border)", background: "var(--background-panel)" }}
       >
+        {/* Légende dans le container, en bas à gauche — taille réduite sur petit écran */}
+        <div className="absolute bottom-1.5 left-1.5 sm:bottom-3 sm:left-3 z-20 max-w-[55vw] sm:max-w-none rounded-md sm:rounded-lg border border-[var(--border)] bg-[var(--background-panel)]/95 px-1.5 py-1 sm:px-3 sm:py-2 shadow-lg backdrop-blur-sm">
+          {isSphereMode ? (
+            <div className="flex flex-col gap-0.5 sm:gap-1">
+              {(sphereData?.empires ?? []).map((empire) => (
+                <div key={empire.id} className="flex items-center gap-1 sm:gap-2 text-[10px] sm:text-xs text-[var(--foreground-muted)]">
+                  <span
+                    className="block h-2.5 w-2.5 sm:h-4 sm:w-4 shrink-0 rounded-sm border border-[rgba(255,255,255,0.4)]"
+                    style={{ background: empire.color }}
+                  />
+                  <span className="font-medium truncate">{empire.name}</span>
+                </div>
+              ))}
+              <div className="flex items-center gap-1 sm:gap-2 text-[10px] sm:text-xs text-[var(--foreground-muted)]">
+                <span
+                  className="block h-2.5 w-2.5 sm:h-4 sm:w-4 shrink-0 rounded-sm border border-[rgba(255,255,255,0.4)]"
+                  style={{ background: sphereNeutralColor }}
+                />
+                <span className="font-medium">Souverain</span>
+              </div>
+            </div>
+          ) : (
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 sm:gap-x-4 sm:gap-y-1 text-[10px] sm:text-xs text-[var(--foreground-muted)]">
+              <span style={{ color: getRelationColor(-100) }}>−100</span>
+              <span style={{ color: getRelationColor(0) }}>0</span>
+              <span style={{ color: getRelationColor(100) }}>+100</span>
+            </div>
+          )}
+        </div>
         {tooltip && (
           <div
             className="pointer-events-none fixed z-50 max-w-xs rounded border px-2 py-1.5 text-sm shadow-lg"
@@ -453,45 +474,6 @@ export function RelationMapClient({
           </ZoomableGroup>
         </ComposableMap>
       </div>
-      {isSphereMode ? (
-        <div className="flex flex-col items-center">
-          <table className="text-xs text-[var(--foreground-muted)] border border-[var(--border)] rounded-md border-collapse">
-            <tbody>
-              {(sphereData?.empires ?? []).map((empire) => (
-                <tr key={empire.id} className="border-b border-[var(--border)] last:border-b-0">
-                  <td className="p-2 w-12 align-middle border-r border-[var(--border)]">
-                    <span
-                      className="block w-6 h-6 rounded-sm border border-[rgba(255,255,255,0.4)]"
-                      style={{ background: empire.color }}
-                    />
-                  </td>
-                  <td className="px-3 py-2 align-middle font-medium">
-                    {empire.name}
-                  </td>
-                </tr>
-              ))}
-              <tr className="border-b border-[var(--border)] last:border-b-0">
-                <td className="p-2 w-12 align-middle border-r border-[var(--border)]">
-                  <span
-                    className="block w-6 h-6 rounded-sm border border-[rgba(255,255,255,0.4)]"
-                    style={{ background: sphereNeutralColor }}
-                  />
-                </td>
-                <td className="px-3 py-2 align-middle font-medium">
-                  Souverain
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      ) : (
-        <div className="flex flex-wrap items-center gap-4 text-xs text-[var(--foreground-muted)]">
-          <span style={{ color: getRelationColor(-100) }}>−100 ({getRelationLabel(-100)})</span>
-          <span style={{ color: getRelationColor(0) }}>0 ({getRelationLabel(0)})</span>
-          <span style={{ color: getRelationColor(100) }}>+100 ({getRelationLabel(100)})</span>
-          <span style={{ color: "var(--background-elevated)" }}>Gris = pays non en base</span>
-        </div>
-      )}
     </div>
   );
 }

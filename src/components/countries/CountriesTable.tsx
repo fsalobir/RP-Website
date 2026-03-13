@@ -128,6 +128,7 @@ export function CountriesTable({
   updateCountryContinentAction,
   showSearch = false,
   showWikiTooltips = false,
+  glassContext = false,
 }: {
   rows: Row[];
   showModifierButton?: boolean;
@@ -143,6 +144,8 @@ export function CountriesTable({
   showSearch?: boolean;
   /** Afficher les infobulles Wiki sur les en-têtes de colonnes (page accueil). */
   showWikiTooltips?: boolean;
+  /** Style glass (fond image accueil) : panneau flouté, texte blanc. */
+  glassContext?: boolean;
 }) {
   const playedSet = useMemo(() => new Set(countryIdsWithPlayer), [countryIdsWithPlayer]);
   const wikiAccueil = showWikiTooltips ? (
@@ -219,11 +222,12 @@ export function CountriesTable({
     }
   }
 
-  const panelStyle = {
-    background: "var(--background-panel)",
-    border: "1px solid var(--border)",
-    borderRadius: "var(--radius)",
-  };
+  const glassPanelClass = "rounded-2xl border border-white/25 bg-white/15 shadow-xl backdrop-blur-xl";
+  const glassBorderClass = "border-white/20";
+  const glassMutedClass = "text-white/85";
+  const panelStyle = glassContext
+    ? undefined
+    : { background: "var(--background-panel)", border: "1px solid var(--border)", borderRadius: "var(--radius)" };
 
   if (adminLayout) {
     return (
@@ -389,17 +393,33 @@ export function CountriesTable({
     );
   }
 
+  const tableWrapperClass = glassContext
+    ? `${glassPanelClass} overflow-hidden`
+    : showSearch ? "rounded-lg border" : "overflow-x-auto rounded-lg border";
+  const theadBorder = glassContext ? glassBorderClass : "";
+  const thClass = glassContext
+    ? `p-3 font-medium ${glassMutedClass} cursor-pointer select-none hover:text-white hover:bg-white/10 border-b ${glassBorderClass}`
+    : "p-3 font-medium text-[var(--foreground-muted)] cursor-pointer select-none hover:text-[var(--foreground)] hover:bg-[var(--background-elevated)]";
+  const thStyle = glassContext ? undefined : { borderColor: "var(--border)" };
+  const sortArrowClass = glassContext ? "text-white" : "text-[var(--accent)]";
+  const trClass = glassContext
+    ? `border-b transition-colors hover:bg-white/10 ${glassBorderClass}`
+    : "border-b transition-colors hover:bg-[var(--background-elevated)]";
+  const trStyle = glassContext ? undefined : { borderColor: "var(--border-muted)" };
+
   return (
-    <div className={showSearch ? "rounded-lg border" : "overflow-x-auto rounded-lg border"} style={panelStyle}>
+    <div className={showSearch ? tableWrapperClass : `overflow-x-auto ${tableWrapperClass}`} style={panelStyle}>
       {showSearch && (
-        <div className="p-3 border-b" style={{ borderColor: "var(--border)" }}>
+        <div className={`p-3 border-b ${glassContext ? `border-white/20 ${glassMutedClass}` : ""}`} style={!glassContext ? { borderColor: "var(--border)" } : undefined}>
           <input
             type="search"
             placeholder="Rechercher par pays ou régime…"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full max-w-md rounded border bg-[var(--background)] px-3 py-2 text-sm text-[var(--foreground)] placeholder:text-[var(--foreground-muted)]"
-            style={{ borderColor: "var(--border)" }}
+            className={glassContext
+              ? "w-full max-w-md rounded-xl border border-white/30 bg-white/20 px-3 py-2 text-sm text-white placeholder:text-white/60 focus:border-white/50 focus:outline-none focus:ring-2 focus:ring-white/30"
+              : "w-full max-w-md rounded border bg-[var(--background)] px-3 py-2 text-sm text-[var(--foreground)] placeholder:text-[var(--foreground-muted)]"}
+            style={!glassContext ? { borderColor: "var(--border)" } : undefined}
             aria-label="Rechercher dans la liste des pays"
           />
         </div>
@@ -407,36 +427,36 @@ export function CountriesTable({
       <div className={showSearch ? "overflow-x-auto" : ""}>
       <table className="w-full min-w-[800px] text-left text-sm">
         <thead>
-          <tr className="border-b" style={{ borderColor: "var(--border)" }}>
+          <tr className={`border-b ${theadBorder}`} style={!glassContext ? { borderColor: "var(--border)" } : undefined}>
             <th
-              className="p-3 font-medium text-[var(--foreground-muted)] cursor-pointer select-none hover:text-[var(--foreground)] hover:bg-[var(--background-elevated)]"
-              style={{ borderColor: "var(--border)" }}
+              className={thClass}
+              style={thStyle}
               onClick={() => handleHeaderClick("name")}
             >
               <span className="inline-flex items-center gap-1">
                 Pays
                 {showWikiTooltips && wikiAccueil}
                 {sortKey === "name" && (
-                  <span className="text-[var(--accent)]" aria-hidden>
+                  <span className={sortArrowClass} aria-hidden>
                     {sortOrder === "asc" ? "↑" : "↓"}
                   </span>
                 )}
               </span>
             </th>
-            <th className="p-3 w-40 font-medium text-[var(--foreground-muted)]" style={{ borderColor: "var(--border)" }}>
+            <th className={glassContext ? `p-3 w-40 font-medium ${glassMutedClass} border-b ${glassBorderClass}` : "p-3 w-40 font-medium text-[var(--foreground-muted)]"} style={thStyle}>
               Sphère
             </th>
             {COLUMNS.filter((c) => c.key !== "name").map(({ key, label }) => (
               <th
                 key={key}
-                className="p-3 font-medium text-[var(--foreground-muted)] cursor-pointer select-none hover:text-[var(--foreground)] hover:bg-[var(--background-elevated)]"
-                style={{ borderColor: "var(--border)" }}
+                className={thClass}
+                style={thStyle}
                 onClick={() => handleHeaderClick(key)}
               >
                 <span className="inline-flex items-center gap-1">
                   {label}
                   {sortKey === key && (
-                    <span className="text-[var(--accent)]" aria-hidden>
+                    <span className={sortArrowClass} aria-hidden>
                       {sortOrder === "asc" ? "↑" : "↓"}
                     </span>
                   )}
@@ -444,12 +464,12 @@ export function CountriesTable({
               </th>
             ))}
             {showAiStatusColumn && (
-              <th className="p-3 w-32 font-medium text-[var(--foreground-muted)]" style={{ borderColor: "var(--border)" }}>
+              <th className={glassContext ? `p-3 w-32 font-medium ${glassMutedClass}` : "p-3 w-32 font-medium text-[var(--foreground-muted)]"} style={thStyle}>
                 Statut IA
               </th>
             )}
             {showModifierButton && (
-              <th className="p-3 w-24 font-medium text-[var(--foreground-muted)]" style={{ borderColor: "var(--border)" }}>
+              <th className={glassContext ? `p-3 w-24 font-medium ${glassMutedClass}` : "p-3 w-24 font-medium text-[var(--foreground-muted)]"} style={thStyle}>
                 Actions
               </th>
             )}
@@ -459,15 +479,11 @@ export function CountriesTable({
           {sortedRows.map((row) => {
             const { country: c, prev } = row;
             return (
-            <tr
-              key={c.id}
-              className="border-b transition-colors hover:bg-[var(--background-elevated)]"
-              style={{ borderColor: "var(--border-muted)" }}
-            >
+            <tr key={c.id} className={trClass} style={trStyle}>
               <td className="p-3 relative align-middle">
                 <Link
                   href={`/pays/${c.slug}`}
-                  className="flex items-center gap-3 font-medium text-[var(--foreground)] hover:text-[var(--accent)] cursor-pointer relative z-[1] min-h-[2rem]"
+                  className={`flex items-center gap-3 font-medium cursor-pointer relative z-[1] min-h-[2rem] ${glassContext ? "text-white hover:text-white/95" : "text-[var(--foreground)] hover:text-[var(--accent)]"}`}
                   style={{ isolation: "isolate" }}
                 >
                   {c.flag_url ? (
@@ -481,19 +497,19 @@ export function CountriesTable({
                     />
                   ) : (
                     <div
-                      className="h-7 w-10 rounded bg-[var(--background-elevated)] pointer-events-none shrink-0"
-                      style={{ background: "var(--background-elevated)" }}
+                      className={`h-7 w-10 rounded pointer-events-none shrink-0 ${glassContext ? "bg-white/20" : ""}`}
+                      style={!glassContext ? { background: "var(--background-elevated)" } : undefined}
                     />
                   )}
                   <span className="pointer-events-none flex flex-col">
                     <span>{c.name}</span>
-                    <span className="text-xs font-normal text-[var(--foreground-muted)]">{c.regime ?? "—"}</span>
+                    <span className={`text-xs font-normal ${glassContext ? glassMutedClass : "text-[var(--foreground-muted)]"}`}>{c.regime ?? "—"}</span>
                   </span>
                 </Link>
               </td>
-              <SphereCell sphere={row.sphere} />
+              <SphereCell sphere={row.sphere} glass={glassContext} />
               <td className="p-3">
-                <span className="font-mono tabular-nums text-[var(--foreground)]">
+                <span className={`font-mono tabular-nums ${glassContext ? "text-white" : "text-[var(--foreground)]"}`}>
                   {row.influence != null && !Number.isNaN(row.influence) ? Number(row.influence).toLocaleString("fr-FR", { minimumFractionDigits: 0, maximumFractionDigits: 2 }) : "—"}
                 </span>
               </td>
@@ -502,18 +518,20 @@ export function CountriesTable({
                 previous={prev?.gdp}
                 formatValue={formatGdp}
                 formatDiff={formatGdp}
+                glass={glassContext}
               />
               <NumericVariationCell
                 current={c.population}
                 previous={prev?.population}
                 formatValue={formatPopulation}
                 formatDiff={formatPopulation}
+                glass={glassContext}
               />
-              <StatCell current={c.stability} previous={prev?.stability} />
+              <StatCell current={c.stability} previous={prev?.stability} glass={glassContext} />
               {showAiStatusColumn && (
                 <td className="p-3">
                   {playedSet.has(c.id) ? (
-                    <span className="text-sm text-[var(--foreground-muted)]" title="Pays assigné à un joueur">
+                    <span className={glassContext ? glassMutedClass : "text-sm text-[var(--foreground-muted)]"} title="Pays assigné à un joueur">
                       Joué
                     </span>
                   ) : (
@@ -530,8 +548,10 @@ export function CountriesTable({
                         }
                       }}
                       disabled={isPending && pendingId === c.id}
-                      className="rounded border bg-[var(--background-elevated)] px-2 py-1 text-sm text-[var(--foreground)]"
-                      style={{ borderColor: "var(--border)" }}
+                      className={glassContext
+                        ? "rounded-xl border border-white/30 bg-white/20 px-2 py-1 text-sm text-white focus:border-white/50 focus:outline-none"
+                        : "rounded border bg-[var(--background-elevated)] px-2 py-1 text-sm text-[var(--foreground)]"}
+                      style={!glassContext ? { borderColor: "var(--border)" } : undefined}
                     >
                       <option value="">—</option>
                       <option value="major">Majeur</option>
@@ -566,11 +586,13 @@ function NumericVariationCell({
   previous,
   formatValue,
   formatDiff,
+  glass = false,
 }: {
   current: number | null | undefined;
   previous?: number | string | null;
   formatValue: (n: number) => string;
   formatDiff?: (n: number) => string;
+  glass?: boolean;
 }) {
   const num = current != null && !Number.isNaN(Number(current)) ? Number(current) : null;
   const prevNum =
@@ -581,18 +603,17 @@ function NumericVariationCell({
   const isUp = diff != null && diff > 0;
   const isDown = diff != null && diff < 0;
   const formatDelta = formatDiff ?? formatNumber;
+  const color = glass ? (isUp ? "#86efac" : isDown ? "#fca5a5" : undefined) : (isUp ? "var(--accent)" : isDown ? "var(--danger)" : undefined);
 
   return (
     <td className="p-3">
-      <span className="font-mono tabular-nums text-[var(--foreground)]">
+      <span className={`font-mono tabular-nums ${glass ? "text-white" : "text-[var(--foreground)]"}`}>
         {num != null ? formatValue(num) : "—"}
       </span>
       {diff != null && diff !== 0 && (
         <span
           className="ml-1 font-mono text-xs"
-          style={{
-            color: isUp ? "var(--accent)" : isDown ? "var(--danger)" : undefined,
-          }}
+          style={{ color }}
           title={isUp ? "En hausse" : "En baisse"}
         >
           ({isUp ? "+" : ""}{formatDelta(diff)})
@@ -602,8 +623,8 @@ function NumericVariationCell({
   );
 }
 
-function SphereCell({ sphere }: { sphere?: SphereEntry[] }) {
-  if (!sphere?.length) return <td className="p-3 text-[var(--foreground-muted)]">—</td>;
+function SphereCell({ sphere, glass = false }: { sphere?: SphereEntry[]; glass?: boolean }) {
+  if (!sphere?.length) return <td className={`p-3 ${glass ? "text-white/85" : "text-[var(--foreground-muted)]"}`}>—</td>;
   return (
     <td className="p-3">
       <span className="inline-flex flex-wrap items-center gap-1">
@@ -618,8 +639,8 @@ function SphereCell({ sphere }: { sphere?: SphereEntry[] }) {
               key={entry.slug}
               href={`/pays/${entry.slug}`}
               title={`${entry.name} – ${tooltip}`}
-              className="inline-block rounded border border-transparent transition-opacity hover:opacity-90 focus:opacity-90"
-              style={{ borderColor: "var(--border-muted)" }}
+              className={`inline-block rounded border border-transparent transition-opacity hover:opacity-90 focus:opacity-90 ${glass ? "border-white/25" : ""}`}
+              style={!glass ? { borderColor: "var(--border-muted)" } : undefined}
             >
               {entry.flag_url ? (
                 // eslint-disable-next-line @next/next/no-img-element
@@ -632,7 +653,8 @@ function SphereCell({ sphere }: { sphere?: SphereEntry[] }) {
                 />
               ) : (
                 <div
-                  className="h-5 w-7 rounded bg-[var(--background-elevated)]"
+                  className={`h-5 w-7 rounded ${glass ? "bg-white/20" : ""}`}
+                  style={!glass ? { background: "var(--background-elevated)" } : undefined}
                   title={tooltip}
                 />
               )}
@@ -647,9 +669,11 @@ function SphereCell({ sphere }: { sphere?: SphereEntry[] }) {
 function StatCell({
   current,
   previous,
+  glass = false,
 }: {
   current: number | null | undefined;
   previous?: number | string | null;
+  glass?: boolean;
 }) {
   const num = current != null && !Number.isNaN(Number(current)) ? Number(current) : null;
   const prevNum =
@@ -660,18 +684,17 @@ function StatCell({
   const isUp = diff != null && diff > 0;
   const isDown = diff != null && diff < 0;
   const diffFormatted = diff != null ? Number(diff.toFixed(2)) : null;
+  const color = glass ? (isUp ? "#86efac" : isDown ? "#fca5a5" : undefined) : (isUp ? "var(--accent)" : isDown ? "var(--danger)" : undefined);
 
   return (
     <td className="p-3">
-      <span className="font-mono tabular-nums text-[var(--foreground)]">
+      <span className={`font-mono tabular-nums ${glass ? "text-white" : "text-[var(--foreground)]"}`}>
         {num != null ? Number(num).toFixed(2) : "—"}
       </span>
       {diffFormatted != null && diffFormatted !== 0 && (
         <span
           className="ml-1 font-mono text-xs"
-          style={{
-            color: isUp ? "var(--accent)" : isDown ? "var(--danger)" : undefined,
-          }}
+          style={{ color }}
           title={isUp ? "En hausse" : "En baisse"}
         >
           ({isUp ? "+" : ""}{diffFormatted})

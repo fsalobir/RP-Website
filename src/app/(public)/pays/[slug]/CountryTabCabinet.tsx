@@ -81,15 +81,17 @@ function SummaryMetric({
   value,
   trend,
   valueClassName = "text-base font-semibold text-[var(--foreground)]",
+  labelClassName = "text-lg font-medium text-[var(--foreground-muted)]",
 }: {
   label: string;
   value: string;
   trend?: Trend | null;
   valueClassName?: string;
+  labelClassName?: string;
 }) {
   return (
     <div className="flex flex-col items-center justify-center gap-1">
-      <span className="text-lg font-medium text-[var(--foreground-muted)]">{label}</span>
+      <span className={labelClassName}>{label}</span>
       <span className={valueClassName}>
         {value}
         {trend ? <> (<TrendInline trend={trend} />)</> : null}
@@ -166,182 +168,198 @@ export function CountryTabCabinet({
         }
       : null;
 
+  const glassPanelClass = "rounded-2xl border border-white/25 bg-white/15 shadow-xl backdrop-blur-xl";
+  const glassMutedClass = "text-white/85";
+  const glassBorderClass = "border-white/20";
+
+  /* Image en fond de toute la box bleue (visible partout, y compris à droite du rapport) */
+  const boxStyle = { ...panelStyle, background: "transparent" };
+
   return (
     <div className="space-y-6">
-      <section className={panelClass} style={panelStyle}>
-        {!breakdown || !expected ? (
-          <p className="text-sm text-[var(--foreground-muted)]">
-            Les données nécessaires au rapport (moyennes monde, paramètres) ne sont pas encore disponibles.
-          </p>
-        ) : cabinetBlocks.length === 0 ? (
-          <p className="text-sm text-[var(--foreground-muted)]">
-            Aucun rapport ministériel à afficher pour cette période.
-          </p>
-        ) : (
-          <>
-            <article
-                className="mx-auto max-w-3xl rounded-md border-2 px-8 py-10 shadow-lg"
-                style={{
-                  borderColor: "var(--border)",
-                  background: "var(--background)",
-                  fontFamily: "Georgia, 'Times New Roman', serif",
-                  boxShadow: "0 4px 6px -1px rgba(0,0,0,0.15), 0 2px 4px -2px rgba(0,0,0,0.1)",
-                }}
-              >
-                <header className="mb-8 border-b pb-4" style={{ borderColor: "var(--border)" }}>
-                  <h2 className="text-center text-xl font-semibold tracking-wide text-[var(--foreground)]">
-                    Rapport Ministeriel pour {reportTitleDate}
-                  </h2>
-                </header>
+      <section className={`relative w-full overflow-hidden rounded-2xl ${panelClass}`} style={boxStyle}>
+        {/* Fond : image pleine largeur et hauteur (cover, ancrée en haut) + overlay */}
+        <div className="absolute inset-0 overflow-hidden rounded-2xl" aria-hidden>
+          <div
+            className="absolute inset-0 bg-cover bg-no-repeat scale-105"
+            style={{
+              backgroundImage: "url(/images/site/rapport-cabinet-bg.png)",
+              backgroundPosition: "top center",
+              filter: "blur(2px)",
+            }}
+          />
+          <div className="absolute inset-0 bg-[var(--background-panel)]/85" />
+        </div>
 
-                {summaryTrends && (
-                  <div className="mb-6 flex flex-col items-center">
-                    <div className="mb-5 grid w-full max-w-2xl grid-cols-1 gap-5 text-center sm:grid-cols-3">
-                      <div className="sm:border-r sm:border-[var(--border)] sm:pr-6">
-                        <SummaryMetric label="PIB" value={formatGdp(snapshot.gdp)} trend={summaryTrends.gdp} />
-                      </div>
-                      <div className="sm:border-r sm:border-[var(--border)] sm:pr-6">
-                        <SummaryMetric label="Population" value={formatPopulation(snapshot.population)} trend={summaryTrends.population} />
-                      </div>
-                      <div className="sm:pr-0">
-                        <SummaryMetric
-                          label="Influence"
-                          value={formatSummaryStat(influenceValue)}
-                          trend={summaryTrends.influence}
-                        />
-                      </div>
-                    </div>
-                    <div className="grid w-full max-w-2xl grid-cols-2 gap-4 text-center text-sm sm:grid-cols-4">
-                      <div className="sm:border-r sm:border-[var(--border)] sm:pr-6">
-                        <SummaryMetric
-                          label="Militarisme"
-                          value={formatSummaryStat(snapshot.militarism)}
-                          trend={summaryTrends.militarism}
-                          valueClassName="text-sm font-semibold text-[var(--foreground)]"
-                        />
-                      </div>
-                      <div className="sm:border-r sm:border-[var(--border)] sm:pr-6">
-                        <SummaryMetric
-                          label="Science"
-                          value={formatSummaryStat(snapshot.science)}
-                          trend={summaryTrends.science}
-                          valueClassName="text-sm font-semibold text-[var(--foreground)]"
-                        />
-                      </div>
-                      <div className="sm:border-r sm:border-[var(--border)] sm:pr-6">
-                        <SummaryMetric
-                          label="Industrie"
-                          value={formatSummaryStat(snapshot.industry)}
-                          trend={summaryTrends.industry}
-                          valueClassName="text-sm font-semibold text-[var(--foreground)]"
-                        />
-                      </div>
-                      <div className="sm:pr-0">
-                        <SummaryMetric
-                          label="Stabilité"
-                          value={formatSummaryStat(snapshot.stability)}
-                          trend={summaryTrends.stability}
-                          valueClassName="text-sm font-semibold text-[var(--foreground)]"
-                        />
-                      </div>
-                    </div>
-                    <div
-                      className="mt-2 w-full border-b pb-6"
-                      style={{ borderColor: "var(--border)" }}
-                      role="separator"
-                      aria-hidden
-                    />
-                  </div>
-                )}
-
-                <div className="space-y-6 text-[15px] leading-relaxed text-[var(--foreground)]">
-                  {cabinetBlocks.map((block) => (
-                    <section key={block.ministryKey} className="space-y-2">
-                      <h3 className="text-base font-semibold text-[var(--foreground)]" style={{ fontFamily: "inherit" }}>
-                        {block.ministryLabel}
-                      </h3>
-                      <div className="space-y-2 pl-0" style={{ textAlign: "justify" }}>
-                        {block.paragraphs.map((p, i) => (
-                          <p
-                            key={i}
-                            className={`indent-0 first-letter:capitalize ${
-                              p.tone === "positive"
-                                ? "text-emerald-400 dark:text-emerald-300"
-                                : p.tone === "negative"
-                                  ? "text-red-600 dark:text-red-400"
-                                  : "text-yellow-500 dark:text-yellow-400"
-                            }`}
-                          >
-                            {p.text}
-                          </p>
-                        ))}
-                      </div>
-                    </section>
-                  ))}
-                </div>
-              </article>
-          </>
-        )}
-
-        {lastUpdateLog && (
-          <section className="mt-6 rounded-lg border p-4" style={{ borderColor: "var(--border)", background: "var(--background-panel)" }}>
-            <h3 className="mb-2 text-sm font-semibold uppercase text-[var(--foreground-muted)]">
-              Dernier passage du cron
-            </h3>
-            <p className="mb-3 text-xs text-[var(--foreground-muted)]">
-              {new Date(lastUpdateLog.run_at).toLocaleString("fr-FR", {
-                dateStyle: "medium",
-                timeStyle: "short",
-              })}
+        <div className="relative z-10 p-6">
+          {!breakdown || !expected ? (
+            <p className={`text-sm ${glassMutedClass}`}>
+              Les données nécessaires au rapport (moyennes monde, paramètres) ne sont pas encore disponibles.
             </p>
-            <div className="grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-3">
-              <div>
-                <span className="text-[var(--foreground-muted)]">Population : </span>
-                <span>{formatPopulation(Number(lastUpdateLog.population_before ?? 0))}</span>
-                <span className="mx-1 text-[var(--foreground-muted)]">→</span>
-                <span>{formatPopulation(Number(lastUpdateLog.population_after ?? 0))}</span>
-              </div>
-              <div>
-                <span className="text-[var(--foreground-muted)]">PIB : </span>
-                <span>{formatGdp(Number(lastUpdateLog.gdp_before ?? 0))}</span>
-                <span className="mx-1 text-[var(--foreground-muted)]">→</span>
-                <span>{formatGdp(Number(lastUpdateLog.gdp_after ?? 0))}</span>
-              </div>
-              <div>
-                <span className="text-[var(--foreground-muted)]">Militarisme : </span>
-                <span>{lastUpdateLog.militarism_before ?? "—"}</span>
-                <span className="mx-1 text-[var(--foreground-muted)]">→</span>
-                <span>{lastUpdateLog.militarism_after ?? "—"}</span>
-              </div>
-              <div>
-                <span className="text-[var(--foreground-muted)]">Industrie : </span>
-                <span>{lastUpdateLog.industry_before ?? "—"}</span>
-                <span className="mx-1 text-[var(--foreground-muted)]">→</span>
-                <span>{lastUpdateLog.industry_after ?? "—"}</span>
-              </div>
-              <div>
-                <span className="text-[var(--foreground-muted)]">Science : </span>
-                <span>{lastUpdateLog.science_before ?? "—"}</span>
-                <span className="mx-1 text-[var(--foreground-muted)]">→</span>
-                <span>{lastUpdateLog.science_after ?? "—"}</span>
-              </div>
-              <div>
-                <span className="text-[var(--foreground-muted)]">Stabilité : </span>
-                <span>{lastUpdateLog.stability_before ?? "—"}</span>
-                <span className="mx-1 text-[var(--foreground-muted)]">→</span>
-                <span>{lastUpdateLog.stability_after ?? "—"}</span>
-              </div>
-              {(previousInfluenceValue != null || lastCronInfluenceAfterValue != null) && (
-                <div>
-                  <span className="text-[var(--foreground-muted)]">Influence : </span>
-                  <span>{formatSummaryStat(previousInfluenceValue)}</span>
-                  <span className="mx-1 text-[var(--foreground-muted)]">→</span>
-                  <span>{formatSummaryStat(lastCronInfluenceAfterValue ?? influenceValue)}</span>
+          ) : cabinetBlocks.length === 0 ? (
+            <p className={`text-sm ${glassMutedClass}`}>
+              Aucun rapport ministériel à afficher pour cette période.
+            </p>
+          ) : (
+            /* Box du rapport : centrée, taille naturelle (pas de scroll) */
+            <div className="max-w-3xl mx-auto w-full rounded-2xl">
+              <article className={`${glassPanelClass} px-6 py-6`} style={{ fontFamily: "Georgia, 'Times New Roman', serif" }}>
+                <header className={`mb-8 border-b pb-4 ${glassBorderClass}`}>
+                <h2 className="text-center text-xl font-semibold tracking-wide text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]">
+                  Rapport ministériel pour {reportTitleDate}
+                </h2>
+              </header>
+
+              {summaryTrends && (
+                <div className="mb-6 flex flex-col items-center">
+                  <div className="mb-5 grid w-full max-w-2xl grid-cols-1 gap-5 text-center sm:grid-cols-3">
+                    <div className={`sm:border-r sm:pr-6 ${glassBorderClass}`}>
+                      <SummaryMetric label="PIB" value={formatGdp(snapshot.gdp)} trend={summaryTrends.gdp} valueClassName="text-base font-semibold text-white" labelClassName={glassMutedClass} />
+                    </div>
+                    <div className={`sm:border-r sm:pr-6 ${glassBorderClass}`}>
+                      <SummaryMetric label="Population" value={formatPopulation(snapshot.population)} trend={summaryTrends.population} valueClassName="text-base font-semibold text-white" labelClassName={glassMutedClass} />
+                    </div>
+                    <div className="sm:pr-0">
+                      <SummaryMetric
+                        label="Influence"
+                        value={formatSummaryStat(influenceValue)}
+                        trend={summaryTrends.influence}
+                        valueClassName="text-base font-semibold text-white"
+                        labelClassName={glassMutedClass}
+                      />
+                    </div>
+                  </div>
+                  <div className={`grid w-full max-w-2xl grid-cols-2 gap-4 text-center text-sm sm:grid-cols-4`}>
+                    <div className={`sm:border-r sm:pr-6 ${glassBorderClass}`}>
+                      <SummaryMetric
+                        label="Militarisme"
+                        value={formatSummaryStat(snapshot.militarism)}
+                        trend={summaryTrends.militarism}
+                        valueClassName="text-sm font-semibold text-white"
+                        labelClassName={glassMutedClass}
+                      />
+                    </div>
+                    <div className={`sm:border-r sm:pr-6 ${glassBorderClass}`}>
+                      <SummaryMetric
+                        label="Science"
+                        value={formatSummaryStat(snapshot.science)}
+                        trend={summaryTrends.science}
+                        valueClassName="text-sm font-semibold text-white"
+                        labelClassName={glassMutedClass}
+                      />
+                    </div>
+                    <div className={`sm:border-r sm:pr-6 ${glassBorderClass}`}>
+                      <SummaryMetric
+                        label="Industrie"
+                        value={formatSummaryStat(snapshot.industry)}
+                        trend={summaryTrends.industry}
+                        valueClassName="text-sm font-semibold text-white"
+                        labelClassName={glassMutedClass}
+                      />
+                    </div>
+                    <div className="sm:pr-0">
+                      <SummaryMetric
+                        label="Stabilité"
+                        value={formatSummaryStat(snapshot.stability)}
+                        trend={summaryTrends.stability}
+                        valueClassName="text-sm font-semibold text-white"
+                        labelClassName={glassMutedClass}
+                      />
+                    </div>
+                  </div>
+                  <div className={`mt-2 w-full border-b pb-6 ${glassBorderClass}`} role="separator" aria-hidden />
                 </div>
               )}
+
+              <div className="space-y-6 text-[15px] leading-relaxed">
+                {cabinetBlocks.map((block) => (
+                  <section key={block.ministryKey} className="space-y-2">
+                    <h3 className="text-base font-semibold text-white" style={{ fontFamily: "inherit" }}>
+                      {block.ministryLabel}
+                    </h3>
+                    <div className="space-y-2 pl-0" style={{ textAlign: "justify" }}>
+                      {block.paragraphs.map((p, i) => (
+                        <p
+                          key={i}
+                          className={`indent-0 first-letter:capitalize ${
+                            p.tone === "positive"
+                              ? "text-emerald-300"
+                              : p.tone === "negative"
+                                ? "text-red-300"
+                                : "text-amber-200"
+                          }`}
+                        >
+                          {p.text}
+                        </p>
+                      ))}
+                    </div>
+                  </section>
+                ))}
+              </div>
+            </article>
             </div>
-          </section>
-        )}
+          )}
+
+        {lastUpdateLog && (
+            <section className={`mt-6 p-4 ${glassPanelClass}`}>
+              <h3 className={`mb-2 text-sm font-semibold uppercase ${glassMutedClass}`}>
+                Dernier passage du cron
+              </h3>
+              <p className={`mb-3 text-xs ${glassMutedClass}`}>
+                {new Date(lastUpdateLog.run_at).toLocaleString("fr-FR", {
+                  dateStyle: "medium",
+                  timeStyle: "short",
+                })}
+              </p>
+              <div className="grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-3 text-white/90">
+                <div>
+                  <span className={glassMutedClass}>Population : </span>
+                  <span>{formatPopulation(Number(lastUpdateLog.population_before ?? 0))}</span>
+                  <span className={`mx-1 ${glassMutedClass}`}>→</span>
+                  <span>{formatPopulation(Number(lastUpdateLog.population_after ?? 0))}</span>
+                </div>
+                <div>
+                  <span className={glassMutedClass}>PIB : </span>
+                  <span>{formatGdp(Number(lastUpdateLog.gdp_before ?? 0))}</span>
+                  <span className={`mx-1 ${glassMutedClass}`}>→</span>
+                  <span>{formatGdp(Number(lastUpdateLog.gdp_after ?? 0))}</span>
+                </div>
+                <div>
+                  <span className={glassMutedClass}>Militarisme : </span>
+                  <span>{lastUpdateLog.militarism_before ?? "—"}</span>
+                  <span className={`mx-1 ${glassMutedClass}`}>→</span>
+                  <span>{lastUpdateLog.militarism_after ?? "—"}</span>
+                </div>
+                <div>
+                  <span className={glassMutedClass}>Industrie : </span>
+                  <span>{lastUpdateLog.industry_before ?? "—"}</span>
+                  <span className={`mx-1 ${glassMutedClass}`}>→</span>
+                  <span>{lastUpdateLog.industry_after ?? "—"}</span>
+                </div>
+                <div>
+                  <span className={glassMutedClass}>Science : </span>
+                  <span>{lastUpdateLog.science_before ?? "—"}</span>
+                  <span className={`mx-1 ${glassMutedClass}`}>→</span>
+                  <span>{lastUpdateLog.science_after ?? "—"}</span>
+                </div>
+                <div>
+                  <span className={glassMutedClass}>Stabilité : </span>
+                  <span>{lastUpdateLog.stability_before ?? "—"}</span>
+                  <span className={`mx-1 ${glassMutedClass}`}>→</span>
+                  <span>{lastUpdateLog.stability_after ?? "—"}</span>
+                </div>
+                {(previousInfluenceValue != null || lastCronInfluenceAfterValue != null) && (
+                  <div>
+                    <span className={glassMutedClass}>Influence : </span>
+                    <span>{formatSummaryStat(previousInfluenceValue)}</span>
+                    <span className={`mx-1 ${glassMutedClass}`}>→</span>
+                    <span>{formatSummaryStat(lastCronInfluenceAfterValue ?? influenceValue)}</span>
+                  </div>
+                )}
+              </div>
+            </section>
+          )}
+        </div>
       </section>
     </div>
   );

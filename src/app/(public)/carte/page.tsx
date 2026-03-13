@@ -185,22 +185,33 @@ export default async function CartePage() {
   };
 
   return (
-    <div className="mx-auto max-w-6xl px-4 py-10">
-      <h1 className="mb-2 text-2xl font-bold text-[var(--foreground)]">
-        Carte des relations diplomatiques
-      </h1>
-      <p className="mb-8 text-[var(--foreground-muted)]">
-        Visualisez les relations entre les nations. Sélectionnez une région sur la carte pour colorer selon le niveau de relation (moyenne entre pays des deux régions). Les pays non présents en base sont affichés en gris.
-      </p>
-      <RelationMapClient
-        geoJson={geoJson}
-        regionRelationMap={regionRelationMapSerialized}
-        regionNames={regionNames}
-        regionCountryNames={regionCountryNames}
-        defaultSelectedRegionId={defaultSelectedRegionId}
-        regionControl={regionControl}
-        sphereData={sphereData}
-      />
+    <div className="relative w-full px-4 py-10">
+      {/* Arrière-plan pleine largeur écran */}
+      <div
+        className="absolute top-0 bottom-0 overflow-hidden"
+        style={{ left: "50%", marginLeft: "-50vw", width: "100vw" }}
+        aria-hidden
+      >
+        <div
+          className="absolute inset-0 bg-cover bg-center bg-no-repeat scale-105"
+          style={{
+            backgroundImage: "url(/images/site/carte-diplomatique-bg.png)",
+            filter: "blur(2px)",
+          }}
+        />
+        <div className="absolute inset-0 bg-black/40" />
+      </div>
+      <div className="relative z-10 max-w-6xl mx-auto">
+        <RelationMapClient
+          geoJson={geoJson}
+          regionRelationMap={regionRelationMapSerialized}
+          regionNames={regionNames}
+          regionCountryNames={regionCountryNames}
+          defaultSelectedRegionId={defaultSelectedRegionId}
+          regionControl={regionControl}
+          sphereData={sphereData}
+        />
+      </div>
     </div>
   );
 }

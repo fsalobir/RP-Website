@@ -119,14 +119,25 @@ export default async function ClassementPage() {
     }) ?? [];
 
   return (
-    <div className="mx-auto max-w-6xl px-4 py-10">
-      <h1 className="mb-2 text-2xl font-bold text-[var(--foreground)]">
-        Classement des nations
-      </h1>
-      <p className="mb-8 text-[var(--foreground-muted)]">
-        Vue d'ensemble des puissances mondiales par critères global, militaire et économique.
-      </p>
-      <ClassementContent rows={rows} />
+    <div className="relative w-full px-4 py-10">
+      {/* Arrière-plan fixe (parallaxe) : taille viewport, reste visible au scroll */}
+      <div
+        className="fixed inset-0 overflow-hidden pointer-events-none"
+        style={{ left: "50%", marginLeft: "-50vw", width: "100vw", zIndex: 0 }}
+        aria-hidden
+      >
+        <div
+          className="absolute inset-0 bg-cover bg-center bg-no-repeat scale-105"
+          style={{
+            backgroundImage: "url(/images/site/classement-bg.png)",
+            filter: "blur(2px)",
+          }}
+        />
+        <div className="absolute inset-0 bg-black/40" />
+      </div>
+      <div className="relative z-10 max-w-6xl mx-auto" style={{ isolation: "isolate" }}>
+        <ClassementContent rows={rows} />
+      </div>
     </div>
   );
 }

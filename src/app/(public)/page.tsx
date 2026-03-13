@@ -74,10 +74,18 @@ export default async function HomePage({
 
   if (error) {
     return (
-      <div className="mx-auto max-w-6xl px-4 py-12">
-        <p className="text-[var(--danger)]">
-          Erreur lors du chargement des pays. Vérifiez que la migration Supabase a été exécutée.
-        </p>
+      <div className="relative w-full px-4 py-10">
+        <div
+          className="fixed inset-0 overflow-hidden pointer-events-none"
+          style={{ left: "50%", marginLeft: "-50vw", width: "100vw", zIndex: 0 }}
+          aria-hidden
+        >
+          <div className="absolute inset-0 bg-cover bg-center bg-no-repeat scale-105" style={{ backgroundImage: "url(/images/site/pays-accueil-bg.png)", filter: "blur(2px)" }} />
+          <div className="absolute inset-0 bg-black/40" />
+        </div>
+        <div className="relative z-10 max-w-6xl mx-auto rounded-2xl border border-white/25 bg-white/15 p-6 shadow-xl backdrop-blur-xl">
+          <p className="text-red-200">Erreur lors du chargement des pays. Vérifiez que la migration Supabase a été exécutée.</p>
+        </div>
       </div>
     );
   }
@@ -145,47 +153,46 @@ export default async function HomePage({
       };
     }) ?? [];
 
-  const panelStyle = {
-    background: "var(--background-panel)",
-    border: "1px solid var(--border)",
-    borderRadius: "var(--radius)",
-  };
-
   return (
-    <div className="mx-auto max-w-6xl px-4 py-10">
-      {showUnauthorized && (
+    <div className="relative w-full px-4 py-10">
+      {/* Arrière-plan fixe (parallaxe) : taille viewport, reste visible au scroll */}
+      <div
+        className="fixed inset-0 overflow-hidden pointer-events-none"
+        style={{ left: "50%", marginLeft: "-50vw", width: "100vw", zIndex: 0 }}
+        aria-hidden
+      >
         <div
-          className="mb-6 rounded-lg border px-4 py-3"
-          style={{ borderColor: "var(--danger)", background: "var(--background-panel)" }}
-        >
-          <p className="text-[var(--danger)]">Compte non autorisé. Seuls les administrateurs et les joueurs assignés à un pays peuvent se connecter.</p>
-        </div>
-      )}
-      <div className="mb-8">
-        <h1 className="text-2xl font-bold text-[var(--foreground)]">
-          Nations
-        </h1>
-        <p className="mt-1 text-[var(--foreground-muted)]">
-          Sélectionnez un pays pour consulter ses indicateurs, forces militaires et avantages. Cliquez sur un en-tête de colonne pour trier.
-        </p>
+          className="absolute inset-0 bg-cover bg-center bg-no-repeat scale-105"
+          style={{
+            backgroundImage: "url(/images/site/pays-accueil-bg.png)",
+            filter: "blur(2px)",
+          }}
+        />
+        <div className="absolute inset-0 bg-black/40" />
       </div>
+      <div className="relative z-10 max-w-6xl mx-auto" style={{ isolation: "isolate" }}>
+        {showUnauthorized && (
+          <div className="mb-6 rounded-2xl border border-white/25 bg-white/15 px-4 py-3 shadow-xl backdrop-blur-xl">
+            <p className="text-red-200">Compte non autorisé. Seuls les administrateurs et les joueurs assignés à un pays peuvent se connecter.</p>
+          </div>
+        )}
 
-      {!countries?.length ? (
-        <div className="rounded-lg border p-8 text-center" style={panelStyle}>
-          <p className="text-[var(--foreground-muted)]">
-            Aucun pays en base. Utilisez l'administration pour en ajouter.
-          </p>
-          <Link
-            href="/admin/connexion"
-            className="mt-4 inline-block rounded py-2 px-4 font-semibold"
-            style={{ background: "var(--accent)", color: "#0f1419" }}
-          >
-            Aller à l'administration
-          </Link>
-        </div>
-      ) : (
-        <CountriesTable rows={rows} showSearch showWikiTooltips />
-      )}
+        {!countries?.length ? (
+          <div className="rounded-2xl border border-white/25 bg-white/15 p-8 text-center shadow-xl backdrop-blur-xl">
+            <p className="text-white/85">
+              Aucun pays en base. Utilisez l&apos;administration pour en ajouter.
+            </p>
+            <Link
+              href="/admin/connexion"
+              className="mt-4 inline-block rounded-xl bg-white/25 py-2 px-4 font-semibold text-white hover:bg-white/35 transition-colors"
+            >
+              Aller à l&apos;administration
+            </Link>
+          </div>
+        ) : (
+          <CountriesTable rows={rows} showSearch showWikiTooltips glassContext />
+        )}
+      </div>
     </div>
   );
 }
