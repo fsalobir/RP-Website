@@ -185,7 +185,7 @@ export function CountryTabCabinet({
             style={{
               backgroundImage: "url(/images/site/rapport-cabinet-bg.png)",
               backgroundPosition: "top center",
-              filter: "blur(2px)",
+              filter: "blur(0.5px)",
             }}
           />
           <div className="absolute inset-0 bg-[var(--background-panel)]/85" />

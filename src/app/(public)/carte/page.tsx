@@ -196,7 +196,7 @@ export default async function CartePage() {
           className="absolute inset-0 bg-cover bg-center bg-no-repeat scale-105"
           style={{
             backgroundImage: "url(/images/site/carte-diplomatique-bg.png)",
-            filter: "blur(2px)",
+            filter: "blur(0.5px)",
           }}
         />
         <div className="absolute inset-0 bg-black/40" />

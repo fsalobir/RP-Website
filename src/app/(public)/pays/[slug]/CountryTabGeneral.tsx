@@ -88,6 +88,7 @@ function SpherePieChart({
   size = 180,
   showLegend = false,
   formatValue,
+  glassContext = false,
 }: {
   slices: Array<{ name: string; flag_url: string | null; slug: string; value: number; colorIndex: number }>;
   total: number;
@@ -96,6 +97,8 @@ function SpherePieChart({
   showLegend?: boolean;
   /** Pour l'infobulle au survol (part % et valeur formatée). */
   formatValue?: (v: number) => string;
+  /** Si true, titres et texte en style glass (blanc / blanc 90%). */
+  glassContext?: boolean;
 }) {
   const [hoverTooltip, setHoverTooltip] = useState<{ text: string; x: number; y: number } | null>(null);
   const cx = size / 2;
@@ -104,7 +107,7 @@ function SpherePieChart({
   let angle = -Math.PI / 2;
   return (
     <div className="relative flex flex-col items-center gap-2">
-      <span className="text-sm font-semibold text-[var(--foreground-muted)]">{title}</span>
+      <span className={`text-sm font-semibold ${glassContext ? "text-white/90" : "text-[var(--foreground-muted)]"}`}>{title}</span>
       <svg
         width={size}
         height={size}
@@ -337,35 +340,49 @@ export function CountryTabGeneral({
     return "légère";
   }
 
+  const glassMutedClass = "text-white/90 drop-shadow-[0_1px_2px_rgba(0,0,0,0.4)]";
+  const glassBorderClass = "border-white/25";
+  const glassTextClass = "text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.5)]";
+
   return (
     <div className="space-y-8">
-      <section className={panelClass} style={panelStyle}>
+      {/* Premier bloc : population / PIB / influence / idéologie / effets — fond image + glass */}
+      <section className={`relative overflow-hidden rounded-2xl ${panelClass}`} style={{ ...panelStyle, background: "transparent" }}>
+        <div className="absolute inset-0 overflow-hidden rounded-2xl" aria-hidden>
+          <div
+            className="absolute inset-0 bg-cover bg-no-repeat scale-105"
+            style={{
+              backgroundImage: "url(/images/site/generalites-bg.png)",
+              backgroundPosition: "top center",
+              filter: "blur(0.5px)",
+            }}
+          />
+          <div className="absolute inset-0 bg-[var(--background-panel)]/75" />
+        </div>
+        <div className="relative z-10">
         <div className="mb-8 flex flex-wrap justify-center gap-x-12 gap-y-4">
           <div className="text-center">
-            <dt className="text-sm font-semibold text-[var(--foreground-muted)]">
-              <strong className="text-[var(--foreground)]">Population</strong>
+            <dt className={`text-sm font-semibold ${glassMutedClass}`}>
+              <strong className={glassTextClass}>Population</strong>
               {rankPopulation > 0 && ` — ${rankEmoji(rankPopulation) ? `${rankEmoji(rankPopulation)} ` : ""}#${rankPopulation}`}
             </dt>
-            <dd className="stat-value mt-0.5 text-2xl font-bold text-[var(--foreground)]">{formatPopulation(country.population)}</dd>
+            <dd className={`stat-value mt-0.5 text-2xl font-bold ${glassTextClass}`}>{formatPopulation(country.population)}</dd>
           </div>
           <div className="text-center">
-            <dt className="text-sm font-semibold text-[var(--foreground-muted)]">
-              <strong className="text-[var(--foreground)]">PIB</strong>
+            <dt className={`text-sm font-semibold ${glassMutedClass}`}>
+              <strong className={glassTextClass}>PIB</strong>
               {rankGdp > 0 && ` — ${rankEmoji(rankGdp) ? `${rankEmoji(rankGdp)} ` : ""}#${rankGdp}`}
             </dt>
-            <dd className="stat-value mt-0.5 text-2xl font-bold text-[var(--foreground)]">{formatGdp(country.gdp)}</dd>
+            <dd className={`stat-value mt-0.5 text-2xl font-bold ${glassTextClass}`}>{formatGdp(country.gdp)}</dd>
           </div>
           {(influenceResult != null || displayInfluence != null) && (
             <div className="text-center">
-              <dt className="text-sm font-semibold text-[var(--foreground-muted)]">
-                <strong className="text-[var(--foreground)]">Influence</strong>
-                {displayInfluence != null && displayInfluence !== influenceResult?.influence && (
-                  <span className="ml-1 text-xs font-normal" title="Inclut l'influence de la sphère (pays contrôlés).">(avec sphère)</span>
-                )}
+              <dt className={`text-sm font-semibold ${glassMutedClass}`}>
+                <strong className={glassTextClass}>Influence</strong>
               </dt>
-              <dd className="stat-value mt-0.5 text-2xl font-bold text-[var(--accent)]">{formatNumber(Math.round(displayInfluence ?? influenceResult?.influence ?? 0))}</dd>
+              <dd className={`stat-value mt-0.5 text-2xl font-bold ${glassTextClass}`}>{formatNumber(Math.round(displayInfluence ?? influenceResult?.influence ?? 0))}</dd>
               {influenceResult != null && (
-                <dl className="mt-2 flex flex-wrap justify-center gap-x-4 gap-y-1 text-xs text-[var(--foreground-muted)]">
+                <dl className={`mt-2 flex flex-wrap justify-center gap-x-4 gap-y-1 text-xs ${glassMutedClass}`}>
                   <span>PIB : {formatNumber(Math.round(influenceResult.componentsAfterGravity.gdp))}</span>
                   <span>Population : {formatNumber(Math.round(influenceResult.componentsAfterGravity.population))}</span>
                   <span>Stabilité : ×{Number(influenceResult.componentsAfterGravity.stabilityMultiplier).toLocaleString("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
@@ -376,45 +393,45 @@ export function CountryTabGeneral({
           )}
         </div>
         {hardPowerByBranch != null && (
-          <div className="mb-6 rounded border py-2 px-3 text-sm" style={{ borderColor: "var(--border-muted)", background: "var(--background-elevated)" }}>
-            <span className="font-medium text-[var(--foreground-muted)]">Hard Power par branche : </span>
-            <span className="text-[var(--foreground)]">
+          <div className={`mb-6 rounded-xl border py-2 px-3 text-sm ${glassBorderClass}`} style={{ background: "rgba(255,255,255,0.12)", backdropFilter: "blur(12px)" }}>
+            <span className={`font-medium ${glassMutedClass}`}>Hard Power par branche : </span>
+            <span className={glassTextClass}>
               Terrestre {formatNumber(hardPowerByBranch.terre)} · Aérien {formatNumber(hardPowerByBranch.air)} · Naval {formatNumber(hardPowerByBranch.mer)} · Stratégique {formatNumber(hardPowerByBranch.strategique)} — Total {formatNumber(hardPowerByBranch.total)}
             </span>
           </div>
         )}
         {ideologySummary && (
-          <div className="mb-6 rounded border p-4 text-sm" style={{ borderColor: "var(--border-muted)", background: "var(--background-elevated)" }}>
+          <div className={`mb-6 rounded-xl border p-4 text-sm ${glassBorderClass}`} style={{ background: "rgba(255,255,255,0.12)", backdropFilter: "blur(12px)" }}>
             <div className="mb-2 flex flex-wrap items-center justify-between gap-3">
-              <span className="font-medium text-[var(--foreground)]">
+              <span className={`font-medium ${glassTextClass}`}>
                 Idéologie dominante : {IDEOLOGY_LABELS[ideologySummary.dominant]}
               </span>
-              <span className="text-[var(--foreground-muted)]">
+              <span className={glassMutedClass}>
                 Distance au centre : {Math.round(ideologySummary.centerDistance * 100)} %
               </span>
             </div>
             <div className="grid gap-2 sm:grid-cols-3">
-              <div className="rounded border px-3 py-2" style={{ borderColor: "var(--border)" }}>
-                <div className="text-xs text-[var(--foreground-muted)]">Monarchisme</div>
-                <div className="font-mono text-[var(--foreground)]">{Number(ideologySummary.scores.monarchism).toFixed(1)}</div>
+              <div className={`rounded border px-3 py-2 ${glassBorderClass}`} style={{ background: "rgba(255,255,255,0.08)" }}>
+                <div className={`text-xs ${glassMutedClass}`}>Monarchisme</div>
+                <div className={`font-mono ${glassTextClass}`}>{Number(ideologySummary.scores.monarchism).toFixed(1)}</div>
               </div>
-              <div className="rounded border px-3 py-2" style={{ borderColor: "var(--border)" }}>
-                <div className="text-xs text-[var(--foreground-muted)]">Républicanisme</div>
-                <div className="font-mono text-[var(--foreground)]">{Number(ideologySummary.scores.republicanism).toFixed(1)}</div>
+              <div className={`rounded border px-3 py-2 ${glassBorderClass}`} style={{ background: "rgba(255,255,255,0.08)" }}>
+                <div className={`text-xs ${glassMutedClass}`}>Républicanisme</div>
+                <div className={`font-mono ${glassTextClass}`}>{Number(ideologySummary.scores.republicanism).toFixed(1)}</div>
               </div>
-              <div className="rounded border px-3 py-2" style={{ borderColor: "var(--border)" }}>
-                <div className="text-xs text-[var(--foreground-muted)]">Cultisme</div>
-                <div className="font-mono text-[var(--foreground)]">{Number(ideologySummary.scores.cultism).toFixed(1)}</div>
+              <div className={`rounded border px-3 py-2 ${glassBorderClass}`} style={{ background: "rgba(255,255,255,0.08)" }}>
+                <div className={`text-xs ${glassMutedClass}`}>Cultisme</div>
+                <div className={`font-mono ${glassTextClass}`}>{Number(ideologySummary.scores.cultism).toFixed(1)}</div>
               </div>
             </div>
-            <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs text-[var(--foreground-muted)]">
+            <div className={`mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs ${glassMutedClass}`}>
               <span>Drift M : {Number(ideologySummary.drift.monarchism).toFixed(2)}</span>
               <span>Drift R : {Number(ideologySummary.drift.republicanism).toFixed(2)}</span>
               <span>Drift C : {Number(ideologySummary.drift.cultism).toFixed(2)}</span>
             </div>
             <div className="mt-4 space-y-3">
-              <div className="rounded border px-3 py-3" style={{ borderColor: "var(--border)" }}>
-                <div className="text-xs font-semibold uppercase tracking-wide text-[var(--foreground-muted)]">
+              <div className={`rounded border px-3 py-3 ${glassBorderClass}`} style={{ background: "rgba(255,255,255,0.08)" }}>
+                <div className={`text-xs font-semibold uppercase tracking-wide ${glassMutedClass}`}>
                   Influences voisines
                 </div>
                 {ideologySummary.breakdown.neighborContributors.length > 0 ? (
@@ -423,8 +440,8 @@ export function CountryTabGeneral({
                       {ideologySummary.breakdown.neighborContributors.map((neighbor) => (
                         <div
                           key={neighbor.countryId}
-                          className="flex items-center justify-between gap-3 rounded border px-2 py-2"
-                          style={{ borderColor: "var(--border-muted)", background: "var(--background-panel)" }}
+                          className={`flex items-center justify-between gap-3 rounded border px-2 py-2 ${glassBorderClass}`}
+                          style={{ background: "rgba(255,255,255,0.06)" }}
                         >
                           <div className="flex min-w-0 items-center gap-2">
                             {neighbor.flag_url ? (
@@ -437,33 +454,33 @@ export function CountryTabGeneral({
                                 className="h-4 w-6 rounded object-cover"
                               />
                             ) : (
-                              <div className="h-4 w-6 rounded border" style={{ borderColor: "var(--border)" }} />
+                              <div className={`h-4 w-6 rounded border ${glassBorderClass}`} />
                             )}
                             <Link href={`/pays/${neighbor.slug}`} className="truncate text-[var(--accent)] hover:underline">
                               {neighbor.name}
                             </Link>
                           </div>
-                          <div className="text-right text-xs text-[var(--foreground-muted)]">
-                            <div className="text-[var(--foreground)]">
+                          <div className={`text-right text-xs ${glassMutedClass}`}>
+                            <div className={glassTextClass}>
                               Influence {getInfluenceIntensity(neighbor.value, strongestNeighborInfluence)} vers le {IDEOLOGY_LABELS[neighbor.ideology]}
                             </div>
                           </div>
                         </div>
                       ))}
                     </div>
-                    <div className="mt-2 text-xs text-[var(--foreground-muted)]">
+                    <div className={`mt-2 text-xs ${glassMutedClass}`}>
                       {strongestNeighborDirection
                         ? `Dans l’ensemble, nos voisins nous poussent surtout vers le ${strongestNeighborDirection}.`
                         : "Nos voisins n’exercent pas de direction idéologique nette."}
                     </div>
                   </>
                 ) : (
-                  <div className="mt-2 text-xs text-[var(--foreground-muted)]">Aucune influence voisine détectée.</div>
+                  <div className={`mt-2 text-xs ${glassMutedClass}`}>Aucune influence voisine détectée.</div>
                 )}
               </div>
 
-              <div className="rounded border px-3 py-3" style={{ borderColor: "var(--border)" }}>
-                <div className="text-xs font-semibold uppercase tracking-wide text-[var(--foreground-muted)]">
+              <div className={`rounded border px-3 py-3 ${glassBorderClass}`} style={{ background: "rgba(255,255,255,0.08)" }}>
+                <div className={`text-xs font-semibold uppercase tracking-wide ${glassMutedClass}`}>
                   Effets idéologiques actifs
                 </div>
                 {ideologyEffects.length > 0 ? (
@@ -472,8 +489,8 @@ export function CountryTabGeneral({
                       {ideologyEffects.map((effect) => (
                         <div
                           key={effect.id}
-                          className="rounded border px-2 py-2 text-[var(--foreground)]"
-                          style={{ borderColor: "var(--border-muted)", background: "var(--background-panel)" }}
+                          className={`rounded border px-2 py-2 ${glassTextClass} ${glassBorderClass}`}
+                          style={{ background: "rgba(255,255,255,0.06)" }}
                         >
                           <div>
                             {getEffectDescription(effect, {
@@ -481,20 +498,20 @@ export function CountryTabGeneral({
                               countryName: getCountryName,
                             })}
                           </div>
-                          <div className="mt-1 text-[var(--foreground-muted)]">
+                          <div className={`mt-1 ${glassMutedClass}`}>
                             Durée restante : {formatDurationRemaining(effect)}
                           </div>
                         </div>
                       ))}
                     </div>
-                    <div className="mt-2 text-xs text-[var(--foreground-muted)]">
+                    <div className={`mt-2 text-xs ${glassMutedClass}`}>
                       {strongestEffectDirection
                         ? `Les effets administratifs poussent actuellement surtout vers le ${strongestEffectDirection}.`
                         : "Les effets administratifs n’impriment pas de direction idéologique nette."}
                     </div>
                   </>
                 ) : (
-                  <div className="mt-2 text-xs text-[var(--foreground-muted)]">
+                  <div className={`mt-2 text-xs ${glassMutedClass}`}>
                     Aucun effet idéologique actif dans les effets du pays.
                   </div>
                 )}
@@ -503,79 +520,95 @@ export function CountryTabGeneral({
           </div>
         )}
 
-        <hr className="my-8 border-0 border-t" style={{ borderColor: "var(--border)" }} />
-        {effects.length === 0 ? (
-          <p className="text-[var(--foreground-muted)]">Aucun effet en cours.</p>
-        ) : (
-          <ul className="space-y-3">
-            {effects.map((e) => (
-              <li
-                key={e.id}
-                className="flex flex-wrap items-center justify-between gap-3 rounded border py-2 px-3"
-                style={{ borderColor: "var(--border-muted)" }}
-              >
-                <div className="min-w-0 flex-1">
-                  <span className="font-medium text-[var(--foreground)]">{e.name}</span>
-                  <p
-                    className={`text-sm ${isEffectDisplayPositive(e) ? "text-[var(--accent)]" : "text-[var(--danger)]"}`}
-                  >
-                    {getEffectDescription(e, {
-                      rosterUnitName: (id) => rosterUnitsFlat.find((u) => u.id === id)?.name_fr ?? null,
-                      countryName: getCountryName,
-                    })}
-                  </p>
-                  <p className="text-xs text-[var(--foreground-muted)]">
-                    Durée restante : {formatDurationRemaining(e)}
-                  </p>
-                </div>
-                {isAdmin && (
-                  <div className="flex shrink-0 gap-2">
-                    <button
-                      type="button"
-                      onClick={() => onEditEffect(e)}
-                      className="text-sm text-[var(--accent)] hover:underline"
+        <hr className={`my-8 border-0 border-t ${glassBorderClass}`} />
+        <div className={`rounded-xl border p-4 ${glassBorderClass}`} style={{ background: "rgba(255,255,255,0.12)", backdropFilter: "blur(12px)" }}>
+          <h4 className={`mb-3 text-sm font-semibold ${glassTextClass}`}>Effets et avantages actifs</h4>
+          {effects.length === 0 && resolvedEffects.filter((e) => e.source === "perk").length === 0 ? (
+            <p className={glassMutedClass}>Aucun effet en cours.</p>
+          ) : (
+            <div className="space-y-4">
+              {effects.length > 0 && (
+                <ul className="space-y-3">
+                  {effects.map((e) => (
+                    <li
+                      key={e.id}
+                      className={`flex flex-wrap items-center justify-between gap-3 rounded border py-2 px-3 ${glassBorderClass}`}
+                      style={{ background: "rgba(255,255,255,0.08)" }}
                     >
-                      Modifier
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => onDeleteEffect(e)}
-                      className="text-sm text-[var(--danger)] hover:underline"
-                    >
-                      Supprimer
-                    </button>
-                  </div>
-                )}
-              </li>
-            ))}
-          </ul>
-        )}
-        {resolvedEffects.filter((e) => e.source === "perk").length > 0 && (
-          <div className="mt-6">
-            <h4 className="mb-2 text-sm font-semibold text-[var(--foreground)]">Effets des avantages actifs</h4>
-            <ul className="space-y-2">
-              {resolvedEffects
-                .filter((e) => e.source === "perk")
-                .map((e, i) => (
-                  <li
-                    key={i}
-                    className="rounded border py-2 px-3 text-sm"
-                    style={{ borderColor: "var(--border-muted)" }}
-                  >
-                    <span className="text-[var(--foreground-muted)]">{e.sourceLabel ?? "Avantage"}</span>
-                    <p
-                      className={`mt-0.5 ${isEffectDisplayPositive(e) ? "text-[var(--accent)]" : "text-[var(--danger)]"}`}
-                    >
-                      {getEffectDescription(e, {
-                        rosterUnitName: (id) => rosterUnitsFlat.find((u) => u.id === id)?.name_fr ?? null,
-                        countryName: getCountryName,
-                      })}
-                    </p>
-                  </li>
-                ))}
-            </ul>
-          </div>
-        )}
+                      <div className="min-w-0 flex-1">
+                        <span className={`font-medium ${glassTextClass}`}>{e.name}</span>
+                        <p
+                          className={`text-sm ${isEffectDisplayPositive(e) ? "text-[var(--accent)]" : "text-[var(--danger)]"}`}
+                        >
+                          {getEffectDescription(e, {
+                            rosterUnitName: (id) => rosterUnitsFlat.find((u) => u.id === id)?.name_fr ?? null,
+                            countryName: getCountryName,
+                          })}
+                        </p>
+                        <p className={`text-xs ${glassMutedClass}`}>
+                          Durée restante : {formatDurationRemaining(e)}
+                        </p>
+                      </div>
+                      {isAdmin && (
+                        <div className="flex shrink-0 gap-2">
+                          <button
+                            type="button"
+                            onClick={() => onEditEffect(e)}
+                            className="text-sm text-[var(--accent)] hover:underline"
+                          >
+                            Modifier
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => onDeleteEffect(e)}
+                            className="text-sm text-[var(--danger)] hover:underline"
+                          >
+                            Supprimer
+                          </button>
+                        </div>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {resolvedEffects.filter((e) => e.source === "perk").length > 0 && (() => {
+                const perkEffects = resolvedEffects.filter((e) => e.source === "perk");
+                const bySource = perkEffects.reduce<Record<string, typeof perkEffects>>((acc, e) => {
+                  const label = e.sourceLabel ?? "Avantage";
+                  if (!acc[label]) acc[label] = [];
+                  acc[label].push(e);
+                  return acc;
+                }, {});
+                return (
+                  <ul className={`space-y-3 ${effects.length > 0 ? "mt-2" : ""}`}>
+                    {Object.entries(bySource).map(([sourceLabel, list]) => (
+                      <li
+                        key={sourceLabel}
+                        className={`rounded border py-2 px-3 text-sm ${glassBorderClass}`}
+                        style={{ background: "rgba(255,255,255,0.08)" }}
+                      >
+                        <span className={glassMutedClass}>Avantage : {sourceLabel}</span>
+                        <div className="mt-1.5 space-y-1">
+                          {list.map((e, i) => (
+                            <p
+                              key={i}
+                              className={`text-sm ${isEffectDisplayPositive(e) ? "text-[var(--accent)]" : "text-[var(--danger)]"}`}
+                            >
+                              {getEffectDescription(e, {
+                                rosterUnitName: (id) => rosterUnitsFlat.find((u) => u.id === id)?.name_fr ?? null,
+                                countryName: getCountryName,
+                              })}
+                            </p>
+                          ))}
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                );
+              })()}
+            </div>
+          )}
+        </div>
         {isAdmin && (
           <div className="mt-4 border-t pt-4" style={{ borderColor: "var(--border-muted)" }}>
             {!effectsFormOpen ? (
@@ -774,81 +807,104 @@ export function CountryTabGeneral({
             )}
           </div>
         )}
+        </div>
       </section>
 
-      <section className={panelClass} style={panelStyle}>
-        <div className="mb-8 flex flex-col gap-5 sm:flex-row sm:gap-10 sm:justify-center">
-          {[
-            { key: "militarism" as const, label: "Militarisme", emoji: "🎖️", value: Number(country.militarism) },
-            { key: "industry" as const, label: "Industrie", emoji: "🏭", value: Number(country.industry) },
-            { key: "science" as const, label: "Science", emoji: "🔬", value: Number(country.science) },
-          ].map(({ label, emoji, value }) => (
-            <div key={label} className="flex flex-col items-center gap-1">
-              <span className="text-center text-sm font-semibold text-[var(--foreground)]">
-                {emoji} {label}
-              </span>
-              <span className="text-2xl font-bold text-[var(--foreground)]">
-                {Number(value).toFixed(2)}
-              </span>
-            </div>
-          ))}
-        </div>
-
-        <div className="mt-10 max-w-2xl mx-auto">
-          <span className="mb-2 block text-center text-sm font-semibold text-[var(--foreground)]">
-            ⚖️ Stabilité
-          </span>
+      <section className={`relative overflow-hidden rounded-2xl ${panelClass}`} style={{ ...panelStyle, background: "transparent" }}>
+        <div className="absolute inset-0 overflow-hidden rounded-2xl" aria-hidden>
           <div
-            className="relative h-5 w-full rounded overflow-visible"
+            className="absolute inset-0 bg-cover bg-no-repeat scale-105"
             style={{
-              background: "linear-gradient(to right, #dc2626, #ea580c, #ca8a04, #65a30d, #16a34a)",
+              backgroundImage: "url(/images/site/stats-bg.png)",
+              backgroundPosition: "top center",
+              filter: "blur(0.5px)",
             }}
-          >
-            {[-3, -2, -1, 0, 1, 2, 3].map((n) => (
-              <div
-                key={n}
-                className="absolute top-0 bottom-0 w-px bg-black"
-                style={{ left: `${((n + 3) / 6) * 100}%` }}
-              />
-            ))}
-            <div
-              className="absolute top-0 flex flex-col items-center"
-              style={{
-                left: `${((Math.max(-3, Math.min(3, Number(country.stability))) + 3) / 6) * 100}%`,
-                transform: "translateX(-50%)",
-              }}
-            >
-              <div
-                className="border-[5px] border-transparent border-b-[#0f1419]"
-                style={{ borderBottomWidth: "6px" }}
-                aria-hidden
-              />
-              <span className="mt-0.5 rounded bg-[var(--background-panel)] px-1.5 py-0.5 text-xs font-bold text-[var(--foreground)] shadow-sm">
-                {country.stability}
-              </span>
-            </div>
-          </div>
-          <div className="relative mt-6 h-8 w-full">
+          />
+          <div className="absolute inset-0 bg-[var(--background-panel)]/75" />
+        </div>
+        <div className="relative z-10 p-6">
+          <div className="mb-8 flex flex-col gap-5 sm:flex-row sm:gap-6 sm:justify-center">
             {[
-              { n: -3, label: "Chaos" },
-              { n: -2, label: "État Failli" },
-              { n: -1, label: "Instable" },
-              { n: 0, label: "Précaire" },
-              { n: 1, label: "Stable" },
-              { n: 2, label: "Uni" },
-              { n: 3, label: "Prospère" },
-            ].map(({ n, label }) => (
-              <span
-                key={n}
-                className="absolute top-0 -translate-x-1/2 rounded bg-[var(--background-panel)] px-1.5 py-0.5 text-center text-xs text-[var(--foreground-muted)] shadow-sm whitespace-nowrap"
+              { key: "militarism" as const, label: "Militarisme", emoji: "🎖️", value: Number(country.militarism) },
+              { key: "industry" as const, label: "Industrie", emoji: "🏭", value: Number(country.industry) },
+              { key: "science" as const, label: "Science", emoji: "🔬", value: Number(country.science) },
+            ].map(({ label, emoji, value }) => (
+              <div
+                key={label}
+                className={`flex flex-col items-center gap-1 rounded-xl border px-6 py-4 min-w-[8rem] ${glassBorderClass}`}
+                style={{ background: "rgba(255,255,255,0.12)", backdropFilter: "blur(12px)" }}
+              >
+                <span className={`text-center text-sm font-semibold ${glassMutedClass}`}>
+                  {emoji} {label}
+                </span>
+                <span className={`text-2xl font-bold ${glassTextClass}`}>
+                  {Number(value).toFixed(2)}
+                </span>
+              </div>
+            ))}
+          </div>
+
+          <div
+            className={`mt-10 max-w-4xl mx-auto rounded-xl border p-6 ${glassBorderClass}`}
+            style={{ background: "rgba(255,255,255,0.12)", backdropFilter: "blur(12px)" }}
+          >
+            <div className="max-w-2xl mx-auto">
+              <span className={`mb-2 block text-center text-sm font-semibold ${glassTextClass}`}>
+                ⚖️ Stabilité
+              </span>
+              <div
+                className="relative h-5 w-full rounded overflow-visible mt-4"
                 style={{
-                  left: `${((n + 3) / 6) * 100}%`,
-                  border: "1px solid var(--border-muted)",
+                  background: "linear-gradient(to right, #dc2626, #ea580c, #ca8a04, #65a30d, #16a34a)",
                 }}
               >
-                {label}
-              </span>
-            ))}
+                {[-3, -2, -1, 0, 1, 2, 3].map((n) => (
+                  <div
+                    key={n}
+                    className="absolute top-0 bottom-0 w-px bg-black"
+                    style={{ left: `${((n + 3) / 6) * 100}%` }}
+                  />
+                ))}
+                <div
+                  className="absolute top-0 flex flex-col items-center"
+                  style={{
+                    left: `${((Math.max(-3, Math.min(3, Number(country.stability))) + 3) / 6) * 100}%`,
+                    transform: "translateX(-50%)",
+                  }}
+                >
+                  <div
+                    className="border-[5px] border-transparent border-b-[#0f1419]"
+                    style={{ borderBottomWidth: "6px" }}
+                    aria-hidden
+                  />
+                  <span className={`mt-0.5 rounded px-1.5 py-0.5 text-xs font-bold shadow-sm border ${glassBorderClass}`} style={{ background: "rgba(255,255,255,0.25)" }}>
+                    {country.stability}
+                  </span>
+                </div>
+              </div>
+              <div className="relative mt-6 h-8 w-full">
+                {[
+                  { n: -3, label: "Chaos" },
+                  { n: -2, label: "État Failli" },
+                  { n: -1, label: "Instable" },
+                  { n: 0, label: "Précaire" },
+                  { n: 1, label: "Stable" },
+                  { n: 2, label: "Uni" },
+                  { n: 3, label: "Prospère" },
+                ].map(({ n, label }) => (
+                  <span
+                    key={n}
+                    className={`absolute top-0 -translate-x-1/2 rounded px-1.5 py-0.5 text-center text-xs shadow-sm whitespace-nowrap border ${glassBorderClass}`}
+                    style={{
+                      left: `${((n + 3) / 6) * 100}%`,
+                      background: "rgba(255,255,255,0.2)",
+                    }}
+                  >
+                    <span className={glassMutedClass}>{label}</span>
+                  </span>
+                ))}
+              </div>
+            </div>
           </div>
         </div>
       </section>
@@ -876,92 +932,102 @@ export function CountryTabGeneral({
           value: item.colorIndex === 0 ? sphereData.masterInfluence : sortedCountries[i - 1]!.influenceGiven,
         }));
         return (
-          <section className={panelClass} style={panelStyle}>
-            <h3 className="mb-4 text-lg font-semibold text-[var(--foreground)]">
-              Sphère
-            </h3>
-            <p className="mb-4 text-sm text-[var(--foreground-muted)]">
-              Somme impériale (pays maître + parts proportionnelles). Pour les pays contrôlés : part = % contrôle × multiplicateur de la règle (Contesté / Occupé / Annexé).
-            </p>
-            <div
-              className="mb-4 flex flex-wrap justify-center gap-10 rounded-lg border p-6"
-              style={{ borderColor: "var(--border)", background: "var(--background-elevated)" }}
-            >
-              <SpherePieChart slices={slicesPop} total={sphereData.totalPopulation} title="Population" showLegend={false} formatValue={formatNumber} />
-              <SpherePieChart slices={slicesGdp} total={sphereData.totalGdp} title="PIB" showLegend={false} formatValue={(v) => formatGdp(v)} />
-              <SpherePieChart slices={slicesInfluence} total={sphereData.totalInfluence} title="Influence" showLegend={false} formatValue={formatNumber} />
+          <section className={`relative overflow-hidden rounded-2xl ${panelClass}`} style={{ ...panelStyle, background: "transparent" }}>
+            <div className="absolute inset-0 overflow-hidden rounded-2xl" aria-hidden>
+              <div
+                className="absolute inset-0 bg-cover bg-no-repeat scale-105"
+                style={{
+                  backgroundImage: "url(/images/site/sphere-bg.png)",
+                  backgroundPosition: "top center",
+                  filter: "blur(0.5px)",
+                }}
+              />
+              <div className="absolute inset-0 bg-[var(--background-panel)]/75" />
             </div>
-            <div className="mb-6 rounded border p-3" style={{ borderColor: "var(--border-muted)", background: "var(--background-elevated)" }}>
-              <p className="mb-2 text-xs font-semibold text-[var(--foreground-muted)]">Légende</p>
-              <ul className="flex flex-wrap gap-x-6 gap-y-1 text-xs">
-                {canonicalOrder.map((item) => (
-                  <li key={item.slug} className="flex items-center gap-2">
-                    <span
-                      className="h-3 w-3 shrink-0 rounded-sm"
-                      style={{ backgroundColor: SPHERE_PIE_COLORS[item.colorIndex % SPHERE_PIE_COLORS.length] }}
-                    />
-                    {item.flag_url ? (
-                      <Link href={`/pays/${item.slug}`} className="shrink-0">
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img src={item.flag_url} alt="" width={16} height={11} className="inline-block h-[11px] w-4 rounded object-cover align-middle" />
-                      </Link>
-                    ) : null}
-                    <Link href={`/pays/${item.slug}`} className="text-[var(--foreground-muted)] hover:text-[var(--accent)] hover:underline">
-                      {item.name}
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-            </div>
-            {sphereData.countries.length > 0 && (
-              <div className="overflow-x-auto rounded border" style={{ borderColor: "var(--border-muted)" }}>
-                <table className="w-full min-w-[420px] text-left text-sm">
-                  <thead>
-                    <tr className="border-b text-[var(--foreground-muted)]" style={{ borderColor: "var(--border)" }}>
-                      <th className="p-3 font-semibold">Pays</th>
-                      <th className="p-3 font-semibold">Niveau</th>
-                      <th className="p-3 font-semibold text-right">Population (part)</th>
-                      <th className="p-3 font-semibold text-right">PIB (part)</th>
-                      <th className="p-3 font-semibold text-right">Influence</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {sortedCountries.map((c) => (
-                      <tr key={c.id} className="border-b last:border-b-0" style={{ borderColor: "var(--border-muted)" }}>
-                        <td className="p-3">
-                          <div className="flex items-center gap-2">
-                            {c.flag_url ? (
-                              <Link href={`/pays/${c.slug}`} className="shrink-0">
-                                {/* eslint-disable-next-line @next/next/no-img-element */}
-                                <img src={c.flag_url} alt="" width={24} height={16} className="h-4 w-6 rounded object-cover" style={{ border: "1px solid var(--border)" }} />
-                              </Link>
-                            ) : null}
-                            <Link href={`/pays/${c.slug}`} className="font-medium text-[var(--accent)] hover:underline">
-                              {c.name}
-                            </Link>
-                          </div>
-                        </td>
-                        <td className="p-3 text-[var(--foreground-muted)]">
-                          {c.controlStatus}
-                          {c.controlStatus === "Contesté" && ` (${c.share_pct} %)`}
-                          {c.controlStatus === "Occupé" && " (100 %)"}
-                          {c.controlStatus === "Annexé" && " (100 %)"}
-                        </td>
-                        <td className="p-3 text-right font-mono text-[var(--foreground)]" title="Part comptée dans la sphère (proportionnelle au % de contrôle).">
-                          {formatNumber(c.contributionPopulation)}
-                        </td>
-                        <td className="p-3 text-right font-mono text-[var(--foreground)]" title="Part comptée dans la sphère (proportionnelle au % de contrôle).">
-                          {formatGdp(c.contributionGdp)}
-                        </td>
-                        <td className="p-3 text-right font-mono text-[var(--foreground)]" title="Influence apportée = influence du pays × % contrôle × multiplicateur règle (Contesté/Occupé/Annexé).">
-                          {formatNumber(c.influenceGiven)}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+            <div className="relative z-10 p-6">
+              <h3 className={`mb-4 text-lg font-semibold ${glassTextClass}`}>
+                Sphère
+              </h3>
+              <div
+                className={`mb-4 flex flex-wrap justify-center gap-10 rounded-xl border p-6 ${glassBorderClass}`}
+                style={{ background: "rgba(255,255,255,0.12)", backdropFilter: "blur(12px)" }}
+              >
+                <SpherePieChart slices={slicesPop} total={sphereData.totalPopulation} title="Population" showLegend={false} formatValue={formatNumber} glassContext />
+                <SpherePieChart slices={slicesGdp} total={sphereData.totalGdp} title="PIB" showLegend={false} formatValue={(v) => formatGdp(v)} glassContext />
+                <SpherePieChart slices={slicesInfluence} total={sphereData.totalInfluence} title="Influence" showLegend={false} formatValue={formatNumber} glassContext />
               </div>
-            )}
+              <div className={`mb-6 rounded-xl border p-3 ${glassBorderClass}`} style={{ background: "rgba(255,255,255,0.12)", backdropFilter: "blur(12px)" }}>
+                <p className={`mb-2 text-xs font-semibold ${glassMutedClass}`}>Légende</p>
+                <ul className="flex flex-wrap gap-x-6 gap-y-1 text-xs">
+                  {canonicalOrder.map((item) => (
+                    <li key={item.slug} className="flex items-center gap-2">
+                      <span
+                        className="h-3 w-3 shrink-0 rounded-sm"
+                        style={{ backgroundColor: SPHERE_PIE_COLORS[item.colorIndex % SPHERE_PIE_COLORS.length] }}
+                      />
+                      {item.flag_url ? (
+                        <Link href={`/pays/${item.slug}`} className="shrink-0">
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img src={item.flag_url} alt="" width={16} height={11} className="inline-block h-[11px] w-4 rounded object-cover align-middle" />
+                        </Link>
+                      ) : null}
+                      <Link href={`/pays/${item.slug}`} className={`${glassMutedClass} hover:text-[var(--accent)] hover:underline`}>
+                        {item.name}
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+              {sphereData.countries.length > 0 && (
+                <div className={`overflow-x-auto rounded-xl border ${glassBorderClass}`} style={{ background: "rgba(255,255,255,0.12)", backdropFilter: "blur(12px)" }}>
+                  <table className="w-full min-w-[420px] text-left text-sm">
+                    <thead>
+                      <tr className={`border-b ${glassBorderClass}`}>
+                        <th className={`p-3 font-semibold ${glassMutedClass}`}>Pays</th>
+                        <th className={`p-3 font-semibold ${glassMutedClass}`}>Niveau</th>
+                        <th className={`p-3 font-semibold text-right ${glassMutedClass}`}>Population (part)</th>
+                        <th className={`p-3 font-semibold text-right ${glassMutedClass}`}>PIB (part)</th>
+                        <th className={`p-3 font-semibold text-right ${glassMutedClass}`}>Influence</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {sortedCountries.map((c) => (
+                        <tr key={c.id} className={`border-b last:border-b-0 ${glassBorderClass}`}>
+                          <td className="p-3">
+                            <div className="flex items-center gap-2">
+                              {c.flag_url ? (
+                                <Link href={`/pays/${c.slug}`} className="shrink-0">
+                                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                                  <img src={c.flag_url} alt="" width={24} height={16} className={`h-4 w-6 rounded object-cover border ${glassBorderClass}`} />
+                                </Link>
+                              ) : null}
+                              <Link href={`/pays/${c.slug}`} className="font-medium text-[var(--accent)] hover:underline">
+                                {c.name}
+                              </Link>
+                            </div>
+                          </td>
+                          <td className={`p-3 ${glassMutedClass}`}>
+                            {c.controlStatus}
+                            {c.controlStatus === "Contesté" && ` (${c.share_pct} %)`}
+                            {c.controlStatus === "Occupé" && " (100 %)"}
+                            {c.controlStatus === "Annexé" && " (100 %)"}
+                          </td>
+                          <td className={`p-3 text-right font-mono ${glassTextClass}`} title="Part comptée dans la sphère (proportionnelle au % de contrôle).">
+                            {formatNumber(c.contributionPopulation)}
+                          </td>
+                          <td className={`p-3 text-right font-mono ${glassTextClass}`} title="Part comptée dans la sphère (proportionnelle au % de contrôle).">
+                            {formatGdp(c.contributionGdp)}
+                          </td>
+                          <td className={`p-3 text-right font-mono ${glassTextClass}`} title="Influence apportée = influence du pays × % contrôle × multiplicateur règle (Contesté/Occupé/Annexé).">
+                            {formatNumber(c.influenceGiven)}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
           </section>
         );
       })()}

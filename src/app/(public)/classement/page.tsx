@@ -130,7 +130,7 @@ export default async function ClassementPage() {
           className="absolute inset-0 bg-cover bg-center bg-no-repeat scale-105"
           style={{
             backgroundImage: "url(/images/site/classement-bg.png)",
-            filter: "blur(2px)",
+            filter: "blur(0.5px)",
           }}
         />
         <div className="absolute inset-0 bg-black/40" />

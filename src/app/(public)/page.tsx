@@ -80,7 +80,7 @@ export default async function HomePage({
           style={{ left: "50%", marginLeft: "-50vw", width: "100vw", zIndex: 0 }}
           aria-hidden
         >
-          <div className="absolute inset-0 bg-cover bg-center bg-no-repeat scale-105" style={{ backgroundImage: "url(/images/site/pays-accueil-bg.png)", filter: "blur(2px)" }} />
+          <div className="absolute inset-0 bg-cover bg-center bg-no-repeat scale-105" style={{ backgroundImage: "url(/images/site/pays-accueil-bg.png)", filter: "blur(0.5px)" }} />
           <div className="absolute inset-0 bg-black/40" />
         </div>
         <div className="relative z-10 max-w-6xl mx-auto rounded-2xl border border-white/25 bg-white/15 p-6 shadow-xl backdrop-blur-xl">
@@ -165,7 +165,7 @@ export default async function HomePage({
           className="absolute inset-0 bg-cover bg-center bg-no-repeat scale-105"
           style={{
             backgroundImage: "url(/images/site/pays-accueil-bg.png)",
-            filter: "blur(2px)",
+            filter: "blur(0.5px)",
           }}
         />
         <div className="absolute inset-0 bg-black/40" />

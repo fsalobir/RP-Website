@@ -457,15 +457,33 @@ export default async function CountryPage({
   }
 
   return (
-    <div className="mx-auto max-w-6xl px-4 py-10">
-      <Link
-        href={backHref}
-        className="mb-6 inline-block text-sm text-[var(--foreground-muted)] hover:text-[var(--accent)]"
-      >
-        ← Retour aux nations
-      </Link>
+    <div className="relative min-h-screen">
+      {/* Arrière-plan ancré sous le menu (h-14) et en haut de l'image pour garder le motif visible */}
+      <div className="fixed left-0 right-0 bottom-0 top-14 overflow-hidden" aria-hidden>
+        <div
+          className="absolute inset-0 bg-cover bg-no-repeat scale-105"
+          style={{
+            backgroundImage: "url(/images/site/fiche-pays-bg.png)",
+            backgroundPosition: "top center",
+            filter: "blur(0.5px)",
+          }}
+        />
+        <div className="absolute inset-0 bg-[var(--background-panel)]/75" />
+      </div>
+      <div className="relative z-10 mx-auto max-w-6xl px-4 py-10">
+        <div
+          className="mb-6 inline-block rounded-xl border border-white/25 px-4 py-2"
+          style={{ background: "rgba(255,255,255,0.12)", backdropFilter: "blur(12px)" }}
+        >
+          <Link
+            href={backHref}
+            className="text-sm text-white/90 hover:text-white transition-colors"
+          >
+            ← Retour aux nations
+          </Link>
+        </div>
 
-      <CountryTabs
+        <CountryTabs
         country={country}
         macros={macros}
         limits={limits}
@@ -512,6 +530,7 @@ export default async function CountryPage({
           influence: Math.round(sphereData.totalInfluence),
         }}
       />
+      </div>
     </div>
   );
 }

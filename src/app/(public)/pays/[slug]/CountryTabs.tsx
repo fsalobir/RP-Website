@@ -857,9 +857,17 @@ export function CountryTabs({
     setBudgetSaving(false);
   };
 
+  const glassPanelClass = "rounded-2xl border border-white/25";
+  const glassPanelStyle = { background: "rgba(255,255,255,0.12)", backdropFilter: "blur(12px)" as const };
+  const glassTextClass = "text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.4)]";
+  const glassMutedClass = "text-white/90";
+
   return (
     <div>
-      <div className="mb-8 flex flex-wrap items-center gap-6">
+      <div
+        className={`mb-8 flex flex-wrap items-center gap-6 p-6 ${glassPanelClass}`}
+        style={glassPanelStyle}
+      >
         {country.flag_url ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
@@ -867,24 +875,20 @@ export function CountryTabs({
             alt=""
             width={80}
             height={53}
-            className="h-[53px] w-20 rounded border border-[var(--border)] object-cover"
-            style={{ borderColor: "var(--border)" }}
+            className="h-[53px] w-20 rounded border border-white/25 object-cover"
           />
         ) : (
-          <div
-            className="h-[53px] w-20 rounded border border-[var(--border)] bg-[var(--background-elevated)]"
-            style={{ borderColor: "var(--border)" }}
-          />
+          <div className="h-[53px] w-20 rounded border border-white/25 bg-white/10" />
         )}
         <div className="min-w-0 flex-1">
-          <h1 className="text-2xl font-bold text-[var(--foreground)]">
+          <h1 className={`text-2xl font-bold ${glassTextClass}`}>
             {country.name}
           </h1>
           {country.regime && (
-            <p className="text-[var(--foreground-muted)]">{country.regime}</p>
+            <p className={glassMutedClass}>{country.regime}</p>
           )}
           {assignedPlayerEmail && (
-            <p className="mt-1 text-sm text-[var(--foreground-muted)]">
+            <p className={`mt-1 text-sm ${glassMutedClass}`}>
               Joueur : {assignedPlayerEmail}
             </p>
           )}
@@ -902,14 +906,15 @@ export function CountryTabs({
                 setGeneralError(null);
                 setGeneralEditMode(true);
               }}
-              className="shrink-0 rounded border border-[var(--border)] bg-[var(--background-elevated)] px-3 py-1.5 text-sm text-[var(--foreground-muted)] hover:text-[var(--accent)] hover:border-[var(--accent-muted)]"
+              className="shrink-0 rounded-lg border border-white/25 px-3 py-1.5 text-sm text-white/90 hover:text-white hover:bg-white/15 transition-colors"
+              style={{ background: "rgba(255,255,255,0.08)" }}
             >
               Éditer
             </button>
             {isAdmin && (
               <Link
                 href={`/admin/pays/${country.id}`}
-                className="shrink-0 rounded border border-[var(--border)] bg-[var(--accent)] px-3 py-1.5 text-sm font-medium text-[#0f1419] hover:opacity-90"
+                className="shrink-0 rounded-lg border border-[var(--accent)] bg-[var(--accent)] px-3 py-1.5 text-sm font-medium text-[#0f1419] hover:opacity-90"
               >
                 [Admin] Editer
               </Link>
@@ -1009,115 +1014,78 @@ export function CountryTabs({
         </div>
       )}
 
-      <div className="tab-list mb-6 flex flex-wrap items-center gap-2" style={{ borderColor: "var(--border)" }}>
+      <div
+        className={`tab-list mb-6 flex flex-wrap items-center gap-2 rounded-xl border border-white/25 px-4 py-3`}
+        style={glassPanelStyle}
+      >
         {canSeeCabinetAndBudget && (
           <button
             type="button"
-            className={`tab ${tab === "cabinet" ? "tab-active" : ""}`}
+            className={`tab rounded-lg border-b-2 px-3 py-2 text-sm transition-colors ${tab === "cabinet" ? "border-[var(--accent)] text-[var(--accent)]" : `border-transparent ${glassMutedClass} hover:text-white`}`}
             data-state={tab === "cabinet" ? "active" : "inactive"}
             onClick={() => setTab("cabinet")}
-            style={
-              tab === "cabinet"
-                ? { color: "var(--accent)", borderBottomColor: "var(--accent)" }
-                : undefined
-            }
           >
             Rapport du Cabinet
           </button>
         )}
         <button
           type="button"
-          className={`tab ${tab === "general" ? "tab-active" : ""}`}
+          className={`tab rounded-lg border-b-2 px-3 py-2 text-sm transition-colors ${tab === "general" ? "border-[var(--accent)] text-[var(--accent)]" : `border-transparent ${glassMutedClass} hover:text-white`}`}
           data-state={tab === "general" ? "active" : "inactive"}
           onClick={() => setTab("general")}
-          style={
-            tab === "general"
-              ? { color: "var(--accent)", borderBottomColor: "var(--accent)" }
-              : undefined
-          }
         >
           Généralités
         </button>
         <button
           type="button"
-          className={`tab ${tab === "military" ? "tab-active" : ""}`}
+          className={`tab rounded-lg border-b-2 px-3 py-2 text-sm transition-colors ${tab === "military" ? "border-[var(--accent)] text-[var(--accent)]" : `border-transparent ${glassMutedClass} hover:text-white`}`}
           data-state={tab === "military" ? "active" : "inactive"}
           onClick={() => setTab("military")}
-          style={
-            tab === "military"
-              ? { color: "var(--accent)", borderBottomColor: "var(--accent)" }
-              : undefined
-          }
         >
           Militaire
         </button>
         {canSeeCabinetAndBudget && (
           <button
             type="button"
-            className={`tab ${tab === "etat_major" ? "tab-active" : ""}`}
+            className={`tab rounded-lg border-b-2 px-3 py-2 text-sm transition-colors ${tab === "etat_major" ? "border-[var(--accent)] text-[var(--accent)]" : `border-transparent ${glassMutedClass} hover:text-white`}`}
             data-state={tab === "etat_major" ? "active" : "inactive"}
             onClick={() => setTab("etat_major")}
-            style={
-              tab === "etat_major"
-                ? { color: "var(--accent)", borderBottomColor: "var(--accent)" }
-                : undefined
-            }
           >
             État Major
           </button>
         )}
         <button
           type="button"
-          className={`tab ${tab === "perks" ? "tab-active" : ""}`}
+          className={`tab rounded-lg border-b-2 px-3 py-2 text-sm transition-colors ${tab === "perks" ? "border-[var(--accent)] text-[var(--accent)]" : `border-transparent ${glassMutedClass} hover:text-white`}`}
           data-state={tab === "perks" ? "active" : "inactive"}
           onClick={() => setTab("perks")}
-          style={
-            tab === "perks"
-              ? { color: "var(--accent)", borderBottomColor: "var(--accent)" }
-              : undefined
-          }
         >
           Avantages
         </button>
         {canSeeCabinetAndBudget && (
           <button
             type="button"
-            className={`tab ${tab === "budget" ? "tab-active" : ""}`}
+            className={`tab rounded-lg border-b-2 px-3 py-2 text-sm transition-colors ${tab === "budget" ? "border-[var(--accent)] text-[var(--accent)]" : `border-transparent ${glassMutedClass} hover:text-white`}`}
             data-state={tab === "budget" ? "active" : "inactive"}
             onClick={() => setTab("budget")}
-            style={
-              tab === "budget"
-                ? { color: "var(--accent)", borderBottomColor: "var(--accent)" }
-                : undefined
-            }
           >
             Budget
           </button>
         )}
         <button
           type="button"
-          className={`tab ${tab === "laws" ? "tab-active" : ""}`}
+          className={`tab rounded-lg border-b-2 px-3 py-2 text-sm transition-colors ${tab === "laws" ? "border-[var(--accent)] text-[var(--accent)]" : `border-transparent ${glassMutedClass} hover:text-white`}`}
           data-state={tab === "laws" ? "active" : "inactive"}
           onClick={() => setTab("laws")}
-          style={
-            tab === "laws"
-              ? { color: "var(--accent)", borderBottomColor: "var(--accent)" }
-              : undefined
-          }
         >
           Lois
         </button>
         {isPlayerForThisCountry && (
           <button
             type="button"
-            className={`tab ${tab === "state_actions" ? "tab-active" : ""}`}
+            className={`tab rounded-lg border-b-2 px-3 py-2 text-sm transition-colors ${tab === "state_actions" ? "border-[var(--accent)] text-[var(--accent)]" : `border-transparent ${glassMutedClass} hover:text-white`}`}
             data-state={tab === "state_actions" ? "active" : "inactive"}
             onClick={() => setTab("state_actions")}
-            style={
-              tab === "state_actions"
-                ? { color: "var(--accent)", borderBottomColor: "var(--accent)" }
-                : undefined
-            }
           >
             Actions d'État
           </button>
@@ -1125,19 +1093,14 @@ export function CountryTabs({
         {isAdmin && (
           <button
             type="button"
-            className={`tab ${tab === "debug" ? "tab-active" : ""}`}
+            className={`tab rounded-lg border-b-2 px-3 py-2 text-sm transition-colors ${tab === "debug" ? "border-[var(--accent)] text-[var(--accent)]" : `border-transparent ${glassMutedClass} hover:text-white`}`}
             data-state={tab === "debug" ? "active" : "inactive"}
             onClick={() => setTab("debug")}
-            style={
-              tab === "debug"
-                ? { color: "var(--accent)", borderBottomColor: "var(--accent)" }
-                : undefined
-            }
           >
             Debug
           </button>
         )}
-        <span className="ml-2 inline-flex items-center self-center" onClick={(e) => e.stopPropagation()}>
+        <span className="ml-2 inline-flex items-center self-center text-white/80" onClick={(e) => e.stopPropagation()}>
           <InfoTooltipWithWikiLink
             text="La fiche pays se lit onglet par onglet : Rapport du Cabinet, Généralités, Militaire, Avantages, Budget, Lois et Actions d'État (selon votre accès)."
             wikiSectionId="fiche-pays-onglets"
