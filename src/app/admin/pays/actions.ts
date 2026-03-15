@@ -368,7 +368,7 @@ export async function randomizeCountryIdeologies(): Promise<{ error?: string; up
       scores[b] = (1 - x) * t;
     }
     const dominant = IDEOLOGY_IDS.reduce((best, id) => (scores[id] > scores[best] ? id : best), IDEOLOGY_IDS[0]);
-    const updatePayload: Record<string, number | object> = {
+    const updatePayload: Record<string, number | object | string> = {
       ideology_breakdown: {
         dominant,
         source: "admin_randomize",
