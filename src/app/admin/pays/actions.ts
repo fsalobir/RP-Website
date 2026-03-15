@@ -242,7 +242,7 @@ export async function randomizeNationalBudgets(): Promise<{ error?: string; upda
 
   if (countriesRes.error) return { error: countriesRes.error.message };
   type CountryRow = { id: string; ai_status?: string | null } & Record<string, unknown>;
-  const countries = (countriesRes.data ?? []) as CountryRow[];
+  const countries = (countriesRes.data ?? []) as unknown as CountryRow[];
   if (!countries.length) return { updated: 0 };
 
   const rulesByKey: Record<string, { value: unknown }> = {};
