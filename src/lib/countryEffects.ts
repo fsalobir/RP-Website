@@ -22,9 +22,16 @@
  *    resolveAllLawEffectsForCountry (laws.ts) en lui passant un contexte élargi (stats du pays).
  */
 
+import { IDEOLOGY_IDS, IDEOLOGY_LABELS, type IdeologyId } from "@/lib/ideology";
 import { BUDGET_MINISTRY_KEYS, BUDGET_MINISTRY_LABELS } from "@/lib/ruleParameters";
 import { resolveAllLawEffectsForCountry, type CountryLawRow as LawRow } from "@/lib/laws";
 import type { AdminEffectAdded, CountryEffect } from "@/types/database";
+
+/** Tous les effect_kind idéologie (drift + snap) pour les 6 idéologies. */
+export const IDEOLOGY_EFFECT_KIND_IDS = [
+  ...IDEOLOGY_IDS.map((id) => `ideology_drift_${id}` as const),
+  ...IDEOLOGY_IDS.map((id) => `ideology_snap_${id}` as const),
+];
 
 /** Clés des stats société (pour dropdown et effect_target). */
 export const STAT_KEYS = ["militarism", "industry", "science", "stability"] as const;
@@ -221,12 +228,18 @@ export const ALL_EFFECT_KIND_IDS = [
   "influence_modifier_hard_power",
   "state_actions_grant",
   "relation_delta",
-  "ideology_drift_monarchism",
-  "ideology_drift_republicanism",
-  "ideology_drift_cultism",
-  "ideology_snap_monarchism",
-  "ideology_snap_republicanism",
-  "ideology_snap_cultism",
+  "ideology_drift_germanic_monarchy",
+  "ideology_drift_merina_monarchy",
+  "ideology_drift_french_republicanism",
+  "ideology_drift_mughal_republicanism",
+  "ideology_drift_nilotique_cultism",
+  "ideology_drift_satoiste_cultism",
+  "ideology_snap_germanic_monarchy",
+  "ideology_snap_merina_monarchy",
+  "ideology_snap_french_republicanism",
+  "ideology_snap_mughal_republicanism",
+  "ideology_snap_nilotique_cultism",
+  "ideology_snap_satoiste_cultism",
   "procuration_points_per_day",
   "recrutement_bonus_percent",
   "design_bonus_percent",
@@ -256,12 +269,18 @@ export const EFFECT_KIND_META: Record<EffectKindId, EffectKindMeta> = {
   influence_modifier_hard_power: { targetType: "none", valueFormat: "multiplier", label: "Modificateur d'influence (Hard Power)" },
   state_actions_grant: { targetType: "none", valueFormat: "integer", label: "Actions d'État (octroi par tick)" },
   relation_delta: { targetType: "country", valueFormat: "raw", label: "Évolution relation bilatérale" },
-  ideology_drift_monarchism: { targetType: "none", valueFormat: "raw", label: "Dérive idéologique (Monarchisme)" },
-  ideology_drift_republicanism: { targetType: "none", valueFormat: "raw", label: "Dérive idéologique (Républicanisme)" },
-  ideology_drift_cultism: { targetType: "none", valueFormat: "raw", label: "Dérive idéologique (Cultisme)" },
-  ideology_snap_monarchism: { targetType: "none", valueFormat: "raw", label: "Impulsion idéologique (Monarchisme)" },
-  ideology_snap_republicanism: { targetType: "none", valueFormat: "raw", label: "Impulsion idéologique (Républicanisme)" },
-  ideology_snap_cultism: { targetType: "none", valueFormat: "raw", label: "Impulsion idéologique (Cultisme)" },
+  ideology_drift_germanic_monarchy: { targetType: "none", valueFormat: "raw", label: "Dérive idéologique (Monarchisme Germanique)" },
+  ideology_drift_merina_monarchy: { targetType: "none", valueFormat: "raw", label: "Dérive idéologique (Monarchisme Mérinais)" },
+  ideology_drift_french_republicanism: { targetType: "none", valueFormat: "raw", label: "Dérive idéologique (Républicanisme Français)" },
+  ideology_drift_mughal_republicanism: { targetType: "none", valueFormat: "raw", label: "Dérive idéologique (Républicanisme Moghol)" },
+  ideology_drift_nilotique_cultism: { targetType: "none", valueFormat: "raw", label: "Dérive idéologique (Cultisme Nilotique)" },
+  ideology_drift_satoiste_cultism: { targetType: "none", valueFormat: "raw", label: "Dérive idéologique (Cultisme Satoiste)" },
+  ideology_snap_germanic_monarchy: { targetType: "none", valueFormat: "raw", label: "Impulsion idéologique (Monarchisme Germanique)" },
+  ideology_snap_merina_monarchy: { targetType: "none", valueFormat: "raw", label: "Impulsion idéologique (Monarchisme Mérinais)" },
+  ideology_snap_french_republicanism: { targetType: "none", valueFormat: "raw", label: "Impulsion idéologique (Républicanisme Français)" },
+  ideology_snap_mughal_republicanism: { targetType: "none", valueFormat: "raw", label: "Impulsion idéologique (Républicanisme Moghol)" },
+  ideology_snap_nilotique_cultism: { targetType: "none", valueFormat: "raw", label: "Impulsion idéologique (Cultisme Nilotique)" },
+  ideology_snap_satoiste_cultism: { targetType: "none", valueFormat: "raw", label: "Impulsion idéologique (Cultisme Satoiste)" },
   procuration_points_per_day: { targetType: "none", valueFormat: "integer", label: "Points de Procuration (par jour)" },
   recrutement_bonus_percent: { targetType: "none", valueFormat: "percent_display", label: "Bonus de Recrutement (%)" },
   design_bonus_percent: { targetType: "none", valueFormat: "percent_display", label: "Bonus de Design (%)" },
@@ -308,12 +327,18 @@ const EFFECT_KIND_GROUP_BY_ID: Record<EffectKindId, keyof typeof EFFECT_KIND_GRO
   influence_modifier_hard_power: "influence",
   state_actions_grant: "diplomatie",
   relation_delta: "diplomatie",
-  ideology_drift_monarchism: "ideologie",
-  ideology_drift_republicanism: "ideologie",
-  ideology_drift_cultism: "ideologie",
-  ideology_snap_monarchism: "ideologie",
-  ideology_snap_republicanism: "ideologie",
-  ideology_snap_cultism: "ideologie",
+  ideology_drift_germanic_monarchy: "ideologie",
+  ideology_drift_merina_monarchy: "ideologie",
+  ideology_drift_french_republicanism: "ideologie",
+  ideology_drift_mughal_republicanism: "ideologie",
+  ideology_drift_nilotique_cultism: "ideologie",
+  ideology_drift_satoiste_cultism: "ideologie",
+  ideology_snap_germanic_monarchy: "ideologie",
+  ideology_snap_merina_monarchy: "ideologie",
+  ideology_snap_french_republicanism: "ideologie",
+  ideology_snap_mughal_republicanism: "ideologie",
+  ideology_snap_nilotique_cultism: "ideologie",
+  ideology_snap_satoiste_cultism: "ideologie",
   procuration_points_per_day: "militaire",
   recrutement_bonus_percent: "militaire",
   design_bonus_percent: "militaire",
@@ -354,12 +379,18 @@ const _NONE = new Set<string>([
   "influence_modifier_gdp",
   "influence_modifier_population",
   "influence_modifier_hard_power",
-  "ideology_drift_monarchism",
-  "ideology_drift_republicanism",
-  "ideology_drift_cultism",
-  "ideology_snap_monarchism",
-  "ideology_snap_republicanism",
-  "ideology_snap_cultism",
+  "ideology_drift_germanic_monarchy",
+  "ideology_drift_merina_monarchy",
+  "ideology_drift_french_republicanism",
+  "ideology_drift_mughal_republicanism",
+  "ideology_drift_nilotique_cultism",
+  "ideology_drift_satoiste_cultism",
+  "ideology_snap_germanic_monarchy",
+  "ideology_snap_merina_monarchy",
+  "ideology_snap_french_republicanism",
+  "ideology_snap_mughal_republicanism",
+  "ideology_snap_nilotique_cultism",
+  "ideology_snap_satoiste_cultism",
   "procuration_points_per_day",
   "recrutement_bonus_percent",
   "design_bonus_percent",
@@ -413,6 +444,14 @@ export function getEffectKindValueHelper(effectKind: string): {
         storedToDisplay: (x) => x,
       };
     case "multiplier":
+      if (effectKind.startsWith("influence_modifier_")) {
+        return {
+          valueLabel: "% (bonus/malus)",
+          valueStep: 1,
+          displayToStored: (x) => 1 + x / 100,
+          storedToDisplay: (x) => (Number(x) - 1) * 100,
+        };
+      }
       return {
         valueLabel: "Mult.",
         valueStep: 0.01,
@@ -490,12 +529,16 @@ export function getEffectDescription(e: CountryEffect | ResolvedEffect, options?
     const otherName = options?.countryName?.(e.effect_target) ?? e.effect_target;
     return `Relation bilatérale — ${otherName} : ${valueStr} par tick`;
   }
-  if (e.effect_kind === "ideology_drift_monarchism") return `Dérive idéologique — Monarchisme : ${valueStr}`;
-  if (e.effect_kind === "ideology_drift_republicanism") return `Dérive idéologique — Républicanisme : ${valueStr}`;
-  if (e.effect_kind === "ideology_drift_cultism") return `Dérive idéologique — Cultisme : ${valueStr}`;
-  if (e.effect_kind === "ideology_snap_monarchism") return `Impulsion idéologique — Monarchisme : ${valueStr}`;
-  if (e.effect_kind === "ideology_snap_republicanism") return `Impulsion idéologique — Républicanisme : ${valueStr}`;
-  if (e.effect_kind === "ideology_snap_cultism") return `Impulsion idéologique — Cultisme : ${valueStr}`;
+  if (e.effect_kind.startsWith("ideology_drift_")) {
+    const id = e.effect_kind.replace("ideology_drift_", "") as IdeologyId;
+    const label = IDEOLOGY_IDS.includes(id) ? IDEOLOGY_LABELS[id] : id;
+    return `Dérive idéologique — ${label} : ${valueStr}`;
+  }
+  if (e.effect_kind.startsWith("ideology_snap_")) {
+    const id = e.effect_kind.replace("ideology_snap_", "") as IdeologyId;
+    const label = IDEOLOGY_IDS.includes(id) ? IDEOLOGY_LABELS[id] : id;
+    return `Impulsion idéologique — ${label} : ${valueStr}`;
+  }
 
   const kindLabel = EFFECT_KIND_LABELS[e.effect_kind] ?? e.effect_kind;
   if (targetLabel) return `${kindLabel} — ${targetLabel} : ${valueStr}`;
@@ -513,14 +556,18 @@ export function formatEffectValue(effectKind: string | null | undefined, value: 
   if (kind === "military_unit_tech_rate") return `${Number(value)} pts/jour`;
   if (kind === "military_unit_extra") return (Number(value) >= 0 ? "+" : "") + String(Number(value));
   if (kind === "military_unit_limit_modifier" || kind === "military_unit_limit_modifier_sub_type" || kind === "military_unit_limit_modifier_roster") return `${Number(value) >= 0 ? "+" : ""}${Number(value)} %`;
-  if (kind.startsWith("influence_modifier_")) return `${(value * 100 - 100).toFixed(0)} %`;
+  if (kind.startsWith("influence_modifier_")) {
+    const pct = (Number(value) - 1) * 100;
+    const sign = pct >= 0 ? "+" : "";
+    return `${sign}${pct.toLocaleString("fr-FR", { minimumFractionDigits: 0, maximumFractionDigits: 0 })} %`;
+  }
   if (kind === "relation_delta") return `${Number(value) >= 0 ? "+" : ""}${Number(value)}`;
   if (kind.startsWith("ideology_drift_") || kind.startsWith("ideology_snap_")) {
     return `${Number(value) >= 0 ? "+" : ""}${Number(value).toFixed(2)}`;
   }
   if (kind === "procuration_points_per_day") return `${Number(value)} pts/jour`;
   if (kind === "recrutement_bonus_percent" || kind === "design_bonus_percent" || kind === "procuration_bonus_percent") {
-    return `${Number(value) >= 0 ? "+" : ""}${Number(value)} %`;
+    return `${Number(value) >= 0 ? "+" : ""}${Number(value).toFixed(2)} %`;
   }
   return String(value);
 }
@@ -606,6 +653,7 @@ export function isEffectDisplayPositive(
   e: Pick<CountryEffect, "effect_kind" | "value"> | CountryEffect
 ): boolean {
   if (e.effect_kind === "budget_ministry_min_pct") return false;
+  if (e.effect_kind.startsWith("influence_modifier_")) return Number(e.value) > 1;
   return Number(e.value) > 0;
 }
 
@@ -676,7 +724,7 @@ export function parseEffectToForm(e: CountryEffect): {
   return { category: "gdp_growth", subChoice: "base", target: null };
 }
 
-/** Effet résolu (country_effects ou agrégé depuis global/mobilisation). Compatible avec les helpers. */
+/** Effet résolu (country_effects ou agrégé depuis global/mobilisation, idéologie). Compatible avec les helpers. */
 export type ResolvedEffect = {
   effect_kind: string;
   effect_target: string | null;
@@ -685,7 +733,7 @@ export type ResolvedEffect = {
   /** Présent pour les effets issus de country_effects ; 'permanent' = n'expire jamais. */
   duration_kind?: string;
   /** Source de l'effet pour affichage (ex. Généralités). */
-  source?: "country" | "law" | "global" | "perk" | "ai";
+  source?: "country" | "law" | "global" | "perk" | "ai" | "ideology";
   /** Libellé affiché (ex. "Avantage : Complexe militaro-industriel"). */
   sourceLabel?: string;
 };
@@ -707,6 +755,10 @@ export type EffectResolutionContext = {
   aiMinorEffects?: Array<{ effect_kind: string; effect_target: string | null; value: number; sourceLabel?: string }>;
   /** Effets des avantages actifs pour ce pays (précalculés côté page). */
   perkEffects?: Array<{ effect_kind: string; effect_target: string | null; value: number; sourceLabel?: string }>;
+  /** Scores idéologie du pays (6 idéologies, somme 100). Pour les effets proportionnels par idéologie. */
+  ideologyScores?: Record<string, number>;
+  /** Règle ideology_effects : liste d'entrées { ideology_id, effect_kind, effect_target, value } (value = effet à 100 %). */
+  ideologyEffectsConfig?: Array<{ ideology_id: string; effect_kind: string; effect_target: string | null; value: number }>;
 };
 
 /** Pseudo-durée pour les effets globaux/mobilisation (toujours actifs). */
@@ -784,6 +836,41 @@ function perkEffectsSource(ctx: EffectResolutionContext): ResolvedEffect[] {
   }));
 }
 
+/** Nombre de décimales pour les valeurs d’effets idéologiques (lisibilité et filtrage des résidus). */
+const IDEOLOGY_EFFECT_DECIMALS = 4;
+
+function ideologyEffectsSource(ctx: EffectResolutionContext): ResolvedEffect[] {
+  const scores = ctx.ideologyScores;
+  const config = ctx.ideologyEffectsConfig;
+  if (!scores || !config?.length) return [];
+  const out: ResolvedEffect[] = [];
+  const factor = 10 ** IDEOLOGY_EFFECT_DECIMALS;
+  for (const entry of config) {
+    if (!entry || typeof entry.effect_kind !== "string" || typeof entry.value !== "number") continue;
+    const id = entry.ideology_id as IdeologyId;
+    if (!IDEOLOGY_IDS.includes(id)) continue;
+    const score = Number(scores[id]);
+    if (!Number.isFinite(score)) continue;
+    const ratio = score / 100;
+    const meta = EFFECT_KIND_META[entry.effect_kind as EffectKindId];
+    const isMultiplier = meta?.valueFormat === "multiplier";
+    const rawValue = isMultiplier
+      ? 1 + (entry.value - 1) * ratio
+      : entry.value * ratio;
+    const effectiveValue = Math.round(rawValue * factor) / factor;
+    if (isMultiplier ? effectiveValue === 1 : effectiveValue === 0) continue;
+    out.push({
+      effect_kind: entry.effect_kind,
+      effect_target: entry.effect_target ?? null,
+      value: effectiveValue,
+      duration_remaining: PERMANENT_DURATION,
+      source: "ideology" as const,
+      sourceLabel: IDEOLOGY_LABELS[id] ?? `Idéologie : ${id}`,
+    });
+  }
+  return out;
+}
+
 /** Registry de sources d'effets. Ajouter une source ici pour un nouvel « endroit » sans toucher aux consommateurs. */
 export const EFFECT_SOURCES: Array<(ctx: EffectResolutionContext) => ResolvedEffect[]> = [
   countryEffectsSource,
@@ -791,6 +878,7 @@ export const EFFECT_SOURCES: Array<(ctx: EffectResolutionContext) => ResolvedEff
   globalEffectsSource,
   perkEffectsSource,
   aiEffectsSource,
+  ideologyEffectsSource,
 ];
 
 /** Agrège les effets de toutes les sources pour un pays. Utiliser cette liste pour getForcedMinPcts, getAllocationCapPercent, getUnitExtraEffectSum, getLimitModifierPercent, expectedNextTick. */
@@ -802,11 +890,12 @@ export function getEffectsForCountry(context: EffectResolutionContext): Resolved
   return out;
 }
 
-/** Effets à passer à getExpectedNextTick uniquement (country_effects + lois). Exclut global_growth_effects pour éviter de les compter deux fois (déjà dans getGlobalGrowthRates). */
+/** Effets à passer à getExpectedNextTick uniquement (country_effects + lois + idéologie). Exclut global_growth_effects pour éviter de les compter deux fois (déjà dans getGlobalGrowthRates). */
 export function getEffectsForCountryTickRates(context: EffectResolutionContext): ResolvedEffect[] {
   return [
     ...countryEffectsSource(context),
     ...lawLevelEffectsSource(context),
+    ...ideologyEffectsSource(context),
   ];
 }
 

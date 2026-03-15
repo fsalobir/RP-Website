@@ -24,7 +24,7 @@ import {
   EFFECT_KINDS_WITH_COUNTRY_TARGET,
   DURATION_DAYS_MAX,
 } from "@/lib/countryEffects";
-import { IDEOLOGY_LABELS } from "@/lib/ideology";
+import { IDEOLOGY_IDS, IDEOLOGY_LABELS, type IdeologyId } from "@/lib/ideology";
 
 /** Palette étendue pour les camemberts de sphère (pays maître + nombreux pays contrôlés). */
 const SPHERE_PIE_COLORS = [
@@ -236,19 +236,19 @@ type CountryTabGeneralProps = {
     }>;
   };
   ideologySummary?: {
-    scores: { monarchism: number; republicanism: number; cultism: number };
-    drift: { monarchism: number; republicanism: number; cultism: number };
-    dominant: "monarchism" | "republicanism" | "cultism";
+    scores: Record<IdeologyId, number>;
+    drift: Record<IdeologyId, number>;
+    dominant: IdeologyId;
     centerDistance: number;
     breakdown: {
-      neighbors: { monarchism: number; republicanism: number; cultism: number };
-      effects: { monarchism: number; republicanism: number; cultism: number };
+      neighbors: Record<IdeologyId, number>;
+      effects: Record<IdeologyId, number>;
       neighborContributors: Array<{
         countryId: string;
         name: string;
         slug: string;
         flag_url: string | null;
-        ideology: "monarchism" | "republicanism" | "cultism";
+        ideology: IdeologyId;
         value: number;
         weight: number;
       }>;
@@ -302,30 +302,25 @@ export function CountryTabGeneral({
   otherCountriesForRelation = [],
   resolvedEffects = [],
 }: CountryTabGeneralProps) {
-  const ideologyEffects = effects.filter(
-    (effect) => effect.effect_kind.startsWith("ideology_drift_") || effect.effect_kind.startsWith("ideology_snap_")
-  );
   const strongestNeighborInfluence = Math.max(
     0,
     ...ideologySummary?.breakdown.neighborContributors.map((neighbor) => neighbor.value) ?? [0]
   );
   const strongestNeighborDirection =
     ideologySummary != null
-      ? IDEOLOGY_LABELS[
-          Object.entries(ideologySummary.breakdown.neighbors).sort((a, b) => Number(b[1]) - Number(a[1]))[0]?.[0] as
-            | "monarchism"
-            | "republicanism"
-            | "cultism"
-        ]
+      ? ((): string | null => {
+          const entries = Object.entries(ideologySummary.breakdown.neighbors) as [IdeologyId, number][];
+          const top = entries.sort((a, b) => Number(b[1]) - Number(a[1]))[0]?.[0];
+          return top != null ? IDEOLOGY_LABELS[top] : null;
+        })()
       : null;
   const strongestEffectDirection =
     ideologySummary != null && Math.max(...Object.values(ideologySummary.breakdown.effects)) > 0
-      ? IDEOLOGY_LABELS[
-          Object.entries(ideologySummary.breakdown.effects).sort((a, b) => Number(b[1]) - Number(a[1]))[0]?.[0] as
-            | "monarchism"
-            | "republicanism"
-            | "cultism"
-        ]
+      ? ((): string | null => {
+          const entries = Object.entries(ideologySummary.breakdown.effects) as [IdeologyId, number][];
+          const top = entries.sort((a, b) => Number(b[1]) - Number(a[1]))[0]?.[0];
+          return top != null ? IDEOLOGY_LABELS[top] : null;
+        })()
       : null;
   const getCountryName = (id: string) =>
     (id === country.id ? country.name : otherCountriesForRelation.find((c) => c.id === id)?.name) ?? null;
@@ -410,24 +405,18 @@ export function CountryTabGeneral({
                 Distance au centre : {Math.round(ideologySummary.centerDistance * 100)} %
               </span>
             </div>
-            <div className="grid gap-2 sm:grid-cols-3">
-              <div className={`rounded border px-3 py-2 ${glassBorderClass}`} style={{ background: "rgba(255,255,255,0.08)" }}>
-                <div className={`text-xs ${glassMutedClass}`}>Monarchisme</div>
-                <div className={`font-mono ${glassTextClass}`}>{Number(ideologySummary.scores.monarchism).toFixed(1)}</div>
-              </div>
-              <div className={`rounded border px-3 py-2 ${glassBorderClass}`} style={{ background: "rgba(255,255,255,0.08)" }}>
-                <div className={`text-xs ${glassMutedClass}`}>Républicanisme</div>
-                <div className={`font-mono ${glassTextClass}`}>{Number(ideologySummary.scores.republicanism).toFixed(1)}</div>
-              </div>
-              <div className={`rounded border px-3 py-2 ${glassBorderClass}`} style={{ background: "rgba(255,255,255,0.08)" }}>
-                <div className={`text-xs ${glassMutedClass}`}>Cultisme</div>
-                <div className={`font-mono ${glassTextClass}`}>{Number(ideologySummary.scores.cultism).toFixed(1)}</div>
-              </div>
+            <div className="grid gap-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6">
+              {IDEOLOGY_IDS.map((id) => (
+                <div key={id} className={`rounded border px-3 py-2 ${glassBorderClass}`} style={{ background: "rgba(255,255,255,0.08)" }}>
+                  <div className={`text-xs ${glassMutedClass}`}>{IDEOLOGY_LABELS[id]}</div>
+                  <div className={`font-mono ${glassTextClass}`}>{Number(ideologySummary.scores[id] ?? 0).toFixed(1)}</div>
+                </div>
+              ))}
             </div>
             <div className={`mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs ${glassMutedClass}`}>
-              <span>Drift M : {Number(ideologySummary.drift.monarchism).toFixed(2)}</span>
-              <span>Drift R : {Number(ideologySummary.drift.republicanism).toFixed(2)}</span>
-              <span>Drift C : {Number(ideologySummary.drift.cultism).toFixed(2)}</span>
+              {IDEOLOGY_IDS.map((id) => (
+                <span key={id}>Drift {IDEOLOGY_LABELS[id]} : {Number(ideologySummary.drift[id] ?? 0).toFixed(2)}</span>
+              ))}
             </div>
             <div className="mt-4 space-y-3">
               <div className={`rounded border px-3 py-3 ${glassBorderClass}`} style={{ background: "rgba(255,255,255,0.08)" }}>
@@ -479,43 +468,46 @@ export function CountryTabGeneral({
                 )}
               </div>
 
-              <div className={`rounded border px-3 py-3 ${glassBorderClass}`} style={{ background: "rgba(255,255,255,0.08)" }}>
-                <div className={`text-xs font-semibold uppercase tracking-wide ${glassMutedClass}`}>
-                  Effets idéologiques actifs
-                </div>
-                {ideologyEffects.length > 0 ? (
-                  <>
-                    <div className="mt-2 space-y-2 text-xs">
-                      {ideologyEffects.map((effect) => (
+              {resolvedEffects.filter((e) => e.source === "ideology").length > 0 && (() => {
+                const ideologyResolved = resolvedEffects.filter((e) => e.source === "ideology");
+                const bySource = ideologyResolved.reduce<Record<string, typeof ideologyResolved>>((acc, e) => {
+                  const label = e.sourceLabel ?? "Idéologie";
+                  if (!acc[label]) acc[label] = [];
+                  acc[label].push(e);
+                  return acc;
+                }, {});
+                return (
+                  <div className={`rounded border px-3 py-3 ${glassBorderClass}`} style={{ background: "rgba(255,255,255,0.08)" }}>
+                    <div className={`text-xs font-semibold uppercase tracking-wide ${glassMutedClass}`}>
+                      Effets par idéologie
+                    </div>
+                    <div className="mt-2 space-y-2">
+                      {Object.entries(bySource).map(([sourceLabel, list]) => (
                         <div
-                          key={effect.id}
-                          className={`rounded border px-2 py-2 ${glassTextClass} ${glassBorderClass}`}
+                          key={sourceLabel}
+                          className={`rounded border px-2 py-2 ${glassBorderClass}`}
                           style={{ background: "rgba(255,255,255,0.06)" }}
                         >
-                          <div>
-                            {getEffectDescription(effect, {
-                              rosterUnitName: (id) => rosterUnitsFlat.find((u) => u.id === id)?.name_fr ?? null,
-                              countryName: getCountryName,
-                            })}
-                          </div>
-                          <div className={`mt-1 ${glassMutedClass}`}>
-                            Durée restante : {formatDurationRemaining(effect)}
+                          <span className={`text-xs font-medium ${glassMutedClass}`}>Idéologie : {sourceLabel}</span>
+                          <div className="mt-1.5 space-y-1">
+                            {list.map((e, i) => (
+                              <p
+                                key={i}
+                                className={`text-xs font-semibold ${isEffectDisplayPositive(e) ? "text-[var(--accent)]" : "text-[var(--danger)]"}`}
+                              >
+                                {getEffectDescription(e, {
+                                  rosterUnitName: (id) => rosterUnitsFlat.find((u) => u.id === id)?.name_fr ?? null,
+                                  countryName: getCountryName,
+                                })}
+                              </p>
+                            ))}
                           </div>
                         </div>
                       ))}
                     </div>
-                    <div className={`mt-2 text-xs ${glassMutedClass}`}>
-                      {strongestEffectDirection
-                        ? `Les effets administratifs poussent actuellement surtout vers le ${strongestEffectDirection}.`
-                        : "Les effets administratifs n’impriment pas de direction idéologique nette."}
-                    </div>
-                  </>
-                ) : (
-                  <div className={`mt-2 text-xs ${glassMutedClass}`}>
-                    Aucun effet idéologique actif dans les effets du pays.
                   </div>
-                )}
-              </div>
+                );
+              })()}
             </div>
           </div>
         )}
@@ -538,7 +530,7 @@ export function CountryTabGeneral({
                       <div className="min-w-0 flex-1">
                         <span className={`font-medium ${glassTextClass}`}>{e.name}</span>
                         <p
-                          className={`text-sm ${isEffectDisplayPositive(e) ? "text-[var(--accent)]" : "text-[var(--danger)]"}`}
+                          className={`text-sm font-semibold ${isEffectDisplayPositive(e) ? "text-[var(--accent)]" : "text-[var(--danger)]"}`}
                         >
                           {getEffectDescription(e, {
                             rosterUnitName: (id) => rosterUnitsFlat.find((u) => u.id === id)?.name_fr ?? null,
@@ -592,7 +584,7 @@ export function CountryTabGeneral({
                           {list.map((e, i) => (
                             <p
                               key={i}
-                              className={`text-sm ${isEffectDisplayPositive(e) ? "text-[var(--accent)]" : "text-[var(--danger)]"}`}
+                              className={`text-sm font-semibold ${isEffectDisplayPositive(e) ? "text-[var(--accent)]" : "text-[var(--danger)]"}`}
                             >
                               {getEffectDescription(e, {
                                 rosterUnitName: (id) => rosterUnitsFlat.find((u) => u.id === id)?.name_fr ?? null,
