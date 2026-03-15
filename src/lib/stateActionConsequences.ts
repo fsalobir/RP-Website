@@ -144,8 +144,9 @@ export async function applyImmediateEffect(
       .eq("id", countryId)
       .single();
     const currentRaw: Record<string, number> = {};
+    const rowData = row as unknown as Record<string, unknown> | null;
     for (const id of IDEOLOGY_IDS) {
-      currentRaw[id] = Number((row as Record<string, unknown>)?.[ideologyColumnName(id)] ?? 100 / 6);
+      currentRaw[id] = Number(rowData?.[ideologyColumnName(id)] ?? 100 / 6);
     }
     const current = normalizeIdeologyScoresWithAxioms(currentRaw);
     const shiftedRaw = { ...current };
