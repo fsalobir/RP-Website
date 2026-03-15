@@ -43,7 +43,7 @@ async function fetchCountryPageGlobals() {
     supabase
       .from("rule_parameters")
       .select("key, value")
-      .in("key", [...RULE_KEYS, "mobilisation_config", "mobilisation_level_effects", "world_date", "influence_config", "sphere_influence_pct", "ai_major_effects", "ai_minor_effects"]),
+      .in("key", [...RULE_KEYS, "mobilisation_config", "mobilisation_level_effects", "world_date", "influence_config", "sphere_influence_pct", "ai_major_effects", "ai_minor_effects", "ideology_effects"]),
     supabase
       .from("military_roster_units")
       .select("*")
@@ -100,7 +100,7 @@ export default async function CountryPage({
   const isPlayerForThisCountry = auth.playerCountryId === country.id;
   const backHref = isAdmin ? "/admin/pays" : "/";
 
-  const [cachedGlobals, macrosRes, limitsRes, countryPerksRes, budgetRes, effectsRes, countriesRes, controlRes, updateLogsRes, countryLawsRes, countryMilitaryUnitsRes, countryMilitaryUnitsAllRes, assignedPlayerRes, countriesListRes, etatMajorFocusRes] = await Promise.all([
+  const [cachedGlobals, macrosRes, limitsRes, countryPerksRes, budgetRes, effectsRes, countriesRes, controlRes, updateLogsRes, countryLawsRes, countryMilitaryUnitsRes, countryMilitaryUnitsAllRes, assignedPlayerRes, countriesListRes, etatMajorFocusRes, ideologyState] = await Promise.all([
     getCachedCountryPageGlobals(),
     supabase.from("country_macros").select("*").eq("country_id", country.id),
     supabase
@@ -121,6 +121,7 @@ export default async function CountryPage({
     supabase.from("country_players").select("email, name").eq("country_id", country.id).maybeSingle(),
     supabase.from("countries").select("id, name").order("name"),
     supabase.from("country_etat_major_focus").select("design_roster_unit_id, recrutement_roster_unit_id, procuration_roster_unit_id, stock_roster_unit_id").eq("country_id", country.id).maybeSingle(),
+    fetchWorldIdeologyState(createServiceRoleClient()),
   ]);
 
   const controlRows = (Array.isArray(controlRes.data) ? controlRes.data : []) as Array<{ country_id: string; share_pct: number; is_annexed: boolean }>;
@@ -314,6 +315,13 @@ export default async function CountryPage({
   const globalGrowthEffects = (Array.isArray(ruleParametersByKey.global_growth_effects?.value) ? ruleParametersByKey.global_growth_effects.value : []) as Array<{ effect_kind: string; effect_target: string | null; value: number }>;
   const aiMajorEffects = (Array.isArray(ruleParametersByKey.ai_major_effects?.value) ? ruleParametersByKey.ai_major_effects.value : []) as Array<{ effect_kind: string; effect_target: string | null; value: number }>;
   const aiMinorEffects = (Array.isArray(ruleParametersByKey.ai_minor_effects?.value) ? ruleParametersByKey.ai_minor_effects.value : []) as Array<{ effect_kind: string; effect_target: string | null; value: number }>;
+  const ideologySummaryForContext = ideologyState.ideologyByCountry.get(country.id) ?? null;
+  const ideologyEffectsConfigRaw = ruleParametersByKey.ideology_effects?.value;
+  const ideologyEffectsConfig = Array.isArray(ideologyEffectsConfigRaw)
+    ? (ideologyEffectsConfigRaw as Array<{ ideology_id: string; effect_kind: string; effect_target: string | null; value: number }>).filter(
+        (e) => e && typeof e.ideology_id === "string" && typeof e.effect_kind === "string" && typeof e.value === "number"
+      )
+    : [];
   const effectsContext = {
     countryId: country.id,
     countryEffects: effects,
@@ -323,6 +331,8 @@ export default async function CountryPage({
     aiMajorEffects,
     aiMinorEffects,
     perkEffects,
+    ideologyScores: ideologySummaryForContext?.scores ?? undefined,
+    ideologyEffectsConfig: ideologyEffectsConfig.length > 0 ? ideologyEffectsConfig : undefined,
   };
   const resolvedEffects = getEffectsForCountry(effectsContext);
   const influenceMods = getInfluenceModifiersFromEffects(resolvedEffects, (e) => e.duration_kind === "permanent" || (e.duration_remaining ?? 0) > 0);
@@ -389,7 +399,6 @@ export default async function CountryPage({
       }
     : null;
 
-  const ideologyState = await fetchWorldIdeologyState(createServiceRoleClient());
   const ideologySummary = ideologyState.ideologyByCountry.get(country.id) ?? null;
 
   let intelLevel: number | null = null;

@@ -8,11 +8,11 @@ export function IdeologieHeader() {
       <div>
         <h1 className="text-2xl font-bold text-[var(--foreground)]">Idéologie</h1>
         <p className="mt-1 text-[var(--foreground-muted)]">
-          Panorama immersif du monde selon les trois grands pôles idéologiques : Monarchisme, Républicanisme et Cultisme.
+          Panorama immersif du monde selon l'hexagone à six idéologies.
         </p>
       </div>
       <InfoTooltipWithWikiLink
-        text="Position des pays sur le triangle idéologique. Filtrez et cliquez sur un point pour voir le détail et ouvrir la fiche pays."
+        text="Position des pays sur l'hexagone idéologique. Filtrez et cliquez sur un point pour voir le détail et ouvrir la fiche pays."
         wikiSectionId="ideologie-lecture-triangle"
         side="bottom"
       />

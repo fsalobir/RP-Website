@@ -14,7 +14,7 @@ import {
   type BudgetMinistryValue,
   type BudgetMinistryEffectDef,
 } from "@/lib/ruleParameters";
-import { DEFAULT_IDEOLOGY_CONFIG, getIdeologyConfig as parseIdeologyConfig, type IdeologyConfig } from "@/lib/ideology";
+import { DEFAULT_IDEOLOGY_CONFIG, getIdeologyConfig as parseIdeologyConfig, IDEOLOGY_IDS, IDEOLOGY_LABELS, type IdeologyConfig } from "@/lib/ideology";
 import { MOIS_LABELS } from "@/lib/worldDate";
 import {
   getEffectKindOptionGroups,
@@ -338,6 +338,12 @@ export function ReglesForm({
   const [globalEffectKind, setGlobalEffectKind] = useState<string>("gdp_growth_base");
   const [globalEffectTarget, setGlobalEffectTarget] = useState<string | null>(null);
   const [globalEffectValue, setGlobalEffectValue] = useState<string>("");
+  const [ideologyEffectFormOpen, setIdeologyEffectFormOpen] = useState(false);
+  const [ideologyEffectFormIdeologyId, setIdeologyEffectFormIdeologyId] = useState<string>(IDEOLOGY_IDS[0]);
+  const [ideologyEffectKind, setIdeologyEffectKind] = useState<string>("gdp_growth_base");
+  const [ideologyEffectTarget, setIdeologyEffectTarget] = useState<string | null>(null);
+  const [ideologyEffectValue, setIdeologyEffectValue] = useState<string>("");
+  const [ideologyEffectEditLocalIndex, setIdeologyEffectEditLocalIndex] = useState<number | null>(null);
   const [budgetOpen, setBudgetOpen] = useState(false);
   const [budgetMinistryOpen, setBudgetMinistryOpen] = useState<Record<string, boolean>>(() =>
     Object.fromEntries(BUDGET_MINISTRY_KEYS.map((k) => [k, false]))
@@ -444,6 +450,7 @@ export function ReglesForm({
   const sphereInfluencePctKey = "sphere_influence_pct";
   const statsDiceModifierRangesKey = "stats_dice_modifier_ranges";
   const ideologyConfigKey = "ideology_config";
+  const ideologyEffectsKey = "ideology_effects";
   const intelConfigKey = "intel_config";
 
   const globalGrowthEffectsRule = useMemo(() => items.find((r) => r.key === globalGrowthEffectsKey), [items]);
@@ -453,6 +460,7 @@ export function ReglesForm({
   const influenceConfigRule = useMemo(() => items.find((r) => r.key === influenceConfigKey), [items]);
   const sphereInfluencePctRule = useMemo(() => items.find((r) => r.key === sphereInfluencePctKey), [items]);
   const ideologyConfigRule = useMemo(() => items.find((r) => r.key === ideologyConfigKey), [items]);
+  const ideologyEffectsRule = useMemo(() => items.find((r) => r.key === ideologyEffectsKey), [items]);
 
   type SphereInfluencePctValue = { contested?: number; occupied?: number; annexed?: number };
   function getSphereInfluencePct(): SphereInfluencePctValue {
@@ -473,6 +481,121 @@ export function ReglesForm({
     if (!ideologyConfigRule) return;
     const current = getIdeologyConfigValue();
     updateValue(ideologyConfigRule.id, { ...current, ...patch });
+  }
+
+  type IdeologyEffectEntry = { ideology_id: string; effect_kind: string; effect_target: string | null; value: number };
+  function getIdeologyEffects(): IdeologyEffectEntry[] {
+    if (!ideologyEffectsRule?.value || !Array.isArray(ideologyEffectsRule.value)) return [];
+    return (ideologyEffectsRule.value as IdeologyEffectEntry[]).filter(
+      (e) =>
+        e &&
+        typeof e.ideology_id === "string" &&
+        typeof e.effect_kind === "string" &&
+        typeof e.value === "number"
+    );
+  }
+  function setIdeologyEffects(arr: IdeologyEffectEntry[]) {
+    if (!ideologyEffectsRule) return;
+    updateValue(ideologyEffectsRule.id, arr);
+  }
+  function getIdeologyEffectsForIdeology(ideologyId: string): IdeologyEffectEntry[] {
+    return getIdeologyEffects().filter((e) => e.ideology_id === ideologyId);
+  }
+  function addIdeologyEffect(ideologyId: string, entry: IdeologyEffectEntry) {
+    setIdeologyEffects([...getIdeologyEffects(), { ...entry, ideology_id: ideologyId }]);
+  }
+  function updateIdeologyEffectAtIndex(ideologyId: string, localIndex: number, entry: IdeologyEffectEntry) {
+    const full = getIdeologyEffects();
+    const forId = full.filter((e) => e.ideology_id === ideologyId);
+    forId[localIndex] = { ...entry, ideology_id: ideologyId };
+    setIdeologyEffects(full.filter((e) => e.ideology_id !== ideologyId).concat(forId));
+  }
+  function removeIdeologyEffect(ideologyId: string, localIndex: number) {
+    const full = getIdeologyEffects();
+    const forId = full.filter((e) => e.ideology_id === ideologyId).filter((_, i) => i !== localIndex);
+    setIdeologyEffects(full.filter((e) => e.ideology_id !== ideologyId).concat(forId));
+  }
+  const EFFECT_KINDS_FOR_IDEOLOGY_RULE = useMemo(
+    () =>
+      ALL_EFFECT_KIND_IDS.filter(
+        (k) => !k.startsWith("ideology_drift_") && !k.startsWith("ideology_snap_")
+      ),
+    []
+  );
+  const ideologyEffectOptionGroups = useMemo(
+    () => getEffectKindOptionGroups(EFFECT_KINDS_FOR_IDEOLOGY_RULE),
+    [EFFECT_KINDS_FOR_IDEOLOGY_RULE]
+  );
+  function getDefaultTargetForKindIdeology(effectKind: string): string | null {
+    if (EFFECT_KINDS_WITH_STAT_TARGET.has(effectKind)) return STAT_KEYS[0];
+    if (EFFECT_KINDS_WITH_BUDGET_TARGET.has(effectKind)) return getBudgetMinistryOptions()[0]?.key ?? BUDGET_MINISTRY_KEYS[0];
+    if (EFFECT_KINDS_WITH_BRANCH_TARGET.has(effectKind)) return MILITARY_BRANCH_EFFECT_IDS[0];
+    if (EFFECT_KINDS_WITH_ROSTER_UNIT_TARGET.has(effectKind)) return rosterUnits[0]?.id ?? null;
+    if (EFFECT_KINDS_WITH_SUB_TYPE_TARGET.has(effectKind)) return subTypeOptions[0]?.value ?? MILITARY_BRANCH_EFFECT_IDS[0] + SUB_TYPE_TARGET_SEP;
+    if (EFFECT_KINDS_WITH_COUNTRY_TARGET.has(effectKind)) return null;
+    return null;
+  }
+  function openAddIdeologyEffect(ideologyId: string) {
+    const firstGroup = ideologyEffectOptionGroups[0];
+    const firstKind = firstGroup?.options[0]?.id ?? EFFECT_KINDS_FOR_IDEOLOGY_RULE[0];
+    setIdeologyEffectFormIdeologyId(ideologyId);
+    setIdeologyEffectKind(firstKind);
+    setIdeologyEffectTarget(getDefaultTargetForKindIdeology(firstKind));
+    setIdeologyEffectValue("");
+    setIdeologyEffectEditLocalIndex(null);
+    setIdeologyEffectFormOpen(true);
+  }
+  function openEditIdeologyEffect(ideologyId: string, localIndex: number) {
+    const list = getIdeologyEffectsForIdeology(ideologyId);
+    const e = list[localIndex];
+    if (!e) return;
+    const helper = getEffectKindValueHelper(e.effect_kind);
+    setIdeologyEffectFormIdeologyId(ideologyId);
+    setIdeologyEffectKind(e.effect_kind);
+    setIdeologyEffectTarget(e.effect_target);
+    setIdeologyEffectValue(String(helper.storedToDisplay(Number(e.value))));
+    setIdeologyEffectEditLocalIndex(localIndex);
+    setIdeologyEffectFormOpen(true);
+  }
+  function saveIdeologyEffectForm() {
+    const valueNum = Number(ideologyEffectValue);
+    if (Number.isNaN(valueNum)) return;
+    const helper = getEffectKindValueHelper(ideologyEffectKind);
+    const valueStored = helper.displayToStored(valueNum);
+    const needsTarget =
+      EFFECT_KINDS_WITH_STAT_TARGET.has(ideologyEffectKind) ||
+      EFFECT_KINDS_WITH_BUDGET_TARGET.has(ideologyEffectKind) ||
+      EFFECT_KINDS_WITH_BRANCH_TARGET.has(ideologyEffectKind) ||
+      EFFECT_KINDS_WITH_ROSTER_UNIT_TARGET.has(ideologyEffectKind);
+    const entry: IdeologyEffectEntry = {
+      ideology_id: ideologyEffectFormIdeologyId,
+      effect_kind: ideologyEffectKind,
+      effect_target: needsTarget ? ideologyEffectTarget : null,
+      value: valueStored,
+    };
+    if (ideologyEffectEditLocalIndex !== null) {
+      updateIdeologyEffectAtIndex(ideologyEffectFormIdeologyId, ideologyEffectEditLocalIndex, entry);
+    } else {
+      addIdeologyEffect(ideologyEffectFormIdeologyId, entry);
+    }
+    setIdeologyEffectFormOpen(false);
+  }
+  function labelForIdeologyEffect(e: IdeologyEffectEntry): string {
+    const kindLabel = EFFECT_KIND_LABELS[e.effect_kind] ?? e.effect_kind;
+    let targetLabel: string | null = null;
+    if (e.effect_target) {
+      if (EFFECT_KINDS_WITH_STAT_TARGET.has(e.effect_kind))
+        targetLabel = STAT_LABELS[e.effect_target as keyof typeof STAT_LABELS] ?? e.effect_target;
+      else if (EFFECT_KINDS_WITH_BUDGET_TARGET.has(e.effect_kind))
+        targetLabel = BUDGET_MINISTRY_LABELS[e.effect_target] ?? e.effect_target;
+      else if (EFFECT_KINDS_WITH_BRANCH_TARGET.has(e.effect_kind))
+        targetLabel = MILITARY_BRANCH_EFFECT_LABELS[e.effect_target] ?? e.effect_target;
+      else if (EFFECT_KINDS_WITH_ROSTER_UNIT_TARGET.has(e.effect_kind))
+        targetLabel = rosterUnits.find((u) => u.id === e.effect_target)?.name_fr ?? e.effect_target;
+      else targetLabel = e.effect_target;
+    }
+    const valueStr = formatEffectValue(e.effect_kind, e.value);
+    return targetLabel ? `${kindLabel} — ${targetLabel} : ${valueStr}` : `${kindLabel} : ${valueStr}`;
   }
 
   const intelConfigRule = useMemo(() => items.find((r) => r.key === intelConfigKey), [items]);
@@ -1943,18 +2066,20 @@ export function ReglesForm({
             </CollapsibleBlock>
           )}
 
-          {items.length > 0 && ideologyConfigRule && (
+          {items.length > 0 && (ideologyConfigRule || ideologyEffectsRule) && (
             <CollapsibleBlock
               title="Idéologie"
-              infoContent={<TooltipBody text="Vitesse du glissement idéologique des pays (voisins et effets actifs)." />}
+              infoContent={<TooltipBody text="Vitesse du glissement idéologique des pays (voisins et effets actifs). Effets par idéologie : valeur à 100 % appliquée au prorata du score." />}
               open={ideologyOpen}
               onToggle={() => setIdeologyOpen((o) => !o)}
               variant="section"
             >
               <div className="p-3 space-y-4">
                 <p className="text-xs text-[var(--foreground-muted)]">
-                  Règles du triangle d’alignement. La dérive combine désormais le voisinage, la relation, l’influence, le contrôle et les effets idéologiques actifs.
+                  Règles de l'hexagone à six idéologies d’alignement. La dérive combine le voisinage, la relation, l’influence, le contrôle et les effets idéologiques actifs.
                 </p>
+                {ideologyConfigRule && (
+                <>
                 <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
                   <div>
                     <label className="mb-1 block text-xs text-[var(--foreground-muted)]">
@@ -2050,6 +2175,97 @@ export function ReglesForm({
                     />
                   </div>
                 </div>
+                </>
+                )}
+                {ideologyEffectsRule && (
+                  <div className="space-y-4">
+                    <h4 className="text-sm font-medium text-[var(--foreground)]">Effets par idéologie (valeur à 100 %)</h4>
+                    {IDEOLOGY_IDS.map((ideologyId) => {
+                      const list = getIdeologyEffectsForIdeology(ideologyId);
+                      const formOpenForThis = ideologyEffectFormOpen && ideologyEffectFormIdeologyId === ideologyId;
+                      return (
+                        <div key={ideologyId} className="rounded border p-2 space-y-1" style={{ borderColor: "var(--border-muted)" }}>
+                          <div className="text-xs font-medium text-[var(--foreground-muted)]">{IDEOLOGY_LABELS[ideologyId]}</div>
+                          <ul className="list-disc list-inside text-sm">
+                            {list.map((e, idx) => (
+                              <li key={idx} className="flex items-center justify-between gap-2">
+                                <span>{labelForIdeologyEffect(e)}</span>
+                                <div className="flex gap-2">
+                                  <button type="button" onClick={() => openEditIdeologyEffect(ideologyId, idx)} className="text-xs text-[var(--accent)] hover:underline">Modifier</button>
+                                  <button type="button" onClick={() => removeIdeologyEffect(ideologyId, idx)} className="text-xs text-[var(--danger)] hover:underline">Supprimer</button>
+                                </div>
+                              </li>
+                            ))}
+                          </ul>
+                          {!formOpenForThis ? (
+                            <button type="button" onClick={() => openAddIdeologyEffect(ideologyId)} className="text-sm text-[var(--accent)] hover:underline">Ajouter un effet</button>
+                          ) : (
+                            <div className="rounded border p-3 space-y-2 mt-2" style={{ borderColor: "var(--border-muted)" }}>
+                              <div>
+                                <label className="mb-0.5 block text-xs text-[var(--foreground-muted)]">Type d'effet</label>
+                                <select value={ideologyEffectKind} onChange={(ev) => { const k = ev.target.value; setIdeologyEffectKind(k); setIdeologyEffectTarget(getDefaultTargetForKindIdeology(k)); }} className="w-full rounded border py-1.5 px-2 text-sm" style={{ borderColor: "var(--border)", background: "var(--background)" }}>
+                                  {ideologyEffectOptionGroups.map((group) => (
+                                    <optgroup key={group.label} label={group.label}>
+                                      {group.options.map((opt) => (<option key={opt.id} value={opt.id}>{opt.label}</option>))}
+                                    </optgroup>
+                                  ))}
+                                </select>
+                              </div>
+                              {EFFECT_KINDS_WITH_STAT_TARGET.has(ideologyEffectKind) && (
+                                <div>
+                                  <label className="mb-0.5 block text-xs text-[var(--foreground-muted)]">Stat</label>
+                                  <select value={ideologyEffectTarget ?? STAT_KEYS[0]} onChange={(ev) => setIdeologyEffectTarget(ev.target.value || null)} className="w-full rounded border py-1.5 px-2 text-sm" style={{ borderColor: "var(--border)", background: "var(--background)" }}>
+                                    {STAT_KEYS.map((k) => (<option key={k} value={k}>{STAT_LABELS[k]}</option>))}
+                                  </select>
+                                </div>
+                              )}
+                              {EFFECT_KINDS_WITH_BUDGET_TARGET.has(ideologyEffectKind) && (
+                                <div>
+                                  <label className="mb-0.5 block text-xs text-[var(--foreground-muted)]">Ministère</label>
+                                  <select value={ideologyEffectTarget ?? getBudgetMinistryOptions()[0]?.key ?? ""} onChange={(ev) => setIdeologyEffectTarget(ev.target.value || null)} className="w-full rounded border py-1.5 px-2 text-sm" style={{ borderColor: "var(--border)", background: "var(--background)" }}>
+                                    {getBudgetMinistryOptions().map(({ key, label }) => (<option key={key} value={key}>{label}</option>))}
+                                  </select>
+                                </div>
+                              )}
+                              {EFFECT_KINDS_WITH_BRANCH_TARGET.has(ideologyEffectKind) && (
+                                <div>
+                                  <label className="mb-0.5 block text-xs text-[var(--foreground-muted)]">Branche</label>
+                                  <select value={ideologyEffectTarget ?? MILITARY_BRANCH_EFFECT_IDS[0]} onChange={(ev) => setIdeologyEffectTarget(ev.target.value || null)} className="w-full rounded border py-1.5 px-2 text-sm" style={{ borderColor: "var(--border)", background: "var(--background)" }}>
+                                    {MILITARY_BRANCH_EFFECT_IDS.map((b) => (<option key={b} value={b}>{MILITARY_BRANCH_EFFECT_LABELS[b]}</option>))}
+                                  </select>
+                                </div>
+                              )}
+                              {EFFECT_KINDS_WITH_ROSTER_UNIT_TARGET.has(ideologyEffectKind) && (
+                                <div>
+                                  <label className="mb-0.5 block text-xs text-[var(--foreground-muted)]">Unité</label>
+                                  <select value={ideologyEffectTarget ?? rosterUnits[0]?.id ?? ""} onChange={(ev) => setIdeologyEffectTarget(ev.target.value || null)} className="w-full rounded border py-1.5 px-2 text-sm" style={{ borderColor: "var(--border)", background: "var(--background)" }}>
+                                    {rosterUnits.map((u) => (<option key={u.id} value={u.id}>{u.name_fr}</option>))}
+                                  </select>
+                                </div>
+                              )}
+                              {EFFECT_KINDS_WITH_SUB_TYPE_TARGET.has(ideologyEffectKind) && (
+                                <div>
+                                  <label className="mb-0.5 block text-xs text-[var(--foreground-muted)]">Sous-branche/type</label>
+                                  <select value={ideologyEffectTarget ?? subTypeOptions[0]?.value ?? ""} onChange={(ev) => setIdeologyEffectTarget(ev.target.value || null)} className="w-full rounded border py-1.5 px-2 text-sm" style={{ borderColor: "var(--border)", background: "var(--background)" }}>
+                                    {subTypeOptions.map((opt) => (<option key={opt.value} value={opt.value}>{opt.label}</option>))}
+                                  </select>
+                                </div>
+                              )}
+                              <div>
+                                <label className="mb-0.5 block text-xs text-[var(--foreground-muted)]">{getEffectKindValueHelper(ideologyEffectKind).valueLabel}</label>
+                                <input type="number" step={getEffectKindValueHelper(ideologyEffectKind).valueStep} value={ideologyEffectValue} onChange={(e) => setIdeologyEffectValue(e.target.value)} className="w-32 rounded border py-1.5 px-2 text-sm font-mono" style={{ borderColor: "var(--border)", background: "var(--background)" }} />
+                              </div>
+                              <div className="flex gap-2">
+                                <button type="button" onClick={saveIdeologyEffectForm} className="rounded py-1.5 px-3 text-sm font-medium" style={{ background: "var(--accent)", color: "#0f1419" }}>Enregistrer</button>
+                                <button type="button" onClick={() => setIdeologyEffectFormOpen(false)} className="rounded border py-1.5 px-3 text-sm" style={{ borderColor: "var(--border)" }}>Annuler</button>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             </CollapsibleBlock>
           )}

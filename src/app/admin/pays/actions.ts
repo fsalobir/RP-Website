@@ -11,7 +11,7 @@ import {
 } from "@/lib/countryEffects";
 import { resolveAllLawEffectsForCountry, type CountryLawRow } from "@/lib/laws";
 import { persistWorldIdeologies } from "@/lib/ideologyServer";
-import { normalizeIdeologyScores } from "@/lib/ideology";
+import { IDEOLOGY_IDS, IDEOLOGY_ANTITHETICAL_PAIRS, ideologyColumnName } from "@/lib/ideology";
 
 const BUDGET_PCT_KEYS = [
   "pct_etat",
@@ -224,8 +224,9 @@ export async function randomizeNationalBudgets(): Promise<{ error?: string; upda
   const { data: adminRow } = await supabase.from("admins").select("id").eq("user_id", user.id).single();
   if (!adminRow) return { error: "Réservé aux admins." };
 
+  const ideologyColumns = IDEOLOGY_IDS.flatMap((id) => [ideologyColumnName(id)]);
   const [countriesRes, effectsRes, lawsRes, rulesRes, budgetsRes] = await Promise.all([
-    supabase.from("countries").select("id, ai_status"),
+    supabase.from("countries").select(["id", "ai_status", ...ideologyColumns].join(", ")),
     supabase.from("country_effects").select("country_id, effect_kind, effect_target, value, duration_remaining, duration_kind").or("duration_remaining.gt.0,duration_kind.eq.permanent"),
     supabase.from("country_laws").select("country_id, law_key, score, target_score"),
     supabase.from("rule_parameters").select("key, value").in("key", [
@@ -234,7 +235,7 @@ export async function randomizeNationalBudgets(): Promise<{ error?: string; upda
       "law_air_industry_config", "law_air_industry_level_effects",
       "law_naval_industry_config", "law_naval_industry_level_effects",
       "law_research_config", "law_research_level_effects",
-      "global_growth_effects", "ai_major_effects", "ai_minor_effects",
+      "global_growth_effects", "ai_major_effects", "ai_minor_effects", "ideology_effects",
     ]),
     supabase.from("country_budget").select("id, country_id, budget_fraction"),
   ]);
@@ -251,6 +252,12 @@ export async function randomizeNationalBudgets(): Promise<{ error?: string; upda
   const globalGrowthEffects = buildGlobalGrowthEffects(globalGrowthEffectsRaw);
   const aiMajorEffects = buildAiEffects(rulesByKey.ai_major_effects?.value);
   const aiMinorEffects = buildAiEffects(rulesByKey.ai_minor_effects?.value);
+  const ideologyEffectsConfigRaw = rulesByKey.ideology_effects?.value;
+  const ideologyEffectsConfig = Array.isArray(ideologyEffectsConfigRaw)
+    ? (ideologyEffectsConfigRaw as Array<{ ideology_id: string; effect_kind: string; effect_target: string | null; value: number }>).filter(
+        (e) => e && typeof e.ideology_id === "string" && typeof e.effect_kind === "string" && typeof e.value === "number"
+      )
+    : [];
 
   const effectsByCountry = new Map<string, Array<{ effect_kind: string; effect_target: string | null; value: number; duration_remaining?: number }>>();
   (effectsRes.data ?? []).forEach((e: { country_id: string; effect_kind: string; effect_target: string | null; value: number; duration_remaining?: number }) => {
@@ -284,6 +291,11 @@ export async function randomizeNationalBudgets(): Promise<{ error?: string; upda
       duration_remaining: e.duration_remaining,
     }));
 
+    const countryRecord = country as Record<string, unknown>;
+    const ideologyScores: Record<string, number> = {};
+    for (const id of IDEOLOGY_IDS) {
+      ideologyScores[id] = Number(countryRecord[ideologyColumnName(id)]) || 0;
+    }
     const ctx: EffectResolutionContext = {
       countryId: country.id,
       countryEffects: countryEffects as Parameters<typeof getEffectsForCountry>[0]["countryEffects"],
@@ -292,6 +304,8 @@ export async function randomizeNationalBudgets(): Promise<{ error?: string; upda
       ai_status: (country as { ai_status?: string | null }).ai_status ?? null,
       aiMajorEffects,
       aiMinorEffects,
+      ideologyScores: Object.keys(ideologyScores).length ? ideologyScores : undefined,
+      ideologyEffectsConfig: ideologyEffectsConfig.length > 0 ? ideologyEffectsConfig : undefined,
     };
     const resolvedEffects: ResolvedEffect[] = getEffectsForCountry(ctx);
     const forcedMinPcts = getForcedMinPcts(resolvedEffects);
@@ -341,34 +355,31 @@ export async function randomizeCountryIdeologies(): Promise<{ error?: string; up
 
   const serviceSupabase = createServiceRoleClient();
   for (const country of countries) {
-    const scores = normalizeIdeologyScores({
-      monarchism: Math.random(),
-      republicanism: Math.random(),
-      cultism: Math.random(),
-    });
-    const dominant =
-      scores.monarchism >= scores.republicanism && scores.monarchism >= scores.cultism
-        ? "monarchism"
-        : scores.republicanism >= scores.cultism
-          ? "republicanism"
-          : "cultism";
-    const { error } = await serviceSupabase
-      .from("countries")
-      .update({
-        ideology_monarchism: Number(scores.monarchism.toFixed(4)),
-        ideology_republicanism: Number(scores.republicanism.toFixed(4)),
-        ideology_cultism: Number(scores.cultism.toFixed(4)),
-        ideology_drift_monarchism: 0,
-        ideology_drift_republicanism: 0,
-        ideology_drift_cultism: 0,
-        ideology_breakdown: {
-          dominant,
-          source: "admin_randomize",
-          top_factors: [{ label: "Randomisation de test", ideology: dominant, value: 100 }],
-        },
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", country.id);
+    const scores: Record<string, number> = {};
+    const rawTotals = [Math.random(), Math.random(), Math.random()];
+    const sumRaw = rawTotals[0] + rawTotals[1] + rawTotals[2];
+    const axisTotals = rawTotals.map((t) => (t / sumRaw) * 100);
+    for (let i = 0; i < IDEOLOGY_ANTITHETICAL_PAIRS.length; i++) {
+      const [a, b] = IDEOLOGY_ANTITHETICAL_PAIRS[i];
+      const t = axisTotals[i];
+      const x = Math.random();
+      scores[a] = x * t;
+      scores[b] = (1 - x) * t;
+    }
+    const dominant = IDEOLOGY_IDS.reduce((best, id) => (scores[id] > scores[best] ? id : best), IDEOLOGY_IDS[0]);
+    const updatePayload: Record<string, number | object> = {
+      ideology_breakdown: {
+        dominant,
+        source: "admin_randomize",
+        top_factors: [{ label: "Randomisation de test", ideology: dominant, value: 100 }],
+      },
+      updated_at: new Date().toISOString(),
+    };
+    for (const id of IDEOLOGY_IDS) {
+      updatePayload[ideologyColumnName(id)] = Number(scores[id].toFixed(4));
+      updatePayload[ideologyColumnName(id, "ideology_drift")] = 0;
+    }
+    const { error } = await serviceSupabase.from("countries").update(updatePayload).eq("id", country.id);
     if (error) return { error: error.message };
   }
 

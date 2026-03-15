@@ -11,19 +11,74 @@ import {
 import type { AdminEffectAdded, DiceResults } from "./types.ts";
 import { ACTION_KEYS_REQUIRING_IMPACT_ROLL } from "./actionKeys.ts";
 
-function normalizeIdeologyScores(scores: { monarchism?: number; republicanism?: number; cultism?: number }) {
-  const raw = {
-    monarchism: Math.max(0, Number(scores.monarchism ?? 0)),
-    republicanism: Math.max(0, Number(scores.republicanism ?? 0)),
-    cultism: Math.max(0, Number(scores.cultism ?? 0)),
-  };
-  const sum = raw.monarchism + raw.republicanism + raw.cultism;
-  if (sum <= 0) return { monarchism: 33.3333, republicanism: 33.3333, cultism: 33.3334 };
-  return {
-    monarchism: (raw.monarchism / sum) * 100,
-    republicanism: (raw.republicanism / sum) * 100,
-    cultism: (raw.cultism / sum) * 100,
-  };
+/** Même ordre que src/lib/ideology.ts (sommets hexagone : haut, haut-droite, bas-droite, bas, bas-gauche, haut-gauche). */
+const IDEOLOGY_IDS = [
+  "germanic_monarchy",
+  "satoiste_cultism",
+  "nilotique_cultism",
+  "mughal_republicanism",
+  "french_republicanism",
+  "merina_monarchy",
+] as const;
+const IDEOLOGY_COLUMNS = IDEOLOGY_IDS.map((id) => `ideology_${id}`);
+const CENTER_VAL = 100 / 6;
+
+/** Paires antithétiques (axiomes), alignées avec src/lib/ideology.ts. */
+const IDEOLOGY_ANTITHETICAL_PAIRS: [string, string][] = [
+  ["germanic_monarchy", "mughal_republicanism"],
+  ["french_republicanism", "satoiste_cultism"],
+  ["nilotique_cultism", "merina_monarchy"],
+];
+
+function normalizeIdeologyScores6(scores: Record<string, number>): Record<string, number> {
+  const raw: Record<string, number> = {};
+  let sum = 0;
+  for (const id of IDEOLOGY_IDS) {
+    raw[id] = Math.max(0, Number(scores[id] ?? 0));
+    sum += raw[id];
+  }
+  if (sum <= 0) {
+    const out: Record<string, number> = {};
+    for (const id of IDEOLOGY_IDS) out[id] = CENTER_VAL;
+    return out;
+  }
+  const out: Record<string, number> = {};
+  for (const id of IDEOLOGY_IDS) out[id] = (raw[id] / sum) * 100;
+  return out;
+}
+
+function normalizeIdeologyScores6WithAxioms(scores: Record<string, number>): Record<string, number> {
+  const raw: Record<string, number> = {};
+  let sum = 0;
+  for (const id of IDEOLOGY_IDS) {
+    raw[id] = Math.max(0, Number(scores[id] ?? 0));
+    sum += raw[id];
+  }
+  if (sum <= 0) {
+    const out: Record<string, number> = {};
+    for (const id of IDEOLOGY_IDS) out[id] = CENTER_VAL;
+    return out;
+  }
+  const tensioned: Record<string, number> = { ...raw };
+  for (const [a, b] of IDEOLOGY_ANTITHETICAL_PAIRS) {
+    const total = tensioned[a] + tensioned[b];
+    if (total <= 0) continue;
+    const ratio = tensioned[a] / total;
+    const r2 = ratio * ratio;
+    const denom = r2 + (1 - ratio) * (1 - ratio);
+    tensioned[a] = total * (r2 / denom);
+    tensioned[b] = total - tensioned[a];
+  }
+  let sumAfter = 0;
+  for (const id of IDEOLOGY_IDS) sumAfter += tensioned[id];
+  if (sumAfter <= 0) {
+    const out: Record<string, number> = {};
+    for (const id of IDEOLOGY_IDS) out[id] = CENTER_VAL;
+    return out;
+  }
+  const out: Record<string, number> = {};
+  for (const id of IDEOLOGY_IDS) out[id] = (tensioned[id] / sumAfter) * 100;
+  return out;
 }
 
 function clampRelation(value: number): number {
@@ -126,30 +181,27 @@ async function applyImmediateEffect(
     return {};
   }
 
-  if (kind === "ideology_snap_monarchism" || kind === "ideology_snap_republicanism" || kind === "ideology_snap_cultism") {
+  if (kind.startsWith("ideology_snap_")) {
+    const ideologyId = kind.replace("ideology_snap_", "");
+    if (!IDEOLOGY_IDS.includes(ideologyId)) return { error: `Idéologie inconnue : ${ideologyId}` };
     const { data: row } = await supabase
       .from("countries")
-      .select("ideology_monarchism, ideology_republicanism, ideology_cultism")
+      .select(IDEOLOGY_COLUMNS.join(", "))
       .eq("id", countryId)
       .single();
-    const current = normalizeIdeologyScores({
-      monarchism: Number(row?.ideology_monarchism ?? 33.3333),
-      republicanism: Number(row?.ideology_republicanism ?? 33.3333),
-      cultism: Number(row?.ideology_cultism ?? 33.3334),
-    });
-    const shifted = normalizeIdeologyScores({
-      monarchism: current.monarchism + (kind === "ideology_snap_monarchism" ? value : 0),
-      republicanism: current.republicanism + (kind === "ideology_snap_republicanism" ? value : 0),
-      cultism: current.cultism + (kind === "ideology_snap_cultism" ? value : 0),
-    });
-    const { error: upErr } = await supabase
-      .from("countries")
-      .update({
-        ideology_monarchism: Number(shifted.monarchism.toFixed(4)),
-        ideology_republicanism: Number(shifted.republicanism.toFixed(4)),
-        ideology_cultism: Number(shifted.cultism.toFixed(4)),
-      })
-      .eq("id", countryId);
+    const currentRaw: Record<string, number> = {};
+    for (const id of IDEOLOGY_IDS) {
+      currentRaw[id] = Number((row as Record<string, unknown>)?.[`ideology_${id}`] ?? CENTER_VAL);
+    }
+    const current = normalizeIdeologyScores6WithAxioms(currentRaw);
+    const shiftedRaw = { ...current };
+    shiftedRaw[ideologyId] = current[ideologyId] + value;
+    const shifted = normalizeIdeologyScores6WithAxioms(shiftedRaw);
+    const updatePayload: Record<string, number> = {};
+    for (const id of IDEOLOGY_IDS) {
+      updatePayload[`ideology_${id}`] = Number(shifted[id].toFixed(4));
+    }
+    const { error: upErr } = await supabase.from("countries").update(updatePayload).eq("id", countryId);
     if (upErr) return { error: upErr.message };
     return {};
   }

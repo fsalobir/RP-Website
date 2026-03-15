@@ -12,6 +12,7 @@ import { createClient } from "@/lib/supabase/client";
 import {
   ALL_EFFECT_KIND_IDS,
   getDefaultTargetForKind,
+  getEffectKindValueHelper,
   getForcedMinPcts,
   getAllocationCapPercent,
   budgetKeyToPctKey,
@@ -179,19 +180,19 @@ export function CountryTabs({
     }>;
   };
   ideologySummary?: {
-    scores: { monarchism: number; republicanism: number; cultism: number };
-    drift: { monarchism: number; republicanism: number; cultism: number };
-    dominant: "monarchism" | "republicanism" | "cultism";
+    scores: Record<import("@/lib/ideology").IdeologyId, number>;
+    drift: Record<import("@/lib/ideology").IdeologyId, number>;
+    dominant: import("@/lib/ideology").IdeologyId;
     centerDistance: number;
     breakdown: {
-      neighbors: { monarchism: number; republicanism: number; cultism: number };
-      effects: { monarchism: number; republicanism: number; cultism: number };
+      neighbors: Record<import("@/lib/ideology").IdeologyId, number>;
+      effects: Record<import("@/lib/ideology").IdeologyId, number>;
       neighborContributors: Array<{
         countryId: string;
         name: string;
         slug: string;
         flag_url: string | null;
-        ideology: "monarchism" | "republicanism" | "cultism";
+        ideology: import("@/lib/ideology").IdeologyId;
         value: number;
         weight: number;
       }>;
@@ -295,6 +296,23 @@ export function CountryTabs({
     });
   }, [ruleParametersByKey.global_growth_effects?.value]);
 
+  const ideologyEffectsConfig = useMemo(() => {
+    const raw = ruleParametersByKey.ideology_effects?.value;
+    if (!Array.isArray(raw)) return [];
+    return raw.filter(
+      (e: unknown): e is { ideology_id: string; effect_kind: string; effect_target: string | null; value: number } =>
+        e != null &&
+        typeof (e as { ideology_id?: unknown }).ideology_id === "string" &&
+        typeof (e as { effect_kind?: unknown }).effect_kind === "string" &&
+        typeof (e as { value?: unknown }).value === "number"
+    ).map((e) => ({
+      ideology_id: e.ideology_id,
+      effect_kind: e.effect_kind,
+      effect_target: e.effect_target ?? null,
+      value: Number(e.value),
+    }));
+  }, [ruleParametersByKey.ideology_effects?.value]);
+
   const resolvedEffects = useMemo(
     () =>
       getEffectsForCountry({
@@ -306,8 +324,10 @@ export function CountryTabs({
         aiMajorEffects,
         aiMinorEffects,
         perkEffects,
+        ideologyScores: ideologySummary?.scores,
+        ideologyEffectsConfig: ideologyEffectsConfig.length > 0 ? ideologyEffectsConfig : undefined,
       }),
-    [country.id, effects, lawLevelEffects, globalGrowthEffects, ai_status, aiMajorEffects, aiMinorEffects, perkEffects]
+    [country.id, effects, lawLevelEffects, globalGrowthEffects, ai_status, aiMajorEffects, aiMinorEffects, perkEffects, ideologySummary?.scores, ideologyEffectsConfig]
   );
 
   const effectsForTick = useMemo(
@@ -320,8 +340,10 @@ export function CountryTabs({
         ai_status,
         aiMajorEffects,
         aiMinorEffects,
+        ideologyScores: ideologySummary?.scores,
+        ideologyEffectsConfig: ideologyEffectsConfig.length > 0 ? ideologyEffectsConfig : undefined,
       }),
-    [country.id, effects, lawLevelEffects, globalGrowthEffects, ai_status, aiMajorEffects, aiMinorEffects]
+    [country.id, effects, lawLevelEffects, globalGrowthEffects, ai_status, aiMajorEffects, aiMinorEffects, ideologySummary?.scores, ideologyEffectsConfig]
   );
 
   const tickBreakdownResult = useMemo(() => {
@@ -350,7 +372,16 @@ export function CountryTabs({
       budgetPcts,
       ruleParametersByKey,
       worldAverages,
-      { countryEffects: effects, lawLevelEffects, globalGrowthEffects, ai_status, aiMajorEffects, aiMinorEffects },
+      {
+        countryEffects: effects,
+        lawLevelEffects,
+        globalGrowthEffects,
+        ai_status,
+        aiMajorEffects,
+        aiMinorEffects,
+        ideologyScores: ideologySummary?.scores,
+        ideologyEffectsConfig: ideologyEffectsConfig.length > 0 ? ideologyEffectsConfig : undefined,
+      },
       {
         mobilisationLevelName: getLawLevelLabel("mobilisation", mobilisationLevelKey),
         rosterUnitName: (id) => rosterUnitsFlat.find((u) => u.id === id)?.name_fr ?? null,
@@ -374,6 +405,8 @@ export function CountryTabs({
     aiMajorEffects,
     aiMinorEffects,
     mobilisationLevelKey,
+    ideologySummary?.scores,
+    ideologyEffectsConfig,
     rosterUnitsFlat,
   ]);
 
@@ -645,15 +678,8 @@ export function CountryTabs({
     setEffectKind(e.effect_kind);
     setEffectTarget(e.effect_target);
     setEffectName(e.name);
-    setEffectValue(
-      e.effect_kind.startsWith("gdp_growth") || e.effect_kind.startsWith("population_growth")
-        ? String(Number(e.value) * 100)
-        : e.effect_kind.startsWith("influence_modifier_")
-          ? String(Number(e.value) * 100 - 100)
-          : e.effect_kind === "budget_ministry_effect_multiplier"
-            ? String(Number(e.value) * 100 - 100)
-            : String(e.value)
-    );
+    const helper = getEffectKindValueHelper(e.effect_kind);
+    setEffectValue(String(helper.storedToDisplay(Number(e.value))));
     setEffectDurationKind((e.duration_kind === "updates" ? "days" : e.duration_kind) as "days" | "updates" | "permanent");
     setEffectDurationRemaining(String(e.duration_remaining));
     setEffectsFormOpen(true);
@@ -700,24 +726,7 @@ export function CountryTabs({
     }
     const isPermanent = effectDurationKind === "permanent";
     const durationNum = isPermanent ? 0 : Math.min(100, Math.max(0, Math.floor(Number(effectDurationRemaining) || 0)));
-    const isGrowthEffect =
-      effect_kind === "gdp_growth_base" ||
-      effect_kind === "gdp_growth_per_stat" ||
-      effect_kind === "population_growth_base" ||
-      effect_kind === "population_growth_per_stat";
-    const isMilitaryUnitEffect =
-      effect_kind === "military_unit_extra" || effect_kind === "military_unit_tech_rate" || effect_kind === "military_unit_limit_modifier";
-    const isInfluenceModifier = effect_kind.startsWith("influence_modifier_");
-    const isMultiplierEffect = isInfluenceModifier || effect_kind === "budget_ministry_effect_multiplier";
-    const valueToStore = isGrowthEffect
-      ? valueNum / 100
-      : effect_kind === "military_unit_limit_modifier"
-        ? valueNum
-        : isMilitaryUnitEffect
-          ? Math.floor(valueNum)
-          : isMultiplierEffect
-            ? (100 + valueNum) / 100
-            : valueNum;
+    const valueToStore = getEffectKindValueHelper(effect_kind).displayToStored(valueNum);
     const supabase = createClient();
     const row = {
       name: effectName.trim(),

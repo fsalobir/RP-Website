@@ -1,13 +1,87 @@
 import { normalizePair } from "@/lib/relations";
 
-export const IDEOLOGY_IDS = ["monarchism", "republicanism", "cultism"] as const;
+/** 6 idéologies (ordre = sommets de l'hexagone, sens horaire à partir du haut). Cohérent avec la géométrie des drifts. */
+export const IDEOLOGY_IDS = [
+  "germanic_monarchy",     /* sommet 0 : haut (Monarchisme Germanique) */
+  "satoiste_cultism",      /* sommet 1 : haut-droite (Cultisme Satoiste) */
+  "nilotique_cultism",     /* sommet 2 : bas-droite (Cultisme Nilotique) */
+  "mughal_republicanism",  /* sommet 3 : bas (Républicanisme Moghol) */
+  "french_republicanism",  /* sommet 4 : bas-gauche (Républicanisme Français) */
+  "merina_monarchy",       /* sommet 5 : haut-gauche (Monarchisme Mérinais) */
+] as const;
 export type IdeologyId = (typeof IDEOLOGY_IDS)[number];
 
 export const IDEOLOGY_LABELS: Record<IdeologyId, string> = {
-  monarchism: "Monarchisme",
-  republicanism: "Républicanisme",
-  cultism: "Cultisme",
+  germanic_monarchy: "Monarchisme Germanique",
+  merina_monarchy: "Monarchisme Mérinais",
+  french_republicanism: "Républicanisme Français",
+  mughal_republicanism: "Républicanisme Moghol",
+  nilotique_cultism: "Cultisme Nilotique",
+  satoiste_cultism: "Cultisme Satoiste",
 };
+
+/** Courtes descriptions pour l’infobox au survol des pôles (hexagone). */
+export const IDEOLOGY_DESCRIPTIONS: Record<IdeologyId, string> = {
+  germanic_monarchy: "Pôle monarchiste d’inspiration germanique : ordre, tradition, hiérarchie.",
+  merina_monarchy: "Pôle monarchiste d’inspiration mérina : légitimité dynastique, centralité du souverain.",
+  french_republicanism: "Pôle républicain d’inspiration française : laïcité, droits civiques, souveraineté du peuple.",
+  mughal_republicanism: "Pôle républicain d’inspiration moghole : pluralité, équilibre des pouvoirs.",
+  nilotique_cultism: "Pôle cultuel nilotique : primat du religieux et du sacré dans l’ordre politique.",
+  satoiste_cultism: "Pôle cultuel satoiste : rites, symboles et autorité spirituelle au cœur du pouvoir.",
+};
+
+/** Image d’en-tête optionnelle pour l’infobox au survol (hexagone). */
+export const IDEOLOGY_INFOBOX_HEADER_IMAGE: Record<IdeologyId, string | null> = {
+  germanic_monarchy: null,
+  merina_monarchy: null,
+  french_republicanism: "/images/ideology/french_republicanism.png",
+  mughal_republicanism: null,
+  nilotique_cultism: null,
+  satoiste_cultism: "/images/ideology/satoiste.png",
+};
+
+/** Description longue optionnelle pour l’infobox (hexagone). */
+export const IDEOLOGY_INFOBOX_LONG_DESCRIPTION: Record<IdeologyId, string | null> = {
+  germanic_monarchy: null,
+  merina_monarchy: null,
+  french_republicanism:
+    "Né des guerres successives avec les monarchies, le Républicanisme français est un rejet radical des élites, et de l'oppression royale-capitaliste. La société doit être fondée sur l'équité radicale : la liberté collective est le fruit du sacrifice individuel.",
+  mughal_republicanism: null,
+  nilotique_cultism: null,
+  satoiste_cultism:
+    "Nommé du nom du premier ministre japonais éponyme, le Satoisme mêle une croyance mystique à un culte féroce du chef. La divinité du leader fort qui dirige l'état fort est le socle de la politique gouvernementale. La politique totalitaire et nationaliste appliquée par l'état sert les ambitions agressives définies par le Guide.",
+};
+
+/** Calque optionnel (image de fond) par secteur de l’hexagone, même ordre que IDEOLOGY_IDS. */
+export const IDEOLOGY_HEX_LAYER_IMAGE: Record<IdeologyId, string | null> = {
+  germanic_monarchy: null,
+  merina_monarchy: null,
+  french_republicanism: "/images/ideology/french_republicanism.png",
+  mughal_republicanism: null,
+  nilotique_cultism: null,
+  satoiste_cultism: "/images/ideology/satoiste.png",
+};
+
+/** Nom de la colonne DB pour le score ou le drift d'une idéologie (ex. ideology_germanic_monarchy). */
+export function ideologyColumnName(id: IdeologyId, prefix: "ideology" | "ideology_drift" = "ideology"): string {
+  return prefix === "ideology_drift" ? `ideology_drift_${id}` : `ideology_${id}`;
+}
+
+/** Paires d’idéologies antithétiques (axiomes) : avoir un score élevé sur l’une décourage l’autre. */
+export const IDEOLOGY_ANTITHETICAL_PAIRS: [IdeologyId, IdeologyId][] = [
+  ["germanic_monarchy", "mughal_republicanism"],
+  ["french_republicanism", "satoiste_cultism"],
+  ["nilotique_cultism", "merina_monarchy"],
+];
+
+/** Retourne l’idéologie antithétique de `id`, ou null si aucune. */
+export function getAntitheticalId(id: IdeologyId): IdeologyId | null {
+  for (const [a, b] of IDEOLOGY_ANTITHETICAL_PAIRS) {
+    if (a === id) return b;
+    if (b === id) return a;
+  }
+  return null;
+}
 
 export type IdeologyScores = Record<IdeologyId, number>;
 
@@ -30,6 +104,8 @@ export const DEFAULT_IDEOLOGY_CONFIG: IdeologyConfig = {
   effect_pull_weight: 1,
   snap_strength: 16,
 };
+
+const CENTER_VALUE = 100 / 6;
 
 type PartialIdeologyConfig = Partial<IdeologyConfig>;
 
@@ -65,10 +141,7 @@ export type IdeologyCountryInput = {
   gdp: number | null;
   population: number | null;
   ai_status?: string | null;
-  ideology_monarchism?: number | null;
-  ideology_republicanism?: number | null;
-  ideology_cultism?: number | null;
-};
+} & Partial<Record<string, number>>;
 
 export type IdeologyControlRow = {
   country_id: string;
@@ -100,6 +173,7 @@ export type IdeologyCountryResult = {
   drift: IdeologyScores;
   dominant: IdeologyId;
   centerDistance: number;
+  /** Repère unitaire : hexagone régulier, sommets sur le cercle unité, x et y dans environ [-1, 1]. */
   point: { x: number; y: number };
   breakdown: {
     neighbors: IdeologyScores;
@@ -125,78 +199,123 @@ function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
 }
 
-function createZeroScores(): IdeologyScores {
-  return { monarchism: 0, republicanism: 0, cultism: 0 };
+export function createZeroScores(): IdeologyScores {
+  const out = {} as IdeologyScores;
+  for (const id of IDEOLOGY_IDS) out[id] = 0;
+  return out;
+}
+
+function createNeutralScores(): IdeologyScores {
+  const out = {} as IdeologyScores;
+  for (const id of IDEOLOGY_IDS) out[id] = CENTER_VALUE;
+  return out;
 }
 
 export function normalizeIdeologyScores(scores: Partial<IdeologyScores>): IdeologyScores {
-  const raw: IdeologyScores = {
-    monarchism: Math.max(0, num(scores.monarchism, 0)),
-    republicanism: Math.max(0, num(scores.republicanism, 0)),
-    cultism: Math.max(0, num(scores.cultism, 0)),
-  };
-  const sum = raw.monarchism + raw.republicanism + raw.cultism;
-  if (sum <= 0) {
-    return { monarchism: 33.3333, republicanism: 33.3333, cultism: 33.3334 };
+  const raw = createZeroScores();
+  for (const id of IDEOLOGY_IDS) {
+    raw[id] = Math.max(0, num((scores as Record<string, number>)[id], 0));
   }
-  return {
-    monarchism: (raw.monarchism / sum) * 100,
-    republicanism: (raw.republicanism / sum) * 100,
-    cultism: (raw.cultism / sum) * 100,
-  };
+  const sum = IDEOLOGY_IDS.reduce((s, id) => s + raw[id], 0);
+  if (sum <= 0) return createNeutralScores();
+  const out = {} as IdeologyScores;
+  for (const id of IDEOLOGY_IDS) {
+    out[id] = (raw[id] / sum) * 100;
+  }
+  return out;
+}
+
+/** Applique la tension axiomatique par paire antithétique : dans chaque paire, le gagnant prend tout, le perdant passe à 0 (on a donc exactement 3 scores non nuls). Puis renormalise à 100. */
+export function normalizeIdeologyScoresWithAxioms(scores: Partial<IdeologyScores>): IdeologyScores {
+  const raw = createZeroScores();
+  for (const id of IDEOLOGY_IDS) {
+    raw[id] = Math.max(0, num((scores as Record<string, number>)[id], 0));
+  }
+  const sum = IDEOLOGY_IDS.reduce((s, id) => s + raw[id], 0);
+  if (sum <= 0) return createNeutralScores();
+  const snapped = { ...raw } as IdeologyScores;
+  for (const [a, b] of IDEOLOGY_ANTITHETICAL_PAIRS) {
+    const total = snapped[a] + snapped[b];
+    if (total <= 0) continue;
+    if (snapped[a] >= snapped[b]) {
+      snapped[a] = total;
+      snapped[b] = 0;
+    } else {
+      snapped[b] = total;
+      snapped[a] = 0;
+    }
+  }
+  const sumAfter = IDEOLOGY_IDS.reduce((s, id) => s + snapped[id], 0);
+  if (sumAfter <= 0) return createNeutralScores();
+  const out = {} as IdeologyScores;
+  for (const id of IDEOLOGY_IDS) {
+    out[id] = (snapped[id] / sumAfter) * 100;
+  }
+  return out;
 }
 
 function addScores(a: IdeologyScores, b: IdeologyScores): IdeologyScores {
-  return {
-    monarchism: a.monarchism + b.monarchism,
-    republicanism: a.republicanism + b.republicanism,
-    cultism: a.cultism + b.cultism,
-  };
+  const out = {} as IdeologyScores;
+  for (const id of IDEOLOGY_IDS) out[id] = a[id] + b[id];
+  return out;
 }
 
 function scaleScores(scores: IdeologyScores, factor: number): IdeologyScores {
-  return {
-    monarchism: scores.monarchism * factor,
-    republicanism: scores.republicanism * factor,
-    cultism: scores.cultism * factor,
-  };
+  const out = {} as IdeologyScores;
+  for (const id of IDEOLOGY_IDS) out[id] = scores[id] * factor;
+  return out;
 }
 
 function dominantIdeology(scores: IdeologyScores): IdeologyId {
-  return IDEOLOGY_IDS.reduce((best, current) => (scores[current] > scores[best] ? current : best), "monarchism");
+  return IDEOLOGY_IDS.reduce((best, current) => (scores[current] > scores[best] ? current : best), IDEOLOGY_IDS[0]);
 }
+
+/** Norme max depuis le centre (100/6,...,100/6) vers un sommet (100,0,0,0,0,0) = 100*sqrt(30)/6. */
+const CENTER_DISTANCE_NORM_FACTOR = (100 * Math.sqrt(30)) / 6;
 
 function ideologyCenterDistance(scores: IdeologyScores): number {
-  const centered = {
-    monarchism: scores.monarchism - 33.3333,
-    republicanism: scores.republicanism - 33.3333,
-    cultism: scores.cultism - 33.3333,
-  };
-  const magnitude = Math.sqrt(centered.monarchism ** 2 + centered.republicanism ** 2 + centered.cultism ** 2);
-  return clamp(magnitude / 81.65, 0, 1);
+  let sumSq = 0;
+  for (const id of IDEOLOGY_IDS) {
+    const d = scores[id] - CENTER_VALUE;
+    sumSq += d * d;
+  }
+  const magnitude = Math.sqrt(sumSq);
+  return clamp(magnitude / CENTER_DISTANCE_NORM_FACTOR, 0, 1);
 }
 
+/** Sommets de l'hexagone régulier (pointy-top), angle 90° - k*60° pour k=0..5, rayon 1. */
+const HEX_VERTICES: Array<{ x: number; y: number }> = [];
+for (let k = 0; k < 6; k++) {
+  const angle = Math.PI / 2 - (k * Math.PI) / 3;
+  HEX_VERTICES.push({ x: Math.cos(angle), y: Math.sin(angle) });
+}
+
+/**
+ * Position (x, y) dans l'hexagone unitaire (sommets sur le cercle unité).
+ * Repère : x et y dans environ [-1, 1]. Barycentre des 6 sommets pondérés par les scores.
+ */
 export function ideologyPointFromScores(scores: IdeologyScores): { x: number; y: number } {
   const normalized = normalizeIdeologyScores(scores);
-  const r = normalized.republicanism / 100;
-  const c = normalized.cultism / 100;
-  return {
-    x: r + c * 0.5,
-    y: c * 0.8660254038,
-  };
+  let x = 0;
+  let y = 0;
+  for (let k = 0; k < 6; k++) {
+    const w = normalized[IDEOLOGY_IDS[k]] / 100;
+    x += w * HEX_VERTICES[k].x;
+    y += w * HEX_VERTICES[k].y;
+  }
+  return { x, y };
 }
 
 function getStoredOrNeutralIdeology(country: IdeologyCountryInput): IdeologyScores {
-  const maybeStored = normalizeIdeologyScores({
-    monarchism: country.ideology_monarchism ?? 0,
-    republicanism: country.ideology_republicanism ?? 0,
-    cultism: country.ideology_cultism ?? 0,
-  });
-  const hasStored =
-    country.ideology_monarchism != null &&
-    country.ideology_republicanism != null &&
-    country.ideology_cultism != null;
-  return hasStored ? maybeStored : normalizeIdeologyScores({});
+  const raw: Partial<IdeologyScores> = {};
+  let hasAny = false;
+  for (const id of IDEOLOGY_IDS) {
+    const v = country[ideologyColumnName(id)];
+    raw[id] = num(v, 0);
+    if (v != null && Number.isFinite(Number(v))) hasAny = true;
+  }
+  if (!hasAny) return createNeutralScores();
+  return normalizeIdeologyScores(raw);
 }
 
 export function getIdeologyEffectTotals(
@@ -207,12 +326,10 @@ export function getIdeologyEffectTotals(
     const active = effect.duration_kind === "permanent" || (effect.duration_remaining ?? 0) > 0;
     if (!active) continue;
     const value = num(effect.value, 0);
-    if (effect.effect_kind === "ideology_drift_monarchism") totals.drift.monarchism += value;
-    if (effect.effect_kind === "ideology_drift_republicanism") totals.drift.republicanism += value;
-    if (effect.effect_kind === "ideology_drift_cultism") totals.drift.cultism += value;
-    if (effect.effect_kind === "ideology_snap_monarchism") totals.snap.monarchism += value;
-    if (effect.effect_kind === "ideology_snap_republicanism") totals.snap.republicanism += value;
-    if (effect.effect_kind === "ideology_snap_cultism") totals.snap.cultism += value;
+    for (const id of IDEOLOGY_IDS) {
+      if (effect.effect_kind === `ideology_drift_${id}`) totals.drift[id] += value;
+      if (effect.effect_kind === `ideology_snap_${id}`) totals.snap[id] += value;
+    }
   }
   return totals;
 }
@@ -261,7 +378,6 @@ export function computeWorldIdeologies(params: {
   neighborIdsByCountry?: Map<string, string[]>;
   controlRows?: IdeologyControlRow[];
   effectsByCountry?: Map<string, IdeologyEffectTotals>;
-  /** Règle sphere_influence_pct : % d'influence attribué à l'overlord (Contesté / Occupé / Annexé). */
   sphereInfluencePct?: SphereInfluencePct | null;
 }): Map<string, IdeologyCountryResult> {
   const config = params.config ?? DEFAULT_IDEOLOGY_CONFIG;
@@ -286,7 +402,7 @@ export function computeWorldIdeologies(params: {
   const out = new Map<string, IdeologyCountryResult>();
 
   for (const country of params.countries) {
-    const prior = priorByCountry.get(country.id) ?? normalizeIdeologyScores({});
+    const prior = priorByCountry.get(country.id) ?? createNeutralScores();
     const effectTotals = effectsByCountry.get(country.id) ?? { drift: createZeroScores(), snap: createZeroScores() };
     const neighbors = neighborIdsByCountry.get(country.id) ?? [];
     let neighborWeightSum = 0;
@@ -303,7 +419,7 @@ export function computeWorldIdeologies(params: {
       const effectivePct = controlRow ? getEffectiveSpherePct(controlRow, sphereInfluencePct) : 0;
       const controlFactor = controlRow ? 1 + (effectivePct / 100) * config.control_pull_weight : 1;
       const totalWeight = Math.max(0.05, relationFactor * influenceFactor * controlFactor);
-      const neighborScoresRaw = priorByCountry.get(neighborId) ?? normalizeIdeologyScores({});
+      const neighborScoresRaw = priorByCountry.get(neighborId) ?? createNeutralScores();
       const weightedPull = scaleScores(neighborScoresRaw, totalWeight);
       neighborWeightSum += totalWeight;
       neighborAccum = addScores(neighborAccum, weightedPull);
@@ -321,7 +437,7 @@ export function computeWorldIdeologies(params: {
     const neighborScores =
       neighborWeightSum > 0
         ? scaleScores(neighborAccum, 1 / neighborWeightSum)
-        : normalizeIdeologyScores({ monarchism: 33.3333, republicanism: 33.3333, cultism: 33.3334 });
+        : createNeutralScores();
 
     const effectsVector = scaleScores(effectTotals.drift, config.effect_pull_weight);
     const snapVector = scaleScores(effectTotals.snap, config.snap_strength);
@@ -333,16 +449,15 @@ export function computeWorldIdeologies(params: {
     const hasDirectionalSource = Math.max(...Object.values(sourceVector)) > 0;
     const target = hasDirectionalSource ? normalizeIdeologyScores(sourceVector) : prior;
 
-    const drift = {
-      monarchism: (target.monarchism - prior.monarchism) * config.daily_step,
-      republicanism: (target.republicanism - prior.republicanism) * config.daily_step,
-      cultism: (target.cultism - prior.cultism) * config.daily_step,
-    };
-    const scores = normalizeIdeologyScores({
-      monarchism: prior.monarchism + drift.monarchism,
-      republicanism: prior.republicanism + drift.republicanism,
-      cultism: prior.cultism + drift.cultism,
-    });
+    const drift = {} as IdeologyScores;
+    for (const id of IDEOLOGY_IDS) {
+      drift[id] = (target[id] - prior[id]) * config.daily_step;
+    }
+    const scoresRaw = {} as IdeologyScores;
+    for (const id of IDEOLOGY_IDS) {
+      scoresRaw[id] = prior[id] + drift[id];
+    }
+    const scores = normalizeIdeologyScoresWithAxioms(scoresRaw);
     const dominant = dominantIdeology(scores);
 
     out.set(country.id, {

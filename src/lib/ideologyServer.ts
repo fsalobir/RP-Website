@@ -4,13 +4,17 @@ import { computeInfluenceForAll } from "@/lib/influence";
 import {
   buildNeighborIdsByCountry,
   computeWorldIdeologies,
+  createZeroScores,
   getIdeologyConfig,
   getIdeologyEffectTotals,
+  ideologyColumnName,
+  IDEOLOGY_IDS,
   relationKey,
   type IdeologyCountryInput,
   type IdeologyCountryResult,
   type IdeologyEffectTotals,
 } from "@/lib/ideology";
+import { IDEOLOGY_EFFECT_KIND_IDS } from "@/lib/countryEffects";
 import type { MilitaryBranch } from "@/types/database";
 
 type WorldIdeologyState = {
@@ -36,7 +40,7 @@ export async function fetchWorldIdeologyState(supabase: SupabaseClient): Promise
   ] = await Promise.all([
     supabase
       .from("countries")
-      .select("id, name, slug, flag_url, regime, militarism, industry, science, stability, population, gdp, ai_status, ideology_monarchism, ideology_republicanism, ideology_cultism"),
+      .select("id, name, slug, flag_url, regime, militarism, industry, science, stability, population, gdp, ai_status, ideology_germanic_monarchy, ideology_merina_monarchy, ideology_french_republicanism, ideology_mughal_republicanism, ideology_nilotique_cultism, ideology_satoiste_cultism"),
     supabase.from("country_players").select("country_id"),
     supabase.from("map_region_countries").select("region_id, country_id"),
     supabase.from("map_region_neighbors").select("region_a_id, region_b_id"),
@@ -45,14 +49,7 @@ export async function fetchWorldIdeologyState(supabase: SupabaseClient): Promise
     supabase
       .from("country_effects")
       .select("country_id, effect_kind, value, duration_kind, duration_remaining")
-      .in("effect_kind", [
-        "ideology_drift_monarchism",
-        "ideology_drift_republicanism",
-        "ideology_drift_cultism",
-        "ideology_snap_monarchism",
-        "ideology_snap_republicanism",
-        "ideology_snap_cultism",
-      ])
+      .in("effect_kind", IDEOLOGY_EFFECT_KIND_IDS)
       .or("duration_remaining.gt.0,duration_kind.eq.permanent"),
     supabase.from("rule_parameters").select("key, value").in("key", ["ideology_config", "influence_config", "sphere_influence_pct"]),
     supabase.from("military_roster_units").select("id, branch, base_count"),
@@ -81,7 +78,7 @@ export async function fetchWorldIdeologyState(supabase: SupabaseClient): Promise
 
   const effectsByCountry = new Map<string, IdeologyEffectTotals>();
   for (const effect of effectsRes.data ?? []) {
-    const list = effectsByCountry.get(effect.country_id) ?? { drift: { monarchism: 0, republicanism: 0, cultism: 0 }, snap: { monarchism: 0, republicanism: 0, cultism: 0 } };
+    const list = effectsByCountry.get(effect.country_id) ?? { drift: createZeroScores(), snap: createZeroScores() };
     const next = getIdeologyEffectTotals([
       {
         effect_kind: effect.effect_kind,
@@ -90,18 +87,13 @@ export async function fetchWorldIdeologyState(supabase: SupabaseClient): Promise
         duration_remaining: effect.duration_remaining ?? undefined,
       },
     ]);
-    effectsByCountry.set(effect.country_id, {
-      drift: {
-        monarchism: list.drift.monarchism + next.drift.monarchism,
-        republicanism: list.drift.republicanism + next.drift.republicanism,
-        cultism: list.drift.cultism + next.drift.cultism,
-      },
-      snap: {
-        monarchism: list.snap.monarchism + next.snap.monarchism,
-        republicanism: list.snap.republicanism + next.snap.republicanism,
-        cultism: list.snap.cultism + next.snap.cultism,
-      },
-    });
+    const drift = { ...list.drift };
+    const snap = { ...list.snap };
+    for (const id of IDEOLOGY_IDS) {
+      drift[id] = list.drift[id] + next.drift[id];
+      snap[id] = list.snap[id] + next.snap[id];
+    }
+    effectsByCountry.set(effect.country_id, { drift, snap });
   }
 
   const rulesByKey = Object.fromEntries((rulesRes.data ?? []).map((row) => [row.key, row.value]));
@@ -156,18 +148,12 @@ export async function persistWorldIdeologies(supabase: SupabaseClient): Promise<
       neighbor_contributors: ideology.breakdown.neighborContributors,
       effects: ideology.breakdown.effects,
     };
-    const { error } = await supabase
-      .from("countries")
-      .update({
-        ideology_monarchism: Number(ideology.scores.monarchism.toFixed(4)),
-        ideology_republicanism: Number(ideology.scores.republicanism.toFixed(4)),
-        ideology_cultism: Number(ideology.scores.cultism.toFixed(4)),
-        ideology_drift_monarchism: Number(ideology.drift.monarchism.toFixed(4)),
-        ideology_drift_republicanism: Number(ideology.drift.republicanism.toFixed(4)),
-        ideology_drift_cultism: Number(ideology.drift.cultism.toFixed(4)),
-        ideology_breakdown: breakdown,
-      })
-      .eq("id", countryId);
+    const updatePayload: Record<string, number | object> = { ideology_breakdown: breakdown };
+    for (const id of IDEOLOGY_IDS) {
+      updatePayload[ideologyColumnName(id)] = Number(ideology.scores[id].toFixed(4));
+      updatePayload[ideologyColumnName(id, "ideology_drift")] = Number(ideology.drift[id].toFixed(4));
+    }
+    const { error } = await supabase.from("countries").update(updatePayload).eq("id", countryId);
     if (error) throw error;
   }
 }

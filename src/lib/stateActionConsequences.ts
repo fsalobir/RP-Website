@@ -14,7 +14,7 @@ import {
   formatAdminEffectShortForDiscord,
   DURATION_DAYS_MAX,
 } from "@/lib/countryEffects";
-import { normalizeIdeologyScores } from "@/lib/ideology";
+import { IDEOLOGY_IDS, ideologyColumnName, normalizeIdeologyScoresWithAxioms, type IdeologyId } from "@/lib/ideology";
 import type { AdminEffectAdded, DiceResults } from "@/types/database";
 
 function clampRelation(value: number): number {
@@ -134,34 +134,28 @@ export async function applyImmediateEffect(
     return {};
   }
 
-  if (
-    kind === "ideology_snap_monarchism" ||
-    kind === "ideology_snap_republicanism" ||
-    kind === "ideology_snap_cultism"
-  ) {
+  if (kind.startsWith("ideology_snap_")) {
+    const ideologyId = kind.replace("ideology_snap_", "") as IdeologyId;
+    if (!IDEOLOGY_IDS.includes(ideologyId)) return { error: `Idéologie inconnue : ${ideologyId}` };
+    const columns = IDEOLOGY_IDS.map((id) => ideologyColumnName(id));
     const { data: row } = await supabase
       .from("countries")
-      .select("ideology_monarchism, ideology_republicanism, ideology_cultism")
+      .select(columns.join(", "))
       .eq("id", countryId)
       .single();
-    const current = normalizeIdeologyScores({
-      monarchism: Number(row?.ideology_monarchism ?? 33.3333),
-      republicanism: Number(row?.ideology_republicanism ?? 33.3333),
-      cultism: Number(row?.ideology_cultism ?? 33.3334),
-    });
-    const shifted = normalizeIdeologyScores({
-      monarchism: current.monarchism + (kind === "ideology_snap_monarchism" ? value : 0),
-      republicanism: current.republicanism + (kind === "ideology_snap_republicanism" ? value : 0),
-      cultism: current.cultism + (kind === "ideology_snap_cultism" ? value : 0),
-    });
-    const { error: upErr } = await supabase
-      .from("countries")
-      .update({
-        ideology_monarchism: Number(shifted.monarchism.toFixed(4)),
-        ideology_republicanism: Number(shifted.republicanism.toFixed(4)),
-        ideology_cultism: Number(shifted.cultism.toFixed(4)),
-      })
-      .eq("id", countryId);
+    const currentRaw: Record<string, number> = {};
+    for (const id of IDEOLOGY_IDS) {
+      currentRaw[id] = Number((row as Record<string, unknown>)?.[ideologyColumnName(id)] ?? 100 / 6);
+    }
+    const current = normalizeIdeologyScoresWithAxioms(currentRaw);
+    const shiftedRaw = { ...current };
+    shiftedRaw[ideologyId] = current[ideologyId] + value;
+    const shifted = normalizeIdeologyScoresWithAxioms(shiftedRaw);
+    const updatePayload: Record<string, number> = {};
+    for (const id of IDEOLOGY_IDS) {
+      updatePayload[ideologyColumnName(id)] = Number(shifted[id].toFixed(4));
+    }
+    const { error: upErr } = await supabase.from("countries").update(updatePayload).eq("id", countryId);
     if (upErr) return { error: upErr.message };
     return {};
   }

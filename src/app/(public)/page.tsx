@@ -18,10 +18,10 @@ export default async function HomePage({
   const showUnauthorized = params.error === "non-autorise";
   const supabase = await createClient();
 
-  const [countriesResult, historyResult, rulesRes, rosterUnitsRes, rosterLevelsRes, countryMilitaryRes, effectsRes, lawsRes, controlRes] = await Promise.all([
+  const [countriesResult, historyResult, rulesRes, rosterUnitsRes, rosterLevelsRes, countryMilitaryRes, effectsRes, lawsRes, controlRes, countryPlayersRes] = await Promise.all([
     supabase
       .from("countries")
-      .select("id, name, slug, flag_url, regime, population, gdp, militarism, industry, science, stability")
+      .select("id, name, slug, flag_url, regime, population, gdp, militarism, industry, science, stability, ai_status")
       .order("name"),
     supabase
       .from("country_history")
@@ -41,6 +41,7 @@ export default async function HomePage({
     supabase.from("country_effects").select("country_id, effect_kind, effect_target, value, duration_remaining, duration_kind").or("duration_remaining.gt.0,duration_kind.eq.permanent"),
     supabase.from("country_laws").select("country_id, law_key, score"),
     supabase.from("country_control").select("country_id, controller_country_id, share_pct, is_annexed"),
+    supabase.from("country_players").select("country_id"),
   ]);
 
   const { data: countries, error } = countriesResult;
@@ -153,6 +154,12 @@ export default async function HomePage({
       };
     }) ?? [];
 
+  const countryIdsWithPlayer = new Set((countryPlayersRes?.data ?? []).map((p: { country_id: string }) => p.country_id));
+  const assignedCountryIds =
+    countries?.filter(
+      (c) => countryIdsWithPlayer.has(c.id) || (c.ai_status != null && String(c.ai_status).trim() !== "")
+    ).map((c) => c.id) ?? [];
+
   return (
     <div className="relative w-full px-4 py-10">
       {/* Arrière-plan fixe (parallaxe) : taille viewport, reste visible au scroll */}
@@ -190,7 +197,7 @@ export default async function HomePage({
             </Link>
           </div>
         ) : (
-          <CountriesTable rows={rows} showSearch showWikiTooltips glassContext />
+          <CountriesTable rows={rows} showSearch showWikiTooltips glassContext showAssignmentFilter assignedCountryIds={assignedCountryIds} />
         )}
       </div>
     </div>

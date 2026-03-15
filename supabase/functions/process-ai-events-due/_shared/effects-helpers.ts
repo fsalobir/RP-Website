@@ -19,7 +19,10 @@ function formatEffectValue(kind: string, value: number): string {
     return `${Number(value) >= 0 ? "+" : ""}${(Number(value) * 100).toFixed(2)} %`;
   }
   if (kind === "budget_allocation_cap") return `${Number(value) >= 0 ? "+" : ""}${Number(value).toFixed(0)} %`;
-  if (kind.startsWith("influence_modifier_")) return `${(value * 100 - 100).toFixed(0)} %`;
+  if (kind.startsWith("influence_modifier_")) {
+    const v = Number(value);
+    return `×${v.toLocaleString("fr-FR", { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`;
+  }
   if (kind === "relation_delta") return `${Number(value) >= 0 ? "+" : ""}${Number(value)}`;
   if (kind.startsWith("ideology_drift_") || kind.startsWith("ideology_snap_")) {
     return `${Number(value) >= 0 ? "+" : ""}${Number(value).toFixed(2)}`;

@@ -129,6 +129,8 @@ export function CountriesTable({
   showSearch = false,
   showWikiTooltips = false,
   glassContext = false,
+  showAssignmentFilter = false,
+  assignedCountryIds = [],
 }: {
   rows: Row[];
   showModifierButton?: boolean;
@@ -146,6 +148,10 @@ export function CountriesTable({
   showWikiTooltips?: boolean;
   /** Style glass (fond image accueil) : panneau flouté, texte blanc. */
   glassContext?: boolean;
+  /** Afficher le filtre Tous / Assignés uniquement (masquer les pays sans joueur ni IA). */
+  showAssignmentFilter?: boolean;
+  /** Ids des pays assignés (joueur ou IA). Utilisé quand showAssignmentFilter est true. */
+  assignedCountryIds?: string[];
 }) {
   const playedSet = useMemo(() => new Set(countryIdsWithPlayer), [countryIdsWithPlayer]);
   const wikiAccueil = showWikiTooltips ? (
@@ -161,8 +167,10 @@ export function CountriesTable({
   const [pendingId, setPendingId] = useState<string | null>(null);
   const [continentPendingId, setContinentPendingId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
+  const [assignmentFilter, setAssignmentFilter] = useState<"all" | "assigned_only">("all");
   const [isPending, startTransition] = useTransition();
 
+  const assignedSet = useMemo(() => new Set(assignedCountryIds), [assignedCountryIds]);
   const continentLabelById = useMemo(
     () => Object.fromEntries(continents.map((co) => [co.id, co.label_fr])),
     [continents]
@@ -188,6 +196,9 @@ export function CountriesTable({
       });
     }
     let list = [...rows];
+    if (showAssignmentFilter && assignmentFilter === "assigned_only") {
+      list = list.filter((row) => assignedSet.has(row.country.id));
+    }
     if (showSearch && searchQuery.trim()) {
       const q = searchQuery.trim().toLowerCase();
       list = list.filter((row) => {
@@ -202,7 +213,7 @@ export function CountriesTable({
       const vb = getSortValue(b, sortKey);
       return compare(va, vb, sortOrder === "asc");
     });
-  }, [rows, sortKey, adminSortKey, sortOrder, adminLayout, showSearch, searchQuery, playerNameByCountryId, continentLabelById]);
+  }, [rows, sortKey, adminSortKey, sortOrder, adminLayout, showSearch, showAssignmentFilter, assignmentFilter, assignedSet, searchQuery, playerNameByCountryId, continentLabelById]);
 
   function handleHeaderClick(key: SortKey) {
     if (sortKey === key) {
@@ -411,17 +422,44 @@ export function CountriesTable({
     <div className={showSearch ? tableWrapperClass : `overflow-x-auto ${tableWrapperClass}`} style={panelStyle}>
       {showSearch && (
         <div className={`p-3 border-b ${glassContext ? `border-white/20 ${glassMutedClass}` : ""}`} style={!glassContext ? { borderColor: "var(--border)" } : undefined}>
-          <input
-            type="search"
-            placeholder="Rechercher par pays ou régime…"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className={glassContext
-              ? "w-full max-w-md rounded-xl border border-white/30 bg-white/20 px-3 py-2 text-sm text-white placeholder:text-white/60 focus:border-white/50 focus:outline-none focus:ring-2 focus:ring-white/30"
-              : "w-full max-w-md rounded border bg-[var(--background)] px-3 py-2 text-sm text-[var(--foreground)] placeholder:text-[var(--foreground-muted)]"}
-            style={!glassContext ? { borderColor: "var(--border)" } : undefined}
-            aria-label="Rechercher dans la liste des pays"
-          />
+          <div className="flex flex-wrap items-center gap-3">
+            <input
+              type="search"
+              placeholder="Rechercher par pays ou régime…"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className={glassContext
+                ? "w-full max-w-md rounded-xl border border-white/30 bg-white/20 px-3 py-2 text-sm text-white placeholder:text-white/60 focus:border-white/50 focus:outline-none focus:ring-2 focus:ring-white/30"
+                : "w-full max-w-md rounded border bg-[var(--background)] px-3 py-2 text-sm text-[var(--foreground)] placeholder:text-[var(--foreground-muted)]"}
+              style={!glassContext ? { borderColor: "var(--border)" } : undefined}
+              aria-label="Rechercher dans la liste des pays"
+            />
+            {showAssignmentFilter && (
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-[var(--foreground-muted)]">Afficher :</span>
+                <button
+                  type="button"
+                  onClick={() => setAssignmentFilter("all")}
+                  className={`rounded border px-3 py-1.5 text-sm font-medium transition-colors ${assignmentFilter === "all"
+                    ? glassContext ? "border-white/50 bg-white/25 text-white" : "border-[var(--accent)] bg-[var(--accent)]/10 text-[var(--accent)]"
+                    : glassContext ? "border-white/30 text-white/80 hover:bg-white/15" : "border-[var(--border)] text-[var(--foreground-muted)] hover:border-[var(--border-muted)] hover:text-[var(--foreground)]"}`}
+                  style={assignmentFilter !== "all" && !glassContext ? { borderColor: "var(--border)" } : undefined}
+                >
+                  Tous
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setAssignmentFilter("assigned_only")}
+                  className={`rounded border px-3 py-1.5 text-sm font-medium transition-colors ${assignmentFilter === "assigned_only"
+                    ? glassContext ? "border-white/50 bg-white/25 text-white" : "border-[var(--accent)] bg-[var(--accent)]/10 text-[var(--accent)]"
+                    : glassContext ? "border-white/30 text-white/80 hover:bg-white/15" : "border-[var(--border)] text-[var(--foreground-muted)] hover:border-[var(--border-muted)] hover:text-[var(--foreground)]"}`}
+                  style={assignmentFilter !== "assigned_only" && !glassContext ? { borderColor: "var(--border)" } : undefined}
+                >
+                  Assignés uniquement
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       )}
       <div className={showSearch ? "overflow-x-auto" : ""}>

@@ -15,12 +15,18 @@ export interface Country {
   growth: number
   /** Pays IA Majeur (major) ou Mineur (minor) pour les pays sans joueur. Null = pas IA. */
   ai_status?: string | null
-  ideology_monarchism?: number | null
-  ideology_republicanism?: number | null
-  ideology_cultism?: number | null
-  ideology_drift_monarchism?: number | null
-  ideology_drift_republicanism?: number | null
-  ideology_drift_cultism?: number | null
+  ideology_germanic_monarchy?: number | null
+  ideology_merina_monarchy?: number | null
+  ideology_french_republicanism?: number | null
+  ideology_mughal_republicanism?: number | null
+  ideology_nilotique_cultism?: number | null
+  ideology_satoiste_cultism?: number | null
+  ideology_drift_germanic_monarchy?: number | null
+  ideology_drift_merina_monarchy?: number | null
+  ideology_drift_french_republicanism?: number | null
+  ideology_drift_mughal_republicanism?: number | null
+  ideology_drift_nilotique_cultism?: number | null
+  ideology_drift_satoiste_cultism?: number | null
   ideology_breakdown?: Record<string, unknown> | null
   created_at: string
   updated_at: string

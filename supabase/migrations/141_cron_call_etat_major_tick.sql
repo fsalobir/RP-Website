@@ -1,4 +1,5 @@
 -- Appeler run_etat_major_tick() depuis run_daily_country_update (après mise à jour des stats, avant state_actions).
+-- Renuméroté 141 pour éviter le doublon de version avec 137_ideology_hexagon_6.
 
 CREATE OR REPLACE FUNCTION public.run_daily_country_update()
 RETURNS void

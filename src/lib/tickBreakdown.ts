@@ -131,6 +131,8 @@ export type TickBreakdownContext = {
   ai_status?: string | null;
   aiMajorEffects?: Array<{ effect_kind: string; effect_target: string | null; value: number }>;
   aiMinorEffects?: Array<{ effect_kind: string; effect_target: string | null; value: number }>;
+  ideologyScores?: Record<string, number>;
+  ideologyEffectsConfig?: Array<{ ideology_id: string; effect_kind: string; effect_target: string | null; value: number }>;
 };
 
 export type GetTickBreakdownOptions = {
@@ -173,6 +175,8 @@ export function getTickBreakdown(
     ai_status: context.ai_status,
     aiMajorEffects: context.aiMajorEffects,
     aiMinorEffects: context.aiMinorEffects,
+    ideologyScores: context.ideologyScores,
+    ideologyEffectsConfig: context.ideologyEffectsConfig,
   });
 
   const effectsForTick = getEffectsForCountryTickRates({
@@ -183,6 +187,8 @@ export function getTickBreakdown(
     ai_status: context.ai_status,
     aiMajorEffects: context.aiMajorEffects,
     aiMinorEffects: context.aiMinorEffects,
+    ideologyScores: context.ideologyScores,
+    ideologyEffectsConfig: context.ideologyEffectsConfig,
   });
 
   const expected = getExpectedNextTick(
