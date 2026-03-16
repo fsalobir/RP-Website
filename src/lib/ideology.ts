@@ -33,21 +33,23 @@ export const IDEOLOGY_DESCRIPTIONS: Record<IdeologyId, string> = {
 /** Image d’en-tête optionnelle pour l’infobox au survol (hexagone). */
 export const IDEOLOGY_INFOBOX_HEADER_IMAGE: Record<IdeologyId, string | null> = {
   germanic_monarchy: null,
-  merina_monarchy: null,
+  merina_monarchy: "/images/ideology/merina_monarchy.png",
   french_republicanism: "/images/ideology/french_republicanism.png",
   mughal_republicanism: null,
-  nilotique_cultism: null,
+  nilotique_cultism: "/images/ideology/nilotique_cultism.png",
   satoiste_cultism: "/images/ideology/satoiste.png",
 };
 
 /** Description longue optionnelle pour l’infobox (hexagone). */
 export const IDEOLOGY_INFOBOX_LONG_DESCRIPTION: Record<IdeologyId, string | null> = {
   germanic_monarchy: null,
-  merina_monarchy: null,
+  merina_monarchy:
+    "Fort de sa splendide isolation, l'île de Madagascar a lentement évolué vers un niveau de développement où le Roi a du partager le poids de diriger. Le Roi pousse le profit individuel, le parlement pousse les réformes sociales.",
   french_republicanism:
     "Né des guerres successives avec les monarchies, le Républicanisme français est un rejet radical des élites, et de l'oppression royale-capitaliste. La société doit être fondée sur l'équité radicale : la liberté collective est le fruit du sacrifice individuel.",
   mughal_republicanism: null,
-  nilotique_cultism: null,
+  nilotique_cultism:
+    "Idéologie forgée sur les rives du plus long fleuve du monde. Sous l'apparence d'un État décentralisé, le pouvoir reste fermement concentré entre les mains d'une élite tentaculaire. De manière purement cynique, cette oligarchie n'hésite pas à instrumentaliser la foi pour galvaniser les foules, sans pour autant nécessairement adhérer aux croyances qu'elle prêche.",
   satoiste_cultism:
     "Nommé du nom du premier ministre japonais éponyme, le Satoisme mêle une croyance mystique à un culte féroce du chef. La divinité du leader fort qui dirige l'état fort est le socle de la politique gouvernementale. La politique totalitaire et nationaliste appliquée par l'état sert les ambitions agressives définies par le Guide.",
 };
@@ -55,10 +57,10 @@ export const IDEOLOGY_INFOBOX_LONG_DESCRIPTION: Record<IdeologyId, string | null
 /** Calque optionnel (image de fond) par secteur de l’hexagone, même ordre que IDEOLOGY_IDS. */
 export const IDEOLOGY_HEX_LAYER_IMAGE: Record<IdeologyId, string | null> = {
   germanic_monarchy: null,
-  merina_monarchy: null,
+  merina_monarchy: "/images/ideology/merina_monarchy.png",
   french_republicanism: "/images/ideology/french_republicanism.png",
   mughal_republicanism: null,
-  nilotique_cultism: null,
+  nilotique_cultism: "/images/ideology/nilotique_cultism.png",
   satoiste_cultism: "/images/ideology/satoiste.png",
 };
 

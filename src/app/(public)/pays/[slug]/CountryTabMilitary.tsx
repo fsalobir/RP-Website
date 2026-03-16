@@ -124,8 +124,8 @@ export function CountryTabMilitary({
             }));
         })();
 
-        return (
-          <section key={branch} className={glassPanelClass} style={glassPanelStyle}>
+        const sectionContent = (
+          <>
             <h2 className={`mb-3 text-lg font-semibold ${glassTextClass}`}>
               {BRANCH_LABELS[branch]}
               {effectiveLimitByBranch[branch] > 0 && (
@@ -142,12 +142,12 @@ export function CountryTabMilitary({
                   const subKey = `${branch}_${subType ?? "__none__"}`;
                   const isOpen = militarySubtypeOpen[subKey] !== false;
                   return (
-                    <div key={subKey} className="rounded-xl border border-white/25 overflow-hidden" style={{ background: "rgba(255,255,255,0.08)" }}>
+                    <div key={subKey} className="rounded-xl border border-white/25 overflow-hidden" style={{ background: "rgba(255,255,255,0.12)", backdropFilter: "blur(12px)" }}>
                       <button
                         type="button"
                         onClick={() => setMilitarySubtypeOpen((prev) => ({ ...prev, [subKey]: prev[subKey] === false }))}
                         className={`flex w-full items-center gap-2 py-1.5 px-3 text-left text-sm font-medium ${glassTextClass} hover:bg-white/10 transition-colors`}
-                        style={{ background: "rgba(255,255,255,0.06)" }}
+                        style={{ background: "rgba(255,255,255,0.12)", backdropFilter: "blur(12px)" }}
                       >
                         <span
                           className="inline-block transition-transform duration-200 ease-out"
@@ -341,6 +341,25 @@ export function CountryTabMilitary({
                 })}
               </div>
             )}
+          </>
+        );
+        const branchBg = branch === "mer" ? MER_BG : branch === "strategique" ? STRATEGIQUE_BG : null;
+        return (
+          <section key={branch} className="relative overflow-hidden rounded-2xl border border-white/25" style={{ background: "transparent" }}>
+            <div className="absolute inset-0 overflow-hidden rounded-2xl" aria-hidden>
+              {branchBg && (
+                <div
+                  className="absolute inset-0 bg-cover bg-no-repeat scale-105"
+                  style={{
+                    backgroundImage: `url(${branchBg})`,
+                    backgroundPosition: "top center",
+                    filter: "blur(0.5px)",
+                  }}
+                />
+              )}
+              <div className="absolute inset-0 bg-[var(--background-panel)]/75" />
+            </div>
+            <div className="relative z-10 p-6">{sectionContent}</div>
           </section>
         );
       })}
@@ -368,6 +387,8 @@ function getIntelMessage(level: number): string {
 }
 
 const RENSEIGNEMENT_BG = "/images/site/renseignement-insuffisant-bg.png";
+const MER_BG = "/images/site/mer-bg.png";
+const STRATEGIQUE_BG = "/images/site/strategique-bg.png";
 
 function IntelGauge({
   level,
@@ -466,7 +487,7 @@ function FoggedBranchView({
       <p className={`mb-4 text-sm ${mutedClass}`}>
         Données fragmentaires — les fourchettes ci-dessous sont des estimations.
       </p>
-      <div className="overflow-x-auto rounded-xl border border-white/25" style={{ background: "rgba(255,255,255,0.08)" }}>
+      <div className="overflow-x-auto rounded-xl border border-white/25" style={{ background: "rgba(255,255,255,0.12)", backdropFilter: "blur(12px)" }}>
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-white/25">
@@ -556,7 +577,7 @@ function FoggedUnitView({
       <h2 className={`mb-3 text-xl font-semibold ${textClass}`}>
         {BRANCH_LABELS[branch]}
       </h2>
-      <div className="overflow-x-auto rounded-xl border border-white/25" style={{ background: "rgba(255,255,255,0.08)" }}>
+      <div className="overflow-x-auto rounded-xl border border-white/25" style={{ background: "rgba(255,255,255,0.12)", backdropFilter: "blur(12px)" }}>
         <table className="w-full text-sm table-fixed">
           <thead>
             <tr className="border-b border-white/25">
