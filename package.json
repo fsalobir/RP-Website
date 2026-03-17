@@ -14,6 +14,7 @@
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "e2e": "playwright test",
+    "test:e2e": "playwright test",
     "supabase": "node scripts/run-supabase.mjs",
     "supabase:functions:serve:process-due": "node scripts/run-supabase.mjs functions serve process-ai-events-due --no-verify-jwt",
     "test:e2e:setup": "npm run supabase -- start && npm run supabase -- db reset --local",
@@ -23,6 +24,8 @@
     "seed:map-regions": "node --env-file=.env.local scripts/seed-map-regions.js",
     "generate:orphan-regions": "node scripts/generate-fill-orphan-regions.js",
     "test:process-due-parity": "node --env-file=.env.local scripts/process-due-parity-check.js"
+    ,
+    "test:db:reset": "npm run supabase -- db reset --local"
   },
   "dependencies": {
     "@supabase/ssr": "^0.8.0",

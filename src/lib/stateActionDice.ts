@@ -147,7 +147,8 @@ export async function computeAiEventDiceRoll({
     roll,
     modifier: totalModifier,
     total,
-    stat_modifiers: Object.keys(statModifiers).length > 0 ? statModifiers : undefined,
+    // Toujours fournir un objet (même vide) pour permettre des assertions strictes côté tests/UI.
+    stat_modifiers: statModifiers,
     admin_modifier: adminSum !== 0 ? adminSum : undefined,
     relation_modifier: relationModifier !== 0 ? relationModifier : undefined,
     influence_modifier: influenceModifier !== 0 ? influenceModifier : undefined,

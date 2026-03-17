@@ -49,3 +49,8 @@ export async function GET(request: NextRequest) {
 
   return NextResponse.json({ ok: true });
 }
+
+// Support POST pour les tests d'intégration (même logique que GET).
+export async function POST(request: NextRequest) {
+  return GET(request);
+}

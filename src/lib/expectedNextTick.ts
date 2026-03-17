@@ -157,7 +157,11 @@ function ministryContribution(
 }
 
 function safeNum(n: number): number {
-  return typeof n === "number" && !Number.isNaN(n) ? n : 0;
+  if (typeof n !== "number" || Number.isNaN(n) || !Number.isFinite(n)) return 0;
+  // Normalisation anti-artefacts flottants (ex. 0.020000000000000004 → 0.02)
+  // pour permettre des attentes strictes et des totaux stables.
+  const rounded = Math.round(n * 1e12) / 1e12;
+  return Object.is(rounded, -0) ? 0 : rounded;
 }
 
 export type ExpectedNextTickResult = {

@@ -2,104 +2,76 @@ name: CI
 
 on:
   push:
-    branches: [main, fantasy]
+    branches: [main]
   pull_request:
-    branches: [main, fantasy]
+    branches: [main]
 
 jobs:
-  test:
+  test-and-build:
     runs-on: ubuntu-latest
+    env:
+      # Utilisé par les routes /api/cron/*
+      CRON_SECRET: test-cron-secret
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Setup Node
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: npm
 
-      - name: Install dependencies
-        run: npm ci
+      - run: npm ci
 
-      - name: Lint
-        run: npm run lint
+      - run: npm run lint
 
-      - name: Build
-        run: npm run build
+      - run: npm run test
 
-      - name: Unit tests
-        run: npm run test
-
-  integration-e2e:
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: npm
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Install Playwright browsers
-        run: npx playwright install --with-deps chromium
-
-      - name: Setup Supabase CLI
-        uses: supabase/setup-cli@v1
+      - uses: supabase/setup-cli@v1
         with:
           version: latest
 
-      - name: Start Supabase local
-        run: supabase start
+      - name: Start Supabase local (and reset DB)
+        run: supabase start && supabase db reset --local
 
-      - name: Reset DB (migrations + seed)
-        run: supabase db reset --local
+      - run: npx playwright install --with-deps
 
-      - name: Export Supabase local env
+      - name: npm run build
         run: |
-          supabase status -o env | grep -v '^Stopped services:' >> "$GITHUB_ENV"
+          # On exporte les variables Supabase local nécessaires au build Next.js.
+          supabase status -o env | node -e "
+            let buf = '';
+            process.stdin.setEncoding('utf8');
+            process.stdin.on('data', (d) => (buf += d));
+            process.stdin.on('end', () => {
+              for (const rawLine of buf.split(/\r?\n/)) {
+                const line = rawLine.trim();
+                if (!line) continue;
+                if (line.startsWith('Stopped services:')) continue;
+                const eqIdx = line.indexOf('=');
+                if (eqIdx <= 0) continue;
+                const key = line.slice(0, eqIdx);
+                let value = line.slice(eqIdx + 1);
+                if (value.startsWith('\"') && value.endsWith('\"')) value = value.slice(1, -1);
+                process.stdout.write(`${key}=${value}\n`);
+              }
+            });
+          " > /tmp/supabase.env
 
-      - name: Start Edge Function (process-ai-events-due)
-        run: |
-          nohup supabase functions serve process-ai-events-due --no-verify-jwt > /tmp/supabase-functions.log 2>&1 &
+          set -a
+          . /tmp/supabase.env
+          set +a
 
-      - name: Build Next.js
-        run: npm run build
-        env:
-          NEXT_PUBLIC_SUPABASE_URL: ${{ env.API_URL }}
-          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ env.ANON_KEY }}
-          SUPABASE_SERVICE_ROLE_KEY: ${{ env.SERVICE_ROLE_KEY }}
+          export NEXT_PUBLIC_SUPABASE_URL="${API_URL:-http://127.0.0.1:54321}"
+          export NEXT_PUBLIC_SUPABASE_ANON_KEY="${ANON_KEY:-}"
+          export SUPABASE_SERVICE_ROLE_KEY="${SERVICE_ROLE_KEY:-}"
 
-      - name: Start Next.js (background)
-        run: |
-          nohup npm run start -- -p 3000 > /tmp/next.log 2>&1 &
-        env:
-          PORT: "3000"
-          NEXT_PUBLIC_SUPABASE_URL: ${{ env.API_URL }}
-          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ env.ANON_KEY }}
-          SUPABASE_SERVICE_ROLE_KEY: ${{ env.SERVICE_ROLE_KEY }}
-          CRON_SECRET: "test-cron-secret"
+          npm run build
 
-      - name: Wait for app
-        run: |
-          for i in $(seq 1 60); do
-            if curl -fsS "http://localhost:3000/" > /dev/null; then
-              exit 0
-            fi
-            sleep 2
-          done
-          echo "Next.js did not become ready. Logs:"
-          tail -n 200 /tmp/next.log || true
-          exit 1
+      - run: npm run test:e2e
 
-      - name: Run Playwright E2E
-        run: npm run test:e2e:run
-        env:
-          PLAYWRIGHT_BASE_URL: "http://localhost:3000"
-
+      - name: Upload Playwright report (on failure)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: playwright-report/

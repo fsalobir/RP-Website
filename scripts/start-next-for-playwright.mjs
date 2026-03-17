@@ -53,6 +53,8 @@ const nextEnv = {
   NEXT_PUBLIC_SUPABASE_URL: supabaseEnv.API_URL ?? "http://127.0.0.1:54321",
   NEXT_PUBLIC_SUPABASE_ANON_KEY: supabaseEnv.ANON_KEY,
   SUPABASE_SERVICE_ROLE_KEY: supabaseEnv.SERVICE_ROLE_KEY,
+  // Secret cron pour les tests d'intégration (routes /api/cron/*)
+  CRON_SECRET: process.env.CRON_SECRET ?? "test-cron-secret",
 };
 
 if (!nextEnv.NEXT_PUBLIC_SUPABASE_ANON_KEY || !nextEnv.SUPABASE_SERVICE_ROLE_KEY) {

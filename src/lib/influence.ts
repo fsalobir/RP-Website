@@ -50,6 +50,12 @@ function getConfigVal(config: InfluenceConfig, key: keyof InfluenceConfig, fallb
   return typeof v === "number" && !Number.isNaN(v) ? v : fallback;
 }
 
+function stableNum(n: number): number {
+  if (typeof n !== "number" || Number.isNaN(n) || !Number.isFinite(n)) return 0;
+  const rounded = Math.round(n * 1e12) / 1e12;
+  return Object.is(rounded, -0) ? 0 : rounded;
+}
+
 /** Facteur de gravité (comme expectedNextTick). Borné [0,1 ; 2]. */
 function gravityFactor(worldAvg: number, countryVal: number, gravityPct: number, contribution: number): number {
   if (worldAvg === 0) return 1;
@@ -139,13 +145,13 @@ export function computeInfluenceForAll(
     const gfMil = gravityFactor(worldAvgMil, comp.military, gravityMil, comp.military);
 
     const afterGravity = {
-      gdp: comp.gdp * gfGdp,
-      population: comp.population * gfPop,
-      stabilityMultiplier: comp.stabilityMultiplier,
-      military: comp.military * gfMil,
+      gdp: stableNum(comp.gdp * gfGdp),
+      population: stableNum(comp.population * gfPop),
+      stabilityMultiplier: stableNum(comp.stabilityMultiplier),
+      military: stableNum(comp.military * gfMil),
     };
-    const baseInfluence = afterGravity.gdp + afterGravity.population + afterGravity.military;
-    const influence = baseInfluence * afterGravity.stabilityMultiplier;
+    const baseInfluence = stableNum(afterGravity.gdp + afterGravity.population + afterGravity.military);
+    const influence = stableNum(baseInfluence * afterGravity.stabilityMultiplier);
 
     byCountry.set(c.id, {
       influence,
@@ -166,18 +172,18 @@ export function applyInfluenceModifiers(
   mods: InfluenceModifiers
 ): InfluenceResult {
   const ag = result.componentsAfterGravity;
-  const gdp = ag.gdp * mods.gdp;
-  const population = ag.population * mods.population;
-  const military = ag.military * mods.hard_power;
-  const baseInfluence = gdp + population + military;
-  const influence = baseInfluence * ag.stabilityMultiplier * mods.global;
+  const gdp = stableNum(ag.gdp * mods.gdp);
+  const population = stableNum(ag.population * mods.population);
+  const military = stableNum(ag.military * mods.hard_power);
+  const baseInfluence = stableNum(gdp + population + military);
+  const influence = stableNum(baseInfluence * ag.stabilityMultiplier * mods.global);
   return {
     influence,
     components: result.components,
     componentsAfterGravity: {
       gdp,
       population,
-      stabilityMultiplier: ag.stabilityMultiplier,
+      stabilityMultiplier: stableNum(ag.stabilityMultiplier),
       military,
     },
   };
