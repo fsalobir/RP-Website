@@ -624,8 +624,13 @@ export function CountryTabs({
 
   const handleDeleteEffect = async (e: CountryEffect) => {
     if (!confirm("Supprimer cet effet ?")) return;
+    setEffectError(null);
     const supabase = createClient();
-    await supabase.from("country_effects").delete().eq("id", e.id);
+    const { error } = await supabase.from("country_effects").delete().eq("id", e.id);
+    if (error) {
+      setEffectError(error.message || "La suppression a échoué.");
+      return;
+    }
     router.refresh();
   };
 
@@ -739,7 +744,11 @@ export function CountryTabs({
           if (total > 0) {
             const scale = cap / total;
             BUDGET_MINISTRIES.forEach((m) => { curPcts[m.key] = curPcts[m.key] * scale; });
-            await supabase.from("country_budget").update({ ...curPcts, updated_at: new Date().toISOString() }).eq("id", current.id);
+            const { error: budgetErr } = await supabase
+              .from("country_budget")
+              .update({ ...curPcts, updated_at: new Date().toISOString() })
+              .eq("id", current.id);
+            if (budgetErr && !err) err = budgetErr.message;
           }
         }
       }

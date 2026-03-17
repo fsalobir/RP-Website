@@ -332,6 +332,7 @@ export function ReglesForm({
   const [items, setItems] = useState(rules);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [ruleValueError, setRuleValueError] = useState<string | null>(null);
   const [globalGrowthOpen, setGlobalGrowthOpen] = useState(false);
   const [globalEffectFormOpen, setGlobalEffectFormOpen] = useState(false);
   const [globalEffectEditIndex, setGlobalEffectEditIndex] = useState<number | null>(null);
@@ -387,6 +388,10 @@ export function ReglesForm({
   async function saveAll() {
     if (items.length === 0) return;
     setError(null);
+    if (ruleValueError) {
+      setError("Impossible d'enregistrer : une ou plusieurs valeurs sont invalides (JSON). Corrigez-les puis réessayez.");
+      return;
+    }
     setSaving(true);
     try {
       let hadError = false;
@@ -1023,10 +1028,17 @@ export function ReglesForm({
     else if (v.startsWith("{") || v.startsWith("[")) {
       try {
         parsed = JSON.parse(v);
-      } catch {
-        parsed = v;
+        setRuleValueError(null);
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        setRuleValueError(
+          `JSON invalide. Corrigez la syntaxe (erreur: ${msg}). ` +
+            `Si vous souhaitez enregistrer une chaîne, entourez-la de guillemets (ex: "texte").`
+        );
+        return;
       }
     }
+    setRuleValueError(null);
     updateValue(id, parsed);
   }
 
@@ -1090,6 +1102,7 @@ export function ReglesForm({
         )}
       </div>
       {error && <p className="text-[var(--danger)]">{error}</p>}
+      {ruleValueError && <p className="text-[var(--danger)]">{ruleValueError}</p>}
       {!(items.length > 0 || (countriesForMatrice && relationMapForMatrice)) ? (
         <div
           className="rounded-lg border p-8 text-center"
