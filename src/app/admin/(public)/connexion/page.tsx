@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import Link from "next/link";
-import { getRedirectPathAfterLogin } from "./actions";
+import { getRedirectPathAfterLogin } from "../../connexion/actions";
 
 export default function AdminConnexionPage() {
   const [email, setEmail] = useState("");
@@ -110,3 +110,4 @@ export default function AdminConnexionPage() {
     </div>
   );
 }
+
