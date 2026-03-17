@@ -207,7 +207,7 @@ export async function runDailyCountryUpdate(): Promise<{ error?: string }> {
   revalidatePath("/");
   revalidatePath("/classement");
   revalidatePath("/ideologie");
-  revalidateTag("country-page-globals", "max");
+  revalidateTag("country-page-globals");
   return {};
 }
 
@@ -388,7 +388,7 @@ export async function randomizeCountryIdeologies(): Promise<{ error?: string; up
   revalidatePath("/");
   revalidatePath("/classement");
   revalidatePath("/ideologie");
-  revalidateTag("country-page-globals", "max");
+  revalidateTag("country-page-globals");
   return { updated: countries.length };
 }
 
@@ -412,7 +412,7 @@ export async function deleteCountry(countryId: string): Promise<{ error?: string
   revalidatePath("/");
   revalidatePath("/classement");
   revalidatePath("/ideologie");
-  revalidateTag("country-page-globals", "max");
+  revalidateTag("country-page-globals");
   return {};
 }
 

@@ -1,4 +1,4 @@
-import { unstable_cache, unstable_noStore } from "next/cache";
+import { unstable_cache } from "next/cache";
 import { createClient, createAnonClientForCache, createServiceRoleClient } from "@/lib/supabase/server";
 import { getCachedAuth } from "@/lib/auth-server";
 import { notFound } from "next/navigation";
@@ -78,14 +78,8 @@ export const dynamic = "force-dynamic";
 export type { RosterRowByBranch };
 export type { FoggedRoster } from "@/lib/intelFog";
 
-export default async function CountryPage({
-  params,
-}: {
-  params: Promise<{ slug: string }>;
-}) {
-  unstable_noStore();
-  const { slug } = await params;
-  const supabase = await createClient();
+async function fetchCountryPagePublicData(slug: string) {
+  const supabase = createAnonClientForCache();
 
   const { data: country, error } = await supabase
     .from("countries")
@@ -93,15 +87,9 @@ export default async function CountryPage({
     .eq("slug", slug)
     .single();
 
-  if (error || !country) notFound();
+  if (error || !country) return { country: null as typeof country | null };
 
-  const auth = await getCachedAuth();
-  const isAdmin = auth.isAdmin;
-  const isPlayerForThisCountry = auth.playerCountryId === country.id;
-  const backHref = isAdmin ? "/admin/pays" : "/";
-
-  const [cachedGlobals, macrosRes, limitsRes, countryPerksRes, budgetRes, effectsRes, countriesRes, controlRes, updateLogsRes, countryLawsRes, countryMilitaryUnitsRes, countryMilitaryUnitsAllRes, assignedPlayerRes, countriesListRes, etatMajorFocusRes, ideologyState] = await Promise.all([
-    getCachedCountryPageGlobals(),
+  const [macrosRes, limitsRes, countryPerksRes, budgetRes, effectsRes, countriesRes, controlRes, countryLawsRes, countryMilitaryUnitsRes, countryMilitaryUnitsAllRes, etatMajorFocusRes] = await Promise.all([
     supabase.from("country_macros").select("*").eq("country_id", country.id),
     supabase
       .from("country_military_limits")
@@ -112,16 +100,14 @@ export default async function CountryPage({
     supabase.from("country_effects").select("*").eq("country_id", country.id).or("duration_remaining.gt.0,duration_kind.eq.permanent"),
     supabase.from("countries").select("id, population, gdp, militarism, industry, science, stability"),
     supabase.from("country_control").select("country_id, share_pct, is_annexed").eq("controller_country_id", country.id),
-    isAdmin
-      ? supabase.from("country_update_logs").select("*").eq("country_id", country.id).order("run_at", { ascending: false }).limit(10)
-      : Promise.resolve({ data: [] as CountryUpdateLog[] }),
     supabase.from("country_laws").select("law_key, score, target_score").eq("country_id", country.id),
     supabase.from("country_military_units").select("*").eq("country_id", country.id),
     supabase.from("country_military_units").select("country_id, roster_unit_id, current_level, extra_count"),
-    supabase.from("country_players").select("email, name").eq("country_id", country.id).maybeSingle(),
-    supabase.from("countries").select("id, name").order("name"),
-    supabase.from("country_etat_major_focus").select("design_roster_unit_id, recrutement_roster_unit_id, procuration_roster_unit_id, stock_roster_unit_id").eq("country_id", country.id).maybeSingle(),
-    fetchWorldIdeologyState(createServiceRoleClient()),
+    supabase
+      .from("country_etat_major_focus")
+      .select("design_roster_unit_id, recrutement_roster_unit_id, procuration_roster_unit_id, stock_roster_unit_id")
+      .eq("country_id", country.id)
+      .maybeSingle(),
   ]);
 
   const controlRows = (Array.isArray(controlRes.data) ? controlRes.data : []) as Array<{ country_id: string; share_pct: number; is_annexed: boolean }>;
@@ -130,6 +116,60 @@ export default async function CountryPage({
     controlledIds.length > 0
       ? (await supabase.from("countries").select("id, name, slug, flag_url, population, gdp").in("id", controlledIds)).data ?? []
       : [];
+
+  return {
+    country,
+    macrosRes,
+    limitsRes,
+    countryPerksRes,
+    budgetRes,
+    effectsRes,
+    countriesRes,
+    controlRows,
+    sphereCountries,
+    countryLawsRes,
+    countryMilitaryUnitsRes,
+    countryMilitaryUnitsAllRes,
+    etatMajorFocusRes,
+  };
+}
+
+function getCachedCountryPagePublicData(slug: string) {
+  return unstable_cache(
+    () => fetchCountryPagePublicData(slug),
+    ["country-page-public", slug],
+    { revalidate: 60, tags: [`country-page:${slug}`] }
+  )();
+}
+
+export default async function CountryPage({
+  params,
+}: {
+  params: Promise<{ slug: string }>;
+}) {
+  const { slug } = await params;
+  const cachedGlobals = await getCachedCountryPageGlobals();
+  const publicData = await getCachedCountryPagePublicData(slug);
+  const country = publicData.country;
+  if (!country) notFound();
+
+  const auth = await getCachedAuth();
+  const isAdmin = auth.isAdmin;
+  const isPlayerForThisCountry = auth.playerCountryId === country.id;
+  const backHref = isAdmin ? "/admin/pays" : "/";
+
+  const supabase = await createClient();
+  const [updateLogsRes, assignedPlayerRes, countriesListRes, ideologyState] = await Promise.all([
+    isAdmin
+      ? supabase.from("country_update_logs").select("*").eq("country_id", country.id).order("run_at", { ascending: false }).limit(10)
+      : Promise.resolve({ data: [] as CountryUpdateLog[] }),
+    supabase.from("country_players").select("email, name").eq("country_id", country.id).maybeSingle(),
+    supabase.from("countries").select("id, name").order("name"),
+    fetchWorldIdeologyState(createServiceRoleClient()),
+  ]);
+
+  const controlRows = publicData.controlRows;
+  const sphereCountries = publicData.sphereCountries;
   // sphereData : somme impériale (pays maître + parts proportionnelles au contrôle). Enrichi plus bas.
   const masterPop = Number(country.population ?? 0);
   const masterGdp = Number(country.gdp ?? 0);
@@ -198,18 +238,18 @@ export default async function CountryPage({
   const playerRow = assignedPlayerRes.data as { email?: string; name?: string } | null;
   const assignedPlayerEmail = (playerRow?.name?.trim() || playerRow?.email) ?? null;
 
-  const macros = macrosRes.data ?? [];
-  const limits = limitsRes.data ?? [];
-  const countryMilitaryUnits = (Array.isArray(countryMilitaryUnitsRes.data) ? countryMilitaryUnitsRes.data : []) as CountryMilitaryUnit[];
-  const etatMajorFocus = etatMajorFocusRes.data as { design_roster_unit_id: string | null; recrutement_roster_unit_id: string | null; procuration_roster_unit_id: string | null; stock_roster_unit_id: string | null } | null;
-  const unlockedPerkIds = new Set((countryPerksRes.data ?? []).map((p) => p.perk_id));
+  const macros = publicData.macrosRes.data ?? [];
+  const limits = publicData.limitsRes.data ?? [];
+  const countryMilitaryUnits = (Array.isArray(publicData.countryMilitaryUnitsRes.data) ? publicData.countryMilitaryUnitsRes.data : []) as CountryMilitaryUnit[];
+  const etatMajorFocus = publicData.etatMajorFocusRes.data as { design_roster_unit_id: string | null; recrutement_roster_unit_id: string | null; procuration_roster_unit_id: string | null; stock_roster_unit_id: string | null } | null;
+  const unlockedPerkIds = new Set((publicData.countryPerksRes.data ?? []).map((p) => p.perk_id));
 
   const activePerkIds = new Set<string>();
   const perkEffects: Array<{ effect_kind: string; effect_target: string | null; value: number; sourceLabel: string }> = [];
-  const budget = budgetRes.data ?? null;
-  const effects = effectsRes.data ?? [];
+  const budget = publicData.budgetRes.data ?? null;
+  const effects = publicData.effectsRes.data ?? [];
 
-  const countries = countriesRes.data ?? [];
+  const countries = publicData.countriesRes.data ?? [];
   const byPopulation = [...countries].sort((a, b) => Number(b.population) - Number(a.population));
   const byGdp = [...countries].sort((a, b) => Number(b.gdp) - Number(a.gdp));
   const rankPopulation = byPopulation.findIndex((c) => c.id === country.id) + 1 || 0;
@@ -220,7 +260,7 @@ export default async function CountryPage({
     ruleParametersByKey[r.key] = { value: r.value };
   }
 
-  const countryMilitaryUnitsAll = (Array.isArray(countryMilitaryUnitsAllRes.data) ? countryMilitaryUnitsAllRes.data : []) as Array<{ country_id: string; roster_unit_id: string; current_level: number; extra_count: number }>;
+  const countryMilitaryUnitsAll = (Array.isArray(publicData.countryMilitaryUnitsAllRes.data) ? publicData.countryMilitaryUnitsAllRes.data : []) as Array<{ country_id: string; roster_unit_id: string; current_level: number; extra_count: number }>;
   const rosterUnitsForInfluence = rosterUnits as Array<{ id: string; branch: MilitaryBranch; base_count: number }>;
   const rosterLevelsForInfluence = rosterLevels as Array<{ unit_id: string; level: number; hard_power: number }>;
   const hardPowerByCountry = computeHardPowerByCountry(countryMilitaryUnitsAll, rosterUnitsForInfluence, rosterLevelsForInfluence);
@@ -274,7 +314,7 @@ export default async function CountryPage({
     };
   }
 
-  const countryLawRows: CountryLawRow[] = ((Array.isArray(countryLawsRes.data) ? countryLawsRes.data : []) as Array<{ law_key: string; score: number; target_score: number }>).map((r) => ({
+  const countryLawRows: CountryLawRow[] = ((Array.isArray(publicData.countryLawsRes.data) ? publicData.countryLawsRes.data : []) as Array<{ law_key: string; score: number; target_score: number }>).map((r) => ({
     country_id: country.id,
     law_key: r.law_key,
     score: Number(r.score ?? 0),

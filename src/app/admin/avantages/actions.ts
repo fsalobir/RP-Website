@@ -99,7 +99,7 @@ export async function createPerk(
     );
   }
   revalidatePath("/admin/avantages");
-  revalidateTag("country-page-globals", "max");
+  revalidateTag("country-page-globals");
   return { error: null };
 }
 
@@ -153,7 +153,7 @@ export async function updatePerk(
     );
   }
   revalidatePath("/admin/avantages");
-  revalidateTag("country-page-globals", "max");
+  revalidateTag("country-page-globals");
   return { error: null };
 }
 
@@ -162,6 +162,6 @@ export async function deletePerk(id: string) {
   const { error } = await supabase.from("perks").delete().eq("id", id);
   if (error) return { error: error.message };
   revalidatePath("/admin/avantages");
-  revalidateTag("country-page-globals", "max");
+  revalidateTag("country-page-globals");
   return { error: null };
 }
