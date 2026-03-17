@@ -323,7 +323,7 @@ export function roundIdeologyScoresToExactSum(
   // À ce stade, delta devrait être nul (sinon, tous les scores étaient à 0 alors que sum > targetSum, incohérent).
   // On tente une dernière correction sans clamp (sécurité), en choisissant le max.
   if (delta !== 0) {
-    let best = IDEOLOGY_IDS[0];
+    let best: IdeologyId = IDEOLOGY_IDS[0];
     for (const id of IDEOLOGY_IDS) if (out[id] > out[best]) best = id;
     out[best] = roundTo(out[best] + delta);
     if (out[best] < 0) out[best] = 0;

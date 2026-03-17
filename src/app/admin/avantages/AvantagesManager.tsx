@@ -518,7 +518,7 @@ export function AvantagesManager({
                   />
                 </div>
               </div>
-              {(perkIconPreview || perkIconUrl) && (
+              {(perkIconPreviewUrl || perkIconUrl) && (
                 <div className="mt-2 flex items-center gap-2">
                   <img
                     src={perkIconPreviewUrl || perkIconUrl || ""}
