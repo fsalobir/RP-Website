@@ -10,6 +10,10 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "supabase": ".\\\\tools\\\\supabase-cli\\\\2.78.1\\\\supabase.exe",
+    "supabase:functions:serve:process-due": ".\\\\tools\\\\supabase-cli\\\\2.78.1\\\\supabase.exe functions serve process-ai-events-due --no-verify-jwt",
+    "check:edge": "node scripts/check-edge-functions.mjs",
+    "sync:edge-shared": "node scripts/sync-edge-shared.mjs",
     "seed:map-regions": "node --env-file=.env.local scripts/seed-map-regions.js",
     "generate:orphan-regions": "node scripts/generate-fill-orphan-regions.js",
     "test:process-due-parity": "node --env-file=.env.local scripts/process-due-parity-check.js"

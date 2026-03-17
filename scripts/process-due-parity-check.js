@@ -36,8 +36,10 @@ async function countPendingTagged() {
 }
 
 async function callAppRoute() {
-  const url = `${APP_BASE_URL}/api/cron/process-ai-events?secret=${encodeURIComponent(CRON_SECRET)}`;
-  const res = await fetch(url);
+  const url = `${APP_BASE_URL}/api/cron/process-ai-events`;
+  const res = await fetch(url, {
+    headers: { Authorization: `Bearer ${CRON_SECRET}` },
+  });
   const body = await res.json().catch(() => ({}));
   return { status: res.status, body };
 }
