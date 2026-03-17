@@ -1,7 +1,6 @@
 import { createAnonClientForCache } from "@/lib/supabase/server";
 import { IdeologyHexagon } from "@/components/ideology/IdeologyHexagon";
 import { fetchWorldIdeologyState } from "@/lib/ideologyServer";
-import { IdeologieHeader } from "./IdeologieHeader";
 
 // Page publique : rendue sans cookies (compatible ISR / cache / export).
 export const revalidate = 60;
@@ -53,9 +52,27 @@ export default async function IdeologiePage() {
     .filter((entry): entry is NonNullable<typeof entry> => entry != null);
 
   return (
-    <div className="mx-auto max-w-7xl px-4 py-10">
-      <IdeologieHeader />
-      <IdeologyHexagon entries={entries} ideologyEffectsConfig={ideologyEffectsConfig} />
+    <div className="relative min-h-screen">
+      {/* Fond fixe */}
+      <div
+        className="fixed inset-0 overflow-hidden pointer-events-none"
+        style={{ left: "50%", marginLeft: "-50vw", width: "100vw", zIndex: 0 }}
+        aria-hidden
+      >
+        <div
+          className="absolute inset-0 bg-cover bg-no-repeat scale-105"
+          style={{
+            backgroundImage: "url(/images/site/ideologie-bg.png)",
+            backgroundPosition: "top center",
+            filter: "blur(0.5px)",
+          }}
+        />
+        <div className="absolute inset-0 bg-black/40" />
+      </div>
+
+      <div className="relative z-10 mx-auto max-w-7xl px-4 py-10" style={{ isolation: "isolate" }}>
+        <IdeologyHexagon entries={entries} ideologyEffectsConfig={ideologyEffectsConfig} />
+      </div>
     </div>
   );
 }

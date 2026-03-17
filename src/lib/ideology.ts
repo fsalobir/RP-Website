@@ -49,7 +49,7 @@ export const IDEOLOGY_INFOBOX_LONG_DESCRIPTION: Record<IdeologyId, string | null
   french_republicanism:
     "Né des guerres successives avec les monarchies, le Républicanisme français est un rejet radical des élites, et de l'oppression royale-capitaliste. La société doit être fondée sur l'équité radicale : la liberté collective est le fruit du sacrifice individuel.",
   mughal_republicanism:
-    "Ryou fournira, peut-être, un jour. Je ne sais déjà pas quel est le courant artistique de son pays, alors. A priori, ça serait une république parlementaire un peu plus cool, avec un encadrement religieux plutôt qu'un monarque.",
+    "Émergeant des décombres de l’autoritarisme, le Républicanisme Moghol se détache des gouvernements traditionnels et se consacre à l'autonomie locale. Attaché à la libre circulation, l’État agit pour protéger les routes mondiales. L'impératif souverain du commerce guide la neutralité de l'État.",
   nilotique_cultism:
     "Idéologie forgée sur les rives du plus long fleuve du monde. Sous l'apparence d'un État décentralisé, le pouvoir reste fermement concentré entre les mains d'une élite tentaculaire. De manière purement cynique, cette oligarchie n'hésite pas à instrumentaliser la foi pour galvaniser les foules, sans pour autant nécessairement adhérer aux croyances qu'elle prêche.",
   satoiste_cultism:

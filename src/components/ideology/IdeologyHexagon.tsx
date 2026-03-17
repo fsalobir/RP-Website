@@ -169,6 +169,12 @@ export function IdeologyHexagon({
   entries: IdeologyHexagonEntry[];
   ideologyEffectsConfig?: IdeologyEffectEntry[];
 }) {
+  const glassPanelStyle: React.CSSProperties = { background: "rgba(255,255,255,0.12)", backdropFilter: "blur(12px)" };
+  const glassPanelClass = "rounded-xl border border-white/25";
+  const glassSubStyle: React.CSSProperties = { background: "rgba(255,255,255,0.08)" };
+  const glassTextClass = "text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.4)]";
+  const glassMutedClass = "text-white/90";
+
   const [showPlayers, setShowPlayers] = useState(true);
   const [showAiMajor, setShowAiMajor] = useState(true);
   const [showAiMinor, setShowAiMinor] = useState(true);
@@ -234,18 +240,18 @@ export function IdeologyHexagon({
   return (
     <div className="space-y-6">
       <div
-        className="rounded-lg border p-4"
-        style={{ background: "var(--background-panel)", borderColor: "var(--border)" }}
+        className={`${glassPanelClass} p-4`}
+        style={glassPanelStyle}
       >
         <div className="flex flex-wrap items-center gap-4">
-          <span className="text-sm text-[var(--foreground-muted)]">Afficher :</span>
+          <span className={`text-sm ${glassMutedClass}`}>Afficher :</span>
           <button
             type="button"
             onClick={() => setAssignmentFilter("all")}
             className={`rounded border px-3 py-1.5 text-sm font-medium transition-colors ${assignmentFilter === "all"
               ? "border-[var(--accent)] bg-[var(--accent)]/10 text-[var(--accent)]"
-              : "border-[var(--border)] text-[var(--foreground-muted)] hover:border-[var(--border-muted)] hover:text-[var(--foreground)]"}`}
-            style={assignmentFilter !== "all" ? { borderColor: "var(--border)" } : undefined}
+              : "border-white/25 text-white/90 hover:border-white/40 hover:text-white"}`}
+            style={assignmentFilter !== "all" ? glassSubStyle : undefined}
           >
             Tous
           </button>
@@ -254,25 +260,25 @@ export function IdeologyHexagon({
             onClick={() => setAssignmentFilter("assigned_only")}
             className={`rounded border px-3 py-1.5 text-sm font-medium transition-colors ${assignmentFilter === "assigned_only"
               ? "border-[var(--accent)] bg-[var(--accent)]/10 text-[var(--accent)]"
-              : "border-[var(--border)] text-[var(--foreground-muted)] hover:border-[var(--border-muted)] hover:text-[var(--foreground)]"}`}
-            style={assignmentFilter !== "assigned_only" ? { borderColor: "var(--border)" } : undefined}
+              : "border-white/25 text-white/90 hover:border-white/40 hover:text-white"}`}
+            style={assignmentFilter !== "assigned_only" ? glassSubStyle : undefined}
           >
             Assignés uniquement
           </button>
-          <span className="mx-2 text-[var(--border)]">|</span>
-          <label className="flex items-center gap-2 text-sm text-[var(--foreground)]">
+          <span className="mx-2 text-white/30">|</span>
+          <label className={`flex items-center gap-2 text-sm ${glassTextClass}`}>
             <input type="checkbox" checked={showPlayers} onChange={(e) => setShowPlayers(e.target.checked)} />
             Joueurs
           </label>
-          <label className="flex items-center gap-2 text-sm text-[var(--foreground)]">
+          <label className={`flex items-center gap-2 text-sm ${glassTextClass}`}>
             <input type="checkbox" checked={showAiMajor} onChange={(e) => setShowAiMajor(e.target.checked)} />
             IA majeures
           </label>
-          <label className="flex items-center gap-2 text-sm text-[var(--foreground)]">
+          <label className={`flex items-center gap-2 text-sm ${glassTextClass}`}>
             <input type="checkbox" checked={showAiMinor} onChange={(e) => setShowAiMinor(e.target.checked)} />
             IA mineures
           </label>
-          <span className="text-sm text-[var(--foreground-muted)]">
+          <span className={`text-sm ${glassMutedClass}`}>
             {visibleEntries.length} pays affiché{visibleEntries.length > 1 ? "s" : ""}
           </span>
         </div>
@@ -281,8 +287,8 @@ export function IdeologyHexagon({
       <div className="mx-auto w-[85%] max-w-[85%]">
         <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_272px]">
           <div
-            className="rounded-lg border p-4"
-            style={{ background: "var(--background-panel)", borderColor: "var(--border)" }}
+            className={`${glassPanelClass} p-4`}
+            style={glassPanelStyle}
           >
             <div className="relative mx-auto aspect-square max-w-[35.7rem]">
             <HexagonSvg />
@@ -304,9 +310,10 @@ export function IdeologyHexagon({
                     <div
                       className="rounded border px-1.5 py-1 text-center text-[10px] font-medium leading-tight transition-colors sm:text-xs"
                       style={{
-                        borderColor: isHovered ? "var(--accent)" : "var(--border-muted)",
-                        background: isHovered ? "var(--background-elevated)" : "var(--background-panel)",
-                        color: "var(--foreground-muted)",
+                        borderColor: isHovered ? "var(--accent)" : "rgba(255,255,255,0.25)",
+                        background: isHovered ? "rgba(255,255,255,0.12)" : "rgba(255,255,255,0.08)",
+                        backdropFilter: "blur(12px)",
+                        color: "rgba(255,255,255,0.92)",
                       }}
                       onMouseEnter={() => handleIdeologyEnter(id)}
                       onMouseLeave={handleIdeologyLeave}
@@ -323,9 +330,10 @@ export function IdeologyHexagon({
                 style={{
                   clipPath: `polygon(${HEX_CLIP_POLYGON})`,
                   WebkitClipPath: `polygon(${HEX_CLIP_POLYGON})`,
-                  borderColor: "var(--border)",
-                  background: "var(--background-elevated)",
-                  color: "var(--foreground)",
+                  borderColor: "rgba(255,255,255,0.25)",
+                  background: "rgba(255,255,255,0.12)",
+                  backdropFilter: "blur(12px)",
+                  color: "#fff",
                   opacity: infoboxFadingOut ? 0 : infoboxFadeIn ? 1 : 0,
                   overflow: "hidden",
                 }}
@@ -340,7 +348,7 @@ export function IdeologyHexagon({
                       {headerImage && (
                         <div
                           className="relative shrink-0 overflow-hidden border-b"
-                          style={{ borderColor: "var(--border)", height: "40%" }}
+                          style={{ borderColor: "rgba(255,255,255,0.25)", height: "40%" }}
                         >
                           <Image src={headerImage} alt="" fill className="object-cover object-top" sizes="(max-width: 640px) 256px, 320px" />
                         </div>
@@ -351,7 +359,7 @@ export function IdeologyHexagon({
                       >
                         <div className="w-full text-center text-xs" style={{ maxWidth: "calc(62% + 10px)" }}>
                           {longDesc && (
-                            <p className="text-[var(--foreground-muted)] leading-tight break-words" style={{ overflowWrap: "break-word", wordBreak: "break-word" }}>
+                            <p className="text-white/90 leading-tight break-words" style={{ overflowWrap: "break-word", wordBreak: "break-word" }}>
                               {longDesc}
                             </p>
                           )}
@@ -410,12 +418,12 @@ export function IdeologyHexagon({
                       width={24}
                       height={16}
                       className="h-4 w-6 rounded border object-cover shadow-sm sm:h-5 sm:w-7"
-                      style={{ borderColor: isSelected ? "var(--accent)" : "var(--border)" }}
+                      style={{ borderColor: isSelected ? "var(--accent)" : "rgba(255,255,255,0.25)" }}
                     />
                   ) : (
                     <div
                       className="h-4 w-6 rounded border shadow-sm sm:h-5 sm:w-7"
-                      style={{ borderColor: isSelected ? "var(--accent)" : "var(--border)", background: "var(--background-elevated)" }}
+                      style={{ borderColor: isSelected ? "var(--accent)" : "rgba(255,255,255,0.25)", ...glassSubStyle }}
                     />
                   )}
                   </button>
@@ -426,8 +434,8 @@ export function IdeologyHexagon({
         </div>
 
           <div
-            className="rounded-lg border p-4"
-            style={{ background: "var(--background-panel)", borderColor: "var(--border)" }}
+            className={`${glassPanelClass} p-4`}
+            style={glassPanelStyle}
           >
             {selected ? (
             <div className="space-y-4">
@@ -440,30 +448,30 @@ export function IdeologyHexagon({
                     width={40}
                     height={27}
                     className="h-7 w-10 rounded border object-cover"
-                    style={{ borderColor: "var(--border)" }}
+                    style={{ borderColor: "rgba(255,255,255,0.25)" }}
                   />
                 ) : (
                   <div
                     className="h-7 w-10 rounded border"
-                    style={{ borderColor: "var(--border)", background: "var(--background-elevated)" }}
+                    style={{ borderColor: "rgba(255,255,255,0.25)", ...glassSubStyle }}
                   />
                 )}
                 <div className="min-w-0">
-                  <div className="font-semibold text-[var(--foreground)]">{selected.name}</div>
-                  <div className="text-sm text-[var(--foreground-muted)]">{selected.regime ?? "—"}</div>
+                  <div className={`font-semibold ${glassTextClass}`}>{selected.name}</div>
+                  <div className={`text-sm ${glassMutedClass}`}>{selected.regime ?? "—"}</div>
                 </div>
               </div>
 
-              <div className="rounded border p-3" style={{ borderColor: "var(--border-muted)" }}>
-                <div className="text-sm font-medium text-[var(--foreground)]">
+              <div className="rounded border border-white/25 p-3" style={glassSubStyle}>
+                <div className={`text-sm font-medium ${glassTextClass}`}>
                   Tendance dominante : {IDEOLOGY_LABELS[selected.dominant]}
                 </div>
-                <div className="mt-1 text-sm text-[var(--foreground-muted)]">
+                <div className={`mt-1 text-sm ${glassMutedClass}`}>
                   Distance au centre : {Math.round(selected.centerDistance * 100)} %
                 </div>
               </div>
 
-              <div className="space-y-2 text-sm">
+              <div className={`space-y-2 text-sm ${glassTextClass}`}>
                 {IDEOLOGY_IDS.map((id) => (
                   <div key={id} className="flex justify-between gap-4">
                     <span>{IDEOLOGY_LABELS[id]}</span>
@@ -472,9 +480,9 @@ export function IdeologyHexagon({
                 ))}
               </div>
 
-              <div className="rounded border p-3" style={{ borderColor: "var(--border-muted)" }}>
-                <div className="mb-2 text-sm font-medium text-[var(--foreground)]">Dérive actuelle</div>
-                <div className="space-y-1 text-sm text-[var(--foreground-muted)]">
+              <div className="rounded border border-white/25 p-3" style={glassSubStyle}>
+                <div className={`mb-2 text-sm font-medium ${glassTextClass}`}>Dérive actuelle</div>
+                <div className={`space-y-1 text-sm ${glassMutedClass}`}>
                   {IDEOLOGY_IDS.map((id) => (
                     <div key={id}>{IDEOLOGY_LABELS[id]} : {formatScore(selected.drift[id] ?? 0)}</div>
                   ))}
