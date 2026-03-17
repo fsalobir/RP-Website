@@ -9,7 +9,7 @@ import { createClient } from "@/lib/supabase/server";
  * - Classement et liste des nations : dépendent de influence_config et autres règles → revalidation immédiate pour l'équilibrage
  */
 export async function revalidateCountryPageGlobals() {
-  revalidateTag("country-page-globals");
+  revalidateTag("country-page-globals", "max");
   revalidatePath("/classement");
   revalidatePath("/");
   revalidatePath("/ideologie");

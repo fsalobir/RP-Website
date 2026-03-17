@@ -168,8 +168,8 @@ export default async function CountryPage({
     fetchWorldIdeologyState(createServiceRoleClient()),
   ]);
 
-  const controlRows = publicData.controlRows;
-  const sphereCountries = publicData.sphereCountries;
+  const controlRows = publicData.controlRows ?? [];
+  const sphereCountries = publicData.sphereCountries ?? [];
   // sphereData : somme impériale (pays maître + parts proportionnelles au contrôle). Enrichi plus bas.
   const masterPop = Number(country.population ?? 0);
   const masterGdp = Number(country.gdp ?? 0);
@@ -238,18 +238,18 @@ export default async function CountryPage({
   const playerRow = assignedPlayerRes.data as { email?: string; name?: string } | null;
   const assignedPlayerEmail = (playerRow?.name?.trim() || playerRow?.email) ?? null;
 
-  const macros = publicData.macrosRes.data ?? [];
-  const limits = publicData.limitsRes.data ?? [];
-  const countryMilitaryUnits = (Array.isArray(publicData.countryMilitaryUnitsRes.data) ? publicData.countryMilitaryUnitsRes.data : []) as CountryMilitaryUnit[];
-  const etatMajorFocus = publicData.etatMajorFocusRes.data as { design_roster_unit_id: string | null; recrutement_roster_unit_id: string | null; procuration_roster_unit_id: string | null; stock_roster_unit_id: string | null } | null;
-  const unlockedPerkIds = new Set((publicData.countryPerksRes.data ?? []).map((p) => p.perk_id));
+  const macros = publicData.macrosRes?.data ?? [];
+  const limits = publicData.limitsRes?.data ?? [];
+  const countryMilitaryUnits = (Array.isArray(publicData.countryMilitaryUnitsRes?.data) ? publicData.countryMilitaryUnitsRes?.data : []) as CountryMilitaryUnit[];
+  const etatMajorFocus = publicData.etatMajorFocusRes?.data as { design_roster_unit_id: string | null; recrutement_roster_unit_id: string | null; procuration_roster_unit_id: string | null; stock_roster_unit_id: string | null } | null;
+  const unlockedPerkIds = new Set((publicData.countryPerksRes?.data ?? []).map((p) => p.perk_id));
 
   const activePerkIds = new Set<string>();
   const perkEffects: Array<{ effect_kind: string; effect_target: string | null; value: number; sourceLabel: string }> = [];
-  const budget = publicData.budgetRes.data ?? null;
-  const effects = publicData.effectsRes.data ?? [];
+  const budget = publicData.budgetRes?.data ?? null;
+  const effects = publicData.effectsRes?.data ?? [];
 
-  const countries = publicData.countriesRes.data ?? [];
+  const countries = publicData.countriesRes?.data ?? [];
   const byPopulation = [...countries].sort((a, b) => Number(b.population) - Number(a.population));
   const byGdp = [...countries].sort((a, b) => Number(b.gdp) - Number(a.gdp));
   const rankPopulation = byPopulation.findIndex((c) => c.id === country.id) + 1 || 0;
@@ -260,7 +260,7 @@ export default async function CountryPage({
     ruleParametersByKey[r.key] = { value: r.value };
   }
 
-  const countryMilitaryUnitsAll = (Array.isArray(publicData.countryMilitaryUnitsAllRes.data) ? publicData.countryMilitaryUnitsAllRes.data : []) as Array<{ country_id: string; roster_unit_id: string; current_level: number; extra_count: number }>;
+  const countryMilitaryUnitsAll = (Array.isArray(publicData.countryMilitaryUnitsAllRes?.data) ? publicData.countryMilitaryUnitsAllRes?.data : []) as Array<{ country_id: string; roster_unit_id: string; current_level: number; extra_count: number }>;
   const rosterUnitsForInfluence = rosterUnits as Array<{ id: string; branch: MilitaryBranch; base_count: number }>;
   const rosterLevelsForInfluence = rosterLevels as Array<{ unit_id: string; level: number; hard_power: number }>;
   const hardPowerByCountry = computeHardPowerByCountry(countryMilitaryUnitsAll, rosterUnitsForInfluence, rosterLevelsForInfluence);
@@ -314,7 +314,7 @@ export default async function CountryPage({
     };
   }
 
-  const countryLawRows: CountryLawRow[] = ((Array.isArray(publicData.countryLawsRes.data) ? publicData.countryLawsRes.data : []) as Array<{ law_key: string; score: number; target_score: number }>).map((r) => ({
+  const countryLawRows: CountryLawRow[] = ((Array.isArray(publicData.countryLawsRes?.data) ? publicData.countryLawsRes?.data : []) as Array<{ law_key: string; score: number; target_score: number }>).map((r) => ({
     country_id: country.id,
     law_key: r.law_key,
     score: Number(r.score ?? 0),

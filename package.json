@@ -10,6 +10,10 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "e2e": "playwright test",
     "supabase": ".\\\\tools\\\\supabase-cli\\\\2.78.1\\\\supabase.exe",
     "supabase:functions:serve:process-due": ".\\\\tools\\\\supabase-cli\\\\2.78.1\\\\supabase.exe functions serve process-ai-events-due --no-verify-jwt",
     "check:edge": "node scripts/check-edge-functions.mjs",
@@ -30,14 +34,18 @@
     "world-atlas": "^2.0.2"
   },
   "devDependencies": {
+    "@playwright/test": "^1.58.2",
     "@tailwindcss/postcss": "^4",
     "@types/d3-geo": "^3.1.0",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "@vitest/coverage-v8": "^4.1.0",
     "eslint": "^9",
     "eslint-config-next": "16.1.6",
     "tailwindcss": "^4",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vite": "^8.0.0",
+    "vitest": "^4.1.0"
   }
 }
