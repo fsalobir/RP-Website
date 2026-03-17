@@ -35,7 +35,7 @@ export const IDEOLOGY_INFOBOX_HEADER_IMAGE: Record<IdeologyId, string | null> = 
   germanic_monarchy: "/images/ideology/germanic_monarchy.png",
   merina_monarchy: "/images/ideology/merina_monarchy.png",
   french_republicanism: "/images/ideology/french_republicanism.png",
-  mughal_republicanism: null,
+  mughal_republicanism: "/images/ideology/mughal_republicanism.png",
   nilotique_cultism: "/images/ideology/nilotique_cultism.png",
   satoiste_cultism: "/images/ideology/satoiste.png",
 };
@@ -48,7 +48,8 @@ export const IDEOLOGY_INFOBOX_LONG_DESCRIPTION: Record<IdeologyId, string | null
     "Fort de sa splendide isolation, l'île de Madagascar a lentement évolué vers un niveau de développement où le Roi a du partager le poids de diriger. Le Roi pousse le profit individuel, le parlement pousse les réformes sociales.",
   french_republicanism:
     "Né des guerres successives avec les monarchies, le Républicanisme français est un rejet radical des élites, et de l'oppression royale-capitaliste. La société doit être fondée sur l'équité radicale : la liberté collective est le fruit du sacrifice individuel.",
-  mughal_republicanism: null,
+  mughal_republicanism:
+    "Ryou fournira, peut-être, un jour. Je ne sais déjà pas quel est le courant artistique de son pays, alors. A priori, ça serait une république parlementaire un peu plus cool, avec un encadrement religieux plutôt qu'un monarque.",
   nilotique_cultism:
     "Idéologie forgée sur les rives du plus long fleuve du monde. Sous l'apparence d'un État décentralisé, le pouvoir reste fermement concentré entre les mains d'une élite tentaculaire. De manière purement cynique, cette oligarchie n'hésite pas à instrumentaliser la foi pour galvaniser les foules, sans pour autant nécessairement adhérer aux croyances qu'elle prêche.",
   satoiste_cultism:
@@ -60,7 +61,7 @@ export const IDEOLOGY_HEX_LAYER_IMAGE: Record<IdeologyId, string | null> = {
   germanic_monarchy: "/images/ideology/germanic_monarchy.png",
   merina_monarchy: "/images/ideology/merina_monarchy.png",
   french_republicanism: "/images/ideology/french_republicanism.png",
-  mughal_republicanism: null,
+  mughal_republicanism: "/images/ideology/mughal_republicanism.png",
   nilotique_cultism: "/images/ideology/nilotique_cultism.png",
   satoiste_cultism: "/images/ideology/satoiste.png",
 };
