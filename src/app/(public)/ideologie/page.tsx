@@ -1,9 +1,10 @@
-import { createClient } from "@/lib/supabase/server";
+import { createAnonClientForCache } from "@/lib/supabase/server";
 import { IdeologyHexagon } from "@/components/ideology/IdeologyHexagon";
 import { fetchWorldIdeologyState } from "@/lib/ideologyServer";
 import { IdeologieHeader } from "./IdeologieHeader";
 
-export const dynamic = "force-dynamic";
+// Page publique : rendue sans cookies (compatible ISR / cache / export).
+export const revalidate = 60;
 
 type IdeologyEffectEntry = { ideology_id: string; effect_kind: string; effect_target: string | null; value: number };
 
@@ -20,7 +21,7 @@ function parseIdeologyEffectsConfig(raw: unknown): IdeologyEffectEntry[] {
 }
 
 export default async function IdeologiePage() {
-  const supabase = await createClient();
+  const supabase = createAnonClientForCache();
   const { countries, ideologyByCountry, playerCountryIds, influenceByCountry } = await fetchWorldIdeologyState(supabase);
 
   const { data: ruleRows } = await supabase.from("rule_parameters").select("key, value").eq("key", "ideology_effects");
