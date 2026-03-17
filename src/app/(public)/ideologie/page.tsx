@@ -1,4 +1,4 @@
-import { createServiceRoleClient } from "@/lib/supabase/server";
+import { createClient } from "@/lib/supabase/server";
 import { IdeologyHexagon } from "@/components/ideology/IdeologyHexagon";
 import { fetchWorldIdeologyState } from "@/lib/ideologyServer";
 import { IdeologieHeader } from "./IdeologieHeader";
@@ -20,7 +20,7 @@ function parseIdeologyEffectsConfig(raw: unknown): IdeologyEffectEntry[] {
 }
 
 export default async function IdeologiePage() {
-  const supabase = createServiceRoleClient();
+  const supabase = await createClient();
   const { countries, ideologyByCountry, playerCountryIds, influenceByCountry } = await fetchWorldIdeologyState(supabase);
 
   const { data: ruleRows } = await supabase.from("rule_parameters").select("key, value").eq("key", "ideology_effects");
