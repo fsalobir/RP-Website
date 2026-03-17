@@ -13,6 +13,8 @@ import {
 } from "@/lib/ideology";
 import { EFFECT_KIND_LABELS, formatEffectValue, isEffectDisplayPositive, STAT_LABELS } from "@/lib/countryEffects";
 
+const flagLoader = ({ src }: { src: string }) => src;
+
 export type IdeologyHexagonEntry = {
   id: string;
   name: string;
@@ -411,8 +413,9 @@ export function IdeologyHexagon({
                   title={`${entry.name} — ${IDEOLOGY_LABELS[entry.dominant]}`}
                 >
                   {entry.flag_url ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
+                    <Image
+                      loader={flagLoader}
+                      unoptimized
                       src={entry.flag_url}
                       alt={entry.name}
                       width={24}
@@ -441,8 +444,9 @@ export function IdeologyHexagon({
             <div className="space-y-4">
               <div className="flex items-center gap-3">
                 {selected.flag_url ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
+                  <Image
+                    loader={flagLoader}
+                    unoptimized
                     src={selected.flag_url}
                     alt={selected.name}
                     width={40}

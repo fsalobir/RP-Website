@@ -22,7 +22,7 @@ import {
 } from "@/lib/countryEffects";
 import { resolveAllLawEffectsForCountry, getLawLevelKeyFromScore, getLawLevelLabel, LAW_DEFINITIONS, type CountryLawRow } from "@/lib/laws";
 import { getTickBreakdown } from "@/lib/tickBreakdown";
-import { saveMilitaryUnit, getCountryMilitaryUnits } from "./actions";
+import { saveMilitaryUnit } from "./actions";
 import type { RosterRowByBranch } from "./countryTabsTypes";
 import type { FoggedRoster } from "@/lib/intelFog";
 import type { InfluenceResult } from "@/lib/influence";
@@ -435,25 +435,6 @@ export function CountryTabs({
   }, [country.id]);
 
   useEffect(() => {
-    const t = setTimeout(() => {
-      militaryEditInitialized.current = false;
-      router.refresh();
-    }, 0);
-    return () => clearTimeout(t);
-  }, []);
-
-  useEffect(() => {
-    const onPageShow = (e: PageTransitionEvent) => {
-      if (e.persisted) {
-        militaryEditInitialized.current = false;
-        router.refresh();
-      }
-    };
-    window.addEventListener("pageshow", onPageShow);
-    return () => window.removeEventListener("pageshow", onPageShow);
-  }, []);
-
-  useEffect(() => {
     if (!canSeeCabinetAndBudget && (tab === "cabinet" || tab === "budget" || tab === "etat_major")) {
       setTab("general");
     }
@@ -474,52 +455,6 @@ export function CountryTabs({
       militaryEditInitialized.current = true;
     }
   }, [rosterByBranch]);
-
-  useEffect(() => {
-    let cancelled = false;
-    getCountryMilitaryUnits(country.id).then((res) => {
-      if (cancelled) return;
-      if (res.error) return;
-      const map: Record<string, { current_level: number; extra_count: number }> = {};
-      for (const u of res.units ?? []) {
-        map[u.roster_unit_id] = {
-          current_level: Math.max(0, u.current_level),
-          extra_count: Math.max(0, u.extra_count),
-        };
-      }
-      const branches: MilitaryBranch[] = ["terre", "air", "mer", "strategique"];
-      const next: Record<string, { current_level: number; extra_count: number }> = {};
-      for (const b of branches) {
-        for (const row of rosterByBranch[b]) {
-          next[row.unit.id] = map[row.unit.id] ?? { current_level: 0, extra_count: 0 };
-        }
-      }
-      if (Object.keys(next).length) {
-        setMilitaryEdit(next);
-        militaryEditInitialized.current = true;
-      }
-      const rosterUnits = rosterByBranch.terre
-        .concat(rosterByBranch.air, rosterByBranch.mer, rosterByBranch.strategique)
-        .map((row) => ({ id: row.unit.id, branch: row.unit.branch, base_count: row.unit.base_count ?? 0 }));
-      const rosterLevels = rosterByBranch.terre
-        .concat(rosterByBranch.air, rosterByBranch.mer, rosterByBranch.strategique)
-        .flatMap((row) =>
-          row.levels.map((l) => ({ unit_id: row.unit.id, level: l.level, hard_power: l.hard_power ?? 0 }))
-        );
-      const countryUnits = (res.units ?? []).map((u) => ({
-        country_id: country.id,
-        roster_unit_id: u.roster_unit_id,
-        current_level: u.current_level,
-        extra_count: u.extra_count,
-      }));
-      const hardPowerMap = computeHardPowerByCountry(countryUnits, rosterUnits, rosterLevels);
-      const hp = hardPowerMap.get(country.id) ?? null;
-      if (hp) setLocalHardPowerByBranch(hp);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [country.id, rosterByBranch]);
 
   useEffect(() => {
     const branches: MilitaryBranch[] = ["terre", "air", "mer", "strategique"];

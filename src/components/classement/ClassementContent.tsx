@@ -2,8 +2,11 @@
 
 import { useState, useMemo } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { formatNumber, formatGdp, formatPopulation } from "@/lib/format";
 import { InfoTooltipWithWikiLink } from "@/components/ui/InfoTooltipWithWikiLink";
+
+const flagLoader = ({ src }: { src: string }) => src;
 
 type CountryForClassement = {
   id: string;
@@ -204,8 +207,7 @@ export function ClassementContent({ rows }: { rows: Row[] }) {
                       </span>
                     )}
                     {row.country.flag_url ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img src={row.country.flag_url} alt="" width={48} height={32} className="h-8 w-12 rounded object-cover" />
+                      <Image loader={flagLoader} unoptimized src={row.country.flag_url} alt="" width={48} height={32} className="h-8 w-12 rounded object-cover" />
                     ) : (
                       <div className="h-8 w-12 rounded bg-white/20" />
                     )}
@@ -261,8 +263,7 @@ export function ClassementContent({ rows }: { rows: Row[] }) {
                           className="flex items-center gap-2 text-white hover:text-white/95"
                         >
                           {row.country.flag_url ? (
-                            // eslint-disable-next-line @next/next/no-img-element
-                            <img src={row.country.flag_url} alt="" width={24} height={16} className="h-4 w-6 rounded object-cover" />
+                            <Image loader={flagLoader} unoptimized src={row.country.flag_url} alt="" width={24} height={16} className="h-4 w-6 rounded object-cover" />
                           ) : (
                             <div className="h-4 w-6 rounded bg-white/20" />
                           )}
@@ -320,8 +321,7 @@ export function ClassementContent({ rows }: { rows: Row[] }) {
                   <td className="p-3">
                     <Link href={`/pays/${row.country.slug}`} className="flex items-center gap-2 text-white hover:text-white/95">
                       {row.country.flag_url ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img src={row.country.flag_url} alt="" width={24} height={16} className="h-4 w-6 rounded object-cover" />
+                        <Image loader={flagLoader} unoptimized src={row.country.flag_url} alt="" width={24} height={16} className="h-4 w-6 rounded object-cover" />
                       ) : (
                         <div className="h-4 w-6 rounded bg-white/20" />
                       )}
@@ -383,8 +383,7 @@ export function ClassementContent({ rows }: { rows: Row[] }) {
                       <td className="p-3">
                         <Link href={`/pays/${row.country.slug}`} className="flex items-center gap-2 text-white hover:text-white/95">
                           {row.country.flag_url ? (
-                            // eslint-disable-next-line @next/next/no-img-element
-                            <img src={row.country.flag_url} alt="" width={24} height={16} className="h-4 w-6 rounded object-cover" />
+                            <Image loader={flagLoader} unoptimized src={row.country.flag_url} alt="" width={24} height={16} className="h-4 w-6 rounded object-cover" />
                           ) : (
                             <div className="h-4 w-6 rounded bg-white/20" />
                           )}
@@ -418,8 +417,7 @@ export function ClassementContent({ rows }: { rows: Row[] }) {
                     <td className="p-3">
                       <Link href={`/pays/${row.country.slug}`} className="flex items-center gap-2 text-white hover:text-white/95">
                         {row.country.flag_url ? (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img src={row.country.flag_url} alt="" width={24} height={16} className="h-4 w-6 rounded object-cover" />
+                          <Image loader={flagLoader} unoptimized src={row.country.flag_url} alt="" width={24} height={16} className="h-4 w-6 rounded object-cover" />
                         ) : (
                           <div className="h-4 w-6 rounded bg-white/20" />
                         )}

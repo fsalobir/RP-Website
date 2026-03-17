@@ -403,6 +403,25 @@ export default async function CountryPage({
 
   let intelLevel: number | null = null;
   let foggedRoster: FoggedRoster | null = null;
+
+  const countryStateByUnitId = new Map<string, CountryMilitaryUnit>();
+  for (const row of countryMilitaryUnits) {
+    if (row?.roster_unit_id) countryStateByUnitId.set(row.roster_unit_id, row);
+  }
+
+  const rosterLevelsByUnitId = new Map<string, MilitaryRosterUnitLevel[]>();
+  for (const lvl of rosterLevels as MilitaryRosterUnitLevel[]) {
+    const unitId = (lvl as { unit_id?: string }).unit_id;
+    if (!unitId) continue;
+    const list = rosterLevelsByUnitId.get(unitId) ?? [];
+    list.push(lvl);
+    rosterLevelsByUnitId.set(unitId, list);
+  }
+  for (const [unitId, list] of rosterLevelsByUnitId) {
+    list.sort((a, b) => Number(a.level ?? 0) - Number(b.level ?? 0));
+    rosterLevelsByUnitId.set(unitId, list);
+  }
+
   if (!isAdmin && !isPlayerForThisCountry) {
     let intelRow: { intel_level: number; display_seed: number } | null = null;
     if (auth.playerCountryId) {
@@ -418,17 +437,14 @@ export default async function CountryPage({
     const displaySeed = intelRow ? Number(intelRow.display_seed) : Math.floor(Math.random() * 2147483647);
     const tempRoster: Record<MilitaryBranch, RosterRowByBranch[]> = { terre: [], air: [], mer: [], strategique: [] };
     for (const unit of rosterUnits) {
-      const countryState = countryMilitaryUnits.find((cmu) => cmu.roster_unit_id === unit.id) ?? null;
-      const levels = rosterLevels
-        .filter((l) => l.unit_id === unit.id)
-        .sort((a, b) => a.level - b.level)
-        .map((l) => ({
-          level: l.level,
-          manpower: l.manpower,
-          hard_power: (l as MilitaryRosterUnitLevel).hard_power ?? 0,
-          mobilization_cost: (l as MilitaryRosterUnitLevel).mobilization_cost ?? 100,
-          science_required: Number((l as MilitaryRosterUnitLevel).science_required ?? 0),
-        }));
+      const countryState = countryStateByUnitId.get(unit.id) ?? null;
+      const levels = (rosterLevelsByUnitId.get(unit.id) ?? []).map((l) => ({
+        level: l.level,
+        manpower: l.manpower,
+        hard_power: (l as MilitaryRosterUnitLevel).hard_power ?? 0,
+        mobilization_cost: (l as MilitaryRosterUnitLevel).mobilization_cost ?? 100,
+        science_required: Number((l as MilitaryRosterUnitLevel).science_required ?? 0),
+      }));
       tempRoster[unit.branch].push({ unit, countryState, levels });
     }
     for (const b of ["terre", "air", "mer", "strategique"] as const) {
@@ -445,12 +461,8 @@ export default async function CountryPage({
     strategique: [],
   };
   for (const unit of rosterUnits) {
-    const countryState =
-      countryMilitaryUnits.find((cmu) => cmu.roster_unit_id === unit.id) ?? null;
-    const levels = rosterLevels
-      .filter((l) => l.unit_id === unit.id)
-      .sort((a, b) => a.level - b.level)
-      .map((l) => ({
+    const countryState = countryStateByUnitId.get(unit.id) ?? null;
+    const levels = (rosterLevelsByUnitId.get(unit.id) ?? []).map((l) => ({
       level: l.level,
       manpower: l.manpower,
       hard_power: (l as MilitaryRosterUnitLevel).hard_power ?? 0,
