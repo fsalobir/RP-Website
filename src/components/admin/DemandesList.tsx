@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   acceptRequest,
@@ -192,24 +192,12 @@ export function DemandesList({ requests, rosterUnitIds, rosterUnits = [], target
 
   const totalPages = Math.max(1, Math.ceil(filteredRequests.length / REQUESTS_PER_PAGE));
 
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [searchQuery]);
-
-  useEffect(() => {
-    if (currentPage > totalPages) setCurrentPage(totalPages);
-  }, [currentPage, totalPages]);
-
-  useEffect(() => {
-    if (selectedId && !filteredRequests.some((request) => request.id === selectedId)) {
-      setSelectedId(null);
-    }
-  }, [filteredRequests, selectedId]);
+  const effectivePage = Math.min(currentPage, totalPages);
 
   const paginatedRequests = useMemo(() => {
-    const start = (currentPage - 1) * REQUESTS_PER_PAGE;
+    const start = (effectivePage - 1) * REQUESTS_PER_PAGE;
     return filteredRequests.slice(start, start + REQUESTS_PER_PAGE);
-  }, [currentPage, filteredRequests]);
+  }, [effectivePage, filteredRequests]);
 
   const selected = filteredRequests.find((r) => r.id === selectedId) ?? sortedRequests.find((r) => r.id === selectedId);
 
@@ -258,7 +246,10 @@ export function DemandesList({ requests, rosterUnitIds, rosterUnits = [], target
             <input
               type="text"
               value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
+              onChange={(e) => {
+                setSearchQuery(e.target.value);
+                setCurrentPage(1);
+              }}
               placeholder="Ex: Prise d'influence Russie"
               className="w-full rounded border bg-[var(--background)] px-3 py-2 text-sm text-[var(--foreground)]"
               style={{ borderColor: "var(--border)" }}
@@ -267,7 +258,7 @@ export function DemandesList({ requests, rosterUnitIds, rosterUnits = [], target
         </div>
         <div className="mb-4 flex flex-wrap items-center justify-between gap-2 text-sm text-[var(--foreground-muted)]">
           <span>{filteredRequests.length} demande(s) trouvée(s)</span>
-          <span>Page {currentPage} / {totalPages}</span>
+          <span>Page {effectivePage} / {totalPages}</span>
         </div>
         {error && (
           <p className="mb-4 rounded border border-red-500/50 bg-red-500/10 px-3 py-2 text-sm text-red-400">
@@ -359,14 +350,14 @@ export function DemandesList({ requests, rosterUnitIds, rosterUnits = [], target
         {filteredRequests.length > REQUESTS_PER_PAGE && (
           <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t pt-4" style={{ borderColor: "var(--border)" }}>
             <span className="text-sm text-[var(--foreground-muted)]">
-              Affichage {Math.min((currentPage - 1) * REQUESTS_PER_PAGE + 1, filteredRequests.length)}-
-              {Math.min(currentPage * REQUESTS_PER_PAGE, filteredRequests.length)} sur {filteredRequests.length}
+              Affichage {Math.min((effectivePage - 1) * REQUESTS_PER_PAGE + 1, filteredRequests.length)}-
+              {Math.min(effectivePage * REQUESTS_PER_PAGE, filteredRequests.length)} sur {filteredRequests.length}
             </span>
             <div className="flex items-center gap-2">
               <button
                 type="button"
                 onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
-                disabled={currentPage === 1}
+                disabled={effectivePage === 1}
                 className="rounded border px-3 py-1.5 text-sm disabled:opacity-50"
                 style={{ borderColor: "var(--border)" }}
               >
@@ -375,7 +366,7 @@ export function DemandesList({ requests, rosterUnitIds, rosterUnits = [], target
               <button
                 type="button"
                 onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
-                disabled={currentPage === totalPages}
+                disabled={effectivePage === totalPages}
                 className="rounded border px-3 py-1.5 text-sm disabled:opacity-50"
                 style={{ borderColor: "var(--border)" }}
               >

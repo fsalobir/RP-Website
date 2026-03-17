@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   acceptAiEvent,
@@ -184,24 +184,12 @@ export function EventIaList({
 
   const totalPages = Math.max(1, Math.ceil(filteredEvents.length / EVENTS_PER_PAGE));
 
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [searchQuery]);
-
-  useEffect(() => {
-    if (currentPage > totalPages) setCurrentPage(totalPages);
-  }, [currentPage, totalPages]);
-
-  useEffect(() => {
-    if (selectedId && !filteredEvents.some((event) => event.id === selectedId)) {
-      setSelectedId(null);
-    }
-  }, [filteredEvents, selectedId]);
+  const effectivePage = Math.min(currentPage, totalPages);
 
   const paginatedEvents = useMemo(() => {
-    const start = (currentPage - 1) * EVENTS_PER_PAGE;
+    const start = (effectivePage - 1) * EVENTS_PER_PAGE;
     return filteredEvents.slice(start, start + EVENTS_PER_PAGE);
-  }, [currentPage, filteredEvents]);
+  }, [effectivePage, filteredEvents]);
 
   const selected = filteredEvents.find((e) => e.id === selectedId) ?? sortedEvents.find((e) => e.id === selectedId);
 
@@ -417,7 +405,10 @@ export function EventIaList({
             <input
               type="text"
               value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
+              onChange={(e) => {
+                setSearchQuery(e.target.value);
+                setCurrentPage(1);
+              }}
               placeholder="Ex: Guerre Russie"
               className="w-full rounded border bg-[var(--background)] px-3 py-2 text-sm text-[var(--foreground)]"
               style={{ borderColor: "var(--border)" }}
@@ -426,7 +417,7 @@ export function EventIaList({
         </div>
         <div className="mb-4 flex flex-wrap items-center justify-between gap-2 text-sm text-[var(--foreground-muted)]">
           <span>{filteredEvents.length} événement(s) trouvé(s)</span>
-          <span>Page {currentPage} / {totalPages}</span>
+          <span>Page {effectivePage} / {totalPages}</span>
         </div>
         {error && (
           <p className="mb-4 rounded border border-red-500/50 bg-red-500/10 px-3 py-2 text-sm text-red-400">
@@ -524,14 +515,14 @@ export function EventIaList({
         {filteredEvents.length > EVENTS_PER_PAGE && (
           <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t pt-4" style={{ borderColor: "var(--border)" }}>
             <span className="text-sm text-[var(--foreground-muted)]">
-              Affichage {Math.min((currentPage - 1) * EVENTS_PER_PAGE + 1, filteredEvents.length)}-
-              {Math.min(currentPage * EVENTS_PER_PAGE, filteredEvents.length)} sur {filteredEvents.length}
+              Affichage {Math.min((effectivePage - 1) * EVENTS_PER_PAGE + 1, filteredEvents.length)}-
+              {Math.min(effectivePage * EVENTS_PER_PAGE, filteredEvents.length)} sur {filteredEvents.length}
             </span>
             <div className="flex items-center gap-2">
               <button
                 type="button"
                 onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
-                disabled={currentPage === 1}
+                disabled={effectivePage === 1}
                 className="rounded border px-3 py-1.5 text-sm disabled:opacity-50"
                 style={{ borderColor: "var(--border)" }}
               >
@@ -540,7 +531,7 @@ export function EventIaList({
               <button
                 type="button"
                 onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
-                disabled={currentPage === totalPages}
+                disabled={effectivePage === totalPages}
                 className="rounded border px-3 py-1.5 text-sm disabled:opacity-50"
                 style={{ borderColor: "var(--border)" }}
               >

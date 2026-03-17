@@ -104,7 +104,24 @@ function SpherePieChart({
   const cx = size / 2;
   const cy = size / 2;
   const r = size / 2 - 4;
-  let angle = -Math.PI / 2;
+  const slicesWithAngles = slices
+    .filter((s) => s.value > 0)
+    .reduce<{ angle: number; items: Array<{ s: (typeof slices)[number]; startAngle: number; sweep: number; share: number; tooltipText: string }> }>(
+      (acc, s) => {
+        const startAngle = acc.angle;
+        const sweep = total > 0 ? (s.value / total) * 2 * Math.PI : 0;
+        const nextAngle = startAngle + sweep;
+        const share = total > 0 ? (s.value / total) * 100 : 0;
+        const tooltipText = formatValue
+          ? `${s.name}: ${share.toFixed(1)} % · ${formatValue(s.value)}`
+          : `${s.name}: ${share.toFixed(1)} %`;
+        return {
+          angle: nextAngle,
+          items: [...acc.items, { s, startAngle, sweep, share, tooltipText }],
+        };
+      },
+      { angle: -Math.PI / 2, items: [] }
+    ).items;
   return (
     <div className="relative flex flex-col items-center gap-2">
       <span className={`text-sm font-semibold ${glassContext ? "text-white/90" : "text-[var(--foreground-muted)]"}`}>{title}</span>
@@ -116,14 +133,7 @@ function SpherePieChart({
         aria-label={title}
         onMouseLeave={() => setHoverTooltip(null)}
       >
-        {slices.filter((s) => s.value > 0).map((s) => {
-          const startAngle = angle;
-          const sweep = total > 0 ? (s.value / total) * 2 * Math.PI : 0;
-          angle += sweep;
-          const share = total > 0 ? (s.value / total) * 100 : 0;
-          const tooltipText = formatValue
-            ? `${s.name}: ${share.toFixed(1)} % · ${formatValue(s.value)}`
-            : `${s.name}: ${share.toFixed(1)} %`;
+        {slicesWithAngles.map(({ s, startAngle, sweep, tooltipText }) => {
           return (
             <path
               key={`${s.slug}-${s.colorIndex}`}

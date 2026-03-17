@@ -474,7 +474,19 @@ export default async function CountryPage({
       intelRow = data;
     }
     intelLevel = intelRow ? Number(intelRow.intel_level) : 0;
-    const displaySeed = intelRow ? Number(intelRow.display_seed) : Math.floor(Math.random() * 2147483647);
+    // Seed d'affichage déterministe si aucun row en base (évite Math.random() dans le render).
+    const displaySeed = intelRow
+      ? Number(intelRow.display_seed)
+      : (() => {
+          const s = `${auth.playerCountryId ?? "anon"}|${country.id}`;
+          let h = 2166136261;
+          for (let i = 0; i < s.length; i++) {
+            h ^= s.charCodeAt(i);
+            h = Math.imul(h, 16777619);
+          }
+          // Borné à int32 positif.
+          return (h >>> 0) % 2147483647;
+        })();
     const tempRoster: Record<MilitaryBranch, RosterRowByBranch[]> = { terre: [], air: [], mer: [], strategique: [] };
     for (const unit of rosterUnits) {
       const countryState = countryStateByUnitId.get(unit.id) ?? null;

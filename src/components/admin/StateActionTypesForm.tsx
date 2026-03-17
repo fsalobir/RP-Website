@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { updateStateActionType } from "@/app/admin/actions-etat/actions";
 import type { StateActionType } from "@/types/database";
@@ -199,10 +199,6 @@ export function StateActionTypesForm({ types }: Props) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(() => types[0]?.id ?? null);
-
-  useEffect(() => {
-    setEdits(Object.fromEntries(types.map((t) => [t.id, initEditForType(t)])));
-  }, [types]);
 
   const hasAnyChanges = types.some((t) => hasChanges(t, edits[t.id] ?? initEditForType(t)));
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { replacePlaceholders, getPreviewVars } from "@/lib/discord-format";
 import {
@@ -62,20 +62,50 @@ export function BotDiscordForm({
   const [channelError, setChannelError] = useState<string | null>(null);
   const [templateError, setTemplateError] = useState<string | null>(null);
   const [editingTemplateId, setEditingTemplateId] = useState<string | null>(null);
-  const [previewState, setPreviewState] = useState<{ template: Template; dispatchType: DispatchType } | null>(null);
+  const [previewState, setPreviewState] = useState<{
+    template: Template;
+    dispatchType: DispatchType;
+    snippets: {
+      titlePhrase: string | null;
+      descriptionPhrase: string | null;
+      up_kind: string | null;
+      dice_result: "success" | "failure" | null;
+    } | null;
+    loading: boolean;
+  } | null>(null);
   const [channelValues, setChannelValues] = useState<Record<string, string>>({});
 
   const getChannelId = (continentId: string, kind: "national" | "international") =>
     regionChannels.find((r) => r.continent_id === continentId && r.channel_kind === kind)?.discord_channel_id ?? "";
 
-  useEffect(() => {
-    const next: Record<string, string> = {};
-    for (const c of continents) {
-      next[`${c.id}:national`] = getChannelId(c.id, "national");
-      next[`${c.id}:international`] = getChannelId(c.id, "international");
-    }
-    setChannelValues((prev) => ({ ...next, ...prev }));
-  }, [continents, regionChannels]);
+  const defaultChannelValues: Record<string, string> = {};
+  for (const c of continents) {
+    defaultChannelValues[`${c.id}:national`] = getChannelId(c.id, "national");
+    defaultChannelValues[`${c.id}:international`] = getChannelId(c.id, "international");
+  }
+  // Fallback DB + overrides utilisateur (sans setState dans useEffect).
+  const effectiveChannelValues = { ...defaultChannelValues, ...channelValues };
+
+  async function loadPreviewSnippets(dispatchType: DispatchType) {
+    setPreviewState((prev) => {
+      if (!prev || prev.dispatchType.id !== dispatchType.id) return prev;
+      return { ...prev, loading: true };
+    });
+    const res = await getPreviewSnippets(dispatchType.id);
+    setPreviewState((prev) => {
+      if (!prev || prev.dispatchType.id !== dispatchType.id) return prev;
+      return {
+        ...prev,
+        snippets: {
+          titlePhrase: res.titlePhrase ?? null,
+          descriptionPhrase: res.descriptionPhrase ?? null,
+          up_kind: res.up_kind ?? null,
+          dice_result: res.dice_result ?? null,
+        },
+        loading: false,
+      };
+    });
+  }
 
   const dispatchByStateAction = stateActionTypes.map((sat) => ({
     stateAction: sat,
@@ -123,7 +153,7 @@ export function BotDiscordForm({
                 <label className="mb-1 block text-xs text-[var(--foreground-muted)]">ID canal national</label>
                 <input
                   type="text"
-                  value={channelValues[`${c.id}:national`] ?? ""}
+                  value={effectiveChannelValues[`${c.id}:national`] ?? ""}
                   onChange={(e) =>
                     setChannelValues((prev) => ({ ...prev, [`${c.id}:national`]: e.target.value }))
                   }
@@ -135,7 +165,7 @@ export function BotDiscordForm({
                     const err = await saveRegionChannel({
                       continent_id: c.id,
                       channel_kind: "national",
-                      discord_channel_id: (channelValues[`${c.id}:national`] ?? "").trim(),
+                      discord_channel_id: (effectiveChannelValues[`${c.id}:national`] ?? "").trim(),
                     });
                     if (err.error) setChannelError(err.error);
                     else router.refresh();
@@ -146,7 +176,7 @@ export function BotDiscordForm({
                 <label className="mb-1 block text-xs text-[var(--foreground-muted)]">ID canal international</label>
                 <input
                   type="text"
-                  value={channelValues[`${c.id}:international`] ?? ""}
+                  value={effectiveChannelValues[`${c.id}:international`] ?? ""}
                   onChange={(e) =>
                     setChannelValues((prev) => ({ ...prev, [`${c.id}:international`]: e.target.value }))
                   }
@@ -158,7 +188,7 @@ export function BotDiscordForm({
                     const err = await saveRegionChannel({
                       continent_id: c.id,
                       channel_kind: "international",
-                      discord_channel_id: (channelValues[`${c.id}:international`] ?? "").trim(),
+                      discord_channel_id: (effectiveChannelValues[`${c.id}:international`] ?? "").trim(),
                     });
                     if (err.error) setChannelError(err.error);
                     else router.refresh();
@@ -278,7 +308,10 @@ export function BotDiscordForm({
                       <div className="flex gap-2">
                         <button
                           type="button"
-                          onClick={() => setPreviewState({ template: tpl, dispatchType: type })}
+                          onClick={async () => {
+                            setPreviewState({ template: tpl, dispatchType: type, snippets: null, loading: true });
+                            await loadPreviewSnippets(type);
+                          }}
                           className="text-xs text-[var(--accent)] hover:underline"
                         >
                           Aperçu
@@ -327,6 +360,9 @@ export function BotDiscordForm({
             template={previewState.template}
             dispatchType={previewState.dispatchType}
             worldDateFormatted={worldDateFormatted}
+            snippets={previewState.snippets}
+            loading={previewState.loading}
+            onReload={() => loadPreviewSnippets(previewState.dispatchType)}
             onClose={() => setPreviewState(null)}
           />
         )}
@@ -346,22 +382,25 @@ function EmbedPreviewModal({
   template,
   dispatchType,
   worldDateFormatted,
+  snippets,
+  loading,
+  onReload,
   onClose,
 }: {
   template: Template;
   dispatchType: DispatchType;
   worldDateFormatted: string;
-  onClose: () => void;
-}) {
-  const actionLabel = deriveActionLabel(dispatchType.label_fr);
-
-  const [snippets, setSnippets] = useState<{
+  snippets: {
     titlePhrase: string | null;
     descriptionPhrase: string | null;
     up_kind: string | null;
     dice_result: "success" | "failure" | null;
-  } | null>(null);
-  const [loading, setLoading] = useState(true);
+  } | null;
+  loading: boolean;
+  onReload: () => void;
+  onClose: () => void;
+}) {
+  const actionLabel = deriveActionLabel(dispatchType.label_fr);
 
   const vars = getPreviewVars({
     date: worldDateFormatted,
@@ -370,22 +409,6 @@ function EmbedPreviewModal({
     up_kind: snippets?.up_kind ?? undefined,
     dice_result: snippets?.dice_result ?? undefined,
   });
-
-  const fetchSnippets = useCallback(async () => {
-    setLoading(true);
-    const res = await getPreviewSnippets(dispatchType.id);
-    setSnippets({
-      titlePhrase: res.titlePhrase ?? null,
-      descriptionPhrase: res.descriptionPhrase ?? null,
-      up_kind: res.up_kind ?? null,
-      dice_result: res.dice_result ?? null,
-    });
-    setLoading(false);
-  }, [dispatchType.id]);
-
-  useEffect(() => {
-    fetchSnippets();
-  }, [fetchSnippets]);
 
   const title =
     snippets?.titlePhrase != null
@@ -424,7 +447,7 @@ function EmbedPreviewModal({
               type="button"
               onClick={(e) => {
                 e.stopPropagation();
-                fetchSnippets();
+                onReload();
               }}
               disabled={loading}
               className="text-xs text-[var(--accent)] hover:underline disabled:opacity-50"

@@ -116,23 +116,13 @@ function LawCard({
   useEffect(() => {
     if (!settingLevel || pendingTarget.current === null) return;
     if (targetScore !== pendingTarget.current) return;
-
-    const elapsed = startedAt.current ? Date.now() - startedAt.current : 0;
-    const remaining = Math.max(0, 400 - elapsed);
-
-    if (remaining <= 0) {
-      pendingTarget.current = null;
-      startedAt.current = null;
-      setSettingLevel(null);
-      return;
-    }
-
+    // Quand la cible est confirmée côté props, on garde un petit délai UI (transition),
+    // sans dépendre de Date.now() (règle de pureté).
     const id = window.setTimeout(() => {
       pendingTarget.current = null;
       startedAt.current = null;
       setSettingLevel(null);
-    }, remaining);
-
+    }, 400);
     return () => window.clearTimeout(id);
   }, [targetScore, settingLevel]);
 
@@ -154,7 +144,6 @@ function LawCard({
     if (!canEditCountry || isLoading) return;
     const threshold = thresholds?.[levelKey] ?? 0;
     pendingTarget.current = threshold;
-    startedAt.current = Date.now();
     setSettingLevel(levelKey);
     setError(null);
     try {
@@ -169,7 +158,6 @@ function LawCard({
       }
     } catch {
       pendingTarget.current = null;
-      startedAt.current = null;
       setSettingLevel(null);
       setError("Une erreur est survenue lors de la mise à jour.");
     }

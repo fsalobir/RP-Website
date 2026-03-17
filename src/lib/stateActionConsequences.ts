@@ -14,7 +14,13 @@ import {
   formatAdminEffectShortForDiscord,
   DURATION_DAYS_MAX,
 } from "@/lib/countryEffects";
-import { IDEOLOGY_IDS, ideologyColumnName, normalizeIdeologyScoresWithAxioms, type IdeologyId } from "@/lib/ideology";
+import {
+  IDEOLOGY_IDS,
+  ideologyColumnName,
+  normalizeIdeologyScoresWithAxioms,
+  roundIdeologyScoresToExactSum,
+  type IdeologyId,
+} from "@/lib/ideology";
 import type { AdminEffectAdded, DiceResults } from "@/types/database";
 
 function clampRelation(value: number): number {
@@ -152,19 +158,9 @@ export async function applyImmediateEffect(
     const shiftedRaw = { ...current };
     shiftedRaw[ideologyId] = current[ideologyId] + value;
     const shifted = normalizeIdeologyScoresWithAxioms(shiftedRaw);
-    // Arrondir à 4 décimales tout en garantissant une somme exacte de 100.0000 après arrondi.
-    // Sans cette correction, la somme peut dériver (ex. 99.9999) à cause des arrondis indépendants.
-    const rounded: Record<IdeologyId, number> = {} as any;
-    for (const id of IDEOLOGY_IDS) {
-      rounded[id] = Number(shifted[id].toFixed(4));
-    }
-    const sumRounded = IDEOLOGY_IDS.reduce((s, id) => s + rounded[id], 0);
-    const delta = Number((100 - sumRounded).toFixed(4));
-    if (delta !== 0) {
-      // Ajuster la cible du snap en priorité (puis clamp >=0), pour respecter l'intention Game Design.
-      const adjusted = Number((rounded[ideologyId] + delta).toFixed(4));
-      rounded[ideologyId] = Math.max(0, adjusted);
-    }
+    // Arrondir à 4 décimales tout en garantissant une somme exacte de 100.0000 après arrondi,
+    // sans "perdre" la correction si l'idéologie ciblée est déjà à 0.
+    const rounded = roundIdeologyScoresToExactSum(shifted, { decimals: 4, targetSum: 100, preferredId: ideologyId });
     const updatePayload: Record<string, number> = {};
     for (const id of IDEOLOGY_IDS) {
       updatePayload[ideologyColumnName(id)] = rounded[id];

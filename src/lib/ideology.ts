@@ -258,6 +258,80 @@ export function normalizeIdeologyScoresWithAxioms(scores: Partial<IdeologyScores
   return out;
 }
 
+/**
+ * Arrondit à `decimals` décimales tout en garantissant une somme exacte (par défaut 100.0000)
+ * et la contrainte `>= 0`. Si une correction négative ne peut pas être entièrement absorbée
+ * par `preferredId` (ex. il est déjà à 0 après arrondi), le reste est redistribué sur les
+ * autres idéologies non nulles.
+ */
+export function roundIdeologyScoresToExactSum(
+  scores: IdeologyScores,
+  options: { decimals?: number; targetSum?: number; preferredId?: IdeologyId } = {}
+): IdeologyScores {
+  const decimals = options.decimals ?? 4;
+  const targetSum = options.targetSum ?? 100;
+  const preferredId = options.preferredId ?? null;
+
+  const factor = 10 ** decimals;
+  const roundTo = (v: number) => Math.round(v * factor) / factor;
+
+  const out = {} as IdeologyScores;
+  for (const id of IDEOLOGY_IDS) {
+    out[id] = roundTo(num(scores[id], 0));
+    if (out[id] < 0) out[id] = 0;
+  }
+
+  const sum = IDEOLOGY_IDS.reduce((s, id) => s + out[id], 0);
+  let delta = roundTo(targetSum - sum);
+  if (delta === 0) return out;
+
+  const applyToId = (id: IdeologyId, d: number): number => {
+    if (d === 0) return 0;
+    if (d > 0) {
+      out[id] = roundTo(out[id] + d);
+      return d;
+    }
+    // d < 0
+    const maxSubtract = out[id];
+    const take = Math.min(maxSubtract, -d);
+    if (take <= 0) return 0;
+    out[id] = roundTo(out[id] - take);
+    return -take;
+  };
+
+  if (preferredId && IDEOLOGY_IDS.includes(preferredId)) {
+    const applied = applyToId(preferredId, delta);
+    delta = roundTo(delta - applied);
+    if (delta === 0) return out;
+  }
+
+  // Si delta > 0, on peut toujours l'ajouter sans violer `>= 0`.
+  if (delta > 0) {
+    const fallback = preferredId && IDEOLOGY_IDS.includes(preferredId) ? preferredId : IDEOLOGY_IDS[0];
+    applyToId(fallback, delta);
+    return out;
+  }
+
+  // delta < 0 : redistribuer (soustraire) sur les autres idéologies encore > 0.
+  const candidates = IDEOLOGY_IDS.filter((id) => id !== preferredId).sort((a, b) => out[b] - out[a]);
+  for (const id of candidates) {
+    if (delta === 0) break;
+    const applied = applyToId(id, delta);
+    delta = roundTo(delta - applied);
+  }
+
+  // À ce stade, delta devrait être nul (sinon, tous les scores étaient à 0 alors que sum > targetSum, incohérent).
+  // On tente une dernière correction sans clamp (sécurité), en choisissant le max.
+  if (delta !== 0) {
+    let best = IDEOLOGY_IDS[0];
+    for (const id of IDEOLOGY_IDS) if (out[id] > out[best]) best = id;
+    out[best] = roundTo(out[best] + delta);
+    if (out[best] < 0) out[best] = 0;
+  }
+
+  return out;
+}
+
 function addScores(a: IdeologyScores, b: IdeologyScores): IdeologyScores {
   const out = {} as IdeologyScores;
   for (const id of IDEOLOGY_IDS) out[id] = a[id] + b[id];

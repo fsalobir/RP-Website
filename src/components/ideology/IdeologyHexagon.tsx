@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import {
   IDEOLOGY_IDS,
   IDEOLOGY_LABELS,
@@ -187,31 +187,38 @@ export function IdeologyHexagon({
   const [infoboxFadingOut, setInfoboxFadingOut] = useState(false);
   const [infoboxFadeIn, setInfoboxFadeIn] = useState(false);
   const infoboxLeaveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  useEffect(() => {
-    if (!displayedIdeology) {
-      setInfoboxFadeIn(false);
-      return;
-    }
-    const t = requestAnimationFrame(() => {
-      requestAnimationFrame(() => setInfoboxFadeIn(true));
-    });
-    return () => cancelAnimationFrame(t);
-  }, [displayedIdeology]);
+  const fadeInRafRef = useRef<number | null>(null);
 
   const handleIdeologyEnter = useCallback((id: IdeologyId) => {
     if (infoboxLeaveTimeoutRef.current) {
       clearTimeout(infoboxLeaveTimeoutRef.current);
       infoboxLeaveTimeoutRef.current = null;
     }
+    if (fadeInRafRef.current != null) {
+      cancelAnimationFrame(fadeInRafRef.current);
+      fadeInRafRef.current = null;
+    }
     setInfoboxFadingOut(false);
+    setInfoboxFadeIn(false);
     setHoveredIdeology(id);
     setDisplayedIdeology(id);
+    // Déclenche le fade-in après montage (sans setState dans un useEffect).
+    requestAnimationFrame(() => {
+      fadeInRafRef.current = requestAnimationFrame(() => {
+        setInfoboxFadeIn(true);
+        fadeInRafRef.current = null;
+      });
+    });
   }, []);
 
   const handleIdeologyLeave = useCallback(() => {
     setHoveredIdeology(null);
     setInfoboxFadingOut(true);
+    setInfoboxFadeIn(false);
+    if (fadeInRafRef.current != null) {
+      cancelAnimationFrame(fadeInRafRef.current);
+      fadeInRafRef.current = null;
+    }
     infoboxLeaveTimeoutRef.current = setTimeout(() => {
       setDisplayedIdeology(null);
       setInfoboxFadingOut(false);

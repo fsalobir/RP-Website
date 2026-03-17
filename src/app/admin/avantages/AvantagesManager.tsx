@@ -70,7 +70,6 @@ export function AvantagesManager({
   const [perkCategoryId, setPerkCategoryId] = useState<string>("");
   const [perkIconUrl, setPerkIconUrl] = useState("");
   const [perkIconFile, setPerkIconFile] = useState<File | null>(null);
-  const [perkIconPreview, setPerkIconPreview] = useState<string | null>(null);
   const [perkIconSize, setPerkIconSize] = useState(48);
   const [perkSortOrder, setPerkSortOrder] = useState(0);
   const [perkEffects, setPerkEffects] = useState<PerkEffectInput[]>([]);
@@ -110,6 +109,17 @@ export function AvantagesManager({
   );
   const currentEffectTarget = effectTarget ?? defaultTarget;
 
+  const perkIconPreviewUrl = useMemo(() => {
+    if (!perkIconFile) return null;
+    return URL.createObjectURL(perkIconFile);
+  }, [perkIconFile]);
+
+  useEffect(() => {
+    return () => {
+      if (perkIconPreviewUrl) URL.revokeObjectURL(perkIconPreviewUrl);
+    };
+  }, [perkIconPreviewUrl]);
+
   function openAddCategory() {
     setEditingCategoryId(null);
     setCategoryName("");
@@ -144,15 +154,6 @@ export function AvantagesManager({
     await deletePerkCategory(id);
     window.location.reload();
   }
-
-  useEffect(() => {
-    if (perkIconFile) {
-      const url = URL.createObjectURL(perkIconFile);
-      setPerkIconPreview(url);
-      return () => URL.revokeObjectURL(url);
-    }
-    setPerkIconPreview(null);
-  }, [perkIconFile]);
 
   async function uploadPerkIcon(file: File): Promise<string> {
     const supabase = createClient();
@@ -520,7 +521,7 @@ export function AvantagesManager({
               {(perkIconPreview || perkIconUrl) && (
                 <div className="mt-2 flex items-center gap-2">
                   <img
-                    src={perkIconPreview || perkIconUrl || ""}
+                    src={perkIconPreviewUrl || perkIconUrl || ""}
                     alt=""
                     width={perkIconSize}
                     height={perkIconSize}

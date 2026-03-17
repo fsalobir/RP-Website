@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
+import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
 import type { Country } from "@/types/database";
@@ -54,16 +55,16 @@ export function CountryForm({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [flagFile, setFlagFile] = useState<File | null>(null);
-  const [flagPreviewUrl, setFlagPreviewUrl] = useState<string | null>(null);
+  const flagPreviewUrl = useMemo(() => {
+    if (!flagFile) return null;
+    return URL.createObjectURL(flagFile);
+  }, [flagFile]);
 
   useEffect(() => {
-    if (flagFile) {
-      const url = URL.createObjectURL(flagFile);
-      setFlagPreviewUrl(url);
-      return () => URL.revokeObjectURL(url);
-    }
-    setFlagPreviewUrl(null);
-  }, [flagFile]);
+    return () => {
+      if (flagPreviewUrl) URL.revokeObjectURL(flagPreviewUrl);
+    };
+  }, [flagPreviewUrl]);
 
   const update = (key: string, value: string | number) => {
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -297,13 +298,13 @@ export function CountryForm({
         >
           {saving ? "Enregistrement…" : "Enregistrer"}
         </button>
-        <a
+        <Link
           href="/admin/pays"
           className="rounded border py-2 px-4 text-[var(--foreground-muted)] hover:bg-[var(--background-elevated)]"
           style={{ borderColor: "var(--border)" }}
         >
           Annuler
-        </a>
+        </Link>
       </div>
     </form>
   );
