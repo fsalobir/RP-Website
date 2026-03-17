@@ -13,6 +13,18 @@ export default defineConfig({
     screenshot: "only-on-failure",
     video: "retain-on-failure",
   },
+  // Démarre automatiquement l'app avec Supabase local pour que les pages utilisent le seed (supabase/seed.sql)
+  // au lieu d'interroger un projet distant via .env.local.
+  webServer: process.env.PLAYWRIGHT_BASE_URL
+    ? undefined
+    : {
+        command: "node scripts/start-next-for-playwright.mjs",
+        url: "http://localhost:3000",
+        // Important: on force un serveur neuf avec les variables d'env ci-dessous,
+        // sinon un `next dev` déjà lancé pourrait pointer vers un Supabase distant.
+        reuseExistingServer: false,
+        timeout: 120_000,
+      },
   projects: [
     {
       name: "chromium",
