@@ -32,7 +32,7 @@ export const IDEOLOGY_DESCRIPTIONS: Record<IdeologyId, string> = {
 
 /** Image d’en-tête optionnelle pour l’infobox au survol (hexagone). */
 export const IDEOLOGY_INFOBOX_HEADER_IMAGE: Record<IdeologyId, string | null> = {
-  germanic_monarchy: null,
+  germanic_monarchy: "/images/ideology/germanic_monarchy.png",
   merina_monarchy: "/images/ideology/merina_monarchy.png",
   french_republicanism: "/images/ideology/french_republicanism.png",
   mughal_republicanism: null,
@@ -42,7 +42,8 @@ export const IDEOLOGY_INFOBOX_HEADER_IMAGE: Record<IdeologyId, string | null> = 
 
 /** Description longue optionnelle pour l’infobox (hexagone). */
 export const IDEOLOGY_INFOBOX_LONG_DESCRIPTION: Record<IdeologyId, string | null> = {
-  germanic_monarchy: null,
+  germanic_monarchy:
+    "Attaqué de toutes parts par des idéologies révolutionnaires, la monarchie allemande a émergé victorieuse de toutes les épreuves, et s'est érigée en gardienne de l'ordre établi. Le rôle du monarque est de protéger, et pour cela, une relation indéfectible avec l'armée de l'État est nécessaire.",
   merina_monarchy:
     "Fort de sa splendide isolation, l'île de Madagascar a lentement évolué vers un niveau de développement où le Roi a du partager le poids de diriger. Le Roi pousse le profit individuel, le parlement pousse les réformes sociales.",
   french_republicanism:
@@ -56,7 +57,7 @@ export const IDEOLOGY_INFOBOX_LONG_DESCRIPTION: Record<IdeologyId, string | null
 
 /** Calque optionnel (image de fond) par secteur de l’hexagone, même ordre que IDEOLOGY_IDS. */
 export const IDEOLOGY_HEX_LAYER_IMAGE: Record<IdeologyId, string | null> = {
-  germanic_monarchy: null,
+  germanic_monarchy: "/images/ideology/germanic_monarchy.png",
   merina_monarchy: "/images/ideology/merina_monarchy.png",
   french_republicanism: "/images/ideology/french_republicanism.png",
   mughal_republicanism: null,
