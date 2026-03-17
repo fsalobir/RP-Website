@@ -12,6 +12,11 @@ jobs:
     env:
       # Utilisé par les routes /api/cron/*
       CRON_SECRET: test-cron-secret
+      # Supabase local (valeurs stables côté app)
+      NEXT_PUBLIC_SUPABASE_URL: "http://127.0.0.1:54321"
+      # Clés Supabase local par défaut (JWT_SECRET = super-secret-jwt-token-with-at-least-32-characters-long)
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0"
+      SUPABASE_SERVICE_ROLE_KEY: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImV4cCI6MTk4MzgxMjk5Nn0.EGIM96RAZx35lJzdJsyH-qQwv8Hdp7fsn3W0YpN81IU"
     steps:
       - uses: actions/checkout@v4
 
@@ -36,36 +41,7 @@ jobs:
       - run: npx playwright install --with-deps
 
       - name: npm run build
-        run: |
-          # On exporte les variables Supabase local nécessaires au build Next.js.
-          supabase status -o env | node -e "
-            let buf = '';
-            process.stdin.setEncoding('utf8');
-            process.stdin.on('data', (d) => (buf += d));
-            process.stdin.on('end', () => {
-              for (const rawLine of buf.split(/\r?\n/)) {
-                const line = rawLine.trim();
-                if (!line) continue;
-                if (line.startsWith('Stopped services:')) continue;
-                const eqIdx = line.indexOf('=');
-                if (eqIdx <= 0) continue;
-                const key = line.slice(0, eqIdx);
-                let value = line.slice(eqIdx + 1);
-                if (value.startsWith('\"') && value.endsWith('\"')) value = value.slice(1, -1);
-                process.stdout.write(`${key}=${value}\n`);
-              }
-            });
-          " > /tmp/supabase.env
-
-          set -a
-          . /tmp/supabase.env
-          set +a
-
-          export NEXT_PUBLIC_SUPABASE_URL="${API_URL:-http://127.0.0.1:54321}"
-          export NEXT_PUBLIC_SUPABASE_ANON_KEY="${ANON_KEY:-}"
-          export SUPABASE_SERVICE_ROLE_KEY="${SERVICE_ROLE_KEY:-}"
-
-          npm run build
+        run: npm run build
 
       - run: npm run test:e2e
 
