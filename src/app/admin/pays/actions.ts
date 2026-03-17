@@ -422,8 +422,12 @@ export async function updateCountryAiStatus(
   aiStatus: string | null
 ): Promise<{ error?: string }> {
   const supabase = await createClient();
-  const { data: adminRow } = await supabase.from("admins").select("id").limit(1).single();
-  if (!adminRow) return { error: "Non autorisé." };
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: "Non connecté." };
+  const { data: adminRow } = await supabase.from("admins").select("id").eq("user_id", user.id).single();
+  if (!adminRow) return { error: "Réservé aux admins." };
 
   const { data: playerRow } = await supabase
     .from("country_players")
@@ -449,8 +453,12 @@ export async function updateCountryContinent(
   continentId: string | null
 ): Promise<{ error?: string }> {
   const supabase = await createClient();
-  const { data: adminRow } = await supabase.from("admins").select("id").limit(1).single();
-  if (!adminRow) return { error: "Non autorisé." };
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: "Non connecté." };
+  const { data: adminRow } = await supabase.from("admins").select("id").eq("user_id", user.id).single();
+  if (!adminRow) return { error: "Réservé aux admins." };
 
   const { error } = await supabase
     .from("countries")

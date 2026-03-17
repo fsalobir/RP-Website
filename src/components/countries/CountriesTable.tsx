@@ -2,8 +2,11 @@
 
 import { useState, useMemo, useTransition } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { formatNumber, formatGdp, formatPopulation } from "@/lib/format";
 import { InfoTooltipWithWikiLink } from "@/components/ui/InfoTooltipWithWikiLink";
+
+const flagLoader = ({ src }: { src: string }) => src;
 
 export type SortKey =
   | "name"
@@ -525,8 +528,9 @@ export function CountriesTable({
                   style={{ isolation: "isolate" }}
                 >
                   {c.flag_url ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
+                    <Image
+                      loader={flagLoader}
+                      unoptimized
                       src={c.flag_url}
                       alt=""
                       width={40}

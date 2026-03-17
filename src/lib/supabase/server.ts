@@ -17,8 +17,13 @@ export async function createClient() {
             cookiesToSet.forEach(({ name, value, options }) =>
               cookieStore.set(name, value, options)
             )
-          } catch {
-            // Ignore in Server Components
+          } catch (e) {
+            // Peut arriver dans certains contextes (Server Components / headers immuables).
+            // On log pour diagnostiquer les déconnexions/session "aléatoires" sans exposer de valeurs de cookies.
+            console.warn('[supabase] Échec lors de cookieStore.set (cookies auth non persistés).', {
+              error: e instanceof Error ? e.message : String(e),
+              cookieNames: cookiesToSet.map((c) => c.name),
+            })
           }
         },
       },

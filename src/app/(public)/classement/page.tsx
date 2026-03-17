@@ -14,6 +14,9 @@ function normId(id: string | null | undefined): string {
 
 export default async function ClassementPage() {
   const supabase = await createClient();
+  const cutoffDate = new Date();
+  cutoffDate.setDate(cutoffDate.getDate() - 14);
+  const countryHistoryCutoff = cutoffDate.toISOString().slice(0, 10);
   const [countriesResult, historyResult, rulesRes, rosterUnitsRes, rosterLevelsRes, countryMilitaryRes, effectsRes, lawsRes, controlRes] = await Promise.all([
     supabase
       .from("countries")
@@ -22,6 +25,7 @@ export default async function ClassementPage() {
     supabase
       .from("country_history")
       .select("country_id, date, population, gdp, militarism, industry, science, stability")
+      .gte("date", countryHistoryCutoff)
       .order("date", { ascending: false }),
     supabase.from("rule_parameters").select("key, value").in("key", [
       "influence_config", "sphere_influence_pct", "global_growth_effects",

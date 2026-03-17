@@ -1,15 +1,11 @@
 import { createClient } from "@/lib/supabase/server";
 import Link from "next/link";
 import { CountriesTable } from "@/components/countries/CountriesTable";
-import { ResetStatsButton } from "./ResetStatsButton";
-import { AdvanceDayButton } from "./AdvanceDayButton";
-import { RandomizeBudgetsButton } from "./RandomizeBudgetsButton";
-import { RandomizeIdeologiesButton } from "./RandomizeIdeologiesButton";
-import { updateCountryAiStatus, updateCountryContinent } from "./actions";
-
-function normId(id: string | null | undefined): string {
-  return String(id ?? "").trim().toLowerCase();
-}
+import { ResetStatsButton } from "../../pays/ResetStatsButton";
+import { AdvanceDayButton } from "../../pays/AdvanceDayButton";
+import { RandomizeBudgetsButton } from "../../pays/RandomizeBudgetsButton";
+import { RandomizeIdeologiesButton } from "../../pays/RandomizeIdeologiesButton";
+import { updateCountryAiStatus, updateCountryContinent } from "../../pays/actions";
 
 export default async function AdminPaysListPage() {
   const supabase = await createClient();
@@ -96,3 +92,4 @@ export default async function AdminPaysListPage() {
     </div>
   );
 }
+

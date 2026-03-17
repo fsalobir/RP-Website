@@ -4,7 +4,7 @@
  * acceptés dont scheduled_trigger_at est passé (ou null) et consequences_applied_at non renseigné.
  * Réservation via processing_started_at pour éviter le double traitement (appels parallèles).
  * Timeout retry : 10 min (lignes en cours sans consequences_applied_at re-sélectionnables).
- * Protégée par CRON_SECRET (en-tête ou query).
+ * Protégée par CRON_SECRET (Authorization: Bearer).
  */
 
 import { NextRequest, NextResponse } from "next/server";
@@ -14,9 +14,9 @@ import { computeAiEventDiceRoll } from "@/lib/stateActionDice";
 import type { DiceResults } from "@/types/database";
 
 function getCronSecret(request: NextRequest): string | null {
-  const header = request.headers.get("x-cron-secret") ?? request.headers.get("authorization")?.replace(/^Bearer\s+/i, "");
-  if (header) return header;
-  return request.nextUrl.searchParams.get("secret");
+  const auth = request.headers.get("authorization");
+  if (!auth) return null;
+  return auth.replace(/^Bearer\s+/i, "");
 }
 
 export async function GET(request: NextRequest) {

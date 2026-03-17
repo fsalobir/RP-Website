@@ -1,6 +1,11 @@
-// Type très léger pour éviter les erreurs TS "instantiation is excessively deep" avec les génériques Supabase.
-// On garde juste la forme minimale nécessaire pour les appels utilisés ici.
-type SupabaseClientLike = { from: (table: string) => any };
+type SupabaseClientLike = {
+  from: (table: string) => {
+    select: (columns: string) => {
+      eq: (column: string, value: unknown) => unknown;
+      maybeSingle: () => Promise<{ data?: { value?: unknown } | null }>;
+    };
+  };
+};
 
 /** Ligne de la table country_relations (une paire normalisée country_a_id < country_b_id). */
 export interface CountryRelationRow {
@@ -43,11 +48,14 @@ export async function getRelation(
 export async function getAllRelationRows(
   supabase: SupabaseClientLike
 ): Promise<CountryRelationRow[]> {
-  const { data, error } = await supabase
+  const res = (await (supabase
     .from("country_relations")
-    .select("country_a_id, country_b_id, value, updated_at");
-  if (error) throw error;
-  return (data ?? []) as CountryRelationRow[];
+    .select("country_a_id, country_b_id, value, updated_at") as unknown)) as {
+    data?: CountryRelationRow[] | null;
+    error?: { message?: string } | null;
+  };
+  if (res.error) throw new Error(res.error.message ?? "Erreur lors du chargement des relations.");
+  return (res.data ?? []) as CountryRelationRow[];
 }
 
 /** Construit une map clé "a_id|b_id" (a < b) → value. */
