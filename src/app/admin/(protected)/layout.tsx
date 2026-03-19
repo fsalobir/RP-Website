@@ -1,4 +1,3 @@
-import { createClient } from "@/lib/supabase/server";
 import { getCachedAuth } from "@/lib/auth-server";
 import { redirect } from "next/navigation";
 import { AdminNav } from "@/components/layout/AdminNav";
@@ -11,15 +10,7 @@ export default async function AdminProtectedLayout({ children }: { children: Rea
   }
 
   if (!auth.isAdmin) {
-    if (auth.playerCountryId) {
-      const supabase = await createClient();
-      const { data: country, error } = await supabase
-        .from("countries")
-        .select("slug")
-        .eq("id", auth.playerCountryId)
-        .single();
-      if (!error && country?.slug) redirect(`/pays/${country.slug}`);
-    }
+    if (auth.playerRealmSlug) redirect(`/royaume/${auth.playerRealmSlug}`);
     redirect("/admin/connexion?error=non-admin");
   }
 

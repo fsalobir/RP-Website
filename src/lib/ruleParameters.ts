@@ -21,6 +21,7 @@ export const RULE_KEY_LABELS: Record<string, string> = {
   cron_paused: "Jeu en pause (cron désactivé)",
   ideology_config: "Configuration idéologique",
   ideology_effects: "Effets par idéologie (hexagone)",
+  max_route_km: "Distance max (km) pour créer une route entre deux villes",
 };
 
 export type RuleSection = {

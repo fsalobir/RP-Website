@@ -1,5 +1,10 @@
 # Canary et rollback Process Due
 
+> ⚠️ **Branche `fantasy` – Document d’héritage**
+> 
+> Ce runbook décrit le canary / rollback de la function `process-ai-events-due` dans le contexte de l’ancien simulateur de nations.  
+> Sur `fantasy`, la logique reste valable (canary piloté par un flag, métriques `pending_due` / `stuck_processing`, rollback simple), mais doit être appliquée au nouveau pipeline d’événements Fantasy.
+
 ## Canary (Phase 3)
 
 1. Désactiver le déclencheur externe actuel de `GET /api/cron/process-ai-events`.

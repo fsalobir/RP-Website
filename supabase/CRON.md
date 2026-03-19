@@ -1,6 +1,12 @@
 # Cron Supabase: configuration et debug
 
-## Référence de ce projet
+> ⚠️ **Branche `fantasy` – Document d’héritage**
+> 
+> Ce fichier décrit le câblage cron/Edge Functions de l’ancien simulateur de nations (jobs `daily-country-update`, `ai-events-generation`, etc.).  
+> Sur la branche `fantasy`, ces jobs et migrations n’existent plus tels quels.  
+> **Ne pas recréer tel quel le schéma d’origine** ; utiliser ces notes uniquement comme modèle pour concevoir le futur système de ticks/événements du RPG (Royaumes, Provinces, Personnages).
+
+## Référence de ce projet (ancienne version, à re-designer pour Fantasy)
 
 Le déclenchement automatique se fait côté **Supabase** via **pg_cron**.
 
@@ -85,9 +91,9 @@ Vérifier dans `ai_events_config`:
 - au moins une action autorisée (major/minor)
 - au moins une cible autorisée
 
-Et en données:
+Et en données (ancienne base):
 
-- au moins un pays IA majeur ou mineur (`countries.ai_status`).
+- au moins une entité IA majeure ou mineure (ex-`countries.ai_status` dans le simulateur de nations).
 
 ---
 

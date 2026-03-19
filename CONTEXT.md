@@ -1,51 +1,53 @@
-# Contexte de session – Simulateur de nations
+# Contexte de session – RPG Grande Échelle (Univers Fantasy)
 
-Document de référence pour reprendre le projet ou une session. À mettre à jour après des changements importants.
+> **⚠️ AVERTISSEMENT DE FORK (BRANCHE `fantasy`)**
+> Ce projet a subi un *Hard Fork*. Toute l'ancienne logique de simulation géopolitique moderne (Pays, PIB, Missiles, Élections) a été supprimée. Nous construisons un RPG / Gestion de royaumes médiéval-fantastique.
+
+Document de référence pour reprendre le projet ou une session. À mettre à jour après des changements importants de l'architecture.
 
 ---
 
-## État actuel du projet (dernière mise à jour)
+## État actuel du projet (Clean Slate)
 
-- **Next.js** (App Router) + **Supabase** (PostgreSQL, Auth, Storage). Pas de cron encore ; prévu pg_cron ou Edge Function.
-- **UI** : 100 % en français. Thème « QG militaire » (fond sombre, panneaux, accent vert). Drapeaux : upload dans le bucket Storage `flags` ou URL.
+- **Stack :** Next.js (App Router) + Supabase (PostgreSQL, Auth, Storage). La base de données a été réinitialisée à zéro. Les passages de temps (ticks) seront pilotés par Supabase (`pg_cron` / Edge Functions).
+- **UI :** 100 % en français. Thème « Dark Fantasy / Carte d'état-major médiéval » (fond sombre, textures parchemin/pierre, accents or, pourpre ou fer).
+- **Médias :** Les blasons, icônes de POI et portraits de personnages utilisent le bucket Supabase Storage (ex: `heraldry`, `portraits`) ou des URL externes.
 
-### Ce qui est en place
+### Architecture cible (En cours de construction)
 
-1. **Public**
-   - Accueil : **table** des pays (Pays, Régime, Population, PIB, Militarisme, Industrie, Science, Stabilité). PIB affiché en « X Bn ». Variations (vert/rouge) affichées entre parenthèses quand des lignes existent dans `country_history`.
-   - Fiche pays : 3 onglets (Généralités/Société/Macros, Militaire, Avantages). Nombres formatés avec `formatNumber` / `formatGdp`.
-   - Page Règles : lecture seule des `rule_parameters`.
+1. **Vue Joueur (Public)**
+   - **Accueil :** Liste des Royaumes (`realms`) avec leurs statistiques agrégées.
+   - **Fiche Royaume (`/royaume/[slug]`) :** Affiche une carte stylisée du royaume divisée en Provinces. 
+   - **Fiche Province :** Détaille la population, la prospérité, les races présentes et les Points d'Intérêt (bâtiments/ruines).
+   - **Personnages :** Vues pour les personnages (`characters`) et leurs arbres généalogiques/clans.
 
-2. **Admin**
-   - Connexion / Inscription. Protection par middleware + table `admins`.
-   - CRUD pays (formulaire 3 blocs) avec **upload de drapeau** (Storage `flags`) ou champ URL.
-   - CRUD rule_parameters (édition valeur par ligne).
+2. **Vue Maître du Jeu (Admin / `/mj`)**
+   - Protection par middleware (réservé aux MJ).
+   - Outils de « God Mode » : CRUD pour les Royaumes, Provinces, création de POI à la volée, attribution d'équipement ou d'effets magiques.
 
-3. **Données**
-   - `countries`, `country_macros`, `rule_parameters`, `military_unit_types`, `country_military_limits`, `perks`, `country_perks`, `admins`, **`country_history`**.
-   - Migrations : `001_initial_schema.sql`, `002_storage_flags_bucket.sql` (politiques uniquement ; créer le bucket « flags » à la main), `003_country_history.sql`.
+3. **Données & Moteur (Le Cœur du Jeu)**
+   - **Moteur d'Effets Générique :** L'ancien système a été abstrait. Un effet peut désormais cibler une Province, un Royaume ou un Personnage. L'agrégation se fait de bas en haut (Provinces -> Royaume).
+   - **Migrations :** Reparties de zéro (`0000_initial_fantasy_schema.sql` en attente).
 
 4. **Formatage**
-   - `src/lib/format.ts` : `formatNumber(value)` → séparateur "." (ex. 32.000.000) ; `formatGdp(value)` → "1,2 Bn". À utiliser partout pour l’affichage des nombres et du PIB.
+   - `src/lib/format.ts` : `formatNumber(value)` → séparateur "." (ex. 32.000). 
+   - *Note : Les anciens formateurs comme `formatGdp` ont été supprimés. Utiliser des formats génériques ou liés aux ressources fantasy (Or, Bois, Magie).*
 
-### Décisions / conventions
+### Décisions / Conventions
 
-- Pas de `next/image` pour les drapeaux : `<img>` utilisé pour accepter toute URL (dont externes et Storage).
-- Variations sur la liste : comparaison `countries` (actuel) vs dernière ligne `country_history` (précédent). Vert si hausse, rouge si baisse. Sans historique, pas de parenthèses.
-- Cron à faire : lire `rule_parameters`, mettre à jour `countries`, et **écrire un snapshot dans `country_history`** pour que les variations s’affichent.
+- **Balises Image :** Pas de `next/image` obligatoire pour les blasons/portraits : `<img>` standard est toléré pour accepter facilement toute URL externe (générateurs d'avatars, hébergeurs d'images) en plus du Storage Supabase.
+- **Hiérarchie stricte :** La donnée brute vit dans la `Province`. Le `Royaume` n'est qu'une enveloppe politique qui additionne les valeurs de ses provinces.
+- **Extensibilité narrative :** Le MJ doit pouvoir ajouter du "fluff" (texte narratif) qui n'a pas forcément d'impact mécanique, ou lier ce fluff à des effets concrets du moteur.
 
-### Fichiers clés
+### Fichiers clés (Nouveau Mapping)
 
 | Rôle | Fichiers |
 |------|----------|
 | Clients Supabase | `src/lib/supabase/server.ts`, `client.ts` |
 | Formatage | `src/lib/format.ts` |
-| Liste pays (table + variations) | `src/app/(public)/page.tsx` |
-| Fiche pays 3 onglets | `src/app/(public)/pays/[slug]/page.tsx`, `CountryTabs.tsx` |
-| Formulaire pays (upload drapeau) | `src/components/admin/CountryForm.tsx` |
-| Règles Cursor | `.cursor/rules/nation-simulator.mdc` |
-| Résumé agent | `AGENTS.md` |
+| Moteur d'effets (RPG) | `src/lib/effectsEngine.ts` *(ou équivalent)* |
+| Règles Cursor | `AGENTS.md` (ou `.cursorrules`) |
 
 ---
 
-Mettre à jour ce fichier après des évolutions majeures (nouvelles tables, nouvelles pages, changements de convention).
+*Mettre à jour ce fichier après la validation du plan d'architecture (création des tables realms, provinces, characters, etc.) et l'avancée de l'interface.*

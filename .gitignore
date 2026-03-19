@@ -36,6 +36,17 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
+# Cursor / IDE
+.cursor/
+
+# Playwright / tests artefacts
+/playwright-report/
+/test-results/
+
+# Supabase CLI state (local, non committable)
+/supabase/.temp/
+/supabase/.branches/
+
 # env files (can opt-in for committing if needed)
 .env*
 

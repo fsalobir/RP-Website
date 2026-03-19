@@ -1,5 +1,10 @@
 # Parity Matrix: route actuelle vs Edge Function
 
+> ⚠️ **Branche `fantasy` – Document d’héritage**
+> 
+> Cette matrice de parité compare l’ancienne route HTTP `/api/cron/process-ai-events` et la Edge Function `process-ai-events-due` du simulateur de nations.  
+> Sur `fantasy`, conserver ces **invariants techniques** (anti double-traitement, batch tolérant aux erreurs, Discord non bloquant…) mais les appliquer au nouveau moteur d’événements du RPG.
+
 But: garantir la parité fonctionnelle entre:
 
 - route actuelle `GET /api/cron/process-ai-events`

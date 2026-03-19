@@ -1,6 +1,12 @@
-# Supabase – Nation Simulator
+# Supabase – Notes techniques (héritage Simulateur de nations)
 
-## Première installation
+> ⚠️ **Branche `fantasy` – Document d’héritage**
+> 
+> Ce fichier décrit l’ancienne configuration Supabase du simulateur de nations moderne (pays, PIB, historique, etc.).  
+> Sur la branche `fantasy`, la base a été **réinitialisée** et le schéma repart de zéro autour des Royaumes/Provinces.  
+> **Utiliser ce document uniquement comme référence technique (pattern migrations / auth / buckets), pas comme spécification métier.**
+
+## Première installation (ANCIEN SCHÉMA, À ADAPTER)
 
 1. **Exécuter les migrations**  
    Dans le projet Supabase, **SQL Editor** → New query → exécuter dans l’ordre :

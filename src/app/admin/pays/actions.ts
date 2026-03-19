@@ -151,7 +151,7 @@ export async function resetAllCountriesStats(): Promise<{ error?: string; update
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return { error: "Non connecté." };
-  const { data: adminRow } = await supabase.from("admins").select("id").eq("user_id", user.id).single();
+  const { data: adminRow } = await supabase.from("mj_admins").select("user_id").eq("user_id", user.id).maybeSingle();
   if (!adminRow) return { error: "Réservé aux admins." };
 
   const { data: countries, error: fetchError } = await supabase
@@ -194,7 +194,7 @@ export async function runDailyCountryUpdate(): Promise<{ error?: string }> {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return { error: "Non connecté." };
-  const { data: adminRow } = await supabase.from("admins").select("id").eq("user_id", user.id).single();
+  const { data: adminRow } = await supabase.from("mj_admins").select("user_id").eq("user_id", user.id).maybeSingle();
   if (!adminRow) return { error: "Réservé aux admins." };
 
   const serviceSupabase = createServiceRoleClient();
@@ -221,7 +221,7 @@ export async function randomizeNationalBudgets(): Promise<{ error?: string; upda
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return { error: "Non connecté." };
-  const { data: adminRow } = await supabase.from("admins").select("id").eq("user_id", user.id).single();
+  const { data: adminRow } = await supabase.from("mj_admins").select("user_id").eq("user_id", user.id).maybeSingle();
   if (!adminRow) return { error: "Réservé aux admins." };
 
   const ideologyColumns = IDEOLOGY_IDS.flatMap((id) => [ideologyColumnName(id)]);
@@ -347,7 +347,7 @@ export async function randomizeCountryIdeologies(): Promise<{ error?: string; up
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return { error: "Non connecté." };
-  const { data: adminRow } = await supabase.from("admins").select("id").eq("user_id", user.id).single();
+  const { data: adminRow } = await supabase.from("mj_admins").select("user_id").eq("user_id", user.id).maybeSingle();
   if (!adminRow) return { error: "Réservé aux admins." };
 
   const { data: countries, error: fetchError } = await supabase.from("countries").select("id, name");
@@ -402,7 +402,7 @@ export async function deleteCountry(countryId: string): Promise<{ error?: string
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return { error: "Non connecté." };
-  const { data: adminRow } = await supabase.from("admins").select("id").eq("user_id", user.id).single();
+  const { data: adminRow } = await supabase.from("mj_admins").select("user_id").eq("user_id", user.id).maybeSingle();
   if (!adminRow) return { error: "Réservé aux admins." };
 
   const { error } = await supabase.from("countries").delete().eq("id", countryId);
@@ -426,7 +426,7 @@ export async function updateCountryAiStatus(
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return { error: "Non connecté." };
-  const { data: adminRow } = await supabase.from("admins").select("id").eq("user_id", user.id).single();
+  const { data: adminRow } = await supabase.from("mj_admins").select("user_id").eq("user_id", user.id).maybeSingle();
   if (!adminRow) return { error: "Réservé aux admins." };
 
   const { data: playerRow } = await supabase
@@ -457,7 +457,7 @@ export async function updateCountryContinent(
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return { error: "Non connecté." };
-  const { data: adminRow } = await supabase.from("admins").select("id").eq("user_id", user.id).single();
+  const { data: adminRow } = await supabase.from("mj_admins").select("user_id").eq("user_id", user.id).maybeSingle();
   if (!adminRow) return { error: "Réservé aux admins." };
 
   const { error } = await supabase

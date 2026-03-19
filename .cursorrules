@@ -1,2 +1,34 @@
-ATTENTION : Nous sommes sur la branche 'fantasy'. Ce projet est dans un monde Fantasy. Les concepts modernes (PIB, élections, technologie) n'existent plus.
+---
+description: 
+alwaysApply: true
+---
 
+# 1. CONTEXTE PROJET (Univers Fantasy)
+[CRITICAL] Nous sommes sur la branche 'fantasy'. Ce projet a subi un Hard Fork vers un monde Fantasy (hybride RPG / Gestion).
+- Les concepts modernes (PIB, élections, technologie, missiles, pays) SONT BANNIS.
+- Le jeu se base sur des entités médiévales : Royaumes (`realms`), Provinces (`provinces`), Races (`races`), Bâtiments/POI (`poi`) et Personnages (`characters`).
+
+# 2. STACK TECHNIQUE
+- Framework : Next.js 14+ (App Router exclusivement, pas de `pages/`).
+- Base de données & Auth : Supabase (PostgreSQL, Auth, Storage).
+- Styles : Tailwind CSS.
+- Tests : Vitest (Unit/Logique métier) et Playwright (E2E).
+- Langage : TypeScript (Strict Mode).
+
+# 3. RÈGLES D'INGÉNIERIE & REFACTORING
+- Focus absolu : Performance maximale, détection de bugs invisibles, et typage strict.
+- Principe de responsabilité unique (SRP) : Des composants petits et des fonctions pures.
+- Remplacer les boucles lourdes par des méthodes optimisées (map, reduce, filter).
+- Traitement des erreurs : Pas de `catch` vide. Toujours logger ou remonter l'erreur proprement à l'UI.
+- Supprimer systématiquement le code mort, les `console.log` inutiles ou les commentaires commentés.
+
+# 4. TESTS ET VALIDATION
+- Ne JAMAIS modifier une logique métier (maths, effets, dés) sans mettre à jour ou créer le test Vitest associé.
+- Les tests unitaires doivent cibler les fichiers dans `src/lib/__tests__/`.
+- Si une modification affecte le rendu visuel critique, s'assurer que l'intégration Playwright est respectée.
+
+# 5. CONVENTIONS UI ET FORMATAGE
+- Langue : L'interface utilisateur, les messages de commit et les commentaires doivent être 100% en Français.
+- Nombres : Toujours utiliser `formatNumber` depuis `src/lib/format.ts`. NE PAS utiliser l'ancien `formatGdp`.
+- Images : L'utilisation de la balise HTML standard `<img>` est autorisée (au lieu de `next/image`) pour faciliter l'affichage d'URL externes (générateurs d'avatars, hébergeurs tiers) sans casser le build Next.js.
+- Thème : UI orientée "Dark Fantasy" (fonds sombres, composants immersifs, style carte d'état-major médiéval).

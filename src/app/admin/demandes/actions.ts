@@ -22,7 +22,7 @@ async function ensureAdmin() {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { supabase: null, error: "Non connecté." };
-  const { data: adminRow } = await supabase.from("admins").select("id").eq("user_id", user.id).single();
+  const { data: adminRow } = await supabase.from("mj_admins").select("user_id").eq("user_id", user.id).maybeSingle();
   if (!adminRow) return { supabase: null, error: "Réservé aux admins." };
   return { supabase, error: null, userId: user.id };
 }

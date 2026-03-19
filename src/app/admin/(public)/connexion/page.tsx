@@ -9,11 +9,13 @@ export default function AdminConnexionPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [rawAuthError, setRawAuthError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
+    setRawAuthError(null);
     setLoading(true);
     const supabase = createClient();
     const { error: signError } = await supabase.auth.signInWithPassword({
@@ -22,7 +24,12 @@ export default function AdminConnexionPage() {
     });
     if (signError) {
       setLoading(false);
-      setError(signError.message === "Invalid login credentials" ? "Identifiants incorrects." : signError.message);
+      setRawAuthError(signError.message);
+      setError(
+        signError.message === "Invalid login credentials"
+          ? "Identifiants incorrects."
+          : signError.message
+      );
       return;
     }
     const { path, error: redirectError } = await getRedirectPathAfterLogin();
@@ -79,7 +86,15 @@ export default function AdminConnexionPage() {
             />
           </div>
           {error && (
-            <p className="text-sm text-[var(--danger)]">{error}</p>
+            <div>
+              <p className="text-sm text-[var(--danger)]">{error}</p>
+              {rawAuthError && (
+                <details className="mt-2 text-xs text-[var(--foreground-muted)]">
+                  <summary>Détail technique</summary>
+                  <p className="mt-1 font-mono break-all">{rawAuthError}</p>
+                </details>
+              )}
+            </div>
           )}
           <button
             type="submit"

@@ -1,0 +1,31 @@
+{
+  "date": "2026-03-18",
+  "description": "Backup avant bascule vers frontières image. Régions Europe/Afrique détaillées via admin1 10m + clustering/quotas, Benelux/Yugoslavia groupés.",
+  "inputs": {
+    "admin1_50m": "scripts/geo/ne_50m_admin_1_states_provinces.geojson",
+    "admin0_50m": "scripts/geo/ne_50m_admin_0_countries.geojson",
+    "admin1_10m": "scripts/geo/ne_10m_admin_1_states_provinces.geojson"
+  },
+  "strategy": {
+    "base_layer": "admin1 50m worldwide + admin0 fallback for missing",
+    "detailed_layer": "admin1 10m for Europe+Africa only",
+    "quotas": {
+      "IE": 4,
+      "CH": 2,
+      "Benelux": 4,
+      "Yugoslavia": 8
+    },
+    "groups": {
+      "Benelux": ["BE", "NL", "LU"],
+      "Yugoslavia": ["SI", "HR", "BA", "RS", "ME", "MK", "XK"]
+    },
+    "region_id": "properties.regionId = adm1_code (or synthetic BX-/YU-)",
+    "filters": ["exclude Antarctica / AQ"]
+  },
+  "output": "public/geo/admin1.topo.json",
+  "notes": {
+    "current_asset_size_mb": 5.35,
+    "risk": "Changing asset changes regionIds and breaks existing province mapping."
+  }
+}
+

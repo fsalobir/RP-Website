@@ -1,38 +1,43 @@
-# Simulateur de nations – Contexte pour l’agent
+# Simulateur RPG Grande Échelle (Univers Fantasy) – Contexte pour l’agent
+
+## AVERTISSEMENT CRITIQUE (CONTEXTE)
+**Ce projet est un "Hard Fork" vers un univers Fantasy (hybride entre Crusader Kings et Donjons & Dragons).** Il est STRICTEMENT INTERDIT d'utiliser, de recréer ou de mentionner des concepts de géopolitique moderne (PIB, élections, missiles balistiques, ministères, ONU, technologie moderne). 
 
 ## Résumé
-- **Projet :** Site web de simulation de conflit moderne (nations, règles, indicateurs dynamiques).
-- **Stack :** Next.js (App Router), TypeScript, Tailwind, Supabase (DB + Auth + Storage). Les passages automatiques (jour + génération IA) sont pilotés côté **Supabase** via **pg_cron** (migrations SQL). Détails : `supabase/CRON.md`.
+- **Projet :** Site web de jeu de rôle (RPG) à grande échelle / gestion de royaumes.
+- **Stack :** Next.js (App Router), TypeScript, Tailwind, Supabase (DB + Auth + Storage). Les événements temporels (ticks, résolution) sont pilotés via Supabase (`pg_cron` / Edge Functions).
 - **Langue :** Interface 100 % en français.
-- **Design :** Tableau de bord type QG militaire : fond sombre, panneaux, accents verts, lisible et sobre.
+- **Design :** Thème Dark Fantasy / Médiéval. Fond sombre texturé (parchemin, pierre), accents or, pourpre ou fer, UI immersive, lisible mais thématisée "livre de règles / carte d'état-major médiéval".
 
-## Données
-- **Pays** : fiche avec 3 onglets (Généralités / Société / Macros ; Militaire ; Avantages). Champs éditables en admin ; population, PIB, croissance évoluent aussi via un cron. Drapeaux : upload Supabase Storage (bucket `flags`) ou URL en secours.
-- **Historique** : table `country_history` (country_id, date, population, gdp, militarism, industry, science, stability) pour afficher les variations (vert/rouge) sur la liste des pays. Remplie par le cron.
-- **Règles** : paramètres de simulation (table `rule_parameters`), modifiables en admin.
-- **Extensibilité :** privilégier l’ajout de paramètres/règles via de nouvelles lignes ou clés (key-value) plutôt que de nouvelles colonnes.
+## Architecture des Données (Entités de base)
+Le modèle de données est hiérarchique et axé sur les personnages et le territoire :
+- **Royaumes (`realms`)** : Entité politique de haut niveau (remplace les "pays"). C'est principalement une "coquille" qui agrège les données de ses territoires.
+- **Provinces (`provinces`)** : Subdivisions d'un royaume. C'est ici que résident les vraies données (Population, Prospérité, Ressources, Défense locale). 
+- **Points d'Intérêt / Bâtiments (`poi`)** : Rattachés aux provinces. Peuvent être du "fluff" narratif (ex: Ruines naines) créé par le MJ d'un coup de baguette magique, ou fournir des effets mécaniques.
+- **Races (`races`)** : Configurables par le MJ, présentes dans les provinces, elles apportent des modificateurs spécifiques (via le moteur d'effets).
+- **Personnages & Clans (`characters`, `clans`)** : PNJ ou PJ. Possèdent des attributs, de l'équipement, et des liens familiaux (arbres généalogiques/alliances). Les effets actifs peuvent s'appliquer directement sur eux.
+- **Carte** : Stylisée, avec des frontières de provinces fixes (basées sur des régions de Supremacy), affichant les royaumes et les POI.
 
 ## Formatage des nombres
-- **Toujours utiliser** `formatNumber` et `formatGdp` de `src/lib/format.ts` pour l’affichage utilisateur.
-- `formatNumber(value)` : séparateur de milliers = "." (ex. 32.000.000).
-- `formatGdp(value)` : PIB en milliards de dollars avec " Bn" (ex. 1,2 Bn).
+- **Toujours utiliser** les utilitaires de `src/lib/format.ts` pour l’affichage utilisateur.
+- `formatNumber(value)` : séparateur de milliers = "." (ex. 32.000).
+- *Note : L'ancien formatteur `formatGdp` a été supprimé. Remplacer par des formateurs de ressources fantasy si nécessaire (ex: `formatGold`).*
 
-## Auth
-- Supabase Auth. Liste des admins dans `public.admins` (user_id). Seuls les admins peuvent modifier les données ; lecture publique pour pays et règles. Middleware protège `/admin` sauf `/admin/connexion` et `/admin/inscription`.
+## Auth & Rôles
+- Supabase Auth. 
+- Les administrateurs sont désormais appelés **MJ (Maîtres du Jeu)**. Seuls les MJ peuvent modifier les données brutes, valider les requêtes de construction/actions des joueurs, et créer des POI/Races à la volée. 
+- Middleware protège les routes `/mj` (anciennement `/admin`).
 
-## Effets et règles de simulation (architecture centralisée)
-
-- **Source unique des types d’effets** : `src/lib/countryEffects.ts`. Tous les `effect_kind` sont définis dans `ALL_EFFECT_KIND_IDS` et `EFFECT_KIND_META` (targetType, valueFormat, label). Sets dérivés : `EFFECT_KINDS_WITH_STAT_TARGET`, `EFFECT_KINDS_WITH_BUDGET_TARGET`, `EFFECT_KINDS_NO_TARGET`, `EFFECT_KINDS_WITH_BRANCH_TARGET`, `EFFECT_KINDS_WITH_ROSTER_UNIT_TARGET`. Helper formulaires : `getEffectKindValueHelper(kind)` (valueLabel, valueStep, displayToStored, storedToDisplay) et `formatEffectValue(kind, value)`.
-- **Résolution « effets pour un pays »** : une seule entrée, extensible par sources. `getEffectsForCountry(context)` agrège les effets de toutes les **sources enregistrées** (tableau `EFFECT_SOURCES` dans countryEffects.ts). Sources actuelles : (1) `country_effects` du pays, (2) effets du palier de mobilisation (`mobilisation_level_effects` + score), (3) `global_growth_effects` (rule_parameters). Pour ajouter un nouvel « endroit » (ex. traité, région, événement) : ajouter une source dans ce registry sans toucher aux consommateurs.
-- **Où configurer les effets** : **Global** = admin Règles > « Global [Appliqué à tous les pays] » → stocké dans `rule_parameters.global_growth_effects` (tableau). **Par pays** = fiche pays > Généralités > effets actifs → table `country_effects`. **Par palier de mobilisation** = admin Règles > Mobilisation → `rule_parameters.mobilisation_level_effects` (effets par niveau). Un même type d’effet est pris en compte quel que soit l’endroit où le MJ l’ajoute.
-- **Cron** (`run_daily_country_update`) : lit `global_growth_effects` pour croissance PIB/pop et `stat_delta` (CTE global_stat_effects) ; lit `country_effects` et effets mobilisation (niveau dérivé du score). Les effets budget_ministry_* et military_unit_* globaux ne sont pas encore appliqués dans le cron (uniquement côté app via la résolution).
-- **App** : partout où on a besoin des « effets pour un pays » (contraintes budget, limites militaires, prévision), utiliser la liste **résolue** via `getEffectsForCountry` (pas seulement `country_effects`). Consommateurs : `getForcedMinPcts`, `getAllocationCapPercent`, `getUnitExtraEffectSum`, `getLimitModifierPercent`, `expectedNextTick`. La fiche pays reçoit `resolvedEffects` et les passe aux onglets Budget / Militaire / etc.
-- **Ajouter un nouveau type d’effet** : l’ajouter dans `countryEffects.ts` (ALL_EFFECT_KIND_IDS, EFFECT_KIND_META, buildEffectKeys, parseEffectToForm, formatEffectValue, et si besoin un helper dédié). Il apparaît alors partout (dropdown Global, Mobilisation, formulaire effets actifs pays).
+## Moteur d'Effets et Règles (Architecture Centralisée)
+- **Source unique des effets** : Le moteur (adapté de l'ancien `countryEffects.ts`, désormais générique ex: `src/lib/effectsEngine.ts`) est le cœur mathématique du jeu.
+- **Ciblage multiple** : Contrairement à l'ancien système, un effet (ex: `stat_delta`) peut désormais cibler une Province, un Royaume entier, ou un Personnage.
+- **Agrégation ascendante** : `getEffectsForRealm()` (ou équivalent) doit agréger de manière dynamique les effets de base du Royaume + les effets des Races locales + les effets des POI construits dans ses Provinces.
+- **Édition MJ** : Un MJ doit pouvoir attacher un "Effet" à peu près n'importe quoi (une épée magique donnée à un Personnage, une bénédiction sur une Province, une malédiction sur une Race). Le design de la table des effets doit être polymorphe ou très flexible (`target_type`, `target_id`).
 
 ## Fichiers importants
 - `src/lib/supabase/server.ts` et `client.ts` : clients Supabase.
-- `src/lib/format.ts` : formatNumber, formatGdp (nombres et PIB).
-- `src/lib/countryEffects.ts` : types d’effets (source unique), résolution getEffectsForCountry, helpers (getForcedMinPcts, getAllocationCapPercent, etc.).
-- `src/app/(public)/` : pages publiques (accueil = table des pays avec PIB, société, variations ; fiche pays onglets Généralités / Militaire / Budget / Avantages ; règles).
-- `src/app/admin/` : tableau de bord et CRUD (pays, règles avec section Global et Mobilisation, joueurs).
-- `supabase/migrations/` : schéma, RLS, cron (044 global_growth_effects + global_stat_effects, 038 mobilisation).
+- `src/lib/format.ts` : utilitaires de formatage texte/nombres.
+- `src/lib/effects/` (ou similaire) : Le cœur du moteur RPG, les définitions des modificateurs, la résolution des stats.
+- `src/app/(public)/` : pages joueurs (accueil = Liste des Royaumes, `/royaume/[slug]` avec carte stylisée de ses provinces, fiches de Personnages).
+- `src/app/mj/` : tableau de bord du Maître du Jeu (CRUD Royaumes, Provinces, validation des POI, gestion des événements).
+- `supabase/migrations/` : Schéma de base de données reparti de zéro (Clean Slate) pour l'univers Fantasy.

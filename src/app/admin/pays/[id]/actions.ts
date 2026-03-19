@@ -12,7 +12,7 @@ export async function upsertCountryControl(
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Non connecté." };
-  const { data: adminRow } = await supabase.from("admins").select("id").eq("user_id", user.id).single();
+  const { data: adminRow } = await supabase.from("mj_admins").select("user_id").eq("user_id", user.id).maybeSingle();
   if (!adminRow) return { error: "Réservé aux admins." };
 
   const pct = Math.max(0, Math.min(100, Number(sharePct)));
@@ -44,7 +44,7 @@ export async function updateCountryControl(
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Non connecté." };
-  const { data: adminRow } = await supabase.from("admins").select("id").eq("user_id", user.id).single();
+  const { data: adminRow } = await supabase.from("mj_admins").select("user_id").eq("user_id", user.id).maybeSingle();
   if (!adminRow) return { error: "Réservé aux admins." };
 
   const pct = Math.max(0, Math.min(100, Number(sharePct)));
@@ -64,7 +64,7 @@ export async function deleteCountryControl(controlId: string, countryId: string)
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Non connecté." };
-  const { data: adminRow } = await supabase.from("admins").select("id").eq("user_id", user.id).single();
+  const { data: adminRow } = await supabase.from("mj_admins").select("user_id").eq("user_id", user.id).maybeSingle();
   if (!adminRow) return { error: "Réservé aux admins." };
 
   const { error } = await supabase.from("country_control").delete().eq("id", controlId);
@@ -82,7 +82,7 @@ export async function updateLawScore(countryId: string, lawKey: string, score: n
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Non connecté." };
-  const { data: adminRow } = await supabase.from("admins").select("id").eq("user_id", user.id).single();
+  const { data: adminRow } = await supabase.from("mj_admins").select("user_id").eq("user_id", user.id).maybeSingle();
   if (!adminRow) return { error: "Réservé aux admins." };
 
   const clamped = Math.max(0, Math.min(500, Math.round(score)));

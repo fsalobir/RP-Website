@@ -25,7 +25,7 @@ export async function computeMapRegionNeighbors(): Promise<{ error?: string }> {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return { error: "Non connecté." };
-  const { data: adminRow } = await supabase.from("admins").select("id").eq("user_id", user.id).single();
+  const { data: adminRow } = await supabase.from("mj_admins").select("user_id").eq("user_id", user.id).maybeSingle();
   if (!adminRow) return { error: "Réservé aux admins." };
 
   const { error } = await supabase.rpc("compute_map_region_neighbors");
@@ -50,7 +50,7 @@ export async function getVoisinagesByCountry(): Promise<{ error?: string; data?:
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return { error: "Non connecté." };
-  const { data: adminRow } = await supabase.from("admins").select("id").eq("user_id", user.id).single();
+  const { data: adminRow } = await supabase.from("mj_admins").select("user_id").eq("user_id", user.id).maybeSingle();
   if (!adminRow) return { error: "Réservé aux admins." };
 
   const [mrcRes, mrnRes, countriesRes] = await Promise.all([

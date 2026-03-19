@@ -1,6 +1,11 @@
 # Déploiement Edge Function: process-ai-events-due
 
-## 1) Déployer la function
+> ⚠️ **Branche `fantasy` – Document d’héritage**
+> 
+> Ces instructions décrivent le déploiement de la function `process-ai-events-due` telle qu’elle existait pour l’ancien simulateur de nations.  
+> Sur `fantasy`, réutiliser les **patterns de déploiement et de secrets** (Supabase Functions, secrets, canary), mais revoir le nom de la function, le schéma ciblé et la sémantique des événements pour coller au RPG Fantasy.
+
+## 1) Déployer la function (ancienne version, à adapter si renommée)
 
 ```bash
 npx supabase functions deploy process-ai-events-due --no-verify-jwt

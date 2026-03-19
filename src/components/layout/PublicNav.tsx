@@ -9,15 +9,15 @@ export function PublicNav({
   isAdmin = false,
   playerDisplayName = null,
   isLoggedIn = false,
-  playerCountrySlug = null,
+  playerRealmSlug = null,
 }: {
   isAdmin?: boolean;
   playerDisplayName?: string | null;
   isLoggedIn?: boolean;
-  playerCountrySlug?: string | null;
+  playerRealmSlug?: string | null;
 }) {
-  const paysHref = playerCountrySlug ? `/pays/${playerCountrySlug}` : "/";
-  const paysLabel = playerCountrySlug ? "Mon Pays" : "Pays";
+  const realmHref = playerRealmSlug ? `/royaume/${playerRealmSlug}` : "/royaumes";
+  const realmLabel = playerRealmSlug ? "Mon Royaume" : "Royaumes";
 
   return (
     <header
@@ -32,17 +32,8 @@ export function PublicNav({
           Roleplay
         </Link>
         <nav className="flex items-center gap-5">
-          <Link href={paysHref} className={navLinkClass}>
-            <span aria-hidden className="mr-1.5">🌍</span>{paysLabel}
-          </Link>
-          <Link href="/carte" className={navLinkClass}>
-            <span aria-hidden className="mr-1.5">🗺️</span>Carte
-          </Link>
-          <Link href="/classement" className={navLinkClass}>
-            <span aria-hidden className="mr-1.5">📊</span>Classement
-          </Link>
-          <Link href="/ideologie" className={navLinkClass}>
-            <span aria-hidden className="mr-1.5">△</span>Idéologie
+          <Link href={realmHref} className={navLinkClass}>
+            <span aria-hidden className="mr-1.5">🏰</span>{realmLabel}
           </Link>
           <Link href="/wiki" className={navLinkClass}>
             <span aria-hidden className="mr-1.5">📖</span>Wiki
@@ -52,10 +43,10 @@ export function PublicNav({
             <>
               {isAdmin && (
                 <Link
-                  href="/admin"
+                  href="/mj"
                   className={`${navLinkClass} text-[var(--accent)] hover:text-[var(--accent-hover)]`}
                 >
-                  <span aria-hidden className="mr-1.5">🔐</span>Admin
+                  <span aria-hidden className="mr-1.5">🔐</span>MJ
                 </Link>
               )}
               <span className="text-sm text-[var(--foreground-muted)]">

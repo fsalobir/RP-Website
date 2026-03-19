@@ -1,209 +1,135 @@
-import { createClient } from "@/lib/supabase/server";
-import Link from "next/link";
-import { CountriesTable } from "@/components/countries/CountriesTable";
-import { computeHardPowerByCountry } from "@/lib/hardPower";
-import { computeInfluenceForAll, applyInfluenceModifiers } from "@/lib/influence";
-import { getInfluenceModifiersByCountry } from "@/lib/countryEffects";
-import { getEffectiveSpherePct, type SphereInfluencePct } from "@/lib/ideology";
-import type { MilitaryBranch } from "@/types/database";
+import { unstable_noStore } from "next/cache";
+import { createAnonClientForCache } from "@/lib/supabase/server";
+import { getMapDisplayConfig } from "@/app/mj/_actions/map";
+import { PublicMapWithRefresh } from "@/components/map/PublicMapWithRefresh";
 
-export const revalidate = 3600;
+// Carte publique = reflet autoritaire de la carte MJ : pas de cache, toujours données fraîches.
+export const revalidate = 0;
+export const dynamic = "force-dynamic";
 
 export default async function HomePage({
   searchParams,
 }: {
   searchParams: Promise<{ error?: string }>;
 }) {
+  unstable_noStore(); // opt-out du cache données pour cette page
+
   const params = await searchParams;
   const showUnauthorized = params.error === "non-autorise";
-  const supabase = await createClient();
+  const supabase = createAnonClientForCache();
 
-  const cutoffDate = new Date();
-  cutoffDate.setDate(cutoffDate.getDate() - 14);
-  const countryHistoryCutoff = cutoffDate.toISOString().slice(0, 10);
-
-  const [countriesResult, historyResult, rulesRes, rosterUnitsRes, rosterLevelsRes, countryMilitaryRes, effectsRes, lawsRes, controlRes, countryPlayersRes] = await Promise.all([
+  const [realmsRes, provinceRegionsRes, poiRes, citiesRes, routesRes, routePathwayPointsRes] = await Promise.all([
+    supabase.from("realms").select("id, slug, name, is_npc").order("name"),
     supabase
-      .from("countries")
-      .select("id, name, slug, flag_url, regime, population, gdp, militarism, industry, science, stability, ai_status")
-      .order("name"),
+      .from("province_base_regions")
+      .select("region_id, provinces(id, realm_id, name, attrs)")
+      .order("created_at", { ascending: true }),
     supabase
-      .from("country_history")
-      .select("country_id, date, population, gdp, militarism, industry, science, stability")
-      .gte("date", countryHistoryCutoff)
-      .order("date", { ascending: false }),
-    supabase.from("rule_parameters").select("key, value").in("key", [
-      "influence_config", "sphere_influence_pct", "global_growth_effects",
-      "mobilisation_config", "mobilisation_level_effects",
-      "law_auto_industry_config", "law_auto_industry_level_effects",
-      "law_air_industry_config", "law_air_industry_level_effects",
-      "law_naval_industry_config", "law_naval_industry_level_effects",
-      "law_research_config", "law_research_level_effects",
-    ]),
-    supabase.from("military_roster_units").select("id, branch, base_count"),
-    supabase.from("military_roster_unit_levels").select("unit_id, level, hard_power"),
-    supabase.from("country_military_units").select("country_id, roster_unit_id, current_level, extra_count"),
-    supabase.from("country_effects").select("country_id, effect_kind, effect_target, value, duration_remaining, duration_kind").or("duration_remaining.gt.0,duration_kind.eq.permanent"),
-    supabase.from("country_laws").select("country_id, law_key, score"),
-    supabase.from("country_control").select("country_id, controller_country_id, share_pct, is_annexed"),
-    supabase.from("country_players").select("country_id"),
+      .from("poi")
+      .select("id, province_id, kind, name, lon, lat, icon_key, is_visible")
+      .eq("is_visible", true),
+    supabase
+      .from("cities")
+      .select("id, province_id, realm_id, name, lon, lat, icon_key, attrs")
+      .order("created_at", { ascending: false }),
+    supabase.from("routes").select("id, name, city_a_id, city_b_id, pathway_point_a_id, pathway_point_b_id, tier, distance_km, attrs").order("created_at", { ascending: false }),
+    supabase.from("route_pathway_points").select("id, route_id, seq, lat, lon").order("route_id").order("seq"),
   ]);
 
-  const { data: countries, error } = countriesResult;
-  const { data: historyRows, error: historyError } = historyResult;
-  const rulesByKey = Object.fromEntries((rulesRes.data ?? []).map((r) => [r.key, r.value]));
-  const ruleParametersByKey: Record<string, { value: unknown }> = {};
-  for (const r of rulesRes.data ?? []) ruleParametersByKey[r.key] = { value: r.value };
-  const influenceConfig = rulesByKey.influence_config as Record<string, unknown> | undefined;
-  const globalGrowthEffects = (Array.isArray(rulesByKey.global_growth_effects) ? rulesByKey.global_growth_effects : []) as Array<{ effect_kind: string; effect_target: string | null; value: number }>;
-  const rosterUnits = (rosterUnitsRes.data ?? []) as Array<{ id: string; branch: MilitaryBranch; base_count: number }>;
-  const rosterLevels = (rosterLevelsRes.data ?? []) as Array<{ unit_id: string; level: number; hard_power: number }>;
-  const countryMilitaryUnits = (countryMilitaryRes.data ?? []) as Array<{ country_id: string; roster_unit_id: string; current_level: number; extra_count: number }>;
-  const countryEffectsRows = (effectsRes.data ?? []) as Array<{ country_id: string; effect_kind: string; effect_target: string | null; value: number; duration_remaining?: number }>;
-  const countryLawRows = (lawsRes.data ?? []) as Array<{ country_id: string; law_key: string; score: number }>;
-  const controlRows = (controlRes.data ?? []) as Array<{ country_id: string; controller_country_id: string; share_pct: number; is_annexed: boolean }>;
-  const countryById = new Map((countries ?? []).map((c) => [c.id, c]));
-  const sphereByControllerId = new Map<string, Array<{ slug: string; flag_url: string | null; name: string; share_pct: number; is_annexed: boolean }>>();
-  for (const r of controlRows) {
-    const controlled = countryById.get(r.country_id);
-    if (!controlled) continue;
-    const list = sphereByControllerId.get(r.controller_country_id) ?? [];
-    list.push({
-      slug: controlled.slug,
-      flag_url: controlled.flag_url,
-      name: controlled.name,
-      share_pct: Number(r.share_pct),
-      is_annexed: !!r.is_annexed,
-    });
-    sphereByControllerId.set(r.controller_country_id, list);
-  }
+  const realms = realmsRes.data ?? [];
+  const provinceRegionsRaw = provinceRegionsRes.data ?? [];
+  const provinces = provinceRegionsRaw
+    .map((row: any) => row?.provinces ? ({ ...row.provinces, region_id: row.region_id }) : null)
+    .filter(Boolean);
+  const cities = (citiesRes.data ?? []) as Array<{
+    id: string;
+    province_id: string;
+    realm_id: string;
+    name: string;
+    lon: number;
+    lat: number;
+    icon_key: string | null;
+    attrs?: Record<string, unknown>;
+  }>;
+  const poi = (poiRes.data ?? []) as Array<{
+    id: string;
+    province_id: string;
+    kind: string;
+    name: string;
+    lon: number | null;
+    lat: number | null;
+    icon_key: string | null;
+    is_visible: boolean;
+  }>;
+  const routes = (routesRes.data ?? []) as Array<{
+    id: string;
+    name: string;
+    city_a_id: string | null;
+    city_b_id: string | null;
+    pathway_point_a_id?: string | null;
+    pathway_point_b_id?: string | null;
+    tier: string;
+    distance_km: number | null;
+    attrs?: Record<string, unknown>;
+  }>;
+  const routePathwayPoints = (routePathwayPointsRes.data ?? []) as Array<{
+    id: string;
+    route_id: string;
+    seq: number;
+    lat: number;
+    lon: number;
+  }>;
+  const error = realmsRes.error ?? provinceRegionsRes.error ?? citiesRes.error ?? routesRes.error ?? routePathwayPointsRes.error;
+
+  const mapDisplayConfig = await getMapDisplayConfig();
 
   if (error) {
     return (
-      <div className="relative w-full px-4 py-10">
-        <div
-          className="fixed inset-0 overflow-hidden pointer-events-none"
-          style={{ left: "50%", marginLeft: "-50vw", width: "100vw", zIndex: 0 }}
-          aria-hidden
-        >
-          <div className="absolute inset-0 bg-cover bg-center bg-no-repeat scale-105" style={{ backgroundImage: "url(/images/site/pays-accueil-bg.png)", filter: "blur(0.5px)" }} />
-          <div className="absolute inset-0 bg-black/40" />
-        </div>
-        <div className="relative z-10 max-w-6xl mx-auto rounded-2xl border border-white/25 bg-white/15 p-6 shadow-xl backdrop-blur-xl">
-          <p className="text-red-200">Erreur lors du chargement des pays. Vérifiez que la migration Supabase a été exécutée.</p>
+      <div className="relative h-[calc(100vh-3.5rem)] w-full">
+        <div className="absolute inset-0 bg-[#071827]" />
+        <div className="absolute inset-0 bg-[radial-gradient(1200px_circle_at_15%_10%,rgba(245,158,11,0.12),transparent_60%),radial-gradient(900px_circle_at_80%_15%,rgba(34,197,94,0.10),transparent_55%)]" />
+        <div className="absolute inset-0 bg-black/40" />
+
+        <div className="relative z-10 mx-auto flex h-full max-w-3xl items-center justify-center px-4">
+          <div className="w-full rounded-2xl border border-amber-500/20 bg-black/50 p-6 shadow-2xl backdrop-blur">
+            {showUnauthorized && (
+              <div className="mb-4 rounded-xl border border-amber-500/40 bg-amber-950/30 px-4 py-3">
+                <p className="text-amber-200">
+                  Compte non autorisé. Seuls les MJ et les joueurs ayant un royaume peuvent se connecter.
+                </p>
+              </div>
+            )}
+
+            <p className="font-semibold text-red-200">Erreur lors du chargement des données.</p>
+            <details className="mt-4 text-sm text-stone-300/80">
+              <summary>Détail technique</summary>
+              <pre className="mt-2 overflow-x-auto rounded bg-black/30 p-3 whitespace-pre-wrap break-words">
+                {error.message}
+                {error.code ? `\nCode: ${error.code}` : ""}
+              </pre>
+            </details>
+          </div>
         </div>
       </div>
     );
   }
 
-  function normId(id: string | null | undefined): string {
-    return String(id ?? "").trim().toLowerCase();
-  }
-
-  const latestByCountry = new Map<string, NonNullable<typeof historyRows>[number]>();
-  if (historyRows?.length && !historyError) {
-    for (const row of historyRows) {
-      const id = normId(row.country_id);
-      if (id && !latestByCountry.has(id)) {
-        latestByCountry.set(id, row);
-      }
-    }
-  }
-
-  const hardPowerByCountry = computeHardPowerByCountry(countryMilitaryUnits, rosterUnits, rosterLevels);
-  const { byCountry: influenceByCountryRaw } = computeInfluenceForAll(
-    countries ?? [],
-    hardPowerByCountry,
-    (influenceConfig ?? {}) as Parameters<typeof computeInfluenceForAll>[2]
-  );
-  const countryIds = (countries ?? []).map((c) => c.id);
-  const influenceModifiersByCountry = getInfluenceModifiersByCountry(
-    countryIds,
-    countryEffectsRows,
-    countryLawRows,
-    ruleParametersByKey,
-    globalGrowthEffects
-  );
-  const influenceByCountry = new Map(
-    countryIds.map((id) => {
-      const raw = influenceByCountryRaw.get(id);
-      const mods = influenceModifiersByCountry.get(id);
-      if (!raw) return [id, null] as const;
-      const result = mods ? applyInfluenceModifiers(raw, mods) : raw;
-      return [id, result] as const;
-    })
-  );
-
-  const sphereInfluencePct = rulesByKey.sphere_influence_pct as SphereInfluencePct | undefined;
-  const sphereInfluenceBonusByController = new Map<string, number>();
-  for (const r of controlRows) {
-    const controllerId = r.controller_country_id;
-    const targetInfluence = influenceByCountry.get(r.country_id)?.influence ?? 0;
-    const controlRow = { country_id: r.country_id, controller_country_id: controllerId, share_pct: Number(r.share_pct ?? 0), is_annexed: !!r.is_annexed };
-    const effectivePct = getEffectiveSpherePct(controlRow, sphereInfluencePct);
-    const influenceGiven = targetInfluence * (controlRow.share_pct / 100) * (effectivePct / 100);
-    const prev = sphereInfluenceBonusByController.get(controllerId) ?? 0;
-    sphereInfluenceBonusByController.set(controllerId, prev + influenceGiven);
-  }
-
-  const rows =
-    countries?.map((c) => {
-      const baseInfluence = influenceByCountry.get(c.id)?.influence ?? null;
-      const sphereBonus = sphereInfluenceBonusByController.get(c.id) ?? 0;
-      const totalInfluence = baseInfluence != null ? Math.round(baseInfluence + sphereBonus) : null;
-      return {
-        country: c,
-        prev: latestByCountry.get(normId(c.id)) ?? null,
-        influence: totalInfluence,
-        sphere: sphereByControllerId.get(c.id) ?? [],
-      };
-    }) ?? [];
-
-  const countryIdsWithPlayer = new Set((countryPlayersRes?.data ?? []).map((p: { country_id: string }) => p.country_id));
-  const assignedCountryIds =
-    countries?.filter(
-      (c) => countryIdsWithPlayer.has(c.id) || (c.ai_status != null && String(c.ai_status).trim() !== "")
-    ).map((c) => c.id) ?? [];
-
   return (
-    <div className="relative w-full px-4 py-10">
-      {/* Arrière-plan fixe (parallaxe) : taille viewport, reste visible au scroll */}
-      <div
-        className="fixed inset-0 overflow-hidden pointer-events-none"
-        style={{ left: "50%", marginLeft: "-50vw", width: "100vw", zIndex: 0 }}
-        aria-hidden
-      >
-        <div
-          className="absolute inset-0 bg-cover bg-center bg-no-repeat scale-105"
-          style={{
-            backgroundImage: "url(/images/site/pays-accueil-bg.png)",
-            filter: "blur(0.5px)",
-          }}
-        />
-        <div className="absolute inset-0 bg-black/40" />
-      </div>
-      <div className="relative z-10 max-w-6xl mx-auto" style={{ isolation: "isolate" }}>
-        {showUnauthorized && (
-          <div className="mb-6 rounded-2xl border border-white/25 bg-white/15 px-4 py-3 shadow-xl backdrop-blur-xl">
-            <p className="text-red-200">Compte non autorisé. Seuls les administrateurs et les joueurs assignés à un pays peuvent se connecter.</p>
-          </div>
-        )}
+    <div className="relative h-[calc(100vh-3.5rem)] w-full overflow-hidden">
+      <div className="absolute inset-0 bg-[#071827]" />
+      <div className="absolute inset-0 bg-[radial-gradient(1200px_circle_at_15%_10%,rgba(245,158,11,0.12),transparent_60%),radial-gradient(900px_circle_at_80%_15%,rgba(34,197,94,0.10),transparent_55%)]" />
+      <div className="absolute inset-0 bg-black/35" />
 
-        {!countries?.length ? (
-          <div className="rounded-2xl border border-white/25 bg-white/15 p-8 text-center shadow-xl backdrop-blur-xl">
-            <p className="text-white/85">
-              Aucun pays en base. Utilisez l&apos;administration pour en ajouter.
-            </p>
-            <Link
-              href="/admin/connexion"
-              className="mt-4 inline-block rounded-xl bg-white/25 py-2 px-4 font-semibold text-white hover:bg-white/35 transition-colors"
-            >
-              Aller à l&apos;administration
-            </Link>
-          </div>
-        ) : (
-          <CountriesTable rows={rows} showSearch showWikiTooltips glassContext showAssignmentFilter assignedCountryIds={assignedCountryIds} />
-        )}
+      <div className="relative z-10 h-full w-full">
+        <PublicMapWithRefresh
+          provinces={provinces as any}
+          realms={realms as any}
+          mapObjects={poi as any}
+          cities={cities as any}
+          routes={routes as any}
+          routePathwayPoints={routePathwayPoints}
+          initialMapDisplayConfig={mapDisplayConfig}
+        />
       </div>
     </div>
   );

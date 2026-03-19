@@ -1,0 +1,21 @@
+project_id = "RP-Website"
+
+[api]
+port = 65431
+
+[db]
+port = 65432
+shadow_port = 65430
+major_version = 15
+
+[db.pooler]
+enabled = false
+
+[studio]
+port = 65433
+
+[inbucket]
+port = 65434
+smtp_port = 65435
+pop3_port = 65436
+

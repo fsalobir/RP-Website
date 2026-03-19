@@ -7,7 +7,7 @@ export async function createPlayer(formData: FormData) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Non connecté." };
-  const { data: adminRow } = await supabase.from("admins").select("id").eq("user_id", user.id).single();
+  const { data: adminRow } = await supabase.from("mj_admins").select("user_id").eq("user_id", user.id).maybeSingle();
   if (!adminRow) return { error: "Réservé aux admins." };
 
   const email = formData.get("email") as string | null;
@@ -58,7 +58,7 @@ export async function assignPlayer(user_id: string, country_id: string) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Non connecté." };
-  const { data: adminRow } = await supabase.from("admins").select("id").eq("user_id", user.id).single();
+  const { data: adminRow } = await supabase.from("mj_admins").select("user_id").eq("user_id", user.id).maybeSingle();
   if (!adminRow) return { error: "Réservé aux admins." };
 
   const { error } = await supabase
@@ -81,7 +81,7 @@ export async function updatePlayerName(user_id: string, name: string | null) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Non connecté." };
-  const { data: adminRow } = await supabase.from("admins").select("id").eq("user_id", user.id).single();
+  const { data: adminRow } = await supabase.from("mj_admins").select("user_id").eq("user_id", user.id).maybeSingle();
   if (!adminRow) return { error: "Réservé aux admins." };
 
   const { error } = await supabase
@@ -98,7 +98,7 @@ export async function deletePlayer(user_id: string) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Non connecté." };
-  const { data: adminRow } = await supabase.from("admins").select("id").eq("user_id", user.id).single();
+  const { data: adminRow } = await supabase.from("mj_admins").select("user_id").eq("user_id", user.id).maybeSingle();
   if (!adminRow) return { error: "Réservé aux admins." };
 
   const admin = createServiceRoleClient();
@@ -117,7 +117,7 @@ export async function addStateActions(country_id: string, amount: number = 25) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Non connecté." };
-  const { data: adminRow } = await supabase.from("admins").select("id").eq("user_id", user.id).single();
+  const { data: adminRow } = await supabase.from("mj_admins").select("user_id").eq("user_id", user.id).maybeSingle();
   if (!adminRow) return { error: "Réservé aux admins." };
 
   const { data: row } = await supabase

@@ -1,6 +1,11 @@
 # Baseline Process Due (Phase 0)
 
-Objectif: mesurer le comportement actuel avant migration Edge Function.
+> ⚠️ **Branche `fantasy` – Document d’héritage**
+> 
+> Ce document décrit la baseline de traitement des événements IA pour l’ancienne base (simulateur de nations moderne).  
+> Sur `fantasy`, réutiliser la **méthodologie** (compter les événements en attente, vérifier les stuck, mesurer les runs) mais adapter les tables/colonnes au nouveau modèle (Royaumes, Provinces, Personnages).
+
+Objectif: mesurer le comportement actuel avant migration Edge Function (ancien modèle), et servir de gabarit de monitoring pour la future version Fantasy.
 
 ## Pré-requis
 
