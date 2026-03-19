@@ -2,9 +2,20 @@
 
 import { revalidatePath } from "next/cache";
 import { createServiceRoleClient } from "@/lib/supabase/server";
-import { geoDistanceKm } from "@/lib/routes";
+import { geoDistanceKm, MAX_ROUTE_PATHWAY_POINTS } from "@/lib/routes";
 import type { RouteTier } from "@/lib/routes";
-import { DEFAULT_MAP_DISPLAY_CONFIG, type MapDisplayConfig } from "@/lib/mapDisplayConfig";
+
+function pathwayPointsLimitMessage(): string {
+  return `Limite de ${MAX_ROUTE_PATHWAY_POINTS} points de passage par route (performance). Supprimez-en avant d’en ajouter.`;
+}
+import {
+  MAP_DISPLAY_CONFIG_KEY,
+  MAP_DISPLAY_CONFIG_VERSION,
+  parseMapDisplayConfigSnapshot,
+  sanitizeMapDisplayConfig,
+  type MapDisplayConfig,
+  type PersistedMapDisplayConfig,
+} from "@/lib/mapDisplayConfig";
 import { ensureMj } from "./_auth";
 
 export async function assignIsoRegionsToMilluipanur(): Promise<{ error?: string; assignedCount?: number }> {
@@ -781,8 +792,11 @@ const DEFAULT_MAX_ROUTE_KM = 500;
 
 export async function createRoute(args: {
   cityAId?: string | null;
-  cityBId: string;
+  cityBId?: string | null;
   pathwayPointAId?: string | null;
+  pathwayPointBId?: string | null;
+  poiAId?: string | null;
+  poiBId?: string | null;
   name: string;
   tier: RouteTier;
 }): Promise<{ error?: string; routeId?: string }> {
@@ -790,39 +804,60 @@ export async function createRoute(args: {
   if (authError) return { error: authError };
 
   const cityAId = args.cityAId?.trim() || null;
-  const cityBId = args.cityBId?.trim();
+  const cityBId = args.cityBId?.trim() || null;
   const pathwayPointAId = args.pathwayPointAId?.trim() || null;
+  const pathwayPointBId = args.pathwayPointBId?.trim() || null;
+  const poiAId = args.poiAId?.trim() || null;
+  const poiBId = args.poiBId?.trim() || null;
   const name = args.name?.trim();
   const tier = args.tier;
 
   const fromPathway = !!pathwayPointAId;
-  if (!fromPathway && !cityAId) return { error: "Ville de départ ou point de branchement requis." };
-  if (fromPathway && cityAId) return { error: "Indiquez soit une ville de départ soit un point de branchement, pas les deux." };
-  if (!cityBId) return { error: "Ville d'arrivée requise." };
-  if (!fromPathway && cityAId === cityBId) return { error: "Les deux villes doivent être différentes." };
+  const toPathway = !!pathwayPointBId;
+  const fromPoi = !!poiAId;
+  const toPoi = !!poiBId;
+  if (!fromPathway && !fromPoi && !cityAId) return { error: "Départ requis (ville, point sur une route ou entité)." };
+  if ([fromPathway, fromPoi, !!cityAId].filter(Boolean).length > 1) return { error: "Un seul type de départ." };
+  if (!toPathway && !toPoi && !cityBId) return { error: "Destination requise (ville, point sur une route ou entité)." };
+  if ([toPathway, toPoi, !!cityBId].filter(Boolean).length > 1) return { error: "Un seul type de destination." };
+  if (!fromPathway && cityAId && cityBId && cityAId === cityBId) return { error: "Les deux villes doivent être différentes." };
   if (!name) return { error: "Nom de la route requis." };
   if (!["local", "regional", "national"].includes(tier)) return { error: "Tier invalide." };
 
   const admin = createServiceRoleClient();
 
-  const cityB = (await admin.from("cities").select("id, lon, lat").eq("id", cityBId).maybeSingle()).data as { id: string; lon: number; lat: number } | null;
-  if (!cityB || !Number.isFinite(cityB.lon) || !Number.isFinite(cityB.lat)) return { error: "Ville d'arrivée introuvable ou sans coordonnées." };
+  let pointB: { lon: number; lat: number };
+  if (toPathway && pathwayPointBId) {
+    const pt = (await admin.from("route_pathway_points").select("lat, lon").eq("id", pathwayPointBId).maybeSingle()).data as { lat: number; lon: number } | null;
+    if (!pt || !Number.isFinite(pt.lat) || !Number.isFinite(pt.lon)) return { error: "Point d'arrivée (sur route) introuvable." };
+    pointB = { lon: pt.lon, lat: pt.lat };
+  } else if (toPoi && poiBId) {
+    const poiB = (await admin.from("poi").select("id, lon, lat").eq("id", poiBId).maybeSingle()).data as { id: string; lon: number | null; lat: number | null } | null;
+    if (!poiB || !Number.isFinite(poiB.lon) || !Number.isFinite(poiB.lat)) return { error: "Entité (POI) d'arrivée introuvable ou sans coordonnées." };
+    pointB = { lon: poiB.lon!, lat: poiB.lat! };
+  } else {
+    const cityB = (await admin.from("cities").select("id, lon, lat").eq("id", cityBId!).maybeSingle()).data as { id: string; lon: number; lat: number } | null;
+    if (!cityB || !Number.isFinite(cityB.lon) || !Number.isFinite(cityB.lat)) return { error: "Ville d'arrivée introuvable ou sans coordonnées." };
+    pointB = { lon: cityB.lon, lat: cityB.lat };
+  }
 
-  let distance_km: number;
-  let seed: number;
+  let pointA: { lon: number; lat: number };
   if (fromPathway && pathwayPointAId) {
     const pt = (await admin.from("route_pathway_points").select("lat, lon").eq("id", pathwayPointAId).maybeSingle()).data as { lat: number; lon: number } | null;
     if (!pt || !Number.isFinite(pt.lat) || !Number.isFinite(pt.lon)) return { error: "Point de branchement introuvable." };
-    distance_km = geoDistanceKm({ lon: pt.lon, lat: pt.lat }, { lon: cityB.lon, lat: cityB.lat });
-    seed = Math.abs((pathwayPointAId + cityBId).split("").reduce((a, c) => ((a << 5) - a + c.charCodeAt(0)) | 0, 0)) % 1e6;
+    pointA = { lon: pt.lon, lat: pt.lat };
+  } else if (fromPoi && poiAId) {
+    const poiA = (await admin.from("poi").select("id, lon, lat").eq("id", poiAId).maybeSingle()).data as { id: string; lon: number | null; lat: number | null } | null;
+    if (!poiA || !Number.isFinite(poiA.lon) || !Number.isFinite(poiA.lat)) return { error: "Entité (POI) de départ introuvable ou sans coordonnées." };
+    pointA = { lon: poiA.lon!, lat: poiA.lat! };
   } else {
-    const { data: cities, error: citiesErr } = await admin.from("cities").select("id, lon, lat").in("id", [cityAId!, cityBId]);
-    if (citiesErr) return { error: citiesErr.message };
-    const cityA = (cities as Array<{ id: string; lon: number; lat: number }>).find((c) => c.id === cityAId);
+    const cityA = (await admin.from("cities").select("id, lon, lat").eq("id", cityAId!).maybeSingle()).data as { id: string; lon: number; lat: number } | null;
     if (!cityA || !Number.isFinite(cityA.lon) || !Number.isFinite(cityA.lat)) return { error: "Ville de départ introuvable." };
-    distance_km = geoDistanceKm({ lon: cityA.lon, lat: cityA.lat }, { lon: cityB.lon, lat: cityB.lat });
-    seed = Math.abs((cityAId! + cityBId).split("").reduce((a, c) => ((a << 5) - a + c.charCodeAt(0)) | 0, 0)) % 1e6;
+    pointA = { lon: cityA.lon, lat: cityA.lat };
   }
+
+  const distance_km = geoDistanceKm(pointA, pointB);
+  const seed = Math.abs(((pathwayPointAId ?? poiAId ?? cityAId ?? "") + (pathwayPointBId ?? poiBId ?? cityBId ?? "")).split("").reduce((a, c) => ((a << 5) - a + c.charCodeAt(0)) | 0, 0)) % 1e6;
 
   const { data: maxParam } = await admin.from("rule_parameters").select("value").eq("key", "max_route_km").maybeSingle();
   const maxRouteKm = typeof maxParam?.value === "number" && maxParam.value > 0 ? maxParam.value : DEFAULT_MAX_ROUTE_KM;
@@ -830,7 +865,6 @@ export async function createRoute(args: {
 
   const insertPayload: Record<string, unknown> = {
     name,
-    city_b_id: cityBId,
     tier,
     distance_km: Math.round(distance_km * 100) / 100,
     attrs: { seed },
@@ -839,8 +873,28 @@ export async function createRoute(args: {
   if (fromPathway) {
     (insertPayload as any).city_a_id = null;
     (insertPayload as any).pathway_point_a_id = pathwayPointAId;
+    (insertPayload as any).poi_a_id = null;
+  } else if (fromPoi) {
+    (insertPayload as any).city_a_id = null;
+    (insertPayload as any).pathway_point_a_id = null;
+    (insertPayload as any).poi_a_id = poiAId;
   } else {
     (insertPayload as any).city_a_id = cityAId;
+    (insertPayload as any).pathway_point_a_id = null;
+    (insertPayload as any).poi_a_id = null;
+  }
+  if (toPathway) {
+    (insertPayload as any).city_b_id = null;
+    (insertPayload as any).pathway_point_b_id = pathwayPointBId;
+    (insertPayload as any).poi_b_id = null;
+  } else if (toPoi) {
+    (insertPayload as any).city_b_id = null;
+    (insertPayload as any).pathway_point_b_id = null;
+    (insertPayload as any).poi_b_id = poiBId;
+  } else {
+    (insertPayload as any).city_b_id = cityBId;
+    (insertPayload as any).pathway_point_b_id = null;
+    (insertPayload as any).poi_b_id = null;
   }
 
   const { data, error } = await admin.from("routes").insert(insertPayload as any).select("id").single();
@@ -866,15 +920,40 @@ export async function createBranchPointOnRoute(args: {
 
   const admin = createServiceRoleClient();
 
-  const { data: route } = await admin.from("routes").select("id, city_a_id, city_b_id").eq("id", routeId).maybeSingle();
+  const { data: route } = await admin
+    .from("routes")
+    .select("id, city_a_id, city_b_id, poi_a_id, poi_b_id")
+    .eq("id", routeId)
+    .maybeSingle();
   if (!route) return { error: "Route introuvable." };
-  const r = route as { city_a_id: string | null; city_b_id: string | null };
-  if (!r.city_a_id || !r.city_b_id) return { error: "Cette route n'a pas deux villes ; impossible d'interpoler." };
+  const r = route as { city_a_id: string | null; city_b_id: string | null; poi_a_id: string | null; poi_b_id: string | null };
 
-  const { data: cities } = await admin.from("cities").select("id, lon, lat").in("id", [r.city_a_id, r.city_b_id]);
-  const cityA = (cities as Array<{ id: string; lon: number; lat: number }>)?.find((c) => c.id === r.city_a_id);
-  const cityB = (cities as Array<{ id: string; lon: number; lat: number }>)?.find((c) => c.id === r.city_b_id);
-  if (!cityA || !cityB) return { error: "Villes de la route introuvables." };
+  const getStart = async (): Promise<{ lon: number; lat: number } | null> => {
+    if (r.poi_a_id) {
+      const row = (await admin.from("poi").select("lon, lat").eq("id", r.poi_a_id).maybeSingle()).data as { lon: number | null; lat: number | null } | null;
+      return row && Number.isFinite(row.lon) && Number.isFinite(row.lat) ? { lon: row.lon!, lat: row.lat! } : null;
+    }
+    if (r.city_a_id) {
+      const row = (await admin.from("cities").select("lon, lat").eq("id", r.city_a_id).maybeSingle()).data as { lon: number; lat: number } | null;
+      return row ?? null;
+    }
+    return null;
+  };
+  const getEnd = async (): Promise<{ lon: number; lat: number } | null> => {
+    if (r.poi_b_id) {
+      const row = (await admin.from("poi").select("lon, lat").eq("id", r.poi_b_id).maybeSingle()).data as { lon: number | null; lat: number | null } | null;
+      return row && Number.isFinite(row.lon) && Number.isFinite(row.lat) ? { lon: row.lon!, lat: row.lat! } : null;
+    }
+    if (r.city_b_id) {
+      const row = (await admin.from("cities").select("lon, lat").eq("id", r.city_b_id).maybeSingle()).data as { lon: number; lat: number } | null;
+      return row ?? null;
+    }
+    return null;
+  };
+
+  const startPt = await getStart();
+  const endPt = await getEnd();
+  if (!startPt || !endPt) return { error: "Impossible de déterminer les extrémités de la route." };
 
   const { data: wps } = await admin
     .from("route_pathway_points")
@@ -882,10 +961,11 @@ export async function createBranchPointOnRoute(args: {
     .eq("route_id", routeId)
     .order("seq", { ascending: true });
   const waypoints = (wps ?? []) as Array<{ id: string; lat: number; lon: number; seq: number }>;
+  if (waypoints.length >= MAX_ROUTE_PATHWAY_POINTS) return { error: pathwayPointsLimitMessage() };
   const points: Array<{ lon: number; lat: number }> = [
-    { lon: cityA.lon, lat: cityA.lat },
+    startPt,
     ...waypoints.map((w) => ({ lon: w.lon, lat: w.lat })),
-    { lon: cityB.lon, lat: cityB.lat },
+    endPt,
   ];
   if (points.length < 2) return { error: "Polyline invalide." };
 
@@ -919,6 +999,107 @@ export async function createBranchPointOnRoute(args: {
   return { pathwayPointId: (inserted as { id: string }).id };
 }
 
+/** Distance (km) d'un point à un segment [a,b] (point le plus proche sur le segment). */
+function pointToSegmentDistanceKm(
+  p: { lon: number; lat: number },
+  a: { lon: number; lat: number },
+  b: { lon: number; lat: number }
+): number {
+  const dx = b.lon - a.lon;
+  const dy = b.lat - a.lat;
+  const len2 = dx * dx + dy * dy;
+  if (len2 < 1e-20) return geoDistanceKm(p, a);
+  let t = ((p.lon - a.lon) * dx + (p.lat - a.lat) * dy) / len2;
+  t = Math.max(0, Math.min(1, t));
+  const q = { lon: a.lon + t * dx, lat: a.lat + t * dy };
+  return geoDistanceKm(p, q);
+}
+
+/** Ajoute un point de passage sur une route à la position (lat, lon) : insertion sur le segment le plus proche du clic. Retourne l'id du nouveau point. */
+export async function addPathwayPointAtPosition(args: {
+  routeId: string;
+  lat: number;
+  lon: number;
+}): Promise<{ error?: string; pathwayPointId?: string }> {
+  const { error: authError } = await ensureMj();
+  if (authError) return { error: authError };
+
+  const routeId = args.routeId?.trim();
+  const { lat, lon } = args;
+  if (!routeId) return { error: "Route requise." };
+  if (!Number.isFinite(lat) || !Number.isFinite(lon)) return { error: "Coordonnées invalides." };
+
+  const admin = createServiceRoleClient();
+
+  const { data: route } = await admin
+    .from("routes")
+    .select("id, city_a_id, city_b_id, pathway_point_a_id, pathway_point_b_id")
+    .eq("id", routeId)
+    .maybeSingle();
+  if (!route) return { error: "Route introuvable." };
+  const r = route as {
+    city_a_id: string | null;
+    city_b_id: string | null;
+    pathway_point_a_id: string | null;
+    pathway_point_b_id: string | null;
+  };
+
+  const points: Array<{ lon: number; lat: number }> = [];
+  const getCoords = async (cityId: string | null, pathwayId: string | null) => {
+    if (pathwayId) {
+      const row = (await admin.from("route_pathway_points").select("lon, lat").eq("id", pathwayId).maybeSingle()).data as { lon: number; lat: number } | null;
+      return row ? { lon: row.lon, lat: row.lat } : null;
+    }
+    if (cityId) {
+      const row = (await admin.from("cities").select("lon, lat").eq("id", cityId).maybeSingle()).data as { lon: number; lat: number } | null;
+      return row ? { lon: row.lon, lat: row.lat } : null;
+    }
+    return null;
+  };
+
+  const start = await getCoords(r.city_a_id, r.pathway_point_a_id);
+  const end = await getCoords(r.city_b_id, r.pathway_point_b_id);
+  if (!start || !end) return { error: "Extrémités de la route introuvables." };
+
+  const { data: wps } = await admin
+    .from("route_pathway_points")
+    .select("id, lat, lon, seq")
+    .eq("route_id", routeId)
+    .order("seq", { ascending: true });
+  const waypoints = (wps ?? []) as Array<{ id: string; lat: number; lon: number; seq: number }>;
+
+  points.push(start);
+  for (const w of waypoints) points.push({ lon: w.lon, lat: w.lat });
+  points.push(end);
+
+  const p = { lon, lat };
+  let bestSegment = 0;
+  let bestDist = Infinity;
+  for (let i = 0; i < points.length - 1; i++) {
+    const d = pointToSegmentDistanceKm(p, points[i], points[i + 1]);
+    if (d < bestDist) {
+      bestDist = d;
+      bestSegment = i;
+    }
+  }
+
+  const newSeq = bestSegment;
+  for (const w of waypoints) {
+    if (w.seq >= newSeq) await admin.from("route_pathway_points").update({ seq: w.seq + 1 }).eq("id", w.id);
+  }
+  const { data: inserted, error } = await admin
+    .from("route_pathway_points")
+    .insert({ route_id: routeId, seq: newSeq, lat, lon })
+    .select("id")
+    .single();
+  if (error || !inserted?.id) return { error: error?.message ?? "Impossible d'ajouter le point." };
+
+  revalidatePath("/mj/carte");
+  revalidatePath("/");
+  revalidatePath("/royaumes");
+  return { pathwayPointId: (inserted as { id: string }).id };
+}
+
 /** Ajoute un point de navigation (waypoint) à une route pour forcer un détour. */
 export async function addPathwayPointToRoute(args: {
   routeId: string;
@@ -945,6 +1126,7 @@ export async function addPathwayPointToRoute(args: {
     .eq("route_id", routeId)
     .order("seq", { ascending: true });
   const points = (existing ?? []) as Array<{ id: string; seq: number }>;
+  if (points.length >= MAX_ROUTE_PATHWAY_POINTS) return { error: pathwayPointsLimitMessage() };
   let newSeq: number;
   if (insertPosition === "start") {
     newSeq = 0;
@@ -999,10 +1181,13 @@ export async function deletePathwayPoint(args: { pathwayPointId: string }): Prom
   return {};
 }
 
-const MAP_DISPLAY_CONFIG_KEY = "map_display_config";
-
 /** Lecture des réglages d'affichage de la carte (carte MJ et publique). */
 export async function getMapDisplayConfig(): Promise<MapDisplayConfig> {
+  const snapshot = await getMapDisplayConfigSnapshot();
+  return snapshot.config;
+}
+
+export async function getMapDisplayConfigSnapshot(): Promise<{ config: MapDisplayConfig; version: number }> {
   const admin = createServiceRoleClient();
   const { data } = await admin
     .from("rule_parameters")
@@ -1010,89 +1195,85 @@ export async function getMapDisplayConfig(): Promise<MapDisplayConfig> {
     .eq("key", MAP_DISPLAY_CONFIG_KEY)
     .maybeSingle();
   const v = data?.value;
-  if (!v || typeof v !== "object" || v === null) return DEFAULT_MAP_DISPLAY_CONFIG;
-  const o = v as Record<string, unknown>;
-  const D = DEFAULT_MAP_DISPLAY_CONFIG;
-  return {
-    cityIconMaxPx: Number(o.cityIconMaxPx) > 0 ? Number(o.cityIconMaxPx) : D.cityIconMaxPx,
-    cityLabelFontSizePx: Number(o.cityLabelFontSizePx) > 0 ? Number(o.cityLabelFontSizePx) : D.cityLabelFontSizePx,
-    zoomRefWorld: Number(o.zoomRefWorld) || D.zoomRefWorld,
-    zoomRefProvince: Number(o.zoomRefProvince) || D.zoomRefProvince,
-    sizeAtWorldPct: Number(o.sizeAtWorldPct) ?? D.sizeAtWorldPct,
-    sizeCurveExp: Number(o.sizeCurveExp) || D.sizeCurveExp,
-    fadeStartPct: Number(o.fadeStartPct) ?? D.fadeStartPct,
-    fadeEndPct: Number(o.fadeEndPct) ?? D.fadeEndPct,
-    routeStrokeLocalPx: (() => {
-      const n = Number(o.routeStrokeLocalPx);
-      return Number.isFinite(n) ? Math.max(0.01, Math.min(0.3, n)) : D.routeStrokeLocalPx;
-    })(),
-    routeStrokeRegionalPx: (() => {
-      const n = Number(o.routeStrokeRegionalPx);
-      return Number.isFinite(n) ? Math.max(0.01, Math.min(0.3, n)) : D.routeStrokeRegionalPx;
-    })(),
-    routeStrokeNationalPx: (() => {
-      const n = Number(o.routeStrokeNationalPx);
-      return Number.isFinite(n) ? Math.max(0.01, Math.min(0.3, n)) : D.routeStrokeNationalPx;
-    })(),
-    routeFadeStartPct: Number(o.routeFadeStartPct) ?? D.routeFadeStartPct,
-    routeFadeEndPct: Number(o.routeFadeEndPct) ?? D.routeFadeEndPct,
-    routeSizeAtWorldPct: Number(o.routeSizeAtWorldPct) ?? D.routeSizeAtWorldPct,
-    routeSizeCurveExp: Number(o.routeSizeCurveExp) || D.routeSizeCurveExp,
-    routeLabelFontSizePx: (() => {
-      const n = Number(o.routeLabelFontSizePx);
-      return Number.isFinite(n) ? Math.max(0.01, Math.min(1, n)) : D.routeLabelFontSizePx;
-    })(),
-    routeSinuosityLocalPct: Number(o.routeSinuosityLocalPct) ?? D.routeSinuosityLocalPct,
-    routeSinuosityRegionalPct: Number(o.routeSinuosityRegionalPct) ?? D.routeSinuosityRegionalPct,
-    routeSinuosityNationalPct: Number(o.routeSinuosityNationalPct) ?? D.routeSinuosityNationalPct,
-  };
+  return parseMapDisplayConfigSnapshot(v);
 }
 
 /** Enregistrement des réglages d'affichage par le MJ (appliqués à la carte publique aussi). */
-export async function saveMapDisplayConfig(config: MapDisplayConfig): Promise<{ error?: string }> {
-  const { error: authError } = await ensureMj();
+export async function saveMapDisplayConfig(
+  config: MapDisplayConfig,
+  expectedVersion?: number
+): Promise<{ error?: string; version?: number }> {
+  const { user, error: authError } = await ensureMj();
   if (authError) return { error: authError };
 
   const admin = createServiceRoleClient();
   const { data: existing } = await admin
     .from("rule_parameters")
-    .select("id")
+    .select("id, value, updated_at")
     .eq("key", MAP_DISPLAY_CONFIG_KEY)
     .maybeSingle();
 
-  const value = {
-    cityIconMaxPx: config.cityIconMaxPx,
-    cityLabelFontSizePx: config.cityLabelFontSizePx,
-    zoomRefWorld: config.zoomRefWorld,
-    zoomRefProvince: config.zoomRefProvince,
-    sizeAtWorldPct: config.sizeAtWorldPct,
-    sizeCurveExp: config.sizeCurveExp,
-    fadeStartPct: config.fadeStartPct,
-    fadeEndPct: config.fadeEndPct,
-    routeStrokeLocalPx: config.routeStrokeLocalPx,
-    routeStrokeRegionalPx: config.routeStrokeRegionalPx,
-    routeStrokeNationalPx: config.routeStrokeNationalPx,
-    routeFadeStartPct: config.routeFadeStartPct,
-    routeFadeEndPct: config.routeFadeEndPct,
-    routeSizeAtWorldPct: config.routeSizeAtWorldPct,
-    routeSizeCurveExp: config.routeSizeCurveExp,
-    routeLabelFontSizePx: config.routeLabelFontSizePx,
-    routeSinuosityLocalPct: config.routeSinuosityLocalPct,
-    routeSinuosityRegionalPct: config.routeSinuosityRegionalPct,
-    routeSinuosityNationalPct: config.routeSinuosityNationalPct,
+  const sanitized = sanitizeMapDisplayConfig(config);
+  const existingValue = (existing?.value && typeof existing.value === "object" ? existing.value : {}) as Record<string, unknown>;
+  const currentVersion = Number(existingValue.version);
+  const normalizedCurrent = Number.isFinite(currentVersion)
+    ? currentVersion
+    : (existing?.value && typeof existing.value === "object" ? 1 : 0);
+  if (typeof expectedVersion === "number" && Number.isFinite(expectedVersion)) {
+    if (expectedVersion !== normalizedCurrent) {
+      return {
+        error:
+          "Conflit de version: les réglages ont été modifiés ailleurs. Rechargez la page MJ puis réessayez.",
+      };
+    }
+  }
+  const prevVersion = normalizedCurrent;
+  const nextVersion = Number.isFinite(prevVersion) ? prevVersion + 1 : 1;
+  const value: PersistedMapDisplayConfig = {
+    schemaVersion: MAP_DISPLAY_CONFIG_VERSION,
+    version: nextVersion,
+    updatedAt: new Date().toISOString(),
+    updatedBy: user?.id ?? null,
+    config: sanitized,
   };
 
   if (existing?.id) {
-    const { error } = await admin.from("rule_parameters").update({ value }).eq("id", existing.id);
-    if (error) return { error: error.message };
+    const expectedUpdatedAt = existing.updated_at;
+    let updateQuery = admin.from("rule_parameters").update({ value, updated_at: new Date().toISOString() }).eq("id", existing.id);
+    if (expectedUpdatedAt) {
+      updateQuery = updateQuery.eq("updated_at", expectedUpdatedAt);
+    }
+    const { data: updatedRows, error } = await updateQuery.select("id");
+    if (error) {
+      return { error: error.message };
+    }
+    if (!updatedRows || updatedRows.length === 0) {
+      return {
+        error:
+          "Conflit de version: un autre MJ a enregistré des changements avant vous. Rechargez puis réessayez.",
+      };
+    }
   } else {
+    if (typeof expectedVersion === "number" && Number.isFinite(expectedVersion) && expectedVersion !== 0) {
+      return { error: "Conflit de version: état serveur inattendu, rechargez la page." };
+    }
     const { error } = await admin.from("rule_parameters").insert({ key: MAP_DISPLAY_CONFIG_KEY, value } as any);
-    if (error) return { error: error.message };
+    if (error) {
+      return { error: error.message };
+    }
   }
 
   revalidatePath("/mj/carte");
   revalidatePath("/");
   revalidatePath("/royaumes");
-  return {};
+
+  await admin.from("map_display_config_audit").insert({
+    actor_user_id: user?.id ?? null,
+    version: nextVersion,
+    payload: value,
+  });
+
+  return { version: nextVersion };
 }
+
 

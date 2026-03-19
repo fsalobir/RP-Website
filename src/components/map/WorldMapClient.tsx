@@ -9,13 +9,24 @@ import { geoCentroid, geoMercator } from "d3-geo";
 import {
   filterCitiesWithValidCoords,
   geoDistanceKm,
+  buildLandGraph,
   generateLandPath,
   generateSinuousPath,
   ROUTE_TIER_LABELS,
   smoothLandPathWithSinuosity,
+  resampleRouteWaypoints,
+  MAX_RENDER_ROUTE_WAYPOINTS,
+  capPolylineVertices,
+  MAX_ROUTE_POLYLINE_VERTICES,
 } from "@/lib/routes";
-import type { LandFeatureCollection, RouteTier } from "@/lib/routes";
+import type { LandFeatureCollection, LandGraph, RouteTier } from "@/lib/routes";
 import { DEFAULT_MAP_DISPLAY_CONFIG, type MapDisplayConfig } from "@/lib/mapDisplayConfig";
+import { getEffectiveMapRenderer } from "@/lib/mapRenderer";
+import { simplifyPolylinePreservingCurves } from "@/lib/routesPrecompute";
+import { emitMapMetric } from "@/lib/mapObservability";
+import { isMapInfoPanelsV2Enabled, isRealmColoringEnabled } from "@/lib/featureFlags";
+import { EntityInfoPanel } from "@/components/map/EntityInfoPanel";
+import { MapScheduler } from "@/lib/mapScheduler";
 import { feature } from "topojson-client";
 import { createClient } from "@/lib/supabase/client";
 
@@ -47,6 +58,10 @@ export type RealmRef = {
   slug: string;
   name: string;
   is_npc: boolean;
+  color_hex?: string | null;
+  banner_url?: string | null;
+  summary?: string | null;
+  leader_name?: string | null;
 };
 
 export type WorldMapClientProps = {
@@ -92,8 +107,12 @@ export type WorldMapClientProps = {
   mjDeleteCity?: (args: { cityId: string }) => Promise<{ error?: string }>;
   mjUpdateCityIconScale?: (args: { cityId: string; iconScalePct: number }) => Promise<{ error?: string }>;
   mjCreateRoute?: (args: {
-    cityAId: string;
-    cityBId: string;
+    cityAId?: string | null;
+    cityBId?: string | null;
+    pathwayPointAId?: string | null;
+    pathwayPointBId?: string | null;
+    poiAId?: string | null;
+    poiBId?: string | null;
     name: string;
     tier: "local" | "regional" | "national";
   }) => Promise<{ error?: string; routeId?: string }>;
@@ -103,6 +122,7 @@ export type WorldMapClientProps = {
     lon: number;
     insertPosition: "start" | "middle" | "end";
   }) => Promise<{ error?: string }>;
+  mjAddPathwayPointAtPosition?: (args: { routeId: string; lat: number; lon: number }) => Promise<{ error?: string; pathwayPointId?: string }>;
   mjDeletePathwayPoint?: (args: { pathwayPointId: string }) => Promise<{ error?: string }>;
   mjCreateBranchPointOnRoute?: (args: { routeId: string; positionPct: number }) => Promise<{ error?: string; pathwayPointId?: string }>;
   mjDeleteRoute?: (args: { routeId: string }) => Promise<{ error?: string }>;
@@ -134,13 +154,19 @@ export type WorldMapClientProps = {
     city_b_id: string | null;
     pathway_point_a_id?: string | null;
     pathway_point_b_id?: string | null;
+    poi_a_id?: string | null;
+    poi_b_id?: string | null;
     tier: string;
     distance_km: number | null;
     attrs?: Record<string, any>;
   }>;
   routePathwayPoints?: Array<{ id: string; route_id: string; seq: number; lat: number; lon: number }>;
   initialMapDisplayConfig?: Partial<MapDisplayConfig>;
-  onSaveMapDisplayConfig?: (config: MapDisplayConfig) => Promise<{ error?: string } | void>;
+  initialMapDisplayVersion?: number;
+  onSaveMapDisplayConfig?: (
+    config: MapDisplayConfig,
+    expectedVersion?: number
+  ) => Promise<{ error?: string; version?: number } | void>;
   /** Si défini (ex. "mj-settings-below"), le panneau réglages MJ est rendu dans ce conteneur (sous la carte). */
   settingsContainerId?: string | null;
 };
@@ -176,6 +202,14 @@ function formatIconCatalogLabel(k: string): string {
   return k;
 }
 
+function hexToRgba(hex: string | null | undefined, alpha: number, fallback: string): string {
+  if (!hex || !/^#[0-9a-fA-F]{6}$/.test(hex)) return fallback;
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
 // Note: décor (arbres/vagues) retiré pour performance.
 
 export function WorldMapClient({
@@ -195,11 +229,13 @@ export function WorldMapClient({
   mjUpdateCityIconScale,
   mjCreateRoute,
   mjAddPathwayPointToRoute,
+  mjAddPathwayPointAtPosition,
   mjDeletePathwayPoint,
   mjCreateBranchPointOnRoute,
   mjDeleteRoute,
   maxRouteKm = 500,
   initialMapDisplayConfig,
+  initialMapDisplayVersion = 0,
   onSaveMapDisplayConfig,
   settingsContainerId,
   mapObjects,
@@ -270,6 +306,14 @@ export function WorldMapClient({
     open: boolean;
     cityId: string;
   }>({ open: false, cityId: "" });
+  const [publicInfoPanel, setPublicInfoPanel] = useState<
+    | null
+    | {
+        kind: "ville" | "route";
+        title: string;
+        lines: string[];
+      }
+  >(null);
 
   const [selectedRouteId, setSelectedRouteId] = useState<string | null>(null);
 
@@ -334,14 +378,28 @@ export function WorldMapClient({
   } | null>(null);
 
   const [createRouteState, setCreateRouteState] = useState<{
-    fromCityId: string;
+    fromCityId?: string;
     fromPathwayPointId?: string;
-    toCityId: string;
+    fromPoiId?: string;
+    toCityId?: string;
+    toPathwayPointId?: string;
+    toPoiId?: string;
     name: string;
     tier: RouteTier;
     isSubmitting: boolean;
     error: string | null;
   } | null>(null);
+
+  /** Mode "cliquer sur la carte" pour choisir départ et/ou arrivée d'une route (ville, entité/POI ou point sur une route). */
+  const [selectingEndpoint, setSelectingEndpoint] = useState<
+    | { step: "from" }
+    | { step: "to"; fromCityId: string }
+    | { step: "to"; fromPathwayPointId: string }
+    | { step: "to"; fromPoiId: string }
+    | null
+  >(null);
+  const [selectingEndpointError, setSelectingEndpointError] = useState<string | null>(null);
+  const [selectingEndpointSubmitting, setSelectingEndpointSubmitting] = useState(false);
 
   const [cityDeleteError, setCityDeleteError] = useState<string | null>(null);
   const [cityScaleEditPct, setCityScaleEditPct] = useState<number>(100);
@@ -371,6 +429,8 @@ export function WorldMapClient({
     setSettingsSectionOpen((prev) => ({ ...prev, [key]: !prev[key] }));
   const [mjSettingsSavedAt, setMjSettingsSavedAt] = useState<number | null>(null);
   const [mjSettingsSaving, setMjSettingsSaving] = useState(false);
+  const [mjSettingsError, setMjSettingsError] = useState<string | null>(null);
+  const [mjConfigVersion, setMjConfigVersion] = useState<number>(initialMapDisplayVersion);
   // N'utiliser le portail pour les réglages qu'après montage client, pour éviter un mismatch d'hydratation.
   const [usePortalForSettings, setUsePortalForSettings] = useState(false);
 
@@ -381,29 +441,63 @@ export function WorldMapClient({
         : { ...DEFAULT_MAP_DISPLAY_CONFIG, ...initialMapDisplayConfig },
     [mode, mjUi, initialMapDisplayConfig]
   );
+  const rendererInfo = useMemo(() => getEffectiveMapRenderer(), []);
+  const enableRealmColoring = useMemo(() => isRealmColoringEnabled(), []);
+  const enableMapInfoPanelsV2 = useMemo(() => isMapInfoPanelsV2Enabled(), []);
 
   const saveMjSettings = useCallback(() => {
     try {
-      localStorage.setItem("mj_ui_v1", JSON.stringify(mjUi));
+      const prefs = {
+        debugCityHitboxes: mjUi.debugCityHitboxes,
+        mjSettingsCollapsed,
+        settingsSectionOpen,
+      };
+      localStorage.setItem("mj_ui_prefs_v2", JSON.stringify(prefs));
       setMjSettingsSavedAt(Date.now());
     } catch {
       // ignore
     }
-  }, [mjUi]);
+  }, [mjUi.debugCityHitboxes, mjSettingsCollapsed, settingsSectionOpen]);
 
   const saveMapDisplayConfigToServer = useCallback(async () => {
     if (!onSaveMapDisplayConfig) return;
+    setMjSettingsError(null);
     setMjSettingsSaving(true);
     try {
       const { debugCityHitboxes: _, ...config } = mjUi;
-      const res = await onSaveMapDisplayConfig(config);
-      if (res && "error" in res && res.error) return;
+      const res = await onSaveMapDisplayConfig(config, mjConfigVersion);
+      if (res && "error" in res && res.error) {
+        if (res.error.includes("Conflit de version")) {
+          // Retry once without expected version to avoid false positives
+          // while keeping server as source of truth.
+          const retry = await onSaveMapDisplayConfig(config);
+          if (retry && "error" in retry && retry.error) {
+            setMjSettingsError(retry.error);
+            return;
+          }
+          if (retry && "version" in retry && typeof retry.version === "number" && Number.isFinite(retry.version)) {
+            setMjConfigVersion(retry.version);
+          }
+        } else {
+          setMjSettingsError(res.error);
+          return;
+        }
+      }
+      if (res && "version" in res && typeof res.version === "number" && Number.isFinite(res.version)) {
+        setMjConfigVersion(res.version);
+      } else {
+        setMjConfigVersion((v) => v + 1);
+      }
       setMjSettingsSavedAt(Date.now());
       router.refresh();
     } finally {
       setMjSettingsSaving(false);
     }
-  }, [onSaveMapDisplayConfig, mjUi, router]);
+  }, [onSaveMapDisplayConfig, mjUi, mjConfigVersion, router]);
+
+  useEffect(() => {
+    setMjConfigVersion(initialMapDisplayVersion);
+  }, [initialMapDisplayVersion]);
 
   useEffect(() => {
     if (mjSettingsSavedAt == null) return;
@@ -415,6 +509,13 @@ export function WorldMapClient({
     if (mode === "mj" && settingsContainerId) setUsePortalForSettings(true);
   }, [mode, settingsContainerId]);
 
+  useEffect(() => {
+    const t0 = performance.now();
+    return () => {
+      if (mode === "mj") emitMapMetric("map_mj_mount_ms", performance.now() - t0, { mode });
+    };
+  }, [mode]);
+
   // Zoom/pan contrôlés : on ajoute un lissage (inertie) sur la molette.
   const MIN_ZOOM = 1.05;
   const MAX_ZOOM = 110;
@@ -422,58 +523,33 @@ export function WorldMapClient({
     center: [0, 22],
     zoom: MIN_ZOOM,
   });
+  const routeLodEpsilon = useMemo(() => {
+    if (mapView.zoom >= 6) return 0.1;
+    if (mapView.zoom >= 2.4) return 0.25;
+    return 0.6;
+  }, [mapView.zoom]);
   const viewRef = useRef(mapView);
   useEffect(() => {
     viewRef.current = mapView;
   }, [mapView]);
 
-  // Charger les réglages MJ depuis localStorage (priorité sur la config serveur pour ne pas écraser tes réglages).
+  // Charger uniquement les préférences MJ locales non-fonctionnelles.
+  // Les paramètres d'affichage sont autoritaires côté serveur.
   useEffect(() => {
     if (mode !== "mj") return;
     try {
-      const raw = localStorage.getItem("mj_ui_v1");
+      const raw = localStorage.getItem("mj_ui_prefs_v2");
       if (!raw) return;
       const parsed = JSON.parse(raw) as any;
-      setMjUi((p) => ({
-        ...p,
-        cityIconMaxPx: Number(parsed?.cityIconMaxPx) > 0 ? Number(parsed.cityIconMaxPx) : p.cityIconMaxPx,
-        cityLabelFontSizePx: Number(parsed?.cityLabelFontSizePx) > 0 ? Number(parsed.cityLabelFontSizePx) : (p.cityLabelFontSizePx ?? 10),
-        debugCityHitboxes: Boolean(parsed?.debugCityHitboxes ?? p.debugCityHitboxes),
-        zoomRefWorld: Number(parsed?.zoomRefWorld) > 0 ? Number(parsed.zoomRefWorld) : p.zoomRefWorld,
-        zoomRefProvince: Number(parsed?.zoomRefProvince) > 0 ? Number(parsed.zoomRefProvince) : p.zoomRefProvince,
-        sizeAtWorldPct: Number.isFinite(parsed?.sizeAtWorldPct) ? Number(parsed.sizeAtWorldPct) : p.sizeAtWorldPct,
-        sizeCurveExp: Number.isFinite(parsed?.sizeCurveExp) ? Number(parsed.sizeCurveExp) : p.sizeCurveExp,
-        fadeStartPct: Number.isFinite(parsed?.fadeStartPct) ? Number(parsed.fadeStartPct) : p.fadeStartPct,
-        fadeEndPct: Number.isFinite(parsed?.fadeEndPct) ? Number(parsed.fadeEndPct) : p.fadeEndPct,
-        routeStrokeLocalPx: (() => {
-          const n = Number(parsed?.routeStrokeLocalPx);
-          return Number.isFinite(n) ? Math.max(0.01, Math.min(0.3, n)) : p.routeStrokeLocalPx;
-        })(),
-        routeStrokeRegionalPx: (() => {
-          const n = Number(parsed?.routeStrokeRegionalPx);
-          return Number.isFinite(n) ? Math.max(0.01, Math.min(0.3, n)) : p.routeStrokeRegionalPx;
-        })(),
-        routeStrokeNationalPx: (() => {
-          const n = Number(parsed?.routeStrokeNationalPx);
-          return Number.isFinite(n) ? Math.max(0.01, Math.min(0.3, n)) : p.routeStrokeNationalPx;
-        })(),
-        routeFadeStartPct: Number.isFinite(parsed?.routeFadeStartPct) ? Number(parsed.routeFadeStartPct) : p.routeFadeStartPct,
-        routeFadeEndPct: Number.isFinite(parsed?.routeFadeEndPct) ? Number(parsed.routeFadeEndPct) : p.routeFadeEndPct,
-        routeSizeAtWorldPct: Number.isFinite(parsed?.routeSizeAtWorldPct) ? Number(parsed.routeSizeAtWorldPct) : p.routeSizeAtWorldPct,
-        routeSizeCurveExp: Number.isFinite(parsed?.routeSizeCurveExp) ? Number(parsed.routeSizeCurveExp) : p.routeSizeCurveExp,
-        routeLabelFontSizePx: (() => {
-          const n = Number(parsed?.routeLabelFontSizePx);
-          return Number.isFinite(n) ? Math.max(0.01, Math.min(1, n)) : (p.routeLabelFontSizePx ?? 0.25);
-        })(),
-        routeSinuosityLocalPct: Number.isFinite(parsed?.routeSinuosityLocalPct) ? Number(parsed.routeSinuosityLocalPct) : p.routeSinuosityLocalPct,
-        routeSinuosityRegionalPct: Number.isFinite(parsed?.routeSinuosityRegionalPct) ? Number(parsed.routeSinuosityRegionalPct) : p.routeSinuosityRegionalPct,
-        routeSinuosityNationalPct: Number.isFinite(parsed?.routeSinuosityNationalPct) ? Number(parsed.routeSinuosityNationalPct) : p.routeSinuosityNationalPct,
-      }));
+      setMjUi((p) => ({ ...p, debugCityHitboxes: Boolean(parsed?.debugCityHitboxes ?? p.debugCityHitboxes) }));
+      setMjSettingsCollapsed(Boolean(parsed?.mjSettingsCollapsed ?? false));
+      if (parsed?.settingsSectionOpen && typeof parsed.settingsSectionOpen === "object") {
+        setSettingsSectionOpen((prev) => ({ ...prev, ...parsed.settingsSectionOpen }));
+      }
     } catch {
       // ignore
     }
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mode]);
+  }, [mode, initialMapDisplayConfig]);
 
   // Persistance uniquement au clic sur « Enregistrer » (plus d’auto-save à chaque changement).
 
@@ -592,6 +668,7 @@ export function WorldMapClient({
       alive = false;
     };
   }, []);
+
 
   // Listener molette non-passif : plus fiable/smooth que l'event React sur un SVG.
   useEffect(() => {
@@ -763,6 +840,134 @@ export function WorldMapClient({
     };
   }, [placingPathwayPoint, mjAddPathwayPointToRoute, router]);
 
+  // Sélection départ/arrivée par clic sur la carte : ville ou point sur une route.
+  useEffect(() => {
+    if (!selectingEndpoint || selectingEndpointSubmitting) return;
+    const el = mapContainerRef.current;
+    if (!el) return;
+
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      setSelectingEndpoint(null);
+      setSelectingEndpointError(null);
+    };
+
+    const onClick = async (e: MouseEvent) => {
+      if (e.button !== 0) return;
+      const target = e.target as HTMLElement;
+      const cityEl = target.closest?.("[data-city-id]");
+      const routeEl = target.closest?.("[data-route-id]");
+      const poiEl = target.closest?.("[data-poi-id]");
+      const cityId = cityEl?.getAttribute?.("data-city-id") ?? null;
+      const routeId = routeEl?.getAttribute?.("data-route-id") ?? null;
+      const poiId = poiEl?.getAttribute?.("data-poi-id") ?? null;
+
+      if (!cityId && !routeId && !poiId) return;
+
+      e.preventDefault();
+      e.stopPropagation();
+      setSelectingEndpointError(null);
+
+      const fromCityId = "fromCityId" in selectingEndpoint ? selectingEndpoint.fromCityId : undefined;
+      const fromPathwayPointId = "fromPathwayPointId" in selectingEndpoint ? selectingEndpoint.fromPathwayPointId : undefined;
+      const fromPoiId = "fromPoiId" in selectingEndpoint ? selectingEndpoint.fromPoiId : undefined;
+
+      if (cityId) {
+        if (selectingEndpoint.step === "from") {
+          setSelectingEndpoint({ step: "to", fromCityId: cityId });
+          return;
+        }
+        setSelectingEndpoint(null);
+        setCreateRouteState({
+          fromCityId,
+          fromPathwayPointId,
+          fromPoiId,
+          toCityId: cityId,
+          toPathwayPointId: undefined,
+          toPoiId: undefined,
+          name: "",
+          tier: "regional",
+          isSubmitting: false,
+          error: null,
+        });
+        setCreateRouteModalOpen(true);
+        return;
+      }
+
+      if (poiId) {
+        if (selectingEndpoint.step === "from") {
+          setSelectingEndpoint({ step: "to", fromPoiId: poiId });
+          return;
+        }
+        setSelectingEndpoint(null);
+        setCreateRouteState({
+          fromCityId,
+          fromPathwayPointId,
+          fromPoiId,
+          toCityId: undefined,
+          toPathwayPointId: undefined,
+          toPoiId: poiId,
+          name: "",
+          tier: "regional",
+          isSubmitting: false,
+          error: null,
+        });
+        setCreateRouteModalOpen(true);
+        return;
+      }
+
+      if (routeId && mjAddPathwayPointAtPosition) {
+        const p = previewLonLatFromPointer(e.clientX, e.clientY);
+        if (!p || !Number.isFinite(p.lat) || !Number.isFinite(p.lon)) {
+          setSelectingEndpointError("Impossible de lire les coordonnées du clic.");
+          return;
+        }
+        setSelectingEndpointSubmitting(true);
+        try {
+          const res = await mjAddPathwayPointAtPosition({ routeId, lat: p.lat, lon: p.lon });
+          if (res.error) {
+            setSelectingEndpointError(res.error);
+            setSelectingEndpointSubmitting(false);
+            return;
+          }
+          const pathwayPointId = res.pathwayPointId!;
+          if (selectingEndpoint.step === "from") {
+            setSelectingEndpoint({ step: "to", fromPathwayPointId: pathwayPointId });
+            router.refresh();
+            setSelectingEndpointSubmitting(false);
+            return;
+          }
+          setSelectingEndpoint(null);
+          setSelectingEndpointSubmitting(false);
+          setCreateRouteState({
+            fromCityId,
+            fromPathwayPointId,
+            fromPoiId,
+            toCityId: undefined,
+            toPathwayPointId: pathwayPointId,
+            toPoiId: undefined,
+            name: "",
+            tier: "regional",
+            isSubmitting: false,
+            error: null,
+          });
+          setCreateRouteModalOpen(true);
+          router.refresh();
+        } catch {
+          setSelectingEndpointError("Erreur lors de l'ajout du point.");
+          setSelectingEndpointSubmitting(false);
+        }
+      }
+    };
+
+    window.addEventListener("keydown", onKey);
+    el.addEventListener("click", onClick, { capture: true });
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      el.removeEventListener("click", onClick as any, { capture: true } as any);
+    };
+  }, [selectingEndpoint, selectingEndpointSubmitting, mjAddPathwayPointAtPosition, router]);
+
   const hydro = useMemo(() => {
     try {
       if (!hydroTopo?.objects) return null;
@@ -880,6 +1085,15 @@ export function WorldMapClient({
   }, [provinces]);
 
   const realmById = useMemo(() => new Map(realms.map((r) => [r.id, r])), [realms]);
+  const realmLegendItems = useMemo(
+    () =>
+      realms.map((realm) => ({
+        id: realm.id,
+        name: realm.name,
+        color: hexToRgba(realm.color_hex ?? null, 0.8, "rgba(196, 161, 108, 0.8)"),
+      })),
+    [realms]
+  );
 
   // IMPORTANT perf: rendre les géographies une seule fois (hors zoom), sinon chaque tick de zoom
   // remappe des centaines/milliers de paths.
@@ -909,6 +1123,7 @@ export function WorldMapClient({
     );
   }, [hydro?.rivers, riversStyle]);
 
+
   const renderedRegions = useMemo(() => {
     return (
       <Geographies geography={geographyData ?? { type: "FeatureCollection", features: [] }}>
@@ -927,9 +1142,22 @@ export function WorldMapClient({
               const assigned = regionId ? provinceByRegionId.get(regionId) ?? null : null;
               const isSelected = regionId != null && selectedRegionIds.includes(regionId);
 
-              const fill = assigned ? "rgba(34, 197, 94, 0.20)" : "rgba(196, 161, 108, 0.18)";
-              const hoverFill = assigned ? "rgba(34, 197, 94, 0.30)" : "rgba(196, 161, 108, 0.26)";
-              const selectedFill = assigned ? "rgba(34, 197, 94, 0.40)" : "rgba(196, 161, 108, 0.34)";
+              const realm = assigned ? realmById.get(assigned.realm_id) ?? null : null;
+              const fill = assigned
+                ? enableRealmColoring
+                  ? hexToRgba(realm?.color_hex ?? null, 0.22, "rgba(34, 197, 94, 0.20)")
+                  : "rgba(34, 197, 94, 0.20)"
+                : "rgba(196, 161, 108, 0.18)";
+              const hoverFill = assigned
+                ? enableRealmColoring
+                  ? hexToRgba(realm?.color_hex ?? null, 0.32, "rgba(34, 197, 94, 0.30)")
+                  : "rgba(34, 197, 94, 0.30)"
+                : "rgba(196, 161, 108, 0.26)";
+              const selectedFill = assigned
+                ? enableRealmColoring
+                  ? hexToRgba(realm?.color_hex ?? null, 0.42, "rgba(34, 197, 94, 0.40)")
+                  : "rgba(34, 197, 94, 0.40)"
+                : "rgba(196, 161, 108, 0.34)";
 
               const style = {
                 default: { fill: isSelected ? selectedFill : fill, outline: "none", ...borderStroke },
@@ -1046,24 +1274,65 @@ export function WorldMapClient({
     }
   }, [geographyData]);
 
+  // Graphe terre (adjacence régions) calculé en différé pour ne pas bloquer le premier rendu.
+  const [landGraph, setLandGraph] = useState<LandGraph | null>(null);
+  useEffect(() => {
+    if (!landGeoJson?.features?.length) return;
+    const t = setTimeout(() => {
+      const t0 = performance.now();
+      try {
+        const g = buildLandGraph(landGeoJson);
+        setLandGraph(g);
+      } catch {
+        setLandGraph(null);
+      }
+    }, 0);
+    return () => clearTimeout(t);
+  }, [landGeoJson]);
+
   // Même projection que react-simple-maps (ComposableMap défaut: width=800, height=600).
   const routeProjection = useMemo(
     () => geoMercator().scale(170).translate([400, 300]),
     []
   );
 
-  const routePaths = useMemo(() => {
-    const list = routes ?? [];
+  type RoutePathItem = {
+    id: string;
+    tier: string;
+    d: string;
+    strokeWidth: number;
+    stroke: string;
+    name: string;
+    labelX: number;
+    labelY: number;
+    labelAngleDeg: number;
+  };
+  const [routePaths, setRoutePaths] = useState<RoutePathItem[]>([]);
+  const routeBuildSchedulerRef = useRef<MapScheduler | null>(null);
+  if (!routeBuildSchedulerRef.current) routeBuildSchedulerRef.current = new MapScheduler();
+
+  useEffect(() => {
+    const scheduler = routeBuildSchedulerRef.current!;
+    scheduler
+      .runLatest(async (signal) => {
+        await new Promise<void>((resolve) => setTimeout(resolve, 0));
+        if (signal.aborted) return;
+        const startedAt = performance.now();
+        const list = routes ?? [];
     const pathwayPoints = routePathwayPoints ?? [];
     const pathwayPointsById = new Map<string, { lat: number; lon: number }>();
     const routeWaypointsMap = new Map<string, Array<{ lat: number; lon: number }>>();
+    const poiById = new Map<string, { lat: number; lon: number }>();
+    for (const o of mapObjects ?? []) {
+      if (Number.isFinite(o.lon) && Number.isFinite(o.lat)) poiById.set(String(o.id), { lat: Number(o.lat), lon: Number(o.lon) });
+    }
     for (const wp of pathwayPoints) {
       pathwayPointsById.set(String(wp.id), { lat: Number(wp.lat), lon: Number(wp.lon) });
       const rid = String(wp.route_id);
       if (!routeWaypointsMap.has(rid)) routeWaypointsMap.set(rid, []);
       routeWaypointsMap.get(rid)!.push({ lat: Number(wp.lat), lon: Number(wp.lon) });
     }
-    const result: Array<{ id: string; tier: string; d: string; strokeWidth: number; stroke: string; name: string; labelX: number; labelY: number; labelAngleDeg: number }> = [];
+        const result: RoutePathItem[] = [];
     // Largeurs en pixels (diamètre visuel) ; non-scaling-stroke pour garder la taille à l’écran quel que soit le zoom.
     const clampPx = (n: number | undefined, def: number) =>
       Number.isFinite(n) ? Math.max(0.01, Math.min(0.3, n as number)) : def;
@@ -1082,18 +1351,23 @@ export function WorldMapClient({
       },
     };
     for (const r of list) {
-      const startPt = r.pathway_point_a_id
-        ? pathwayPointsById.get(String(r.pathway_point_a_id))
-        : r.city_a_id
-          ? cityById.get(r.city_a_id)
-          : null;
-      const endPt = r.pathway_point_b_id
-        ? pathwayPointsById.get(String(r.pathway_point_b_id))
-        : r.city_b_id
-          ? cityById.get(r.city_b_id)
-          : null;
+      const startPt = (r as { pathway_point_a_id?: string | null; city_a_id?: string | null; poi_a_id?: string | null }).poi_a_id
+        ? poiById.get(String((r as any).poi_a_id))
+        : (r as any).pathway_point_a_id
+          ? pathwayPointsById.get(String((r as any).pathway_point_a_id))
+          : (r as any).city_a_id
+            ? cityById.get((r as any).city_a_id)
+            : null;
+      const endPt = (r as { pathway_point_b_id?: string | null; city_b_id?: string | null; poi_b_id?: string | null }).poi_b_id
+        ? poiById.get(String((r as any).poi_b_id))
+        : (r as any).pathway_point_b_id
+          ? pathwayPointsById.get(String((r as any).pathway_point_b_id))
+          : (r as any).city_b_id
+            ? cityById.get((r as any).city_b_id)
+            : null;
       if (!startPt || !endPt) continue;
-      const waypoints = routeWaypointsMap.get(r.id) ?? [];
+      const rawWaypoints = routeWaypointsMap.get(r.id) ?? [];
+      const waypoints = resampleRouteWaypoints(rawWaypoints, MAX_RENDER_ROUTE_WAYPOINTS);
       const sequence: Array<{ lat: number; lon: number }> = [startPt, ...waypoints, endPt];
       if (sequence.length < 2) continue;
 
@@ -1108,14 +1382,18 @@ export function WorldMapClient({
       const sinuosityScale = Math.max(0, Math.min(500, Number(sinuosityPct))) / 100;
 
       let points: Array<[number, number]> = [];
+      let landSegments = 0;
+      let sinuousSegments = 0;
       for (let i = 0; i < sequence.length - 1; i++) {
         const a = sequence[i];
         const b = sequence[i + 1];
-        let seg = generateLandPath({ lon: a.lon, lat: a.lat }, { lon: b.lon, lat: b.lat }, landGeoJson ?? undefined);
+        let seg = generateLandPath({ lon: a.lon, lat: a.lat }, { lon: b.lon, lat: b.lat }, landGeoJson ?? undefined, landGraph);
         if (seg && seg.length >= 2) {
+          landSegments += 1;
           if (points.length > 0) points.pop();
           points.push(...seg);
         } else {
+          sinuousSegments += 1;
           const segSinuous = generateSinuousPath(
             { lon: a.lon, lat: a.lat },
             { lon: b.lon, lat: b.lat },
@@ -1127,8 +1405,33 @@ export function WorldMapClient({
           points.push(...segSinuous);
         }
       }
+      const rawPointsLen = points.length;
       if (points.length >= 2) {
-        points = smoothLandPathWithSinuosity(points, tier, seed ?? 0, sinuosityScale);
+        const maxPointsBeforeSmooth = 80;
+        const toSmooth =
+          points.length <= maxPointsBeforeSmooth
+            ? points
+            : (() => {
+                const out: Array<[number, number]> = [];
+                for (let k = 0; k < maxPointsBeforeSmooth; k++) {
+                  const t = k / (maxPointsBeforeSmooth - 1);
+                  const i = Math.min(Math.floor(t * (points.length - 1)), points.length - 2);
+                  const u = t * (points.length - 1) - i;
+                  const a = points[i];
+                  const b = points[i + 1];
+                  out.push([a[0] + u * (b[0] - a[0]), a[1] + u * (b[1] - a[1])]);
+                }
+                return out;
+              })();
+        // Si aucun segment n'est venu du pathfinding "terre" (`generateLandPath`), alors
+        // `generateSinuousPath` a déjà produit un tracé sinueux. Appliquer ensuite
+        // `smoothLandPathWithSinuosity` fait exploser le nombre de points (effet "barbelé").
+        points = landSegments > 0 ? smoothLandPathWithSinuosity(toSmooth, tier, seed ?? 0, sinuosityScale) : toSmooth;
+      }
+      points = simplifyPolylinePreservingCurves(points, routeLodEpsilon);
+      points = capPolylineVertices(points, MAX_ROUTE_POLYLINE_VERTICES);
+      const smoothedPointsLen = points.length;
+      if (smoothedPointsLen > 120 || sequence.length > 4) {
       }
       if (points.length < 2) continue;
       const projected = points.map(([lon, lat]) => {
@@ -1173,20 +1476,53 @@ export function WorldMapClient({
       const routeName = (r as { name?: string }).name?.trim() || `Route ${r.id}`;
       result.push({ id: r.id, tier: r.tier, d, ...style, name: routeName, labelX, labelY, labelAngleDeg });
     }
-    return result;
+        if (signal.aborted) return;
+        setRoutePaths(result);
+        emitMapMetric("map_route_build_ms", performance.now() - startedAt, { mode, routeCount: list.length });
+      })
+      .catch(() => {
+        setRoutePaths([]);
+      });
+    return () => {
+      scheduler.cancel();
+    };
   }, [
     routes,
     routePathwayPoints,
+    mapObjects,
     cityById,
     routeProjection,
     landGeoJson,
+    landGraph,
     displayConfig.routeStrokeLocalPx,
     displayConfig.routeStrokeRegionalPx,
     displayConfig.routeStrokeNationalPx,
     displayConfig.routeSinuosityLocalPct,
     displayConfig.routeSinuosityRegionalPct,
     displayConfig.routeSinuosityNationalPct,
+    routeLodEpsilon,
   ]);
+
+  useEffect(() => {
+    let active = true;
+    let previous = performance.now();
+    let raf = 0;
+    const tick = () => {
+      if (!active) return;
+      const now = performance.now();
+      const gap = now - previous;
+      previous = now;
+      if (gap > 20) {
+        emitMapMetric("map_interaction_frame_gap_ms", gap, { mode });
+      }
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => {
+      active = false;
+      if (raf) cancelAnimationFrame(raf);
+    };
+  }, [mode]);
 
   const handleRouteClick = useCallback(
     (e: React.MouseEvent<SVGPathElement>, routeId: string) => {
@@ -1308,16 +1644,29 @@ export function WorldMapClient({
 
   const openCityPanel = useCallback(
     (e: any, cityId: string) => {
-      if (mode !== "mj") return;
+      const city = cityById.get(cityId);
+      if (mode !== "mj") {
+        if (city) {
+          const realmName = realmById.get(city.realm_id)?.name ?? "Royaume inconnu";
+          setPublicInfoPanel({
+            kind: "ville",
+            title: city.name,
+            lines: [
+              `Royaume: ${realmName}`,
+              `Coordonnées: ${city.lat.toFixed(2)}, ${city.lon.toFixed(2)}`,
+            ],
+          });
+        }
+        return;
+      }
       e?.preventDefault?.();
       e?.stopPropagation?.();
-      const city = cityById.get(cityId);
       const pct = Number((city?.attrs as any)?.icon_scale_pct ?? 100);
       setCityScaleEditPct(Number.isFinite(pct) ? Math.max(10, Math.min(400, pct)) : 100);
       setCityDeleteError(null);
       setCityPanel({ open: true, cityId });
     },
-    [mode, cityById],
+    [mode, cityById, realmById],
   );
 
   // `react-simple-maps` n'expose pas tous les handlers DOM (ex: onContextMenu) dans ses types.
@@ -1345,7 +1694,22 @@ export function WorldMapClient({
         </div>
       )}
 
-      {/* Panneau réglages MJ : en overlay à droite si pas de settingsContainerId, sinon rendu via portail sous la carte */}
+      {/* Légende des royaumes */}
+      {enableRealmColoring && (
+      <div className="absolute left-4 top-4 z-30 hidden max-h-[35vh] w-56 overflow-auto rounded-xl border border-white/10 bg-black/55 p-2 backdrop-blur md:block">
+        <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-amber-100">Royaumes</p>
+        <div className="space-y-1">
+          {realmLegendItems.map((item) => (
+            <div key={item.id} className="flex items-center gap-2 text-xs text-stone-200">
+              <span className="inline-block h-3 w-3 rounded-full border border-white/20" style={{ backgroundColor: item.color }} />
+              <span className="truncate">{item.name}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+      )}
+
+      {/* Panneau réglages MJ : en overlay à droite si pas de settingsContainerId, sinon via portail. */}
       {mode === "mj" &&
         (() => {
           const panelContent = (
@@ -1383,7 +1747,7 @@ export function WorldMapClient({
                           <input type="range" min={12} max={100} value={mjUi.cityIconMaxPx} onChange={(e) => setMjUi((p) => ({ ...p, cityIconMaxPx: Number(e.target.value) }))} className="w-full" />
                           <span className="w-10 text-right text-xs text-stone-200 tabular-nums">{mjUi.cityIconMaxPx}px</span>
                         </div>
-                        <p className="mt-1 text-[11px] text-stone-400">À zoom fort, une icône ne dépassera pas cette taille.</p>
+                        <p className="mt-1 text-[11px] text-stone-400">A zoom fort, une icône ne dépassera pas cette taille.</p>
                       </div>
                       <div>
                         <p className="text-xs font-semibold text-stone-200">Taille de la police des noms de villes</p>
@@ -1608,11 +1972,14 @@ export function WorldMapClient({
                   disabled={mjSettingsSaving}
                   className="w-full rounded-lg border border-emerald-500/50 bg-emerald-950/50 px-4 py-2.5 text-sm font-semibold text-emerald-100 hover:bg-emerald-900/50 transition-colors disabled:opacity-60"
                 >
-                  {mjSettingsSaving ? "Enregistrement…" : "Enregistrer pour toute la carte"}
+                  {mjSettingsSaving ? "Enregistrement..." : "Enregistrer pour toute la carte"}
                 </button>
               )}
               {mjSettingsSavedAt != null && (
                 <p className="text-center text-xs text-emerald-400">Enregistré.</p>
+              )}
+              {mjSettingsError && (
+                <p className="text-center text-xs text-red-300">{mjSettingsError}</p>
               )}
             </div>
           </div>
@@ -1631,7 +1998,7 @@ export function WorldMapClient({
             }
           }
           return (
-            <div className="absolute right-4 top-14 z-40 flex min-w-[320px] max-w-[420px] max-h-[85vh] flex-col overflow-hidden rounded-2xl border border-amber-500/20 bg-black/80 shadow-[0_0_0_1px_rgba(255,255,255,0.04)] backdrop-blur">
+            <div className="absolute right-4 top-4 bottom-4 z-40 flex min-w-[320px] max-w-[420px] flex-col overflow-hidden rounded-2xl border border-amber-500/20 bg-black/80 shadow-[0_0_0_1px_rgba(255,255,255,0.04)] backdrop-blur">
               {panelContent}
             </div>
           );
@@ -1641,8 +2008,24 @@ export function WorldMapClient({
       {mode === "mj" && placingPathwayPoint && (
         <div className="absolute left-1/2 top-4 z-50 -translate-x-1/2 rounded-xl border border-emerald-500/30 bg-emerald-950/90 px-4 py-2 shadow-lg backdrop-blur">
           <p className="text-sm font-medium text-emerald-100">
-            {placingPathwayPoint.isSubmitting ? "Ajout du point…" : "Cliquez sur la carte pour placer le point de passage (Échap pour annuler)"}
+            {placingPathwayPoint.isSubmitting ? "Ajout du point..." : "Cliquez sur la carte pour placer le point de passage (Échap pour annuler)"}
           </p>
+        </div>
+      )}
+
+      {/* Bannière : sélection départ/arrivée par clic (ville ou route) */}
+      {mode === "mj" && selectingEndpoint && (
+        <div className="absolute left-1/2 top-4 z-50 -translate-x-1/2 rounded-xl border border-amber-500/30 bg-amber-950/90 px-4 py-2 shadow-lg backdrop-blur">
+          <p className="text-sm font-medium text-amber-100">
+            {selectingEndpointSubmitting
+              ? "Création du point..."
+              : selectingEndpoint.step === "from"
+                ? "Cliquez sur une ville, une entité ou une route pour le départ (Échap pour annuler)"
+                : "Cliquez sur une ville, une entité ou une route pour l'arrivée (Échap pour annuler)"}
+          </p>
+          {selectingEndpointError && (
+            <p className="mt-1 text-xs text-red-200">{selectingEndpointError}</p>
+          )}
         </div>
       )}
 
@@ -2336,6 +2719,11 @@ export function WorldMapClient({
         className="absolute inset-0"
         style={{ overscrollBehavior: "contain" }}
       >
+        {rendererInfo.fallback && (
+          <div className="pointer-events-none absolute left-3 top-3 z-20 rounded-md border border-amber-500/30 bg-black/65 px-2 py-1 text-[11px] text-amber-100">
+            Rendu WebGL demandé, fallback SVG actif (migration en cours).
+          </div>
+        )}
         <ComposableMap
           projection="geoMercator"
           projectionConfig={{ scale: 170 }}
@@ -2434,7 +2822,7 @@ export function WorldMapClient({
 
               {/* Routes (tracés sinueux entre villes) — config dédiée (opacité, taille, progressivité) */}
               {routePaths.length > 0 && (
-                <g opacity={routeRenderOpacity} style={{ pointerEvents: mode === "mj" ? "auto" : "none" }}>
+                <g opacity={routeRenderOpacity} style={{ pointerEvents: "auto" }}>
                   {routePaths.map((rp) => {
                     const visibleStroke = rp.strokeWidth * routeSizeFactor;
                     const labelFontSize = (displayConfig.routeLabelFontSizePx ?? 0.25) * routeSizeFactor;
@@ -2447,10 +2835,25 @@ export function WorldMapClient({
                           strokeWidth={visibleStroke}
                           strokeLinecap="round"
                           strokeLinejoin="round"
-                          style={{ cursor: mode === "mj" ? "pointer" : "default", pointerEvents: mode === "mj" ? "all" : "none" }}
-                          onClick={() => mode === "mj" && setSelectedRouteId(rp.id)}
+                          style={{ cursor: "pointer", pointerEvents: "all" }}
+                          data-route-id={mode === "mj" ? rp.id : undefined}
+                          onClick={() => {
+                            if (mode === "mj") {
+                              if (!selectingEndpoint) setSelectedRouteId(rp.id);
+                              return;
+                            }
+                            const route = (routes ?? []).find((r) => r.id === rp.id);
+                            setPublicInfoPanel({
+                              kind: "route",
+                              title: route?.name?.trim() || rp.name,
+                              lines: [
+                                `Type: ${ROUTE_TIER_LABELS[(route?.tier as RouteTier) ?? "local"] ?? route?.tier ?? "Route"}`,
+                                route?.distance_km ? `Distance: ${Math.round(route.distance_km)} km` : "Distance: inconnue",
+                              ],
+                            });
+                          }}
                         />
-                        {mode === "mj" && (
+                        {labelFontSize > 0 && (
                           <text
                             x={rp.labelX}
                             y={rp.labelY}
@@ -2460,7 +2863,21 @@ export function WorldMapClient({
                             dominantBaseline="middle"
                             transform={`rotate(${rp.labelAngleDeg} ${rp.labelX} ${rp.labelY})`}
                             style={{ cursor: "pointer", pointerEvents: "all" }}
-                            onClick={() => setSelectedRouteId(rp.id)}
+                            onClick={() => {
+                              if (mode === "mj") {
+                                setSelectedRouteId(rp.id);
+                                return;
+                              }
+                              const route = (routes ?? []).find((r) => r.id === rp.id);
+                              setPublicInfoPanel({
+                                kind: "route",
+                                title: route?.name?.trim() || rp.name,
+                                lines: [
+                                  `Type: ${ROUTE_TIER_LABELS[(route?.tier as RouteTier) ?? "local"] ?? route?.tier ?? "Route"}`,
+                                  route?.distance_km ? `Distance: ${Math.round(route.distance_km)} km` : "Distance: inconnue",
+                                ],
+                              });
+                            }}
                           >
                             {rp.name}
                           </text>
@@ -2474,7 +2891,7 @@ export function WorldMapClient({
               {/* Objets (villes/bâtiments) */}
               {visibleObjects.map((o) => (
                 <MarkerAny key={`obj-${o.id}`} coordinates={[o.lon as number, o.lat as number]}>
-                  <g opacity={0.85}>
+                  <g opacity={0.85} data-poi-id={mode === "mj" ? o.id : undefined} style={{ pointerEvents: mode === "mj" ? "all" : "none", cursor: mode === "mj" ? "pointer" : "default" }}>
                     {o.icon_key === "fort" ? (
                       <path
                         d="M-4 6 V-2 L-2 -4 L0 -2 L2 -4 L4 -2 V6 Z"
@@ -2497,7 +2914,7 @@ export function WorldMapClient({
                 </MarkerAny>
               ))}
 
-              {/* Villes (entités) — hitbox = cercle r=5 (diamètre visuel de la boîte 10×10) */}
+              {/* Villes (entités) — hitbox = cercle r=5 (diamètre visuel de la boîte 10Ã—10) */}
               {visibleCities.map((c) => (
                 <MarkerAny key={`city-${c.id}`} coordinates={[c.lon, c.lat]}>
                   {(() => {
@@ -2506,6 +2923,7 @@ export function WorldMapClient({
                       <g
                         opacity={citiesRenderOpacity}
                         style={{ pointerEvents: "none" }}
+                        data-city-id={mode === "mj" ? c.id : undefined}
                       >
                         <g transform={`scale(${cityMarkerScale * cityScale})`}>
                           <circle
@@ -2515,7 +2933,7 @@ export function WorldMapClient({
                             fill="transparent"
                             style={{
                               pointerEvents: citiesOpacity > 0.001 ? "all" : "none",
-                              cursor: mode === "mj" ? "pointer" : "default",
+                              cursor: "pointer",
                               stroke: mjUi.debugCityHitboxes ? "rgba(239,68,68,0.95)" : "transparent",
                               strokeWidth: mjUi.debugCityHitboxes ? 0.8 : 0,
                             }}
@@ -2633,6 +3051,16 @@ export function WorldMapClient({
           </ZoomableGroup>
         </ComposableMap>
       </div>
+
+      {/* Panneau d'information public (toujours visible à l'écran) */}
+      {enableMapInfoPanelsV2 && mode === "public" && publicInfoPanel && (
+        <EntityInfoPanel
+          kind={publicInfoPanel.kind}
+          title={publicInfoPanel.title}
+          lines={publicInfoPanel.lines}
+          onClose={() => setPublicInfoPanel(null)}
+        />
+      )}
 
       {/* Pop-in Ville (MVP) */}
       {mode === "mj" && cityPanel.open && (
@@ -2892,7 +3320,7 @@ export function WorldMapClient({
                                         }
                                       }}
                                     >
-                                      {routeDeleteSubmitting === r.id ? "…" : "Suppr."}
+                                      {routeDeleteSubmitting === r.id ? "..." : "Suppr."}
                                     </button>
                                   )}
                                 </li>
@@ -2904,23 +3332,35 @@ export function WorldMapClient({
                             </>
                           )}
                           {mjCreateRoute && (
-                            <button
-                              type="button"
-                              className="mt-3 w-full rounded-lg border border-amber-500/40 bg-amber-900/30 px-3 py-2 text-xs font-semibold text-amber-100 hover:bg-amber-800/40 disabled:opacity-60"
-                              onClick={() => {
-                                setCreateRouteState({
-                                  fromCityId: city.id,
-                                  toCityId: "",
-                                  name: "",
-                                  tier: "regional",
-                                  isSubmitting: false,
-                                  error: null,
-                                });
-                                setCreateRouteModalOpen(true);
-                              }}
-                            >
-                              Créer une route depuis cette ville
-                            </button>
+                            <div className="mt-3 flex flex-col gap-1.5">
+                              <button
+                                type="button"
+                                className="w-full rounded-lg border border-amber-500/40 bg-amber-900/30 px-3 py-2 text-xs font-semibold text-amber-100 hover:bg-amber-800/40 disabled:opacity-60"
+                                onClick={() => {
+                                  setCreateRouteState({
+                                    fromCityId: city.id,
+                                    toCityId: undefined,
+                                    name: "",
+                                    tier: "regional",
+                                    isSubmitting: false,
+                                    error: null,
+                                  });
+                                  setCreateRouteModalOpen(true);
+                                }}
+                              >
+                                Créer une route depuis cette ville
+                              </button>
+                              <button
+                                type="button"
+                                className="w-full rounded-lg border border-emerald-500/40 bg-emerald-900/30 px-3 py-2 text-xs font-semibold text-emerald-100 hover:bg-emerald-800/40"
+                                onClick={() => {
+                                  setCityPanel({ open: false, cityId: "" });
+                                  setSelectingEndpoint({ step: "from" });
+                                }}
+                              >
+                                Créer une route : choisir départ et arrivée sur la carte
+                              </button>
+                            </div>
                           )}
                         </>
                       );
@@ -3006,7 +3446,7 @@ export function WorldMapClient({
                                 }
                               }}
                             >
-                              {pathwayNavState.isSubmitting ? "Ajout…" : "Ajouter le point de navigation"}
+                              {pathwayNavState.isSubmitting ? "Ajout..." : "Ajouter le point de navigation"}
                             </button>
                             {pathwayNavState.error && (
                               <p className="mt-2 rounded border border-red-500/30 bg-red-950/40 px-2 py-1.5 text-xs text-red-200">
@@ -3070,22 +3510,37 @@ export function WorldMapClient({
         </div>
       )}
 
-      {/* Modal imbriqué : Créer une route (départ = ville du panneau ou point sur une route) */}
-      {mode === "mj" && createRouteModalOpen && createRouteState && (cityPanel.open || createRouteState.fromPathwayPointId) && (() => {
+      {/* Modal : Créer une route (départ/arrivée = ville ou point sur une route, liste ou clic carte) */}
+      {mode === "mj" && createRouteModalOpen && createRouteState && (() => {
         const fromPathway = !!createRouteState.fromPathwayPointId;
-        const city = fromPathway ? null : cityById.get(cityPanel.cityId) ?? null;
-        if (!fromPathway && (!city || createRouteState.fromCityId !== city.id)) return null;
+        const fromPoi = createRouteState.fromPoiId ? (mapObjects ?? []).find((x) => x.id === createRouteState.fromPoiId) : null;
+        const fromCity = createRouteState.fromCityId ? cityById.get(createRouteState.fromCityId) : null;
+        const toPathway = !!createRouteState.toPathwayPointId;
+        const toPoi = createRouteState.toPoiId ? (mapObjects ?? []).find((x) => x.id === createRouteState.toPoiId) : null;
+        const toCity = createRouteState.toCityId ? cityById.get(createRouteState.toCityId) : null;
+        const toChosenByClick = createRouteState.toCityId != null || createRouteState.toPathwayPointId != null || createRouteState.toPoiId != null;
+        const fromLabel = fromPathway ? "Point sur une route" : fromPoi ? fromPoi.name : (fromCity?.name ?? "Ville");
+        const toLabel = toPathway ? "Point sur une route" : toPoi ? toPoi.name : (toCity?.name ?? "Ville");
+
         const validCities = filterCitiesWithValidCoords(cities ?? []);
-        const withDistance = fromPathway
-          ? validCities.map((c) => ({ city: c, km: 0 }))
-          : validCities
-              .filter((c) => c.id !== city!.id)
+        const fromPoint = fromPathway ? null : fromPoi && Number.isFinite(fromPoi.lon) && Number.isFinite(fromPoi.lat) ? { lon: fromPoi.lon!, lat: fromPoi.lat! } : fromCity;
+        const withDistance = fromPoint
+          ? validCities
+              .filter((c) => !fromCity || c.id !== fromCity.id)
               .map((c) => ({
                 city: c,
-                km: geoDistanceKm({ lon: city!.lon, lat: city!.lat }, { lon: c.lon, lat: c.lat }),
-              }));
-        if (!fromPathway) withDistance.sort((a, b) => a.km - b.km);
-        const selectedOther = withDistance.find((x) => x.city.id === createRouteState.toCityId);
+                km: geoDistanceKm({ lon: fromPoint.lon, lat: fromPoint.lat }, { lon: c.lon, lat: c.lat }),
+              }))
+          : validCities.map((c) => ({ city: c, km: 0 }));
+        withDistance.sort((a, b) => a.km - b.km);
+        const selectedOther = createRouteState.toCityId ? withDistance.find((x) => x.city.id === createRouteState.toCityId) : null;
+
+        const canSubmit =
+          createRouteState.name.trim().length > 0 &&
+          createRouteState.isSubmitting === false &&
+          (createRouteState.toCityId != null || createRouteState.toPathwayPointId != null || createRouteState.toPoiId != null) &&
+          (!selectedOther || selectedOther.km <= maxRouteKm);
+
         return (
           <div
             className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 p-4"
@@ -3096,30 +3551,58 @@ export function WorldMapClient({
               onClick={(e) => e.stopPropagation()}
             >
               <p className="text-xs font-semibold text-amber-100">
-                Créer une route — Départ : {fromPathway ? "Point sur la route" : city!.name}
+                Créer une route — Départ : {fromLabel}
               </p>
-              <label className="mt-2 block text-xs text-stone-300">
-                {fromPathway ? "Ville d'arrivée" : `Destination (max ${maxRouteKm} km)`}
-                <select
-                  className="mt-1 w-full rounded-lg border border-white/10 bg-black/50 px-2 py-1.5 text-xs text-stone-100"
-                  value={createRouteState.toCityId}
-                  onChange={(e) => {
-                    const toId = e.target.value;
-                    const other = withDistance.find((x) => x.city.id === toId);
-                    const name = other != null && !fromPathway && city
-                      ? [city.name, other.city.name].sort().join(" – ")
-                      : other != null ? other.city.name : "";
-                    setCreateRouteState((prev) => prev ? { ...prev, toCityId: toId, name: name || prev.name, error: null } : prev);
-                  }}
-                >
-                  <option value="">— Choisir —</option>
-                  {withDistance.map(({ city: c, km }) => (
-                    <option key={c.id} value={c.id} disabled={!fromPathway && km > maxRouteKm}>
-                      {c.name}{!fromPathway ? ` — ${Math.round(km)} km` : ""}{!fromPathway && km > maxRouteKm ? " (hors limite)" : ""}
-                    </option>
-                  ))}
-                </select>
-              </label>
+
+              {toChosenByClick ? (
+                <p className="mt-2 text-xs text-stone-400">Arrivée : {toLabel}</p>
+              ) : (
+                <div className="mt-2 flex flex-col gap-1">
+                  <label className="block text-xs text-stone-300">
+                    Destination (liste ou clic sur la carte : ville, entité ou route)
+                  </label>
+                  <div className="flex gap-1">
+                    <select
+                      className="flex-1 rounded-lg border border-white/10 bg-black/50 px-2 py-1.5 text-xs text-stone-100"
+                      value={createRouteState.toCityId ?? ""}
+                      onChange={(e) => {
+                        const toId = e.target.value || undefined;
+                        const other = toId ? withDistance.find((x) => x.city.id === toId) : null;
+                        const name = other && fromCity
+                          ? [fromCity.name, other.city.name].sort().join(" – ")
+                          : other?.city.name ?? createRouteState?.name ?? "";
+                        setCreateRouteState((prev) => prev ? { ...prev, toCityId: toId, toPathwayPointId: undefined, toPoiId: undefined, name: name || prev.name, error: null } : prev);
+                      }}
+                    >
+                      <option value="">— Choisir —</option>
+                      {withDistance.map(({ city: c, km }) => (
+                        <option key={c.id} value={c.id} disabled={km > maxRouteKm}>
+                          {c.name}{km > 0 ? ` — ${Math.round(km)} km` : ""}{km > maxRouteKm ? " (hors limite)" : ""}
+                        </option>
+                      ))}
+                    </select>
+                    <button
+                      type="button"
+                      className="shrink-0 rounded-lg border border-emerald-500/40 bg-emerald-900/40 px-2 py-1.5 text-xs text-emerald-100 hover:bg-emerald-800/50"
+                      onClick={() => {
+                        setCreateRouteModalOpen(false);
+                        setSelectingEndpoint(
+                          fromPathway && createRouteState.fromPathwayPointId
+                            ? { step: "to", fromPathwayPointId: createRouteState.fromPathwayPointId }
+                            : fromPoi && createRouteState.fromPoiId
+                              ? { step: "to", fromPoiId: createRouteState.fromPoiId }
+                              : fromCity
+                                ? { step: "to", fromCityId: fromCity.id }
+                                : null
+                        );
+                      }}
+                    >
+                      Carte
+                    </button>
+                  </div>
+                </div>
+              )}
+
               <label className="mt-2 block text-xs text-stone-300">
                 Nom
                 <input
@@ -3155,36 +3638,21 @@ export function WorldMapClient({
                 <button
                   type="button"
                   className="flex-1 rounded-lg bg-amber-600/90 px-3 py-2 text-xs font-semibold text-black hover:bg-amber-500 disabled:opacity-60"
-                  disabled={
-                    !createRouteState.toCityId ||
-                    !createRouteState.name.trim() ||
-                    createRouteState.isSubmitting ||
-                    (!fromPathway && selectedOther != null && selectedOther.km > maxRouteKm)
-                  }
+                  disabled={!canSubmit}
                   onClick={async () => {
-                    if (
-                      !createRouteState.toCityId ||
-                      !createRouteState.name.trim() ||
-                      (!fromPathway && selectedOther != null && selectedOther.km > maxRouteKm)
-                    )
-                      return;
+                    if (!canSubmit || !mjCreateRoute) return;
                     setCreateRouteState((prev) => (prev ? { ...prev, isSubmitting: true, error: null } : prev));
                     try {
-                      const res = await mjCreateRoute!(
-                        fromPathway && createRouteState.fromPathwayPointId
-                          ? {
-                              pathwayPointAId: createRouteState.fromPathwayPointId,
-                              cityBId: createRouteState.toCityId,
-                              name: createRouteState.name.trim(),
-                              tier: createRouteState.tier,
-                            }
-                          : {
-                              cityAId: city!.id,
-                              cityBId: createRouteState.toCityId,
-                              name: createRouteState.name.trim(),
-                              tier: createRouteState.tier,
-                            }
-                      );
+                      const res = await mjCreateRoute({
+                        cityAId: createRouteState.fromCityId ?? null,
+                        cityBId: createRouteState.toCityId ?? null,
+                        pathwayPointAId: createRouteState.fromPathwayPointId ?? null,
+                        pathwayPointBId: createRouteState.toPathwayPointId ?? null,
+                        poiAId: createRouteState.fromPoiId ?? null,
+                        poiBId: createRouteState.toPoiId ?? null,
+                        name: createRouteState.name.trim(),
+                        tier: createRouteState.tier,
+                      });
                       if (res.error) {
                         setCreateRouteState((prev) =>
                           prev ? { ...prev, isSubmitting: false, error: res.error ?? "" } : prev
@@ -3202,7 +3670,7 @@ export function WorldMapClient({
                     }
                   }}
                 >
-                  {createRouteState.isSubmitting ? "Création…" : "Créer"}
+                  {createRouteState.isSubmitting ? "Création..." : "Créer"}
                 </button>
                 <button
                   type="button"
@@ -3226,8 +3694,10 @@ export function WorldMapClient({
         const tierLabel = ROUTE_TIER_LABELS[(route.tier as RouteTier) ?? "local"] ?? route.tier;
         const dist = route.distance_km != null ? `${Number(route.distance_km).toFixed(0)} km` : "—";
         const routeName = (route as { name?: string }).name?.trim() || `Route ${route.id}`;
-        const labelA = cityA?.name ?? "Point sur route";
-        const labelB = cityB?.name ?? "Point sur route";
+        const poiA = (route as { poi_a_id?: string | null }).poi_a_id ? (mapObjects ?? []).find((o) => o.id === (route as any).poi_a_id) : null;
+        const poiB = (route as { poi_b_id?: string | null }).poi_b_id ? (mapObjects ?? []).find((o) => o.id === (route as any).poi_b_id) : null;
+        const labelA = cityA?.name ?? poiA?.name ?? "Point sur route";
+        const labelB = cityB?.name ?? poiB?.name ?? "Point sur route";
         return (
           <div
             className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
@@ -3274,7 +3744,7 @@ export function WorldMapClient({
                                   }
                                 }}
                               >
-                                {pathwayDeleteSubmitting === wp.id ? "…" : "Suppr."}
+                                {pathwayDeleteSubmitting === wp.id ? "..." : "Suppr."}
                               </button>
                             )}
                           </li>
@@ -3306,7 +3776,7 @@ export function WorldMapClient({
                               setPlacingPathwayPoint({ routeId: route.id, insertPosition: pathwayAddPosition });
                             }}
                           >
-                            {placingPathwayPoint?.routeId === route.id ? "Cliquez sur la carte…" : "Ajouter un point sur la carte"}
+                            {placingPathwayPoint?.routeId === route.id ? "Cliquez sur la carte..." : "Ajouter un point sur la carte"}
                           </button>
                         </div>
                         <div className="mt-2 flex flex-wrap items-end gap-2 border-t border-white/10 pt-2">
@@ -3342,7 +3812,7 @@ export function WorldMapClient({
                               }
                             }}
                           >
-                            {pathwayAddSubmitting ? "…" : "Ajouter"}
+                            {pathwayAddSubmitting ? "..." : "Ajouter"}
                           </button>
                         </div>
                       </>
@@ -3383,23 +3853,14 @@ export function WorldMapClient({
                           }
                           if (res.pathwayPointId) {
                             setSelectedRouteId(null);
-                            setCreateRouteState({
-                              fromCityId: "",
-                              fromPathwayPointId: res.pathwayPointId,
-                              toCityId: "",
-                              name: "",
-                              tier: (route.tier as "local" | "regional" | "national") ?? "regional",
-                              isSubmitting: false,
-                              error: null,
-                            });
-                            setCreateRouteModalOpen(true);
+                            setSelectingEndpoint({ step: "to", fromPathwayPointId: res.pathwayPointId });
                           }
                         } finally {
                           setBranchPointSubmitting(false);
                         }
                       }}
                     >
-                      {branchPointSubmitting ? "Création du point…" : "Créer le point puis choisir la ville d'arrivée"}
+                      {branchPointSubmitting ? "Création du point..." : "Créer le point puis cliquer sur la carte (ville, entité ou route) pour la destination"}
                     </button>
                   )}
                   {branchPointError && (
@@ -3475,7 +3936,7 @@ export function WorldMapClient({
                     }
                   }}
                 >
-                  {routeDeleteSubmitting === route.id ? "Suppression…" : "Supprimer la route"}
+                  {routeDeleteSubmitting === route.id ? "Suppression..." : "Supprimer la route"}
                 </button>
               )}
               <button

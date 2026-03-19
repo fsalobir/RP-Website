@@ -8,6 +8,10 @@ type RealmRow = {
   slug: string;
   name: string;
   is_npc: boolean;
+  color_hex?: string | null;
+  banner_url?: string | null;
+  summary?: string | null;
+  leader_name?: string | null;
   settings: any;
 };
 
@@ -26,7 +30,7 @@ export default async function RoyaumesPage() {
 
   const { data, error } = await supabase
     .from("realms")
-    .select("id, slug, name, is_npc, settings")
+    .select("id, slug, name, is_npc, color_hex, banner_url, summary, leader_name, settings")
     .order("name");
 
   const realms = (data ?? []) as RealmRow[];
@@ -57,15 +61,17 @@ export default async function RoyaumesPage() {
                 <tr>
                   <th className="px-4 py-3">Drapeau</th>
                   <th className="px-4 py-3">Nom</th>
+                  <th className="px-4 py-3">Type</th>
                   <th className="px-4 py-3">Race</th>
                   <th className="px-4 py-3">Leader</th>
+                  <th className="px-4 py-3">Résumé</th>
                 </tr>
               </thead>
               <tbody className="text-stone-100/90">
                 {realms.map((r) => {
-                  const flagUrl = safeSettingUrl(r.settings, "flag_url");
+                  const flagUrl = r.banner_url || safeSettingUrl(r.settings, "flag_url");
                   const race = safeSettingString(r.settings, "race");
-                  const leader = safeSettingString(r.settings, "leader");
+                  const leader = r.leader_name || safeSettingString(r.settings, "leader");
                   return (
                     <tr key={r.id} className="border-t border-white/5">
                       <td className="px-4 py-3">
@@ -82,13 +88,18 @@ export default async function RoyaumesPage() {
                         )}
                       </td>
                       <td className="px-4 py-3 font-medium">
+                        <span
+                          className="mr-2 inline-block h-2.5 w-2.5 rounded-full border border-white/20 align-middle"
+                          style={{ backgroundColor: r.color_hex ?? "rgba(245, 158, 11, 0.8)" }}
+                        />
                         <Link href={`/royaume/${r.slug}`} className="hover:underline">
                           {r.name}
                         </Link>
-                        <span className="ml-2 text-xs text-stone-500">{r.is_npc ? "PNJ" : "Joueur"}</span>
                       </td>
+                      <td className="px-4 py-3 text-xs text-stone-300">{r.is_npc ? "PNJ" : "Joueur"}</td>
                       <td className="px-4 py-3 text-stone-200/90">{race}</td>
                       <td className="px-4 py-3 text-stone-200/90">{leader}</td>
+                      <td className="max-w-[320px] px-4 py-3 text-stone-300">{r.summary || "—"}</td>
                     </tr>
                   );
                 })}

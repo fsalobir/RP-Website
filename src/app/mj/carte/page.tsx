@@ -7,6 +7,7 @@ import {
   createCityBuilding,
   createRoute,
   addPathwayPointToRoute,
+  addPathwayPointAtPosition,
   deletePathwayPoint,
   createBranchPointOnRoute,
   deleteRoute,
@@ -17,7 +18,7 @@ import {
   renameProvince,
   splitProvince,
   undoProvinceMapOp,
-  getMapDisplayConfig,
+  getMapDisplayConfigSnapshot,
   saveMapDisplayConfig,
 } from "../_actions/map";
 
@@ -27,7 +28,7 @@ export default async function MjCartePage() {
   const admin = createServiceRoleClient();
 
   const [realmsRes, provinceRegionsRes, opsRes, poiRes, citiesRes, routesRes, routePathwayPointsRes, maxRouteKmRes] = await Promise.all([
-    admin.from("realms").select("id, slug, name, is_npc").order("name"),
+    admin.from("realms").select("id, slug, name, is_npc, color_hex, banner_url, summary, leader_name").order("name"),
     admin
       .from("province_base_regions")
       .select("region_id, provinces(id, realm_id, name, attrs)")
@@ -45,12 +46,21 @@ export default async function MjCartePage() {
       .from("cities")
       .select("id, province_id, realm_id, name, lon, lat, icon_key, attrs")
       .order("created_at", { ascending: false }),
-    admin.from("routes").select("id, name, city_a_id, city_b_id, pathway_point_a_id, pathway_point_b_id, tier, distance_km, attrs").order("created_at", { ascending: false }),
+    admin.from("routes").select("id, name, city_a_id, city_b_id, pathway_point_a_id, pathway_point_b_id, poi_a_id, poi_b_id, tier, distance_km, attrs").order("created_at", { ascending: false }),
     admin.from("route_pathway_points").select("id, route_id, seq, lat, lon").order("route_id").order("seq"),
     admin.from("rule_parameters").select("value").eq("key", "max_route_km").maybeSingle(),
   ]);
 
-  const realms = (realmsRes.data ?? []) as Array<{ id: string; slug: string; name: string; is_npc: boolean }>;
+  const realms = (realmsRes.data ?? []) as Array<{
+    id: string;
+    slug: string;
+    name: string;
+    is_npc: boolean;
+    color_hex?: string | null;
+    banner_url?: string | null;
+    summary?: string | null;
+    leader_name?: string | null;
+  }>;
   const provinces = (provinceRegionsRes.data ?? [])
     .map((row: any) => row?.provinces ? ({ ...row.provinces, region_id: row.region_id }) : null)
     .filter(Boolean) as Array<{ id: string; realm_id: string; name: string; region_id: string; attrs?: Record<string, any> }>;
@@ -98,7 +108,7 @@ export default async function MjCartePage() {
       ? maxRouteKmRes.data.value
       : 500;
 
-  const mapDisplayConfig = await getMapDisplayConfig();
+  const mapDisplaySnapshot = await getMapDisplayConfigSnapshot();
 
   return (
     <div>
@@ -120,11 +130,13 @@ export default async function MjCartePage() {
           mjUpdateCityIconScale={updateCityIconScale}
           mjCreateRoute={createRoute}
           mjAddPathwayPointToRoute={addPathwayPointToRoute}
+          mjAddPathwayPointAtPosition={addPathwayPointAtPosition}
           mjDeletePathwayPoint={deletePathwayPoint}
           mjCreateBranchPointOnRoute={createBranchPointOnRoute}
           mjDeleteRoute={deleteRoute}
           maxRouteKm={maxRouteKm}
-          initialMapDisplayConfig={mapDisplayConfig}
+          initialMapDisplayConfig={mapDisplaySnapshot.config}
+          initialMapDisplayVersion={mapDisplaySnapshot.version}
           onSaveMapDisplayConfig={saveMapDisplayConfig}
           mapObjects={poi as any}
           cities={cities as any}

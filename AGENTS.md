@@ -17,6 +17,7 @@ Le modèle de données est hiérarchique et axé sur les personnages et le terri
 - **Races (`races`)** : Configurables par le MJ, présentes dans les provinces, elles apportent des modificateurs spécifiques (via le moteur d'effets).
 - **Personnages & Clans (`characters`, `clans`)** : PNJ ou PJ. Possèdent des attributs, de l'équipement, et des liens familiaux (arbres généalogiques/alliances). Les effets actifs peuvent s'appliquer directement sur eux.
 - **Carte** : Stylisée, avec des frontières de provinces fixes (basées sur des régions de Supremacy), affichant les royaumes et les POI.
+- **Routes sur la carte** : limites et perf centralisées dans `src/lib/routes.ts` (`MAX_ROUTE_PATHWAY_POINTS`, `MAX_LAND_GRAPH_FEATURES`, `MAX_ROUTE_POLYLINE_VERTICES`, etc.). Le graphe « terre » n’est pas construit sur les très grandes cartes (évite le gel du navigateur).
 
 ## Formatage des nombres
 - **Toujours utiliser** les utilitaires de `src/lib/format.ts` pour l’affichage utilisateur.

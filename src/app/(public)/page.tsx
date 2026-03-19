@@ -19,7 +19,7 @@ export default async function HomePage({
   const supabase = createAnonClientForCache();
 
   const [realmsRes, provinceRegionsRes, poiRes, citiesRes, routesRes, routePathwayPointsRes] = await Promise.all([
-    supabase.from("realms").select("id, slug, name, is_npc").order("name"),
+    supabase.from("realms").select("id, slug, name, is_npc, color_hex, banner_url, summary, leader_name").order("name"),
     supabase
       .from("province_base_regions")
       .select("region_id, provinces(id, realm_id, name, attrs)")
@@ -32,7 +32,7 @@ export default async function HomePage({
       .from("cities")
       .select("id, province_id, realm_id, name, lon, lat, icon_key, attrs")
       .order("created_at", { ascending: false }),
-    supabase.from("routes").select("id, name, city_a_id, city_b_id, pathway_point_a_id, pathway_point_b_id, tier, distance_km, attrs").order("created_at", { ascending: false }),
+    supabase.from("routes").select("id, name, city_a_id, city_b_id, pathway_point_a_id, pathway_point_b_id, poi_a_id, poi_b_id, tier, distance_km, attrs").order("created_at", { ascending: false }),
     supabase.from("route_pathway_points").select("id, route_id, seq, lat, lon").order("route_id").order("seq"),
   ]);
 
@@ -68,6 +68,8 @@ export default async function HomePage({
     city_b_id: string | null;
     pathway_point_a_id?: string | null;
     pathway_point_b_id?: string | null;
+    poi_a_id?: string | null;
+    poi_b_id?: string | null;
     tier: string;
     distance_km: number | null;
     attrs?: Record<string, unknown>;

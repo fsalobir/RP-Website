@@ -1,0 +1,50 @@
+{
+  "profiles": {
+    "small": {
+      "public": {
+        "frameGapP95MsMax": 40,
+        "wheelStepP95MsMax": 200,
+        "longTasksMax": 3,
+        "svgNodesMax": 2500
+      },
+      "mj": {
+        "frameGapP95MsMax": 50,
+        "wheelStepP95MsMax": 240,
+        "longTasksMax": 6,
+        "svgNodesMax": 3200
+      },
+      "maxRegressionPct": 12
+    },
+    "medium": {
+      "public": {
+        "frameGapP95MsMax": 45,
+        "wheelStepP95MsMax": 220,
+        "longTasksMax": 5,
+        "svgNodesMax": 4200
+      },
+      "mj": {
+        "frameGapP95MsMax": 55,
+        "wheelStepP95MsMax": 260,
+        "longTasksMax": 8,
+        "svgNodesMax": 5200
+      },
+      "maxRegressionPct": 15
+    },
+    "large": {
+      "public": {
+        "frameGapP95MsMax": 60,
+        "wheelStepP95MsMax": 300,
+        "longTasksMax": 10,
+        "svgNodesMax": 7200
+      },
+      "mj": {
+        "frameGapP95MsMax": 75,
+        "wheelStepP95MsMax": 360,
+        "longTasksMax": 14,
+        "svgNodesMax": 9000
+      },
+      "maxRegressionPct": 18
+    }
+  }
+}
+

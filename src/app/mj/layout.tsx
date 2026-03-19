@@ -40,6 +40,9 @@ export default async function MjLayout({ children }: { children: React.ReactNode
               <Link href="/mj/entites" className="text-white/80 hover:text-white">
                 Entités
               </Link>
+              <Link href="/mj/royaumes" className="text-white/80 hover:text-white">
+                Royaumes
+              </Link>
             </nav>
           </div>
           <Link href="/" className="text-sm text-white/60 hover:text-white">

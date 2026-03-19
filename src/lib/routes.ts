@@ -114,16 +114,83 @@ export function getRoadDistanceBetweenCities(
  * Pathfinding sur le graphe d’adjacence des régions (BFS), puis A → centroïdes intermédiaires → B.
  * Retourne null si une extrémité est en mer ou aucun chemin n’existe.
  */
+/** Graphe d'adjacence des régions (pré-calculé une fois pour éviter O(n²) par segment). */
+export type LandGraph = { features: GeoJSON.Feature<GeoJSON.Polygon | GeoJSON.MultiPolygon>[]; adj: Map<number, number[]> };
+
+/** Au-delà de ce seuil, le graphe O(n²) avec booleanTouches fige le navigateur (ex. carte monde ~605 régions). */
+export const MAX_LAND_GRAPH_FEATURES = 200;
+
+/**
+ * Nombre max de lignes dans `route_pathway_points` par route (hors extrémités ville/POI).
+ * Au-delà, le client ferait trop de segments × sinuosité → risque de gel / tracés énormes.
+ */
+export const MAX_ROUTE_PATHWAY_POINTS = 50;
+
+/** Au rendu, si une route a plus de waypoints (données anciennes), on rééchantillonne. */
+export const MAX_RENDER_ROUTE_WAYPOINTS = MAX_ROUTE_PATHWAY_POINTS;
+
+/** Plafond de sommets par polyligne affichée (lon/lat) après fusion des segments. */
+export const MAX_ROUTE_POLYLINE_VERTICES = 400;
+
+/** Rééchantillonne des waypoints le long de l’ordre initial (garde début/fin de la liste). */
+export function resampleRouteWaypoints<T extends { lat: number; lon: number }>(waypoints: T[], maxCount: number): T[] {
+  if (waypoints.length <= maxCount) return waypoints;
+  if (maxCount <= 0) return [];
+  if (maxCount === 1) return [waypoints[Math.floor((waypoints.length - 1) / 2)]];
+  const out: T[] = [];
+  for (let k = 0; k < maxCount; k++) {
+    const idx = Math.round((k / (maxCount - 1)) * (waypoints.length - 1));
+    out.push(waypoints[idx]);
+  }
+  return out;
+}
+
+/** Réduit le nombre de sommets d’une polyligne [lon, lat] pour l’affichage SVG. */
+export function capPolylineVertices(points: Array<[number, number]>, maxVertices: number): Array<[number, number]> {
+  if (points.length <= maxVertices || maxVertices < 2) return points;
+  const out: Array<[number, number]> = [];
+  for (let k = 0; k < maxVertices; k++) {
+    const t = k / (maxVertices - 1);
+    const i = Math.min(Math.floor(t * (points.length - 1)), points.length - 2);
+    const u = t * (points.length - 1) - i;
+    const a = points[i];
+    const b = points[i + 1];
+    out.push([a[0] + u * (b[0] - a[0]), a[1] + u * (b[1] - a[1])]);
+  }
+  return out;
+}
+
+/** Pré-calcule le graphe d'adjacence (une fois par GeoJSON) pour éviter O(n²) par segment de route. */
+export function buildLandGraph(landGeoJson: LandFeatureCollection | null | undefined): LandGraph | null {
+  if (!landGeoJson?.features?.length) return null;
+  const features = landGeoJson.features;
+  if (features.length > MAX_LAND_GRAPH_FEATURES) return null;
+  const adj = new Map<number, number[]>();
+  for (let i = 0; i < features.length; i++) adj.set(i, []);
+  for (let i = 0; i < features.length; i++) {
+    for (let j = i + 1; j < features.length; j++) {
+      const fi = features[i], fj = features[j];
+      if (fi?.geometry && fj?.geometry && turf.booleanTouches(fi, fj)) {
+        adj.get(i)!.push(j); adj.get(j)!.push(i);
+      }
+    }
+  }
+  return { features, adj };
+}
+
 export function generateLandPath(
   a: { lon: number; lat: number },
   b: { lon: number; lat: number },
-  landGeoJson: LandFeatureCollection | null | undefined
+  landGeoJson: LandFeatureCollection | null | undefined,
+  landGraph?: LandGraph | null
 ): Array<[number, number]> | null {
-  if (!landGeoJson?.features?.length) return null;
+  // Jamais de build synchrone ici : un gros GeoJSON bloquerait le thread (voir buildLandGraph).
+  if (landGraph == null) return null;
+  const graph = landGraph;
+  const { features, adj } = graph;
 
   const pointA = turf.point([a.lon, a.lat]);
   const pointB = turf.point([b.lon, b.lat]);
-  const features = landGeoJson.features;
 
   let idxA = -1;
   let idxB = -1;
@@ -134,19 +201,6 @@ export function generateLandPath(
   }
   if (idxA === -1 || idxB === -1) return null;
   if (idxA === idxB) return [[a.lon, a.lat], [b.lon, b.lat]];
-
-  const adj = new Map<number, number[]>();
-  for (let i = 0; i < features.length; i++) adj.set(i, []);
-  for (let i = 0; i < features.length; i++) {
-    for (let j = i + 1; j < features.length; j++) {
-      const fi = features[i];
-      const fj = features[j];
-      if (fi?.geometry && fj?.geometry && turf.booleanTouches(fi, fj)) {
-        adj.get(i)!.push(j);
-        adj.get(j)!.push(i);
-      }
-    }
-  }
 
   const queue: number[] = [idxA];
   const parent = new Map<number, number>();
@@ -172,12 +226,25 @@ export function generateLandPath(
   pathIndices.reverse();
 
   const path: Array<[number, number]> = [[a.lon, a.lat]];
-  for (let i = 1; i < pathIndices.length - 1; i++) {
-    const feat = features[pathIndices[i]];
-    if (feat?.geometry) {
-      const c = turf.centroid(feat);
-      const coords = c.geometry.coordinates;
-      path.push([coords[0], coords[1]]);
+  const maxIntermediate = 24;
+  const numIntermediates = pathIndices.length - 2;
+  if (numIntermediates > 0) {
+    const step =
+      numIntermediates <= maxIntermediate ? 1 : (numIntermediates - 1) / (maxIntermediate - 1);
+    const count = Math.min(maxIntermediate, numIntermediates);
+    for (let k = 0; k < count; k++) {
+      const iIdx = 1 + (step === 1 ? k : Math.round(k * step));
+      const idx = Math.min(iIdx, pathIndices.length - 2);
+      const feat = features[pathIndices[idx]];
+      if (feat?.geometry) {
+        try {
+          const c = turf.centroid(feat);
+          const coords = c.geometry.coordinates;
+          path.push([coords[0], coords[1]]);
+        } catch {
+          // ignore invalid geometry
+        }
+      }
     }
   }
   path.push([b.lon, b.lat]);

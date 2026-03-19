@@ -51,3 +51,64 @@ jobs:
         with:
           name: playwright-report
           path: playwright-report/
+
+  perf-map:
+    runs-on: ubuntu-latest
+    needs: test-and-build
+    env:
+      CRON_SECRET: test-cron-secret
+      NEXT_PUBLIC_SUPABASE_URL: "http://127.0.0.1:54321"
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0"
+      SUPABASE_SERVICE_ROLE_KEY: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImV4cCI6MTk4MzgxMjk5Nn0.EGIM96RAZx35lJzdJsyH-qQwv8Hdp7fsn3W0YpN81IU"
+      MAP_BENCH_URL: "http://127.0.0.1:3000"
+      MAP_BENCH_ITERATIONS: "3"
+      MAP_BENCH_PROFILE: "medium"
+      MAP_BENCH_DATASET_TAG: "ci-default"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Start Supabase local (and reset DB)
+        run: supabase start && supabase db reset --local
+
+      - run: npx playwright install --with-deps
+
+      - name: Build app
+        run: npm run build
+
+      - name: Start app for perf benchmark
+        run: nohup npm run start -- -p 3000 > /tmp/next-start.log 2>&1 &
+
+      - name: Wait app ready
+        run: |
+          for i in {1..60}; do
+            if curl -sf http://127.0.0.1:3000 > /dev/null; then
+              echo "App ready"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "App did not start in time"
+          exit 1
+
+      - name: Run interaction benchmark
+        run: npm run benchmark:map:interaction
+
+      - name: Enforce perf thresholds
+        run: npm run benchmark:map:check
+
+      - name: Upload perf benchmark report
+        uses: actions/upload-artifact@v4
+        with:
+          name: map-benchmark-interaction
+          path: tmp/map-benchmark-interaction.json
