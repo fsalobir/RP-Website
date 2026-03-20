@@ -59,6 +59,7 @@ import { resolveMapGpuBudgetProfile, getMapGpuBudget, trimMapCacheToBudget } fro
 import { useMapRendererSession } from "@/components/map/session/useMapRendererSession";
 import { useMapDataPipeline } from "@/components/map/data/useMapDataPipeline";
 import { MapEngine } from "@/components/map/engine/MapEngine";
+import { pushMapDebugSessionLog } from "@/lib/mapDebugSession";
 
 const ComposableMap = dynamic(() => import("react-simple-maps").then((m) => m.ComposableMap), { ssr: false });
 const Geographies = dynamic(() => import("react-simple-maps").then((m) => m.Geographies), { ssr: false });
@@ -2194,6 +2195,156 @@ export function WorldMapClient({
     });
   }, [visibleRoutePaths.length, visibleRouteLabelCount, visibleCitiesInView.length, visibleObjectsInView.length, mode, renderZoomLevel]);
 
+  // #region agent log (debug session 5b6b8a — prod vs local nation/province)
+  const agentZoomLogThrottleRef = useRef(0);
+  useEffect(() => {
+    if (renderZoomLevel !== "nation" && renderZoomLevel !== "province") return;
+    const now = performance.now();
+    if (now - agentZoomLogThrottleRef.current < 380) return;
+    agentZoomLogThrottleRef.current = now;
+    let host = "";
+    try {
+      host = typeof window !== "undefined" ? window.location.hostname : "";
+    } catch {
+      host = "";
+    }
+    const payload = {
+      sessionId: "5b6b8a",
+      runId: "zoom-nation-province",
+      hypothesisId: "H1-H5",
+      location: "WorldMapClient.tsx:agent-zoom-snapshot",
+      message: "nation_province_workload_snapshot",
+      timestamp: Date.now(),
+      data: {
+        host,
+        mode,
+        renderZoomLevel,
+        currentZoomLevel,
+        mapZoom: mapView.zoom,
+        H1_env: {
+          NODE_ENV: process.env.NODE_ENV,
+          NEXT_PUBLIC_MAP_RENDERER: process.env.NEXT_PUBLIC_MAP_RENDERER ?? null,
+          NEXT_PUBLIC_MAP_RENDERER_ROLLOUT: process.env.NEXT_PUBLIC_MAP_RENDERER_ROLLOUT ?? null,
+          NEXT_PUBLIC_MAP_ZERO_SVG_SPIKE: process.env.NEXT_PUBLIC_MAP_ZERO_SVG_SPIKE ?? null,
+        },
+        H2_quality: { qualityTier, mobileHardMode, isMobilePerf, isZeroSvgSpike: isZeroSvgSpike },
+        H2_renderer: { effective: rendererInfo.effective, reason: rendererInfo.reason, fallback: rendererInfo.fallback },
+        H3_caps: {
+          maxRouteLabels: activeZoomRules.caps.maxRouteLabels,
+          maxCities: activeZoomRules.caps.maxCities,
+          maxEntities: activeZoomRules.caps.maxEntities,
+          mjConfigVersion,
+        },
+        H4_ready: { topoReady, routeWarmupReady, isInteractionLite, isInteracting, isSettling },
+        H5_counts: {
+          routePathsTotal: routePaths.length,
+          visibleRoutePaths: visibleRoutePaths.length,
+          visibleRouteLabelCount,
+          visibleCities: visibleCitiesInView.length,
+          visibleObjects: visibleObjectsInView.length,
+        },
+      },
+    };
+    pushMapDebugSessionLog(payload as unknown as Record<string, unknown>);
+    fetch("/api/debug-map-session", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    }).catch(() => {});
+  }, [
+    renderZoomLevel,
+    currentZoomLevel,
+    mapView.zoom,
+    mode,
+    qualityTier,
+    mobileHardMode,
+    isMobilePerf,
+    isZeroSvgSpike,
+    rendererInfo.effective,
+    rendererInfo.reason,
+    rendererInfo.fallback,
+    activeZoomRules.caps.maxRouteLabels,
+    activeZoomRules.caps.maxCities,
+    activeZoomRules.caps.maxEntities,
+    mjConfigVersion,
+    topoReady,
+    routeWarmupReady,
+    isInteractionLite,
+    isInteracting,
+    isSettling,
+    routePaths.length,
+    visibleRoutePaths.length,
+    visibleRouteLabelCount,
+    visibleCitiesInView.length,
+    visibleObjectsInView.length,
+  ]);
+
+  const agentInteractionLogThrottleRef = useRef(0);
+  useEffect(() => {
+    if (!isInteracting) return;
+    if (renderZoomLevel !== "nation" && renderZoomLevel !== "province") return;
+    let host = "";
+    try {
+      host = typeof window !== "undefined" ? window.location.hostname : "";
+    } catch {
+      host = "";
+    }
+    const send = () => {
+      const now = performance.now();
+      if (now - agentInteractionLogThrottleRef.current < 520) return;
+      agentInteractionLogThrottleRef.current = now;
+      const payload = {
+        sessionId: "5b6b8a",
+        runId: "zoom-nation-province-interaction",
+        hypothesisId: "H6",
+        location: "WorldMapClient.tsx:agent-interaction-snapshot",
+        message: "nation_province_while_dragging",
+        timestamp: Date.now(),
+        data: {
+          host,
+          phase: "interacting",
+          mode,
+          renderZoomLevel,
+          currentZoomLevel,
+          mapZoom: mapView.zoom,
+          H4_ready: { topoReady, routeWarmupReady, isInteractionLite, isInteracting, isSettling },
+          H5_counts: {
+            routePathsTotal: routePaths.length,
+            visibleRoutePaths: visibleRoutePaths.length,
+            visibleRouteLabelCount,
+            visibleCities: visibleCitiesInView.length,
+            visibleObjects: visibleObjectsInView.length,
+          },
+        },
+      };
+      pushMapDebugSessionLog(payload as unknown as Record<string, unknown>);
+      fetch("/api/debug-map-session", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      }).catch(() => {});
+    };
+    send();
+    const iv = globalThis.setInterval(send, 550);
+    return () => globalThis.clearInterval(iv);
+  }, [
+    isInteracting,
+    renderZoomLevel,
+    currentZoomLevel,
+    mapView.zoom,
+    mode,
+    topoReady,
+    routeWarmupReady,
+    isInteractionLite,
+    isSettling,
+    routePaths.length,
+    visibleRoutePaths.length,
+    visibleRouteLabelCount,
+    visibleCitiesInView.length,
+    visibleObjectsInView.length,
+  ]);
+  // #endregion
+
   useEffect(() => {
     if (!ENABLE_FRAME_GAP_METRIC) return;
     let active = true;
@@ -3612,6 +3763,15 @@ export function WorldMapClient({
                 <code className="rounded bg-black/50 px-1 text-[8px] text-cyan-200">{`npm run prod:local`}</code>{" "}
                 — si la carte rame comme en prod, le problème est reproductible sans Vercel ; si elle reste fluide, on
                 cherche ailleurs (réseau, onglet, extension).
+              </p>
+              <p className="mt-2 border-t border-rose-500/30 pt-2 text-[9px] leading-snug text-stone-400">
+                <span className="text-cyan-200/90">Prod (Vercel) vs local fluide</span> : les snapshots debug sont aussi
+                stockés dans <code className="rounded bg-black/40 px-0.5 text-[8px]">window.__MAP_DEBUG_LOGS__</code>{" "}
+                (même code déployé). En Nation/Province + quelques drags, ouvre la console (F12) puis exécute :{" "}
+                <code className="rounded bg-black/40 px-0.5 text-[8px]">
+                  copy(JSON.stringify(window.__MAP_DEBUG_LOGS__, null, 2))
+                </code>{" "}
+                et colle le résultat dans un fichier texte pour comparaison avec le local.
               </p>
             </div>
           </div>
