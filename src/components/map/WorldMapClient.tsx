@@ -28,7 +28,18 @@ import {
   simplifyPolylinePreservingCurves,
 } from "@/lib/routesPrecompute";
 import { emitMapMetric } from "@/lib/mapObservability";
-import { isMapInfoPanelsV2Enabled, isMapRouteWorkerEnabled, isRealmColoringEnabled } from "@/lib/featureFlags";
+import { buildMapRouteDatasetRevision } from "@/lib/mapRouteDatasetRevision";
+import { computeRouteLabelCap, pickRouteLabelOrder } from "@/lib/mapLabelBudget";
+import { createMapQualityGovernor } from "@/lib/mapQualityGovernor";
+import { RouteGeometryWorkerClient } from "@/lib/routeGeometryWorkerClient";
+import { RouteBatchSvgLayer } from "@/components/map/RouteBatchSvgLayer";
+import {
+  isMapInfoPanelsV2Enabled,
+  isMapQualityGovernorEnabled,
+  isMapRouteBatchSvgEnabled,
+  isMapRouteWorkerEnabled,
+  isRealmColoringEnabled,
+} from "@/lib/featureFlags";
 import { EntityInfoPanel } from "@/components/map/EntityInfoPanel";
 import { MapScheduler } from "@/lib/mapScheduler";
 import {
@@ -42,7 +53,7 @@ import {
 import { feature, mesh } from "topojson-client";
 import { createClient } from "@/lib/supabase/client";
 import { computeRealmLabelAnchors } from "@/lib/realmMapLabels";
-import type { RouteGeometryWorkerRequest, RouteGeometryWorkerResponse } from "@/lib/routeGeometryWorkerTypes";
+import type { RouteGeometryWorkerRequest } from "@/lib/routeGeometryWorkerTypes";
 
 const ComposableMap = dynamic(() => import("react-simple-maps").then((m) => m.ComposableMap), { ssr: false });
 const Geographies = dynamic(() => import("react-simple-maps").then((m) => m.Geographies), { ssr: false });
@@ -52,37 +63,10 @@ const Marker = dynamic(() => import("react-simple-maps").then((m) => (m as any).
 const ROUTE_GEOMETRY_CACHE_MAX_ENTRIES = 900;
 const ENABLE_FRAME_GAP_METRIC = process.env.NEXT_PUBLIC_MAP_DEBUG_FRAME_GAP === "1";
 const ENABLE_ROUTE_GEOMETRY_WORKER = isMapRouteWorkerEnabled();
+const ENABLE_ROUTE_BATCH_SVG = isMapRouteBatchSvgEnabled();
+const ENABLE_QUALITY_GOVERNOR = isMapQualityGovernorEnabled();
 const INTERACTION_FRAME_BUDGET_MS = 16;
 const INTERACTION_SETTLE_MS = 140;
-
-function requestRouteGeometryFromWorker(
-  worker: Worker,
-  request: RouteGeometryWorkerRequest
-): Promise<Array<[number, number]> | null> {
-  return new Promise((resolve) => {
-    const timeout = window.setTimeout(() => {
-      worker.removeEventListener("message", onMessage as EventListener);
-      resolve(null);
-    }, 2500);
-    const onMessage = (event: MessageEvent<RouteGeometryWorkerResponse>) => {
-      const msg = event.data;
-      if (!msg) return;
-      if (msg.type === "route-geometry-built" && msg.payload.routeId === request.payload.routeId) {
-        window.clearTimeout(timeout);
-        worker.removeEventListener("message", onMessage as EventListener);
-        resolve(msg.payload.points);
-        return;
-      }
-      if (msg.type === "route-geometry-failed" && msg.routeId === request.payload.routeId) {
-        window.clearTimeout(timeout);
-        worker.removeEventListener("message", onMessage as EventListener);
-        resolve(null);
-      }
-    };
-    worker.addEventListener("message", onMessage as EventListener);
-    worker.postMessage(request);
-  });
-}
 
 type MapFeatureProps = {
   regionId?: string | null;
@@ -546,6 +530,7 @@ export function WorldMapClient({
     [mode, rendererUserKey]
   );
   const isWebglRenderer = rendererInfo.effective === "webgl";
+  const useRouteBatchSvg = ENABLE_ROUTE_BATCH_SVG && mode === "public" && !isWebglRenderer;
   const enableRealmColoring = useMemo(() => isRealmColoringEnabled(), []);
   const enableMapInfoPanelsV2 = useMemo(() => isMapInfoPanelsV2Enabled(), []);
 
@@ -687,6 +672,7 @@ export function WorldMapClient({
   const [isInteracting, setIsInteracting] = useState(false);
   const [isSettling, setIsSettling] = useState(false);
   const settleTimerRef = useRef<ReturnType<typeof globalThis.setTimeout> | null>(null);
+  const settleStartedAtRef = useRef<number>(0);
   const lastWheelTsRef = useRef<number>(0);
   const isInteractionLite = isInteracting || isSettling || !routeWarmupReady;
   useEffect(() => {
@@ -720,9 +706,15 @@ export function WorldMapClient({
   function endInteractionWithSettle() {
     setIsInteracting(false);
     setIsSettling(true);
+    settleStartedAtRef.current = performance.now();
     if (settleTimerRef.current != null) globalThis.clearTimeout(settleTimerRef.current);
     settleTimerRef.current = globalThis.setTimeout(() => {
       settleTimerRef.current = null;
+      const burst = performance.now() - settleStartedAtRef.current;
+      emitMapMetric("map_end_zoom_burst_ms", burst, {
+        mode,
+        zoomLevel: renderZoomLevel,
+      });
       setIsSettling(false);
     }, INTERACTION_SETTLE_MS);
   }
@@ -833,6 +825,26 @@ export function WorldMapClient({
     return () => media.removeEventListener("change", apply);
   }, []);
 
+  const qualityGovernorRef = useRef(createMapQualityGovernor());
+  const [qualityTick, setQualityTick] = useState(0);
+  useEffect(() => {
+    if (!ENABLE_QUALITY_GOVERNOR) return;
+    let raf = 0;
+    let last = performance.now();
+    const tick = () => {
+      const now = performance.now();
+      qualityGovernorRef.current.onFrameGapMs(now - last);
+      last = now;
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    const iv = globalThis.setInterval(() => setQualityTick((t) => t + 1), 750);
+    return () => {
+      cancelAnimationFrame(raf);
+      globalThis.clearInterval(iv);
+    };
+  }, []);
+
   useEffect(() => {
     if (!topoReady) return;
     let cancelled = false;
@@ -877,7 +889,12 @@ export function WorldMapClient({
       const current = zoomTargetRef.current ?? viewRef.current.zoom;
       const next = clampZoom(current * factor);
       zoomTargetRef.current = next;
-      lastWheelTsRef.current = performance.now();
+      const wheelNow = performance.now();
+      const prevWheel = lastWheelTsRef.current;
+      if (prevWheel > 0) {
+        emitMapMetric("map_wheel_step_ms", wheelNow - prevWheel, { mode });
+      }
+      lastWheelTsRef.current = wheelNow;
 
       const rect = el.getBoundingClientRect();
       const x = rect.width ? (e.clientX - rect.left) / rect.width : 0.5;
@@ -1524,25 +1541,30 @@ export function WorldMapClient({
     return Array.from(new Set(ids));
   }, [selectedRegionIds, provinceByRegionId]);
 
-  const visibleObjects = useMemo(() => {
+  const visibleObjectsAllRules = useMemo(() => {
     const list = (mapObjects ?? []).filter((o) => o.is_visible && typeof o.lon === "number" && typeof o.lat === "number");
-    const filtered = list.filter((o) => {
+    return list.filter((o) => {
       const forest = isForestLikeObject(o.kind, o.icon_key);
       if (forest && !activeZoomRules.visibility.forests) return false;
       if (!forest && !activeZoomRules.visibility.smallEntities) return false;
       return true;
     });
-    return filtered.slice(0, activeZoomRules.caps.maxEntities);
-  }, [mapObjects, activeZoomRules.visibility.forests, activeZoomRules.visibility.smallEntities, activeZoomRules.caps.maxEntities]);
+  }, [mapObjects, activeZoomRules.visibility.forests, activeZoomRules.visibility.smallEntities]);
 
-  const visibleCities = useMemo(() => {
-    if (!activeZoomRules.visibility.cities) return [];
-    const list = (cities ?? []).filter((c) => Number.isFinite(c.lon) && Number.isFinite(c.lat));
-    return list.slice(0, activeZoomRules.caps.maxCities);
-  }, [cities, activeZoomRules.visibility.cities, activeZoomRules.caps.maxCities]);
   const validCitiesAll = useMemo(() => filterCitiesWithValidCoords(cities ?? []), [cities]);
 
-  const cityById = useMemo(() => new Map(visibleCities.map((c) => [c.id, c])), [visibleCities]);
+  const cityById = useMemo(() => {
+    const m = new Map<string, (typeof validCitiesAll)[number]>();
+    for (const c of validCitiesAll) {
+      m.set(String(c.id), c);
+    }
+    return m;
+  }, [validCitiesAll]);
+
+  const citiesForZoomRules = useMemo(() => {
+    if (!activeZoomRules.visibility.cities) return [];
+    return (cities ?? []).filter((c) => Number.isFinite(c.lon) && Number.isFinite(c.lat));
+  }, [cities, activeZoomRules.visibility.cities]);
   const provinceCapitalCityIds = useMemo(() => {
     const ids = new Set<string>();
     for (const p of provinces) {
@@ -1617,8 +1639,9 @@ export function WorldMapClient({
     };
   }, [routeProjection, mapView.center, mapView.zoom, renderZoomLevel]);
   const visibleObjectsInView = useMemo(() => {
-    if (!viewportProjectedBounds) return visibleObjects;
-    const filtered = visibleObjects.filter((o) => {
+    const cap = activeZoomRules.caps.maxEntities;
+    if (!viewportProjectedBounds) return visibleObjectsAllRules.slice(0, cap);
+    const filtered = visibleObjectsAllRules.filter((o) => {
       const p = routeProjection([Number(o.lon), Number(o.lat)]);
       if (!p) return false;
       const [x, y] = p;
@@ -1629,11 +1652,12 @@ export function WorldMapClient({
         y > viewportProjectedBounds.maxY
       );
     });
-    return filtered.slice(0, activeZoomRules.caps.maxEntities);
-  }, [visibleObjects, viewportProjectedBounds, routeProjection, activeZoomRules.caps.maxEntities]);
+    return filtered.slice(0, cap);
+  }, [visibleObjectsAllRules, viewportProjectedBounds, routeProjection, activeZoomRules.caps.maxEntities]);
   const visibleCitiesInView = useMemo(() => {
-    if (!viewportProjectedBounds) return visibleCities;
-    const filtered = visibleCities.filter((c) => {
+    const cap = activeZoomRules.caps.maxCities;
+    if (!viewportProjectedBounds) return citiesForZoomRules.slice(0, cap);
+    const filtered = citiesForZoomRules.filter((c) => {
       const p = routeProjection([Number(c.lon), Number(c.lat)]);
       if (!p) return false;
       const [x, y] = p;
@@ -1644,8 +1668,8 @@ export function WorldMapClient({
         y > viewportProjectedBounds.maxY
       );
     });
-    return filtered.slice(0, activeZoomRules.caps.maxCities);
-  }, [visibleCities, viewportProjectedBounds, routeProjection, activeZoomRules.caps.maxCities]);
+    return filtered.slice(0, cap);
+  }, [citiesForZoomRules, viewportProjectedBounds, routeProjection, activeZoomRules.caps.maxCities]);
 
   type RoutePathItem = {
     id: string;
@@ -1665,7 +1689,7 @@ export function WorldMapClient({
   const routeBuildSchedulerRef = useRef<MapScheduler | null>(null);
   const routeGeometryCacheRef = useRef<Map<string, Omit<RoutePathItem, "id" | "tier">>>(new Map());
   const routeGeometryKeyByIdRef = useRef<Map<string, string>>(new Map());
-  const routeGeometryWorkerRef = useRef<Worker | null>(null);
+  const routeGeometryWorkerClientRef = useRef<RouteGeometryWorkerClient | null>(null);
   if (!routeBuildSchedulerRef.current) routeBuildSchedulerRef.current = new MapScheduler();
   const poiById = useMemo(() => {
     const map = new Map<string, { lat: number; lon: number }>();
@@ -1693,11 +1717,11 @@ export function WorldMapClient({
   }, [routePathwayPoints]);
   useEffect(() => {
     if (!ENABLE_ROUTE_GEOMETRY_WORKER) return;
-    const worker = new Worker(new URL("../../workers/routeGeometry.worker.ts", import.meta.url));
-    routeGeometryWorkerRef.current = worker;
+    const client = new RouteGeometryWorkerClient(new URL("../../workers/routeGeometry.worker.ts", import.meta.url));
+    routeGeometryWorkerClientRef.current = client;
     return () => {
-      routeGeometryWorkerRef.current = null;
-      worker.terminate();
+      client.terminate();
+      routeGeometryWorkerClientRef.current = null;
     };
   }, []);
 
@@ -1707,22 +1731,40 @@ export function WorldMapClient({
       .runLatest(async (signal) => {
         await new Promise<void>((resolve) => setTimeout(resolve, 0));
         if (signal.aborted) return;
+        routeGeometryWorkerClientRef.current?.invalidateAll();
         const startedAt = performance.now();
         const list = routes ?? [];
         const result: RoutePathItem[] = [];
+        let routesCandidatesCount = 0;
+        let mainThreadGeomMs = 0;
+        let workerGeomMs = 0;
+        let labelLayoutMs = 0;
         const maxVerticesForZoom =
           renderZoomLevel === "monde" ? 120 : renderZoomLevel === "continent" ? 180 : renderZoomLevel === "nation" ? 280 : 400;
         const viewNow = viewRef.current;
         const centerPNow = routeProjection(viewNow.center);
+        const gMargin = ENABLE_QUALITY_GOVERNOR ? qualityGovernorRef.current.getState().routeBuildMarginFactor : 1;
+        const z = Math.max(0.1, viewNow.zoom);
+        const pad = 180 * gMargin;
         const buildBounds = centerPNow
           ? {
-              minX: centerPNow[0] - 400 / Math.max(0.1, viewNow.zoom) - 180,
-              maxX: centerPNow[0] + 400 / Math.max(0.1, viewNow.zoom) + 180,
-              minY: centerPNow[1] - 300 / Math.max(0.1, viewNow.zoom) - 180,
-              maxY: centerPNow[1] + 300 / Math.max(0.1, viewNow.zoom) + 180,
+              minX: centerPNow[0] - 400 / z - pad,
+              maxX: centerPNow[0] + 400 / z + pad,
+              minY: centerPNow[1] - 300 / z - pad,
+              maxY: centerPNow[1] + 300 / z + pad,
             }
           : null;
-        const geoRevision = `${landGeoJson?.features?.length ?? 0}:${landGraph?.adj?.size ?? 0}`;
+        const datasetRevision = buildMapRouteDatasetRevision({
+          routesLength: list.length,
+          routeIdsSample: list
+            .slice(0, 48)
+            .map((x) => String(x.id))
+            .join(","),
+          landFeaturesLen: landGeoJson?.features?.length ?? 0,
+          landGraphSize: landGraph?.adj?.size ?? 0,
+          displayConfigVersion: mjConfigVersion,
+          zoomBand: renderZoomLevel,
+        });
         const serializeSeq = (seq: Array<{ lat: number; lon: number }>) =>
           seq
             .map((p) => `${Number(p.lon).toFixed(3)},${Number(p.lat).toFixed(3)}`)
@@ -1756,6 +1798,7 @@ export function WorldMapClient({
         });
         if (!hasPointInBuildBounds) continue;
       }
+      routesCandidatesCount++;
 
       const tier = (r.tier === "local" || r.tier === "regional" || r.tier === "national" ? r.tier : "local") as RouteTier;
       const seed = typeof (r.attrs as any)?.seed === "number" ? (r.attrs as any).seed : undefined;
@@ -1773,7 +1816,7 @@ export function WorldMapClient({
         Number(sinuosityScale).toFixed(3),
         Number(routeLodEpsilon).toFixed(3),
         renderZoomLevel,
-        geoRevision,
+        datasetRevision,
         serializeSeq(sequence),
       ].join("::");
       const prevKey = routeGeometryKeyByIdRef.current.get(r.id);
@@ -1789,23 +1832,28 @@ export function WorldMapClient({
       let landSegments = 0;
       const shouldUseWorker =
         ENABLE_ROUTE_GEOMETRY_WORKER &&
-        routeGeometryWorkerRef.current &&
+        routeGeometryWorkerClientRef.current &&
         (!landGraph || sequence.length > 3 || list.length > 220);
-      if (shouldUseWorker && routeGeometryWorkerRef.current) {
-        const workerPoints = await requestRouteGeometryFromWorker(routeGeometryWorkerRef.current, {
-          type: "build-route-geometry",
-          payload: {
-            routeId: r.id,
-            tier,
-            seed,
-            sinuosityScale,
-            routeLodEpsilon,
-            routeLodZoomRef,
-            currentZoomLevel: renderZoomLevel,
-            maxVerticesForZoom: Math.min(MAX_ROUTE_POLYLINE_VERTICES, maxVerticesForZoom),
-            sequence,
+      if (shouldUseWorker && routeGeometryWorkerClientRef.current) {
+        const w0 = performance.now();
+        const workerPoints = await routeGeometryWorkerClientRef.current.requestPoints(
+          {
+            type: "build-route-geometry",
+            payload: {
+              routeId: r.id,
+              tier,
+              seed,
+              sinuosityScale,
+              routeLodEpsilon,
+              routeLodZoomRef,
+              currentZoomLevel: renderZoomLevel,
+              maxVerticesForZoom: Math.min(MAX_ROUTE_POLYLINE_VERTICES, maxVerticesForZoom),
+              sequence,
+            },
           },
-        });
+          signal
+        );
+        workerGeomMs += performance.now() - w0;
         if (signal.aborted) return;
         if (workerPoints && workerPoints.length >= 2) {
           points = workerPoints;
@@ -1874,6 +1922,7 @@ export function WorldMapClient({
       }).filter((p): p is [number, number] => p !== null);
       if (projected.length < 2) continue;
       const d = "M " + projected.map(([x, y]) => `${x} ${y}`).join(" L ");
+      const tLabel0 = performance.now();
       // Position du libellé à 50 % de la distance totale (pas à l'index milieu) pour que le nom ne bouge pas quand on ajoute des embranchements/waypoints
       let totalLen = 0;
       const segLengths: number[] = [];
@@ -1906,6 +1955,7 @@ export function WorldMapClient({
       let labelAngleDeg = (Math.atan2(p1[1] - p0[1], p1[0] - p0[0]) * 180) / Math.PI;
       if (labelAngleDeg > 90) labelAngleDeg -= 180;
       if (labelAngleDeg < -90) labelAngleDeg += 180;
+      labelLayoutMs += performance.now() - tLabel0;
       const routeName = (r as { name?: string }).name?.trim() || `Route ${r.id}`;
       let minX = Number.POSITIVE_INFINITY;
       let minY = Number.POSITIVE_INFINITY;
@@ -1939,14 +1989,37 @@ export function WorldMapClient({
       result.push({ id: r.id, tier: r.tier, ...geom });
     }
         if (signal.aborted) return;
+        const totalMs = performance.now() - startedAt;
+        mainThreadGeomMs = Math.max(0, totalMs - workerGeomMs);
         setRoutePaths(result);
-        emitMapMetric("map_route_build_ms", performance.now() - startedAt, { mode, routeCount: list.length });
+        emitMapMetric("map_route_build_ms", totalMs, { mode, routeCount: list.length });
+        emitMapMetric("map_routes_candidates_count", routesCandidatesCount, {
+          mode,
+          zoomLevel: renderZoomLevel,
+        });
+        emitMapMetric("map_routes_built_count", result.length, {
+          mode,
+          zoomLevel: renderZoomLevel,
+        });
+        emitMapMetric("map_route_build_ms_main_thread", mainThreadGeomMs, {
+          mode,
+          zoomLevel: renderZoomLevel,
+        });
+        emitMapMetric("map_route_build_ms_worker", workerGeomMs, {
+          mode,
+          zoomLevel: renderZoomLevel,
+        });
+        emitMapMetric("map_label_layout_ms", labelLayoutMs, {
+          mode,
+          zoomLevel: renderZoomLevel,
+        });
       })
       .catch(() => {
         setRoutePaths([]);
       });
     return () => {
       scheduler.cancel();
+      routeGeometryWorkerClientRef.current?.invalidateAll();
     };
   }, [
     routes,
@@ -1964,6 +2037,8 @@ export function WorldMapClient({
     routeLodZoomRef,
     renderZoomLevel,
     mode,
+    mjConfigVersion,
+    qualityTick,
   ]);
 
   const visibleRoutePaths = useMemo(() => {
@@ -1986,15 +2061,37 @@ export function WorldMapClient({
   }, [routePaths, routeProjection, mapView.center, mapView.zoom, renderZoomLevel, activeZoomRules.caps.maxRouteLabels]);
 
   const visibleRouteLabelCount = useMemo(() => {
-    const capByLevel = renderZoomLevel === "monde" ? 35 : renderZoomLevel === "continent" ? 90 : renderZoomLevel === "nation" ? 220 : 400;
-    const interactionCap = isInteractionLite ? Math.max(10, Math.floor(capByLevel * 0.25)) : capByLevel;
-    const mobileCap = isMobilePerf ? Math.max(0, Math.floor(interactionCap * 0.6)) : interactionCap;
-    const cap = Math.min(mobileCap, activeZoomRules.caps.maxRouteLabels);
+    const gf = ENABLE_QUALITY_GOVERNOR ? qualityGovernorRef.current.getState().labelFactor : 1;
+    const cap = computeRouteLabelCap({
+      renderZoomLevel,
+      maxRouteLabelsRule: activeZoomRules.caps.maxRouteLabels,
+      isInteractionLite,
+      isMobilePerf,
+      governorLabelFactor: gf,
+    });
     return Math.min(visibleRoutePaths.length, cap);
-  }, [visibleRoutePaths.length, renderZoomLevel, activeZoomRules.caps.maxRouteLabels, isInteractionLite, isMobilePerf]);
+  }, [
+    visibleRoutePaths.length,
+    renderZoomLevel,
+    activeZoomRules.caps.maxRouteLabels,
+    isInteractionLite,
+    isMobilePerf,
+    qualityTick,
+  ]);
+
+  const routeLabelAllowSet = useMemo(() => {
+    const centerP = routeProjection(mapView.center);
+    const cap = Math.min(visibleRoutePaths.length, visibleRouteLabelCount);
+    const ids = pickRouteLabelOrder(visibleRoutePaths, centerP, cap);
+    return new Set(ids);
+  }, [visibleRoutePaths, visibleRouteLabelCount, mapView.center, routeProjection]);
 
   useEffect(() => {
     emitMapMetric("map_routes_visible_count", visibleRoutePaths.length, {
+      mode,
+      zoomLevel: renderZoomLevel,
+    });
+    emitMapMetric("map_routes_rendered_count", visibleRoutePaths.length, {
       mode,
       zoomLevel: renderZoomLevel,
     });
@@ -3468,38 +3565,69 @@ export function WorldMapClient({
               {/* Routes (tracés sinueux entre villes) — config dédiée (opacité, taille, progressivité) */}
               {!isWebglRenderer && activeZoomRules.visibility.routes && visibleRoutePaths.length > 0 && (
                 <g opacity={routeRenderOpacity} style={{ pointerEvents: "auto" }}>
-                  {visibleRoutePaths.map((rp, idx) => {
+                  {useRouteBatchSvg && (
+                    <RouteBatchSvgLayer
+                      paths={visibleRoutePaths}
+                      routeTierStyle={routeTierStyle}
+                      routeSizeFactor={routeSizeFactor}
+                      opacity={1}
+                    />
+                  )}
+                  {visibleRoutePaths.map((rp) => {
                     const style = routeTierStyle[(rp.tier as RouteTier) ?? "local"] ?? routeTierStyle.local;
                     const visibleStroke = style.strokeWidth * routeSizeFactor;
                     const labelFontSize = (displayConfig.routeLabelFontSizePx ?? 0.25) * routeSizeFactor;
                     return (
                       <g key={rp.id}>
-                        <path
-                          d={rp.d}
-                          fill="none"
-                          stroke={style.stroke}
-                          strokeWidth={visibleStroke}
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          style={{ cursor: "pointer", pointerEvents: "all" }}
-                          data-route-id={mode === "mj" ? rp.id : undefined}
-                          onClick={() => {
-                            if (mode === "mj") {
-                              if (!selectingEndpoint) setSelectedRouteId(rp.id);
-                              return;
-                            }
-                            const route = (routes ?? []).find((r) => r.id === rp.id);
-                            setPublicInfoPanel({
-                              kind: "route",
-                              title: route?.name?.trim() || rp.name,
-                              lines: [
-                                `Type: ${ROUTE_TIER_LABELS[(route?.tier as RouteTier) ?? "local"] ?? route?.tier ?? "Route"}`,
-                                route?.distance_km ? `Distance: ${Math.round(route.distance_km)} km` : "Distance: inconnue",
-                              ],
-                            });
-                          }}
-                        />
-                        {labelFontSize > 0 && idx < visibleRouteLabelCount && (
+                        {useRouteBatchSvg ? (
+                          <path
+                            d={rp.d}
+                            fill="none"
+                            stroke="rgba(0,0,0,0.02)"
+                            strokeWidth={14}
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            style={{ cursor: "pointer", pointerEvents: "stroke" }}
+                            onClick={() => {
+                              const route = (routes ?? []).find((r) => r.id === rp.id);
+                              setPublicInfoPanel({
+                                kind: "route",
+                                title: route?.name?.trim() || rp.name,
+                                lines: [
+                                  `Type: ${ROUTE_TIER_LABELS[(route?.tier as RouteTier) ?? "local"] ?? route?.tier ?? "Route"}`,
+                                  route?.distance_km ? `Distance: ${Math.round(route.distance_km)} km` : "Distance: inconnue",
+                                ],
+                              });
+                            }}
+                          />
+                        ) : (
+                          <path
+                            d={rp.d}
+                            fill="none"
+                            stroke={style.stroke}
+                            strokeWidth={visibleStroke}
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            style={{ cursor: "pointer", pointerEvents: "all" }}
+                            data-route-id={mode === "mj" ? rp.id : undefined}
+                            onClick={() => {
+                              if (mode === "mj") {
+                                if (!selectingEndpoint) setSelectedRouteId(rp.id);
+                                return;
+                              }
+                              const route = (routes ?? []).find((r) => r.id === rp.id);
+                              setPublicInfoPanel({
+                                kind: "route",
+                                title: route?.name?.trim() || rp.name,
+                                lines: [
+                                  `Type: ${ROUTE_TIER_LABELS[(route?.tier as RouteTier) ?? "local"] ?? route?.tier ?? "Route"}`,
+                                  route?.distance_km ? `Distance: ${Math.round(route.distance_km)} km` : "Distance: inconnue",
+                                ],
+                              });
+                            }}
+                          />
+                        )}
+                        {labelFontSize > 0 && routeLabelAllowSet.has(rp.id) && (
                           <text
                             className="map-label-font"
                             x={rp.labelX}
@@ -3687,7 +3815,7 @@ export function WorldMapClient({
                */}
               {isWebglRenderer && activeZoomRules.visibility.routes && visibleRoutePaths.length > 0 && (
                 <g opacity={routeRenderOpacity} style={{ pointerEvents: "auto" }}>
-                  {visibleRoutePaths.map((rp, idx) => {
+                  {visibleRoutePaths.map((rp) => {
                     const style = routeTierStyle[(rp.tier as RouteTier) ?? "local"] ?? routeTierStyle.local;
                     const visibleStroke = style.strokeWidth * routeSizeFactor;
                     const labelFontSize = (displayConfig.routeLabelFontSizePx ?? 0.25) * routeSizeFactor;
@@ -3718,7 +3846,7 @@ export function WorldMapClient({
                             });
                           }}
                         />
-                        {labelFontSize > 0 && idx < visibleRouteLabelCount && (
+                        {labelFontSize > 0 && routeLabelAllowSet.has(rp.id) && (
                           <text
                             className="map-label-font"
                             x={rp.labelX}
