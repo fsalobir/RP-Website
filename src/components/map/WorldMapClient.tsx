@@ -1734,7 +1734,7 @@ export function WorldMapClient({
             sinuosityScale,
             routeLodEpsilon,
             routeLodZoomRef,
-            renderZoomLevel,
+            currentZoomLevel: renderZoomLevel,
             maxVerticesForZoom: Math.min(MAX_ROUTE_POLYLINE_VERTICES, maxVerticesForZoom),
             sequence,
           },
