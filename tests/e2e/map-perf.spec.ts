@@ -15,5 +15,10 @@ test.describe("Carte - garde-fous perf UX", () => {
     await page.goto("/mj/carte");
     await expect(page.locator("body")).toBeVisible();
   });
+
+  test("affiche le badge renderer actif", async ({ page }) => {
+    await page.goto("/");
+    await expect(page.getByText("Renderer:")).toBeVisible();
+  });
 });
 

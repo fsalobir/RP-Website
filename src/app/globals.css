@@ -1,5 +1,13 @@
 @import "tailwindcss";
 
+@font-face {
+  font-family: "MiddleEarthMap";
+  src: url("/fonts/Middleearth-ao6m.ttf") format("truetype");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
 /* Thème : tableau de bord QG militaire – moderne et sobre */
 :root {
   --background: #0f1419;
@@ -91,4 +99,9 @@ body {
 .tab[data-state="active"] {
   color: var(--accent);
   border-bottom-color: var(--accent);
+}
+
+.map-label-font {
+  font-family: "MiddleEarthMap", var(--font-sans), serif;
+  letter-spacing: 0.02em;
 }

@@ -17,6 +17,13 @@ describe("sanitizeMapDisplayConfig", () => {
     expect(out.routeLabelFontSizePx).toBe(DEFAULT_MAP_DISPLAY_CONFIG.routeLabelFontSizePx);
     expect(out.routeSinuosityNationalPct).toBe(100);
   });
+
+  it("initialise les règles de zoom par défaut", () => {
+    const out = sanitizeMapDisplayConfig({});
+    expect(out.zoomLevelRules.province.visibility.routes).toBe(true);
+    expect(out.zoomLevelRules.continent.visibility.routes).toBe(false);
+    expect(out.zoomLevelRules.monde.visibility.rivers).toBe(false);
+  });
 });
 
 describe("parseMapDisplayConfigSnapshot", () => {
@@ -33,6 +40,15 @@ describe("parseMapDisplayConfigSnapshot", () => {
     });
     expect(out.version).toBe(7);
     expect(out.config.cityIconMaxPx).toBe(22);
+  });
+
+  it("applique fallback legacy quand zoomLevelRules absent", () => {
+    const out = parseMapDisplayConfigSnapshot({
+      version: 2,
+      config: { routeStrokeLocalPx: 0.08 },
+    });
+    expect(out.config.routeStrokeLocalPx).toBe(0.08);
+    expect(out.config.zoomLevelRules.nation.scale.routes).toBeGreaterThan(0);
   });
 });
 

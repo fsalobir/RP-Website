@@ -4,6 +4,8 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "dev:webgl:mj": "cross-env NEXT_PUBLIC_MAP_RENDERER=webgl NEXT_PUBLIC_MAP_RENDERER_ROLLOUT=mj-only next dev",
+    "dev:webgl:all": "cross-env NEXT_PUBLIC_MAP_RENDERER=webgl NEXT_PUBLIC_MAP_RENDERER_ROLLOUT=all next dev",
     "dev:fast": "node --max-old-space-size=4096 ./node_modules/next/dist/bin/next dev",
     "dev:watch": "node scripts/dev-with-restart.js",
     "test:prod": "next build && next start",
@@ -54,6 +56,7 @@
     "@types/react-dom": "^19",
     "@types/topojson-client": "^3.1.5",
     "@vitest/coverage-v8": "^4.1.0",
+    "cross-env": "^10.1.0",
     "eslint": "^9",
     "eslint-config-next": "16.1.6",
     "tailwindcss": "^4",

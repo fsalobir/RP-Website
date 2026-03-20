@@ -1,5 +1,17 @@
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
+## Carte (WebGL / SVG)
+
+Le rendu par défaut reste **SVG**. Pour **tester WebGL côté MJ** sans toucher à `.env.local` :
+
+```bash
+npm run dev:webgl:mj
+```
+
+Puis ouvre `/mj/carte` : le badge doit afficher **webgl** ; l’accueil reste en **svg**.
+
+Pour aller plus loin (canary, prod), voir **`docs/map-webgl-rollout-checklist.md`** et **`.env.example`**.
+
 ## Getting Started
 
 First, run the development server:

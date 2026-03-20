@@ -1,5 +1,16 @@
 # Feature flags carte v2
 
+## Rendu WebGL (rollout)
+
+Voir aussi `docs/map-webgl-migration.md` et `docs/map-webgl-rollout-checklist.md`.
+
+- `NEXT_PUBLIC_MAP_RENDERER=svg|webgl` — moteur demandé (sans rollout actif → SVG).
+- `NEXT_PUBLIC_MAP_RENDERER_ROLLOUT=off|mj-only|public-canary|all`
+- `NEXT_PUBLIC_MAP_RENDERER_CANARY_PCT=0..100` — part du public en canary.
+- `NEXT_PUBLIC_MAP_RENDERER_FORCE_SVG=1` — rollback immédiat tout SVG.
+
+Variables listées dans `.env.example`.
+
 - `NEXT_PUBLIC_REALM_COLORING_V2=1|0`
   - Active/désactive la coloration des provinces par royaume.
 - `NEXT_PUBLIC_MAP_INFO_PANELS_V2=1|0`

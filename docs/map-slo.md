@@ -45,3 +45,10 @@ Source de vérité des seuils: `docs/map-benchmark-thresholds.json`.
   - respecter les seuils `docs/map-benchmark-thresholds.json`
   - conserver la cohérence MJ/Public sur les paramètres de carte
 
+## Gates obligatoires WebGL (passage de phase)
+
+- `frameGapP95` interaction <= seuil du profil actif.
+- Régression interaction (`zoom/pan`) <= budget défini par benchmark check.
+- Erreurs runtime renderer (WebGL init/draw) <= 0.5%.
+- Zéro régression fonctionnelle sur scénarios critiques (clic route/ville, panneau info, sélection MJ).
+
