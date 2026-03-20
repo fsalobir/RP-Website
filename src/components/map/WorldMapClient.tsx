@@ -686,7 +686,7 @@ export function WorldMapClient({
   const pendingMoveRef = useRef<{ center: [number, number]; zoom: number } | null>(null);
   const [isInteracting, setIsInteracting] = useState(false);
   const [isSettling, setIsSettling] = useState(false);
-  const settleTimerRef = useRef<number | null>(null);
+  const settleTimerRef = useRef<ReturnType<typeof globalThis.setTimeout> | null>(null);
   const lastWheelTsRef = useRef<number>(0);
   const isInteractionLite = isInteracting || isSettling || !routeWarmupReady;
   useEffect(() => {
