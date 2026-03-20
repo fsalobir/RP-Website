@@ -629,10 +629,6 @@ export function WorldMapClient({
   });
   const currentZoomLevel = useMemo<MapZoomLevelId>(() => getCurrentZoomLevel(mapView.zoom), [mapView.zoom]);
   const [renderZoomLevel, setRenderZoomLevel] = useState<MapZoomLevelId>("monde");
-  useEffect(() => {
-    if (isInteracting || isSettling) return;
-    setRenderZoomLevel(currentZoomLevel);
-  }, [currentZoomLevel, isInteracting, isSettling]);
   const currentZoomLevelLabel = useMemo(() => {
     if (renderZoomLevel === "province") return "Province";
     if (renderZoomLevel === "nation") return "Nation";
@@ -693,6 +689,10 @@ export function WorldMapClient({
   const settleTimerRef = useRef<number | null>(null);
   const lastWheelTsRef = useRef<number>(0);
   const isInteractionLite = isInteracting || isSettling || !routeWarmupReady;
+  useEffect(() => {
+    if (isInteracting || isSettling) return;
+    setRenderZoomLevel(currentZoomLevel);
+  }, [currentZoomLevel, isInteracting, isSettling]);
 
   function clampZoom(z: number) {
     return Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, z));
