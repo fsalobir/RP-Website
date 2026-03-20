@@ -2,44 +2,55 @@
 
 Ce n’est pas une question d’opinion sur le rendu : il y a **des causes vérifiables** qui expliquent un écart **local vs prod** avec **le même code**.
 
-## 1. Données Supabase différentes (cause la plus fréquente)
+## 0. Cas où la base est éliminée (même host + mêmes volumes)
 
-Le serveur Next charge **provinces, routes, points de passage, villes, etc.** depuis Supabase. Le coût CPU côté navigateur (projection, simplification, routes, culling) est **lié au volume** de ces tableaux.
+Si `?mapdiag=1` montre :
 
-- En **local**, `NEXT_PUBLIC_SUPABASE_URL` dans `.env.local` pointe souvent vers **un autre projet** ou une base **moins remplie** que la prod.
-- En **prod**, Vercel utilise **les variables du projet** → souvent **la base « réelle »**.
+- le **même** hôte Supabase, et  
+- les **mêmes** chiffres (provinces, routes, pts chemin, etc.),
 
-**Même code, plus de lignes en base → plus de travail → même sensation de lag qu’avant.**
+alors **ce n’est pas** « la prod a plus de données ». Il reste surtout :
+
+| Local (`npm run dev`) | En ligne (Vercel) |
+|----------------------|-------------------|
+| `NODE_ENV=development` | `NODE_ENV=production` |
+| bundle **développement** (Turbopack / dev) | bundle **optimisé** + React **production** |
+| pas le même JS exécuté que sur le site | même logique que `npm run build && npm run start` |
+
+`FORCE_SVG` **non défini** vs **`0`** : même comportement (le kill-switch n’est actif que si la valeur est **`1`**).
+
+### Test décisif (à faire sur ta machine, même `.env.local` que la prod)
+
+```bash
+npm run build && npm run start
+```
+
+Puis ouvre `http://localhost:3000` (ou le port affiché) avec **`?mapdiag=1`** et teste la carte.
+
+- **Si ça rame comme en ligne** → le problème est **reproductible sans Vercel** : c’est le **mode production** (bundle / React), pas « le cloud ».
+- **Si ça reste fluide** comme en `next dev` → alors on cherche ailleurs (cache navigateur, autre onglet, extension, réseau au chargement, etc.).
+
+## 1. Données Supabase différentes (cause fréquente quand mapdiag diffère)
+
+Si le **host** ou les **volumes** diffèrent entre local et prod, le coût CPU côté navigateur change (même code).
 
 ### Vérification
 
-1. Ouvre la **même page** (ex. `/` ou `/mj/carte`) en local et en prod avec **`?mapdiag=1`** dans l’URL.
-2. Compare la ligne **Supabase (host)** : si ce n’est **pas** le même hôte, tu compares **deux bases**.
-3. Compare la ligne **Volumes** (provinces, routes, pts chemin, etc.). Si les nombres sont **très différents**, le lag « prod » est **attendu** avec le pipeline actuel (SVG / calculs lourds).
+1. Même page + **`?mapdiag=1`** en local et en prod.
+2. Comparer **Supabase (host)** et **Volumes**.
 
 ## 2. `next dev` n’est pas une prod
 
-`npm run dev:webgl:all` lance **`next dev`** (mode développement React, bundler dev). La **prod** en ligne est **`next build` + `next start`** (ou serveur Vercel).
-
-- Ce n’est **pas** le même binaire ni le même mode React.
-- Pour reproduire la prod **sur ta machine** :  
-  `npm run build && npm run start`  
-  avec **les mêmes** `NEXT_PUBLIC_SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_ANON_KEY` que **Vercel**.
-
-Si ça lague comme en prod, le problème n’est **pas** « Vercel » en soi, c’est **le build prod + les données**.
+Voir section **0** : `npm run dev:webgl:all` ne reproduit **pas** le binaire servi sur Vercel.
 
 ## 3. Cache / ancien déploiement
 
-Un onglet peut garder un **ancien JS** (cache agressif, service worker rare). **Hard reload** (Ctrl+Shift+R) ou fenêtre privée.
+Hard reload (Ctrl+Shift+R), fenêtre privée, vérifier que le déploiement correspond bien à la branche attendue.
 
-## 4. Branche déployée
+## 4. Ce que le badge « Renderer: webgl » ne dit pas
 
-Si le déploiement automatique suit `main` et que tu travailles sur une autre branche, **la prod ne contient pas** les derniers changements.
-
-## 5. Ce que le badge « Renderer: webgl » ne dit pas
-
-Aujourd’hui, une grande partie **géographique** (ex. `react-simple-maps` / SVG) reste le même pipeline **que le rendu soit déclaré « webgl » ou non** tant que le moteur WebGL ne remplace pas ces couches. Donc **le « webgl »** ne garantit pas à lui seul une baisse de coût CPU : le **volume de données** et le **coût SVG** restent dominants.
+Une grande partie **géographique** (ex. `react-simple-maps` / SVG) peut rester coûteuse tant que le moteur WebGL ne remplace pas ces couches. Le flag **webgl** ne supprime pas à lui seul tout le coût DOM.
 
 ---
 
-**En résumé** : si le local est fluide et la prod laggée « comme avant », compare **d’abord** `?mapdiag=1` (host Supabase + volumes) et **ensuite** `npm run build && npm run start` avec les **mêmes** clés que la prod.
+**En résumé** : si mapdiag est **identique** sauf `NODE_ENV`, la prochaine étape objective est **`npm run build && npm run start`** sur la même machine.

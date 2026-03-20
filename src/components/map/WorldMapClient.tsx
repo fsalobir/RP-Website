@@ -508,11 +508,17 @@ export function WorldMapClient({
   // N'utiliser le portail pour les réglages qu'après montage client, pour éviter un mismatch d'hydratation.
   const [usePortalForSettings, setUsePortalForSettings] = useState(false);
   const [mapDiag, setMapDiag] = useState(false);
+  const [mapDiagPageHost, setMapDiagPageHost] = useState("");
   useEffect(() => {
     try {
       setMapDiag(new URLSearchParams(window.location.search).has("mapdiag"));
     } catch {
       setMapDiag(false);
+    }
+    try {
+      setMapDiagPageHost(typeof window !== "undefined" ? window.location.hostname : "");
+    } catch {
+      setMapDiagPageHost("");
     }
   }, []);
 
@@ -3563,6 +3569,21 @@ export function WorldMapClient({
                 {mapDiagSnapshot.dataCounts.routes} · pts chemin {mapDiagSnapshot.dataCounts.routePathwayPoints} · objets{" "}
                 {mapDiagSnapshot.dataCounts.mapObjects}
               </div>
+              {mapDiagPageHost ? (
+                <div>
+                  <span className="text-stone-400">Page (hôte)</span> {mapDiagPageHost}
+                </div>
+              ) : null}
+              <p className="mt-2 border-t border-rose-500/30 pt-2 text-[9px] leading-snug text-stone-400">
+                Si <span className="text-stone-300">Supabase</span> et <span className="text-stone-300">Volumes</span>{" "}
+                sont identiques local / prod, ce n’est pas la base : la différence vient surtout de{" "}
+                <span className="text-amber-200/90">NODE_ENV</span> (tu exécutes un bundle{" "}
+                <span className="text-amber-200/90">dev</span> en local et un bundle{" "}
+                <span className="text-amber-200/90">production</span> en ligne). Test décisif sur cette machine :{" "}
+                <code className="rounded bg-black/50 px-1 text-[8px] text-cyan-200">{`npm run build && npm run start`}</code>{" "}
+                — si la carte rame comme en prod, le problème est reproductible sans Vercel ; si elle reste fluide, on
+                cherche ailleurs (réseau, onglet, extension).
+              </p>
             </div>
           </div>
         )}
