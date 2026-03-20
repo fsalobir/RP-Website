@@ -62,6 +62,14 @@ Constats:
 4. Si la charge reste elevee sur gros datasets, prioriser le passage des calculs routes en Web Worker.
 5. Poursuivre la feuille de route renderer lignes robuste (`docs/map-routes-performance-roadmap.md`).
 
+## Configuration prod recommandee (stable)
+
+- `NEXT_PUBLIC_MAP_RENDERER=webgl`
+- `NEXT_PUBLIC_MAP_RENDERER_ROLLOUT=mj-only`
+- `NEXT_PUBLIC_MAP_ROUTE_WORKER=1`
+- `NEXT_PUBLIC_MAP_DEBUG_METRICS=0`
+- `NEXT_PUBLIC_MAP_DEBUG_FRAME_GAP=0`
+
 ## A/B worker routes (small, 1 iteration)
 
 Fichiers:
