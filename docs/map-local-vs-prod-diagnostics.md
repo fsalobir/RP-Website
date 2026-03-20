@@ -15,15 +15,17 @@ alors **ce n’est pas** « la prod a plus de données ». Il reste surtout :
 |----------------------|-------------------|
 | `NODE_ENV=development` | `NODE_ENV=production` |
 | bundle **développement** (Turbopack / dev) | bundle **optimisé** + React **production** |
-| pas le même JS exécuté que sur le site | même logique que `npm run build && npm run start` |
+| pas le même JS exécuté que sur le site | même logique que `npm run prod:local` (build + start) |
 
 `FORCE_SVG` **non défini** vs **`0`** : même comportement (le kill-switch n’est actif que si la valeur est **`1`**).
 
 ### Test décisif (à faire sur ta machine, même `.env.local` que la prod)
 
 ```bash
-npm run build && npm run start
+npm run prod:local
 ```
+
+(Sous PowerShell, évite `npm run build && npm run start` : `&&` n’est pas toujours accepté — ce script npm est équivalent.)
 
 Puis ouvre `http://localhost:3000` (ou le port affiché) avec **`?mapdiag=1`** et teste la carte.
 
@@ -53,4 +55,4 @@ Une grande partie **géographique** (ex. `react-simple-maps` / SVG) peut rester 
 
 ---
 
-**En résumé** : si mapdiag est **identique** sauf `NODE_ENV`, la prochaine étape objective est **`npm run build && npm run start`** sur la même machine.
+**En résumé** : si mapdiag est **identique** sauf `NODE_ENV`, la prochaine étape objective est **`npm run prod:local`** sur la même machine.

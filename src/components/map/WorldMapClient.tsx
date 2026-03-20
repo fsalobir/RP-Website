@@ -3609,7 +3609,7 @@ export function WorldMapClient({
                 <span className="text-amber-200/90">NODE_ENV</span> (tu exécutes un bundle{" "}
                 <span className="text-amber-200/90">dev</span> en local et un bundle{" "}
                 <span className="text-amber-200/90">production</span> en ligne). Test décisif sur cette machine :{" "}
-                <code className="rounded bg-black/50 px-1 text-[8px] text-cyan-200">{`npm run build && npm run start`}</code>{" "}
+                <code className="rounded bg-black/50 px-1 text-[8px] text-cyan-200">{`npm run prod:local`}</code>{" "}
                 — si la carte rame comme en prod, le problème est reproductible sans Vercel ; si elle reste fluide, on
                 cherche ailleurs (réseau, onglet, extension).
               </p>

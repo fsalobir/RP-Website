@@ -11,6 +11,7 @@
     "dev:fast": "node scripts/clear-next-dev-lock.mjs && node --max-old-space-size=4096 ./node_modules/next/dist/bin/next dev",
     "dev:watch": "node scripts/dev-with-restart.js",
     "test:prod": "next build && next start",
+    "prod:local": "next build && next start",
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
