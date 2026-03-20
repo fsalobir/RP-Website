@@ -55,3 +55,18 @@ Source de vérité des seuils: `docs/map-benchmark-thresholds.json`.
 - Erreurs runtime renderer (WebGL init/draw) <= 0.5%.
 - Zéro régression fonctionnelle sur scénarios critiques (clic route/ville, panneau info, sélection MJ).
 
+## Go / No-Go rollout zero-SVG
+
+- **MJ-only -> public-canary**
+  - `benchmark:map:check` vert (profil `medium` minimum)
+  - `benchmark:map:check:zero-svg` vert sur environnement cible
+  - matrice critique MJ/Public validée (`docs/map-mj-public-parity-matrix.md`)
+- **public-canary -> all**
+  - stabilité 72h sans alerte critique observabilité
+  - drill rollback exécuté avec succès sur stage canary
+  - aucun incident de perte de contexte WebGL non récupéré
+- **all -> retrait fallback SVG**
+  - stabilité 14 jours
+  - stress/soak validé (`docs/map-stress-soak-validation.md`)
+  - runbook incident + kill-switch testés en conditions réelles
+

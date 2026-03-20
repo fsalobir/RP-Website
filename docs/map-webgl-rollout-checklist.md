@@ -22,12 +22,14 @@ Puis ouvrir `/mj/carte` → badge **webgl** ; l’accueil `/` reste en **svg**.
 1. `NEXT_PUBLIC_MAP_RENDERER_ROLLOUT=public-canary`
 2. Ajuster `NEXT_PUBLIC_MAP_RENDERER_CANARY_PCT` (ex. `5`, puis `25`, puis `50`).
 3. Vérifier qu’une partie des navigateurs voit `webgl` sur l’accueil (clé stable par navigateur).
+4. Exécuter un drill rollback (`docs/map-rollback-drills.md`) avant d’augmenter le pourcentage.
 
 ## Étape 3 — 100 % public
 
 1. Quand les métriques et la parité sont stables sur une fenêtre convenue :
    - `NEXT_PUBLIC_MAP_RENDERER_ROLLOUT=all`
 2. Surveiller `map_interaction_frame_gap_ms` et les erreurs console.
+3. Vérifier la matrice cibles (`docs/map-browser-device-matrix.md`) sur profils critiques.
 
 ## Rollback
 
@@ -36,3 +38,4 @@ Puis ouvrir `/mj/carte` → badge **webgl** ; l’accueil `/` reste en **svg**.
 ## Après stabilisation
 
 - Suivre la checklist de décommission SVG dans `docs/map-webgl-migration.md`.
+- Appliquer les garde-fous post-lancement (`docs/map-post-launch-guardrails.md`).

@@ -38,6 +38,11 @@
     "test:db:reset:local": "npm run supabase:local -- db reset --local"
   },
   "dependencies": {
+    "@deck.gl/core": "^9.2.11",
+    "@deck.gl/layers": "^9.2.11",
+    "@deck.gl/react": "^9.2.11",
+    "@loaders.gl/core": "^4.3.4",
+    "@luma.gl/core": "^9.2.6",
     "@supabase/ssr": "^0.8.0",
     "@supabase/supabase-js": "^2.97.0",
     "@turf/turf": "^7.3.4",

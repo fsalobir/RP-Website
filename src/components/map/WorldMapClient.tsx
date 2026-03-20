@@ -21,7 +21,6 @@ import {
 } from "@/lib/routes";
 import type { LandFeatureCollection, LandGraph, RouteTier } from "@/lib/routes";
 import { DEFAULT_MAP_DISPLAY_CONFIG, type MapDisplayConfig } from "@/lib/mapDisplayConfig";
-import { resolveEffectiveRenderer } from "@/lib/mapRenderer";
 import {
   buildRouteLodVariants,
   pickRouteLodByZoom,
@@ -35,12 +34,9 @@ import { RouteGeometryWorkerClient } from "@/lib/routeGeometryWorkerClient";
 import { RouteBatchSvgLayer } from "@/components/map/RouteBatchSvgLayer";
 import {
   isMapInfoPanelsV2Enabled,
-  isMapMobileHardModeEnabled,
   isMapQualityGovernorEnabled,
   isMapRouteBatchSvgEnabled,
   isMapRouteWorkerEnabled,
-  isMapZeroSvgSpikeEnabled,
-  getMapQualityTierFlag,
   isRealmColoringEnabled,
 } from "@/lib/featureFlags";
 import { EntityInfoPanel } from "@/components/map/EntityInfoPanel";
@@ -59,6 +55,10 @@ import { computeRealmLabelAnchors } from "@/lib/realmMapLabels";
 import type { RouteGeometryWorkerRequest } from "@/lib/routeGeometryWorkerTypes";
 import { applyQualityTierToZoomRule, getQualityTierReducedEffects } from "@/lib/mapQualityTier";
 import { emitMapInteractionEvent } from "@/lib/mapInteractionEvents";
+import { resolveMapGpuBudgetProfile, getMapGpuBudget, trimMapCacheToBudget } from "@/lib/mapGpuMemoryBudget";
+import { useMapRendererSession } from "@/components/map/session/useMapRendererSession";
+import { useMapDataPipeline } from "@/components/map/data/useMapDataPipeline";
+import { MapEngine } from "@/components/map/engine/MapEngine";
 
 const ComposableMap = dynamic(() => import("react-simple-maps").then((m) => m.ComposableMap), { ssr: false });
 const Geographies = dynamic(() => import("react-simple-maps").then((m) => m.Geographies), { ssr: false });
@@ -515,35 +515,14 @@ export function WorldMapClient({
         : { ...DEFAULT_MAP_DISPLAY_CONFIG, ...initialMapDisplayConfig },
     [mode, mjUi, initialMapDisplayConfig]
   );
-  const [rendererUserKey, setRendererUserKey] = useState<string | null>(null);
-  useEffect(() => {
-    try {
-      const key = "map_renderer_user_key_v1";
-      const existing = localStorage.getItem(key);
-      if (existing) {
-        setRendererUserKey(existing);
-        return;
-      }
-      const generated = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
-      localStorage.setItem(key, generated);
-      setRendererUserKey(generated);
-    } catch {
-      setRendererUserKey(null);
-    }
-  }, []);
-  const rendererInfo = useMemo(
-    () => resolveEffectiveRenderer(mode, { userKey: rendererUserKey }),
-    [mode, rendererUserKey]
-  );
-  const isWebglRenderer = rendererInfo.effective === "webgl";
-  const zeroSvgSpikeEnabled = useMemo(() => isMapZeroSvgSpikeEnabled(), []);
-  const isZeroSvgSpike = isWebglRenderer && zeroSvgSpikeEnabled;
+  const { rendererInfo, qualityTier, mobileHardMode, adapter: rendererAdapter } = useMapRendererSession(mode);
+  const isWebglRenderer = rendererAdapter.isWebgl;
+  const isZeroSvgSpike = rendererAdapter.isZeroSvg;
   const useRouteBatchSvg = ENABLE_ROUTE_BATCH_SVG && mode === "public" && !isWebglRenderer;
-  const qualityTier = useMemo(() => getMapQualityTierFlag(), []);
-  const mobileHardMode = useMemo(() => isMapMobileHardModeEnabled(), []);
   const reduceHeavyEffects = useMemo(() => getQualityTierReducedEffects(qualityTier), [qualityTier]);
   const enableRealmColoring = useMemo(() => isRealmColoringEnabled(), []);
   const enableMapInfoPanelsV2 = useMemo(() => isMapInfoPanelsV2Enabled(), []);
+  const { tileManifest } = useMapDataPipeline();
 
   const saveMjSettings = useCallback(() => {
     try {
@@ -638,6 +617,11 @@ export function WorldMapClient({
       isMobilePerf: isMobilePerf && mobileHardMode,
     });
   }, [displayConfig.zoomLevelRules, renderZoomLevel, qualityTier, isMobilePerf, mobileHardMode]);
+  const gpuBudgetProfile = useMemo(
+    () => resolveMapGpuBudgetProfile({ isMobilePerf: isMobilePerf && mobileHardMode, qualityTier }),
+    [isMobilePerf, mobileHardMode, qualityTier]
+  );
+  const gpuBudget = useMemo(() => getMapGpuBudget(gpuBudgetProfile), [gpuBudgetProfile]);
   const zoomThresholdLabels = useMemo(
     () =>
       (["monde", "continent", "nation", "province"] as const).map((id) => ({
@@ -2005,11 +1989,10 @@ export function WorldMapClient({
       };
       routeGeometryKeyByIdRef.current.set(r.id, cacheKey);
       routeGeometryCacheRef.current.set(cacheKey, geom);
-      while (routeGeometryCacheRef.current.size > ROUTE_GEOMETRY_CACHE_MAX_ENTRIES) {
-        const oldestKey = routeGeometryCacheRef.current.keys().next().value;
-        if (!oldestKey) break;
-        routeGeometryCacheRef.current.delete(oldestKey);
-      }
+      trimMapCacheToBudget(
+        routeGeometryCacheRef.current,
+        Math.min(ROUTE_GEOMETRY_CACHE_MAX_ENTRIES, gpuBudget.maxRouteGeometryCacheEntries)
+      );
       result.push({ id: r.id, tier: r.tier, ...geom });
     }
         if (signal.aborted) return;
@@ -2063,6 +2046,7 @@ export function WorldMapClient({
     mode,
     mjConfigVersion,
     qualityTick,
+    gpuBudget.maxRouteGeometryCacheEntries,
   ]);
 
   const visibleRoutePaths = useMemo(() => {
@@ -3503,6 +3487,16 @@ export function WorldMapClient({
         <div className="pointer-events-none absolute left-3 top-11 z-20 rounded-md border border-cyan-500/30 bg-black/65 px-2 py-1 text-[11px] text-cyan-100">
           Niveau: <span className="font-mono">{currentZoomLevelLabel}</span>
         </div>
+        <div className="pointer-events-none absolute left-3 top-[4.7rem] z-20 rounded-md border border-emerald-500/30 bg-black/65 px-2 py-1 text-[11px] text-emerald-100">
+          Budget GPU: <span className="font-mono">{gpuBudgetProfile}</span> · Cache routes max{" "}
+          <span className="font-mono">{gpuBudget.maxRouteGeometryCacheEntries}</span>
+        </div>
+        {tileManifest && (
+          <div className="pointer-events-none absolute left-3 top-[6.4rem] z-20 rounded-md border border-violet-500/30 bg-black/65 px-2 py-1 text-[11px] text-violet-100">
+            Tuiles: <span className="font-mono">{tileManifest.entries.length}</span>
+          </div>
+        )}
+        <MapEngine enabled={isWebglRenderer} mode={mode} />
         <ComposableMap
           projection="geoMercator"
           projectionConfig={{ scale: 170 }}

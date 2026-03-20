@@ -23,6 +23,9 @@ Références de gouvernance:
 - `docs/map-slo.md`
 - `docs/map-interaction-contract.md`
 - `docs/map-mj-public-parity-matrix.md`
+- `docs/map-browser-device-matrix.md`
+- `docs/map-rollback-drills.md`
+- `docs/map-post-launch-guardrails.md`
 
 ## Contrat MVP WebGL (phase 1)
 
