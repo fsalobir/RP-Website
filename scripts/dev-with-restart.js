@@ -4,12 +4,23 @@
  * Usage: npm run dev:watch
  */
 const { spawn } = require("child_process");
+const fs = require("fs");
+const path = require("path");
 
 const RESTART_MINUTES = 3;
 const RESTART_MS = RESTART_MINUTES * 60 * 1000;
 const PAUSE_BEFORE_RESTART_MS = 2500;
 
+function clearNextDevLock() {
+  try {
+    fs.rmSync(path.join(__dirname, "..", ".next", "dev", "lock"), { force: true });
+  } catch {
+    // ignore
+  }
+}
+
 function run() {
+  clearNextDevLock();
   const child = spawn("npx", ["next", "dev"], {
     stdio: "inherit",
     shell: true,
