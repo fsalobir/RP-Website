@@ -106,3 +106,19 @@ Lecture:
 - Les changements de fluidite (RAF coalesce + interaction lite + mobile perf profile) ont surtout baisse le jank percu.
 - L'effet worker reste variable selon page/profil; il faut conserver un rollout progressif avec monitoring.
 
+## Validation fin de zoom (correctif UX/perf)
+
+Fichiers:
+- `tmp/map-benchmark-endzoom-worker-off-small.json`
+- `tmp/map-benchmark-endzoom-worker-on-small.json`
+
+Mesures:
+- OFF `small/public wheelStepP95Ms`: `142.02`
+- ON `small/public wheelStepP95Ms`: `145.35`
+- OFF `small/mj wheelStepP95Ms`: `151.09`
+- ON `small/mj wheelStepP95Ms`: `144.11`
+
+Conclusion:
+- Le comportement est globalement stable entre OFF/ON sur ce run court.
+- Le correctif cible surtout l'UX (suppression du flash de reactivation + carte moins vide en interaction), avec un cout perf neutre a leger.
+

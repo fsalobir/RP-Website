@@ -53,6 +53,7 @@ const ROUTE_GEOMETRY_CACHE_MAX_ENTRIES = 900;
 const ENABLE_FRAME_GAP_METRIC = process.env.NEXT_PUBLIC_MAP_DEBUG_FRAME_GAP === "1";
 const ENABLE_ROUTE_GEOMETRY_WORKER = isMapRouteWorkerEnabled();
 const INTERACTION_FRAME_BUDGET_MS = 16;
+const INTERACTION_SETTLE_MS = 140;
 
 function requestRouteGeometryFromWorker(
   worker: Worker,
@@ -627,15 +628,20 @@ export function WorldMapClient({
     zoom: MIN_ZOOM,
   });
   const currentZoomLevel = useMemo<MapZoomLevelId>(() => getCurrentZoomLevel(mapView.zoom), [mapView.zoom]);
+  const [renderZoomLevel, setRenderZoomLevel] = useState<MapZoomLevelId>("monde");
+  useEffect(() => {
+    if (isInteracting || isSettling) return;
+    setRenderZoomLevel(currentZoomLevel);
+  }, [currentZoomLevel, isInteracting, isSettling]);
   const currentZoomLevelLabel = useMemo(() => {
-    if (currentZoomLevel === "province") return "Province";
-    if (currentZoomLevel === "nation") return "Nation";
-    if (currentZoomLevel === "continent") return "Continent";
+    if (renderZoomLevel === "province") return "Province";
+    if (renderZoomLevel === "nation") return "Nation";
+    if (renderZoomLevel === "continent") return "Continent";
     return "Monde";
-  }, [currentZoomLevel]);
+  }, [renderZoomLevel]);
   const activeZoomRules = useMemo(() => {
-    return displayConfig.zoomLevelRules[currentZoomLevel];
-  }, [displayConfig.zoomLevelRules, currentZoomLevel]);
+    return displayConfig.zoomLevelRules[renderZoomLevel];
+  }, [displayConfig.zoomLevelRules, renderZoomLevel]);
   const zoomThresholdLabels = useMemo(
     () =>
       (["monde", "continent", "nation", "province"] as const).map((id) => ({
@@ -646,11 +652,11 @@ export function WorldMapClient({
     []
   );
   const routeLodEpsilon = useMemo(() => {
-    return getRouteSimplificationEpsilonForZoomLevel(currentZoomLevel);
-  }, [currentZoomLevel]);
+    return getRouteSimplificationEpsilonForZoomLevel(renderZoomLevel);
+  }, [renderZoomLevel]);
   const routeLodZoomRef = useMemo(() => {
-    return currentZoomLevel === "province" ? 12 : currentZoomLevel === "nation" ? 6 : currentZoomLevel === "continent" ? 2.4 : 1.05;
-  }, [currentZoomLevel]);
+    return renderZoomLevel === "province" ? 12 : renderZoomLevel === "nation" ? 6 : renderZoomLevel === "continent" ? 2.4 : 1.05;
+  }, [renderZoomLevel]);
   const viewRef = useRef(mapView);
   useEffect(() => {
     viewRef.current = mapView;
@@ -683,8 +689,10 @@ export function WorldMapClient({
   const moveRafRef = useRef<number | null>(null);
   const pendingMoveRef = useRef<{ center: [number, number]; zoom: number } | null>(null);
   const [isInteracting, setIsInteracting] = useState(false);
+  const [isSettling, setIsSettling] = useState(false);
+  const settleTimerRef = useRef<number | null>(null);
   const lastWheelTsRef = useRef<number>(0);
-  const isInteractionLite = isInteracting || !routeWarmupReady;
+  const isInteractionLite = isInteracting || isSettling || !routeWarmupReady;
 
   function clampZoom(z: number) {
     return Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, z));
@@ -698,6 +706,25 @@ export function WorldMapClient({
     wheelAnchorRef.current = null;
     // Empêche une “dérive” restante : la cible devient le zoom courant.
     zoomTargetRef.current = viewRef.current.zoom;
+  }
+
+  function beginInteraction() {
+    if (settleTimerRef.current != null) {
+      globalThis.clearTimeout(settleTimerRef.current);
+      settleTimerRef.current = null;
+    }
+    setIsSettling(false);
+    setIsInteracting(true);
+  }
+
+  function endInteractionWithSettle() {
+    setIsInteracting(false);
+    setIsSettling(true);
+    if (settleTimerRef.current != null) globalThis.clearTimeout(settleTimerRef.current);
+    settleTimerRef.current = globalThis.setTimeout(() => {
+      settleTimerRef.current = null;
+      setIsSettling(false);
+    }, INTERACTION_SETTLE_MS);
   }
 
   function commitView(next: { center: [number, number]; zoom: number }) {
@@ -715,7 +742,7 @@ export function WorldMapClient({
 
   function startZoomAnimation() {
     if (zoomRafRef.current != null) return;
-    setIsInteracting(true);
+    beginInteraction();
     const step = () => {
       const now = performance.now();
       const { center, zoom } = viewRef.current;
@@ -750,7 +777,7 @@ export function WorldMapClient({
       if (sinceWheel > 520 || Math.abs(target - nextZoom) < 1e-4) {
         zoomRafRef.current = null;
         wheelAnchorRef.current = null;
-        setIsInteracting(false);
+        endInteractionWithSettle();
         return;
       }
       zoomRafRef.current = requestAnimationFrame(step);
@@ -825,6 +852,13 @@ export function WorldMapClient({
       globalThis.clearTimeout(t);
     };
   }, [topoReady]);
+
+  useEffect(
+    () => () => {
+      if (settleTimerRef.current != null) globalThis.clearTimeout(settleTimerRef.current);
+    },
+    []
+  );
 
 
   // Listener molette non-passif : plus fiable/smooth que l'event React sur un SVG.
@@ -1537,7 +1571,7 @@ export function WorldMapClient({
   const realmLabelAnchors = useMemo(() => {
     const shouldShow =
       activeZoomRules.visibility.realmLabels &&
-      (currentZoomLevel === "continent" || currentZoomLevel === "monde");
+      (renderZoomLevel === "continent" || renderZoomLevel === "monde");
     if (!shouldShow || !landGeoJson?.features?.length) return [];
     return computeRealmLabelAnchors({
       landGeoJson,
@@ -1545,7 +1579,7 @@ export function WorldMapClient({
       realmById,
       cityById,
     });
-  }, [activeZoomRules.visibility.realmLabels, currentZoomLevel, landGeoJson, provinceByRegionId, realmById, cityById]);
+  }, [activeZoomRules.visibility.realmLabels, renderZoomLevel, landGeoJson, provinceByRegionId, realmById, cityById]);
 
   // Graphe terre (adjacence régions) calculé en différé pour ne pas bloquer le premier rendu.
   const [landGraph, setLandGraph] = useState<LandGraph | null>(null);
@@ -1633,7 +1667,7 @@ export function WorldMapClient({
         const list = routes ?? [];
         const result: RoutePathItem[] = [];
         const maxVerticesForZoom =
-          currentZoomLevel === "monde" ? 120 : currentZoomLevel === "continent" ? 180 : currentZoomLevel === "nation" ? 280 : 400;
+          renderZoomLevel === "monde" ? 120 : renderZoomLevel === "continent" ? 180 : renderZoomLevel === "nation" ? 280 : 400;
         const geoRevision = `${landGeoJson?.features?.length ?? 0}:${landGraph?.adj?.size ?? 0}`;
         const serializeSeq = (seq: Array<{ lat: number; lon: number }>) =>
           seq
@@ -1675,7 +1709,7 @@ export function WorldMapClient({
         seed ?? "na",
         Number(sinuosityScale).toFixed(3),
         Number(routeLodEpsilon).toFixed(3),
-        currentZoomLevel,
+        renderZoomLevel,
         geoRevision,
         serializeSeq(sequence),
       ].join("::");
@@ -1700,7 +1734,7 @@ export function WorldMapClient({
             sinuosityScale,
             routeLodEpsilon,
             routeLodZoomRef,
-            currentZoomLevel,
+            renderZoomLevel,
             maxVerticesForZoom: Math.min(MAX_ROUTE_POLYLINE_VERTICES, maxVerticesForZoom),
             sequence,
           },
@@ -1861,7 +1895,7 @@ export function WorldMapClient({
     displayConfig.routeSinuosityNationalPct,
     routeLodEpsilon,
     routeLodZoomRef,
-    currentZoomLevel,
+    renderZoomLevel,
     mode,
   ]);
 
@@ -1871,7 +1905,7 @@ export function WorldMapClient({
     if (!centerP) return routePaths;
     const halfW = 400 / Math.max(0.1, mapView.zoom);
     const halfH = 300 / Math.max(0.1, mapView.zoom);
-    const margin = currentZoomLevel === "monde" ? 120 : currentZoomLevel === "continent" ? 80 : 45;
+    const margin = renderZoomLevel === "monde" ? 120 : renderZoomLevel === "continent" ? 80 : 45;
     const minX = centerP[0] - halfW - margin;
     const maxX = centerP[0] + halfW + margin;
     const minY = centerP[1] - halfH - margin;
@@ -1879,29 +1913,29 @@ export function WorldMapClient({
     const filtered = routePaths.filter(
       (rp) => !(rp.maxX < minX || rp.minX > maxX || rp.maxY < minY || rp.minY > maxY)
     );
-    const capByLevel = currentZoomLevel === "monde" ? 240 : currentZoomLevel === "continent" ? 520 : 1200;
+    const capByLevel = renderZoomLevel === "monde" ? 240 : renderZoomLevel === "continent" ? 520 : 1200;
     const cap = Math.min(capByLevel, activeZoomRules.caps.maxRouteLabels > 0 ? activeZoomRules.caps.maxRouteLabels * 6 : capByLevel);
     return filtered.slice(0, cap);
-  }, [routePaths, routeProjection, mapView.center, mapView.zoom, currentZoomLevel, activeZoomRules.caps.maxRouteLabels]);
+  }, [routePaths, routeProjection, mapView.center, mapView.zoom, renderZoomLevel, activeZoomRules.caps.maxRouteLabels]);
 
   const visibleRouteLabelCount = useMemo(() => {
-    const capByLevel = currentZoomLevel === "monde" ? 35 : currentZoomLevel === "continent" ? 90 : currentZoomLevel === "nation" ? 220 : 400;
-    const interactionCap = isInteractionLite ? Math.max(0, Math.floor(capByLevel * 0.25)) : capByLevel;
+    const capByLevel = renderZoomLevel === "monde" ? 35 : renderZoomLevel === "continent" ? 90 : renderZoomLevel === "nation" ? 220 : 400;
+    const interactionCap = isInteractionLite ? Math.max(10, Math.floor(capByLevel * 0.25)) : capByLevel;
     const mobileCap = isMobilePerf ? Math.max(0, Math.floor(interactionCap * 0.6)) : interactionCap;
     const cap = Math.min(mobileCap, activeZoomRules.caps.maxRouteLabels);
     return Math.min(visibleRoutePaths.length, cap);
-  }, [visibleRoutePaths.length, currentZoomLevel, activeZoomRules.caps.maxRouteLabels, isInteractionLite, isMobilePerf]);
+  }, [visibleRoutePaths.length, renderZoomLevel, activeZoomRules.caps.maxRouteLabels, isInteractionLite, isMobilePerf]);
 
   useEffect(() => {
     emitMapMetric("map_routes_visible_count", visibleRoutePaths.length, {
       mode,
-      zoomLevel: currentZoomLevel,
+      zoomLevel: renderZoomLevel,
     });
     emitMapMetric("map_route_labels_visible_count", visibleRouteLabelCount, {
       mode,
-      zoomLevel: currentZoomLevel,
+      zoomLevel: renderZoomLevel,
     });
-  }, [visibleRoutePaths.length, visibleRouteLabelCount, mode, currentZoomLevel]);
+  }, [visibleRoutePaths.length, visibleRouteLabelCount, mode, renderZoomLevel]);
 
   useEffect(() => {
     if (!ENABLE_FRAME_GAP_METRIC) return;
@@ -3274,28 +3308,6 @@ export function WorldMapClient({
           projectionConfig={{ scale: 170 }}
           style={{ width: "100%", height: "100%" }}
         >
-          <defs>
-            <filter id="fantasyGlow" x="-20%" y="-20%" width="140%" height="140%">
-              <feGaussianBlur in="SourceGraphic" stdDeviation="0.9" result="blur" />
-              <feMerge>
-                <feMergeNode in="blur" />
-                <feMergeNode in="SourceGraphic" />
-              </feMerge>
-            </filter>
-
-            {/* Texture "parchemin" légère (évite un rendu trop moderne) */}
-            <filter id="parchmentNoise" x="-20%" y="-20%" width="140%" height="140%">
-              <feTurbulence type="fractalNoise" baseFrequency="0.8" numOctaves="2" seed="7" result="noise" />
-              <feColorMatrix
-                in="noise"
-                type="matrix"
-                values="0 0 0 0 0.55  0 0 0 0 0.45  0 0 0 0 0.32  0 0 0 0.25 0"
-                result="tint"
-              />
-              <feBlend in="SourceGraphic" in2="tint" mode="multiply" />
-            </filter>
-          </defs>
-
           <ZoomableGroup
             center={mapView.center}
             zoom={mapView.zoom}
@@ -3309,7 +3321,7 @@ export function WorldMapClient({
               // Si l'utilisateur commence à drag pendant un zoom inertiel,
               // on arrête l'animation pour ne pas bloquer le pan.
               stopZoomAnimation();
-              setIsInteracting(true);
+              beginInteraction();
             }}
             onMove={(pos: any) => {
               const c = (pos?.coordinates ?? mapView.center) as [number, number];
@@ -3335,7 +3347,7 @@ export function WorldMapClient({
               }
               pendingMoveRef.current = null;
               commitView({ center: c, zoom: z });
-              setIsInteracting(false);
+              endInteractionWithSettle();
             }}
           >
             {/* Océan bleu "carte ancienne" + grain parchemin léger */}
@@ -3344,18 +3356,16 @@ export function WorldMapClient({
               y={-5000}
               width={10000}
               height={10000}
-              fill="#7fb4cf"
-              filter={isInteractionLite || isMobilePerf ? undefined : "url(#parchmentNoise)"}
+              fill={isInteractionLite ? "#86b8d1" : "#7fb4cf"}
             />
-            {/* Garder un visuel constant (parchemin + glow léger) pour éviter l'effet “flash”. */}
-            <g style={{ filter: isInteractionLite || isMobilePerf ? "none" : "url(#fantasyGlow)" }}>
+            <g>
               {/* Hydro (décor) */}
               {hydro?.lakes && (
                 <g
                   style={{
                     pointerEvents: "none",
                     // Lacs : alignés sur les rivières (fade + lock à fort zoom).
-                    opacity: lakesLocked ? 1 : isInteractionLite || isMobilePerf ? 0 : lakesOpacity,
+                    opacity: lakesLocked ? 1 : isInteractionLite || isMobilePerf ? Math.max(0.14, lakesOpacity * 0.25) : lakesOpacity,
                     transition: lakesLocked ? "none" : "opacity 200ms ease-out",
                   }}
                 >
@@ -3367,7 +3377,7 @@ export function WorldMapClient({
               {hydro?.rivers && (
                 <g
                   style={{
-                    opacity: riversLocked ? 1 : isInteractionLite || isMobilePerf ? 0 : riversOpacity,
+                    opacity: riversLocked ? 1 : isInteractionLite || isMobilePerf ? Math.max(0.16, riversOpacity * 0.3) : riversOpacity,
                     transition: riversLocked ? "none" : "opacity 200ms ease-out",
                     pointerEvents: "none",
                   }}
@@ -3378,7 +3388,7 @@ export function WorldMapClient({
 
               {/* Provinces (régions) : DOIVENT être sous les marqueurs */}
               {renderedRegions}
-              {!isInteractionLite && renderedRealmBoundaries}
+              <g opacity={isInteractionLite ? 0.38 : 1}>{renderedRealmBoundaries}</g>
 
               {/* Routes (tracés sinueux entre villes) — config dédiée (opacité, taille, progressivité) */}
               {!isWebglRenderer && activeZoomRules.visibility.routes && visibleRoutePaths.length > 0 && (
@@ -3811,14 +3821,14 @@ export function WorldMapClient({
                     <title>{c.name}</title>
                   </MarkerAny>
                 ))}
-              {!isInteracting && realmLabelAnchors.map((r) => (
+              {realmLabelAnchors.slice(0, isInteractionLite ? 12 : realmLabelAnchors.length).map((r) => (
                 <MarkerAny key={`realm-label-${r.realmId}`} coordinates={[r.lon, r.lat]}>
                   <text
                     className="map-label-font"
                     textAnchor="middle"
                     dominantBaseline="middle"
-                    fill="rgba(236, 225, 188, 0.92)"
-                    fontSize={currentZoomLevel === "monde" ? 4.2 : 5.2}
+                    fill={isInteractionLite ? "rgba(236, 225, 188, 0.68)" : "rgba(236, 225, 188, 0.92)"}
+                    fontSize={renderZoomLevel === "monde" ? 4.2 : 5.2}
                     transform={`rotate(${r.angleDeg})`}
                     style={{
                       pointerEvents: "none",
