@@ -399,25 +399,6 @@ export function WorldMapClient({
     return () => ro.disconnect();
   }, []);
 
-  const [mapFontsReady, setMapFontsReady] = useState(false);
-  useEffect(() => {
-    let cancelled = false;
-    void (async () => {
-      try {
-        if (typeof document !== "undefined" && document.fonts?.load) {
-          await document.fonts.load("16px MiddleEarthMap");
-          await document.fonts.ready;
-        }
-      } catch {
-        /* ignore */
-      }
-      if (!cancelled) setMapFontsReady(true);
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
   const [geographyData, setGeographyData] = useState<any | null>(null);
   const [hydroTopo, setHydroTopo] = useState<any | null>(null);
   const [topoReady, setTopoReady] = useState(false);
@@ -2312,10 +2293,14 @@ export function WorldMapClient({
       routePadPx
     );
     if (!vb) return routePaths;
-    const filtered = routePaths.filter((rp) => {
+    let filtered = routePaths.filter((rp) => {
       const bb = routePathLonLatBounds(rp.lonLatPath);
       return lonLatBoundsIntersect(vb, bb);
     });
+    // Repli : si la bbox écran/route est incohérente (repeat monde, premier frame, etc.), ne pas tout masquer.
+    if (filtered.length === 0 && routePaths.length > 0) {
+      filtered = routePaths;
+    }
     const capByLevel = renderZoomLevel === "monde" ? 240 : renderZoomLevel === "continent" ? 520 : 1200;
     const cap = Math.min(capByLevel, activeZoomRules.caps.maxRouteLabels > 0 ? activeZoomRules.caps.maxRouteLabels * 6 : capByLevel);
     return filtered.slice(0, cap);
@@ -2472,7 +2457,6 @@ export function WorldMapClient({
       showCityLabels: citiesOpacity > 0.001 && (displayConfig.cityLabelFontSizePx ?? 0) > 0,
       cityLabelFontSizePx: Math.max(8, Math.min(22, (displayConfig.cityLabelFontSizePx ?? 10) * 0.9)),
       routeLabelFontSizePx: Math.max(8, Math.min(26, (displayConfig.routeLabelFontSizePx ?? 0.25) * routeSizeFactor * 42)),
-      mapTextLayersEnabled: mapFontsReady,
     });
   }, [
     isWebglRenderer,
@@ -2494,7 +2478,6 @@ export function WorldMapClient({
     displayConfig.cityLabelFontSizePx,
     displayConfig.routeLabelFontSizePx,
     routeSizeFactor,
-    mapFontsReady,
   ]);
 
   useEffect(() => {

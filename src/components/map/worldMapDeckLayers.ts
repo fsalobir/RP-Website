@@ -1,4 +1,5 @@
 import type { Layer } from "@deck.gl/core";
+import { COORDINATE_SYSTEM } from "@deck.gl/core";
 import { GeoJsonLayer, IconLayer, PathLayer, TextLayer } from "@deck.gl/layers";
 import type { Feature, FeatureCollection } from "geojson";
 
@@ -73,11 +74,10 @@ export type BuildWorldMapDeckLayersOpts = {
   showCityLabels: boolean;
   cityLabelFontSizePx: number;
   routeLabelFontSizePx: number;
-  /** TextLayer seulement après chargement document.fonts (MiddleEarthMap). */
-  mapTextLayersEnabled: boolean;
 };
 
-const MAP_TEXT_FONT = "MiddleEarthMap";
+/** Pile de polices : deck charge la 1ère disponible ; repli lisible si la custom tarde. */
+const MAP_TEXT_FONT = 'MiddleEarthMap, Georgia, "Times New Roman", serif';
 
 /**
  * Ordre bas → haut : hydro, provinces, frontières royaumes, routes, icônes, textes.
@@ -171,24 +171,28 @@ export function buildWorldMapDeckLayers(opts: BuildWorldMapDeckLayersOpts): Laye
         data: opts.routes,
         pickable: true,
         parameters: DECK_MAP_LAYER_PARAMETERS,
+        coordinateSystem: COORDINATE_SYSTEM.LNGLAT,
         widthUnits: "pixels",
+        widthMinPixels: 2,
         capRounded: true,
         jointRounded: true,
         opacity: routeOpacity,
         getPath: (d) => d.lonLatPath,
         getColor: (d) => d.color,
-        getWidth: (d) => Math.max(1, d.widthPx),
+        getWidth: (d) => Math.max(2, d.widthPx),
       })
     );
 
     const routeLabelData = opts.routes.filter((r) => r.showLabel && r.name);
-    if (opts.mapTextLayersEnabled && routeLabelData.length > 0) {
+    if (routeLabelData.length > 0) {
       layers.push(
         new TextLayer<WorldMapDeckRoute>({
           id: "wm-route-labels",
           data: routeLabelData,
           pickable: false,
           parameters: DECK_MAP_LAYER_PARAMETERS,
+          coordinateSystem: COORDINATE_SYSTEM.LNGLAT,
+          characterSet: "auto",
           opacity: routeOpacity,
           getPosition: (d) => [...d.labelLonLat, 0],
           getText: (d) => d.name,
@@ -217,6 +221,7 @@ export function buildWorldMapDeckLayers(opts: BuildWorldMapDeckLayersOpts): Laye
         data: opts.pois,
         pickable: true,
         parameters: DECK_MAP_LAYER_PARAMETERS,
+        coordinateSystem: COORDINATE_SYSTEM.LNGLAT,
         sizeUnits: "pixels",
         billboard: true,
         sizeMinPixels: 6,
@@ -242,6 +247,7 @@ export function buildWorldMapDeckLayers(opts: BuildWorldMapDeckLayersOpts): Laye
         data: opts.cities,
         pickable: true,
         parameters: DECK_MAP_LAYER_PARAMETERS,
+        coordinateSystem: COORDINATE_SYSTEM.LNGLAT,
         sizeUnits: "pixels",
         billboard: true,
         sizeMinPixels: 8,
@@ -259,13 +265,15 @@ export function buildWorldMapDeckLayers(opts: BuildWorldMapDeckLayersOpts): Laye
       })
     );
 
-    if (opts.mapTextLayersEnabled && opts.showCityLabels) {
+    if (opts.showCityLabels) {
       layers.push(
         new TextLayer<WorldMapDeckCity>({
           id: "wm-city-labels",
           data: opts.cities,
           pickable: false,
           parameters: DECK_MAP_LAYER_PARAMETERS,
+          coordinateSystem: COORDINATE_SYSTEM.LNGLAT,
+          characterSet: "auto",
           getPosition: (d) => [d.lon, d.lat, 0],
           getText: (d) => d.name,
           getPixelOffset: [0, Math.round(Math.min(26, opts.cityLabelFontSizePx * 1.35))],
@@ -281,13 +289,15 @@ export function buildWorldMapDeckLayers(opts: BuildWorldMapDeckLayersOpts): Laye
     }
   }
 
-  if (opts.mapTextLayersEnabled && opts.realmLabels.length > 0) {
+  if (opts.realmLabels.length > 0) {
     layers.push(
       new TextLayer<WorldMapDeckRealmLabel>({
         id: "wm-realm-labels",
         data: opts.realmLabels,
         pickable: false,
         parameters: DECK_MAP_LAYER_PARAMETERS,
+        coordinateSystem: COORDINATE_SYSTEM.LNGLAT,
+        characterSet: "auto",
         getPosition: (d) => [d.lon, d.lat, 0],
         getText: (d) => d.name,
         getSize: (d) => d.fontSizePx,
