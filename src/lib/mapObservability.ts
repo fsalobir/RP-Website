@@ -5,6 +5,8 @@ export type MapMetricName =
   | "map_route_build_ms"
   | "map_routes_visible_count"
   | "map_route_labels_visible_count"
+  | "map_cities_visible_count"
+  | "map_objects_visible_count"
   | "map_interaction_frame_gap_ms";
 
 export function emitMapMetric(name: MapMetricName, value: number, meta?: Record<string, unknown>) {

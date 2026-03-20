@@ -83,7 +83,7 @@ const ZOOM_LEVEL_RULE_DEFAULTS: ZoomLevelRules = {
       realmLabels: false,
     },
     scale: { cities: 1, routes: 1, entities: 1 },
-    caps: { maxRouteLabels: 420, maxCities: 3200, maxEntities: 3200 },
+    caps: { maxRouteLabels: 260, maxCities: 2000, maxEntities: 2000 },
   },
   nation: {
     visibility: {
@@ -97,7 +97,7 @@ const ZOOM_LEVEL_RULE_DEFAULTS: ZoomLevelRules = {
       realmLabels: false,
     },
     scale: { cities: 0.72, routes: 0.72, entities: 0.72 },
-    caps: { maxRouteLabels: 180, maxCities: 1400, maxEntities: 1400 },
+    caps: { maxRouteLabels: 130, maxCities: 900, maxEntities: 900 },
   },
   continent: {
     visibility: {

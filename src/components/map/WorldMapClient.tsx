@@ -1602,6 +1602,50 @@ export function WorldMapClient({
     () => geoMercator().scale(170).translate([400, 300]),
     []
   );
+  const viewportProjectedBounds = useMemo(() => {
+    const centerP = routeProjection(mapView.center);
+    if (!centerP) return null;
+    const halfW = 400 / Math.max(0.1, mapView.zoom);
+    const halfH = 300 / Math.max(0.1, mapView.zoom);
+    const margin =
+      renderZoomLevel === "monde" ? 120 : renderZoomLevel === "continent" ? 90 : renderZoomLevel === "nation" ? 70 : 55;
+    return {
+      minX: centerP[0] - halfW - margin,
+      maxX: centerP[0] + halfW + margin,
+      minY: centerP[1] - halfH - margin,
+      maxY: centerP[1] + halfH + margin,
+    };
+  }, [routeProjection, mapView.center, mapView.zoom, renderZoomLevel]);
+  const visibleObjectsInView = useMemo(() => {
+    if (!viewportProjectedBounds) return visibleObjects;
+    const filtered = visibleObjects.filter((o) => {
+      const p = routeProjection([Number(o.lon), Number(o.lat)]);
+      if (!p) return false;
+      const [x, y] = p;
+      return !(
+        x < viewportProjectedBounds.minX ||
+        x > viewportProjectedBounds.maxX ||
+        y < viewportProjectedBounds.minY ||
+        y > viewportProjectedBounds.maxY
+      );
+    });
+    return filtered.slice(0, activeZoomRules.caps.maxEntities);
+  }, [visibleObjects, viewportProjectedBounds, routeProjection, activeZoomRules.caps.maxEntities]);
+  const visibleCitiesInView = useMemo(() => {
+    if (!viewportProjectedBounds) return visibleCities;
+    const filtered = visibleCities.filter((c) => {
+      const p = routeProjection([Number(c.lon), Number(c.lat)]);
+      if (!p) return false;
+      const [x, y] = p;
+      return !(
+        x < viewportProjectedBounds.minX ||
+        x > viewportProjectedBounds.maxX ||
+        y < viewportProjectedBounds.minY ||
+        y > viewportProjectedBounds.maxY
+      );
+    });
+    return filtered.slice(0, activeZoomRules.caps.maxCities);
+  }, [visibleCities, viewportProjectedBounds, routeProjection, activeZoomRules.caps.maxCities]);
 
   type RoutePathItem = {
     id: string;
@@ -1668,6 +1712,16 @@ export function WorldMapClient({
         const result: RoutePathItem[] = [];
         const maxVerticesForZoom =
           renderZoomLevel === "monde" ? 120 : renderZoomLevel === "continent" ? 180 : renderZoomLevel === "nation" ? 280 : 400;
+        const viewNow = viewRef.current;
+        const centerPNow = routeProjection(viewNow.center);
+        const buildBounds = centerPNow
+          ? {
+              minX: centerPNow[0] - 400 / Math.max(0.1, viewNow.zoom) - 180,
+              maxX: centerPNow[0] + 400 / Math.max(0.1, viewNow.zoom) + 180,
+              minY: centerPNow[1] - 300 / Math.max(0.1, viewNow.zoom) - 180,
+              maxY: centerPNow[1] + 300 / Math.max(0.1, viewNow.zoom) + 180,
+            }
+          : null;
         const geoRevision = `${landGeoJson?.features?.length ?? 0}:${landGraph?.adj?.size ?? 0}`;
         const serializeSeq = (seq: Array<{ lat: number; lon: number }>) =>
           seq
@@ -1693,6 +1747,15 @@ export function WorldMapClient({
       const waypoints = resampleRouteWaypoints(rawWaypoints, MAX_RENDER_ROUTE_WAYPOINTS);
       const sequence: Array<{ lat: number; lon: number }> = [startPt, ...waypoints, endPt];
       if (sequence.length < 2) continue;
+      if (buildBounds) {
+        const hasPointInBuildBounds = sequence.some((pt) => {
+          const p = routeProjection([Number(pt.lon), Number(pt.lat)]);
+          if (!p) return false;
+          const [x, y] = p;
+          return !(x < buildBounds.minX || x > buildBounds.maxX || y < buildBounds.minY || y > buildBounds.maxY);
+        });
+        if (!hasPointInBuildBounds) continue;
+      }
 
       const tier = (r.tier === "local" || r.tier === "regional" || r.tier === "national" ? r.tier : "local") as RouteTier;
       const seed = typeof (r.attrs as any)?.seed === "number" ? (r.attrs as any).seed : undefined;
@@ -1724,7 +1787,11 @@ export function WorldMapClient({
 
       let points: Array<[number, number]> = [];
       let landSegments = 0;
-      if (ENABLE_ROUTE_GEOMETRY_WORKER && !landGraph && routeGeometryWorkerRef.current) {
+      const shouldUseWorker =
+        ENABLE_ROUTE_GEOMETRY_WORKER &&
+        routeGeometryWorkerRef.current &&
+        (!landGraph || sequence.length > 3 || list.length > 220);
+      if (shouldUseWorker && routeGeometryWorkerRef.current) {
         const workerPoints = await requestRouteGeometryFromWorker(routeGeometryWorkerRef.current, {
           type: "build-route-geometry",
           payload: {
@@ -1935,7 +2002,15 @@ export function WorldMapClient({
       mode,
       zoomLevel: renderZoomLevel,
     });
-  }, [visibleRoutePaths.length, visibleRouteLabelCount, mode, renderZoomLevel]);
+    emitMapMetric("map_cities_visible_count", visibleCitiesInView.length, {
+      mode,
+      zoomLevel: renderZoomLevel,
+    });
+    emitMapMetric("map_objects_visible_count", visibleObjectsInView.length, {
+      mode,
+      zoomLevel: renderZoomLevel,
+    });
+  }, [visibleRoutePaths.length, visibleRouteLabelCount, visibleCitiesInView.length, visibleObjectsInView.length, mode, renderZoomLevel]);
 
   useEffect(() => {
     if (!ENABLE_FRAME_GAP_METRIC) return;
@@ -3461,7 +3536,7 @@ export function WorldMapClient({
               )}
 
               {/* Objets (villes/bâtiments) */}
-              {!isWebglRenderer && visibleObjects.map((o) => (
+              {!isWebglRenderer && visibleObjectsInView.map((o) => (
                 <MarkerAny key={`obj-${o.id}`} coordinates={[o.lon as number, o.lat as number]}>
                   <g
                     opacity={0.85}
@@ -3492,7 +3567,7 @@ export function WorldMapClient({
               ))}
 
               {/* Villes (entités) — hitbox = cercle r=5 (diamètre visuel de la boîte 10×10) */}
-              {!isWebglRenderer && visibleCities.map((c) => (
+              {!isWebglRenderer && visibleCitiesInView.map((c) => (
                 <MarkerAny key={`city-${c.id}`} coordinates={[c.lon, c.lat]}>
                   {(() => {
                     const cityScale = cityScaleFactorFor(c);
@@ -3680,7 +3755,7 @@ export function WorldMapClient({
               )}
 
               {isWebglRenderer &&
-                visibleObjects.map((o) => (
+                visibleObjectsInView.map((o) => (
                   <MarkerAny key={`obj-wgl-${o.id}`} coordinates={[o.lon as number, o.lat as number]}>
                     <g
                       opacity={0.85}
@@ -3711,7 +3786,7 @@ export function WorldMapClient({
                 ))}
 
               {isWebglRenderer &&
-                visibleCities.map((c) => (
+                visibleCitiesInView.map((c) => (
                   <MarkerAny key={`city-wgl-${c.id}`} coordinates={[c.lon, c.lat]}>
                     {(() => {
                       const cityScale = cityScaleFactorFor(c);

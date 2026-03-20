@@ -122,3 +122,20 @@ Conclusion:
 - Le comportement est globalement stable entre OFF/ON sur ce run court.
 - Le correctif cible surtout l'UX (suppression du flash de reactivation + carte moins vide en interaction), avec un cout perf neutre a leger.
 
+## Validation nation/province (culling + pre-cull routes)
+
+Fichiers:
+- `tmp/map-benchmark-np-worker-off-medium.json`
+- `tmp/map-benchmark-np-worker-off-large.json`
+- `tmp/map-benchmark-np-worker-on-medium.json`
+- `tmp/map-benchmark-np-worker-on-large.json`
+
+Constats:
+- OFF (medium/large) montre des `wheelStepP95Ms` autour de `626-764` ms, avec nœuds SVG max `3268-3305`.
+- ON (medium/large) est plus variable et souvent plus coûteux (`~2299-3213` ms) sur ce lot.
+- Le culling viewport a bien réduit le volume SVG visible, mais le seuil worker actuel est trop agressif dans certains scénarios.
+
+Action recommandée:
+- Conserver le culling nation/province (gain structurel).
+- Affiner la stratégie worker (seuils plus stricts / activation conditionnelle) avant rollout large.
+
