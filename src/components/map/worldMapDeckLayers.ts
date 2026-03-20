@@ -1,6 +1,10 @@
 import type { Layer } from "@deck.gl/core";
-import { GeoJsonLayer, PathLayer, ScatterplotLayer, TextLayer } from "@deck.gl/layers";
+import { GeoJsonLayer, IconLayer, PathLayer, TextLayer } from "@deck.gl/layers";
 import type { Feature, FeatureCollection } from "geojson";
+
+/** Désactive le depth test : sinon les routes disparaissent sous les polygones remplis. */
+// deck.gl typings: `parameters` attend le type luma `Parameters`, pas un simple littéral.
+const DECK_MAP_LAYER_PARAMETERS = { depthTest: false, depthMask: false } as any;
 
 function ensureFeatureCollection(g: FeatureCollection | Feature | null | undefined): FeatureCollection | null {
   if (!g) return null;
@@ -24,16 +28,19 @@ export type WorldMapDeckCity = {
   lon: number;
   lat: number;
   name: string;
-  fill: [number, number, number, number];
-  radiusPx: number;
+  iconUrl: string;
+  /** Dedup textures côté IconManager (icônes locales partagées). */
+  iconCacheId: string;
+  iconSizePx: number;
 };
 
 export type WorldMapDeckPoi = {
   id: string;
   lon: number;
   lat: number;
-  fill: [number, number, number, number];
-  radiusPx: number;
+  iconUrl: string;
+  iconCacheId: string;
+  iconSizePx: number;
 };
 
 export type WorldMapDeckRealmLabel = {
@@ -66,10 +73,14 @@ export type BuildWorldMapDeckLayersOpts = {
   showCityLabels: boolean;
   cityLabelFontSizePx: number;
   routeLabelFontSizePx: number;
+  /** TextLayer seulement après chargement document.fonts (MiddleEarthMap). */
+  mapTextLayersEnabled: boolean;
 };
 
+const MAP_TEXT_FONT = "MiddleEarthMap";
+
 /**
- * Ordre bas → haut : hydro, provinces, frontières royaumes, routes, marqueurs, textes.
+ * Ordre bas → haut : hydro, provinces, frontières royaumes, routes, icônes, textes.
  */
 export function buildWorldMapDeckLayers(opts: BuildWorldMapDeckLayersOpts): Layer[] {
   const layers: Layer[] = [];
@@ -85,6 +96,7 @@ export function buildWorldMapDeckLayers(opts: BuildWorldMapDeckLayersOpts): Laye
         stroked: true,
         filled: true,
         extruded: false,
+        parameters: DECK_MAP_LAYER_PARAMETERS,
         getFillColor: [43, 111, 152, Math.round(77 * o)],
         getLineColor: [10, 40, 70, Math.round(64 * o)],
         getLineWidth: 0.5,
@@ -105,6 +117,7 @@ export function buildWorldMapDeckLayers(opts: BuildWorldMapDeckLayersOpts): Laye
         pickable: false,
         stroked: true,
         filled: false,
+        parameters: DECK_MAP_LAYER_PARAMETERS,
         lineWidthMinPixels: 0.6,
         lineWidthMaxPixels: 2,
         getLineColor: [20, 90, 140, Math.round(220 * o)],
@@ -123,6 +136,7 @@ export function buildWorldMapDeckLayers(opts: BuildWorldMapDeckLayersOpts): Laye
         stroked: true,
         filled: true,
         extruded: false,
+        parameters: DECK_MAP_LAYER_PARAMETERS,
         lineWidthMinPixels: 0.35,
         lineWidthMaxPixels: 1.2,
         getLineColor: [75, 55, 30, 110],
@@ -140,6 +154,7 @@ export function buildWorldMapDeckLayers(opts: BuildWorldMapDeckLayersOpts): Laye
         pickable: false,
         stroked: true,
         filled: false,
+        parameters: DECK_MAP_LAYER_PARAMETERS,
         lineWidthMinPixels: 0.5,
         lineWidthMaxPixels: 1.4,
         getLineColor: opts.borderLineColor,
@@ -155,6 +170,7 @@ export function buildWorldMapDeckLayers(opts: BuildWorldMapDeckLayersOpts): Laye
         id: "wm-routes",
         data: opts.routes,
         pickable: true,
+        parameters: DECK_MAP_LAYER_PARAMETERS,
         widthUnits: "pixels",
         capRounded: true,
         jointRounded: true,
@@ -166,12 +182,13 @@ export function buildWorldMapDeckLayers(opts: BuildWorldMapDeckLayersOpts): Laye
     );
 
     const routeLabelData = opts.routes.filter((r) => r.showLabel && r.name);
-    if (routeLabelData.length > 0) {
+    if (opts.mapTextLayersEnabled && routeLabelData.length > 0) {
       layers.push(
         new TextLayer<WorldMapDeckRoute>({
           id: "wm-route-labels",
           data: routeLabelData,
           pickable: false,
+          parameters: DECK_MAP_LAYER_PARAMETERS,
           opacity: routeOpacity,
           getPosition: (d) => [...d.labelLonLat, 0],
           getText: (d) => d.name,
@@ -183,7 +200,7 @@ export function buildWorldMapDeckLayers(opts: BuildWorldMapDeckLayersOpts): Laye
             Math.max(0, Math.min(255, Math.round(d.color[3] * routeOpacity))),
           ],
           getAngle: (d) => 360 - d.labelAngleDeg,
-          fontFamily: '"MiddleEarthMap", serif',
+          fontFamily: MAP_TEXT_FONT,
           outlineColor: [18, 14, 9, 200],
           outlineWidth: 2,
           background: false,
@@ -195,53 +212,66 @@ export function buildWorldMapDeckLayers(opts: BuildWorldMapDeckLayersOpts): Laye
 
   if (opts.pois.length > 0) {
     layers.push(
-      new ScatterplotLayer<WorldMapDeckPoi>({
-        id: "wm-pois",
+      new IconLayer<WorldMapDeckPoi>({
+        id: "wm-poi-icons",
         data: opts.pois,
         pickable: true,
-        opacity: 0.88,
-        stroked: true,
-        filled: true,
-        lineWidthMinPixels: 0.5,
+        parameters: DECK_MAP_LAYER_PARAMETERS,
+        sizeUnits: "pixels",
+        billboard: true,
+        sizeMinPixels: 6,
+        sizeMaxPixels: 56,
         getPosition: (d) => [d.lon, d.lat, 0],
-        getRadius: (d) => d.radiusPx,
-        getFillColor: (d) => d.fill,
-        getLineColor: [50, 35, 20, 90],
-        radiusUnits: "pixels",
+        getIcon: (d) => ({
+          url: d.iconUrl,
+          id: d.iconCacheId,
+          width: 128,
+          height: 128,
+          mask: false,
+        }),
+        getSize: (d) => d.iconSizePx,
+        getColor: () => [255, 255, 255, 255],
       })
     );
   }
 
   if (opts.cities.length > 0) {
     layers.push(
-      new ScatterplotLayer<WorldMapDeckCity>({
-        id: "wm-cities",
+      new IconLayer<WorldMapDeckCity>({
+        id: "wm-city-icons",
         data: opts.cities,
         pickable: true,
-        opacity: 1,
-        stroked: true,
-        filled: true,
-        lineWidthMinPixels: 0.5,
+        parameters: DECK_MAP_LAYER_PARAMETERS,
+        sizeUnits: "pixels",
+        billboard: true,
+        sizeMinPixels: 8,
+        sizeMaxPixels: 52,
         getPosition: (d) => [d.lon, d.lat, 0],
-        getRadius: (d) => d.radiusPx,
-        getFillColor: (d) => d.fill,
-        getLineColor: [20, 12, 6, 140],
-        radiusUnits: "pixels",
+        getIcon: (d) => ({
+          url: d.iconUrl,
+          id: d.iconCacheId,
+          width: 128,
+          height: 128,
+          mask: false,
+        }),
+        getSize: (d) => d.iconSizePx,
+        getColor: () => [255, 255, 255, 255],
       })
     );
 
-    if (opts.showCityLabels) {
+    if (opts.mapTextLayersEnabled && opts.showCityLabels) {
       layers.push(
         new TextLayer<WorldMapDeckCity>({
           id: "wm-city-labels",
           data: opts.cities,
           pickable: false,
+          parameters: DECK_MAP_LAYER_PARAMETERS,
           getPosition: (d) => [d.lon, d.lat, 0],
           getText: (d) => d.name,
-          getPixelOffset: [0, 14],
+          getPixelOffset: [0, Math.round(Math.min(26, opts.cityLabelFontSizePx * 1.35))],
           getSize: opts.cityLabelFontSizePx,
           getColor: [220, 200, 160, 240],
-          fontFamily: '"MiddleEarthMap", serif',
+          fontFamily: MAP_TEXT_FONT,
           outlineColor: [18, 14, 9, 180],
           outlineWidth: 2,
           background: false,
@@ -251,18 +281,19 @@ export function buildWorldMapDeckLayers(opts: BuildWorldMapDeckLayersOpts): Laye
     }
   }
 
-  if (opts.realmLabels.length > 0) {
+  if (opts.mapTextLayersEnabled && opts.realmLabels.length > 0) {
     layers.push(
       new TextLayer<WorldMapDeckRealmLabel>({
         id: "wm-realm-labels",
         data: opts.realmLabels,
         pickable: false,
+        parameters: DECK_MAP_LAYER_PARAMETERS,
         getPosition: (d) => [d.lon, d.lat, 0],
         getText: (d) => d.name,
         getSize: (d) => d.fontSizePx,
         getColor: (d) => d.color,
         getAngle: (d) => d.angleDeg,
-        fontFamily: '"MiddleEarthMap", serif',
+        fontFamily: MAP_TEXT_FONT,
         outlineColor: [18, 14, 9, 190],
         outlineWidth: 3,
         background: false,

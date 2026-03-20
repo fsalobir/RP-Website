@@ -71,6 +71,7 @@ import {
 import { WebMercatorViewport } from "@deck.gl/core";
 import type { PickingInfo } from "@deck.gl/core";
 import { toDeckViewState } from "@/lib/mapDeckViewState";
+import { getDeckViewportLonLatBounds, lonLatBoundsIntersect, routePathLonLatBounds } from "@/lib/mapLonLatViewport";
 import type { Feature, FeatureCollection } from "geojson";
 import { postDebugMapSessionToServer, pushMapDebugSessionLog } from "@/lib/mapDebugSession";
 import { getMapEnvBuildWarnings } from "@/lib/mapRenderer";
@@ -308,6 +309,46 @@ function hexToTuple(hex: string | null | undefined, alpha: number, fallback: [nu
   return [r, g, b, alpha];
 }
 
+const DECK_ICON_CITY = "/map-icons/city.png";
+const DECK_ICON_CASTLE = "/map-icons/castle.png";
+const DECK_ICON_VILLAGE = "/map-icons/village.png";
+
+function deckIconCacheId(url: string): string {
+  if (url.startsWith("/")) return url;
+  try {
+    const u = new URL(url);
+    return `${u.origin}${u.pathname}`;
+  } catch {
+    return url;
+  }
+}
+
+function resolveCityDeckIconUrl(
+  iconKey: string | null | undefined,
+  cityId: string,
+  realmCapitalIds: Set<string>,
+  provinceCapitalIds: Set<string>
+): { url: string; cacheId: string } {
+  if (typeof iconKey === "string" && iconKey.startsWith("http")) {
+    return { url: iconKey, cacheId: deckIconCacheId(iconKey) };
+  }
+  if (iconKey === "castle") return { url: DECK_ICON_CASTLE, cacheId: "local:castle" };
+  if (iconKey === "village") return { url: DECK_ICON_VILLAGE, cacheId: "local:village" };
+  if (iconKey === "city") return { url: DECK_ICON_CITY, cacheId: "local:city" };
+  if (realmCapitalIds.has(cityId)) return { url: DECK_ICON_CASTLE, cacheId: "local:castle" };
+  if (provinceCapitalIds.has(cityId)) return { url: DECK_ICON_CITY, cacheId: "local:city" };
+  return { url: DECK_ICON_VILLAGE, cacheId: "local:village" };
+}
+
+function resolvePoiDeckIconUrl(iconKey: string | null | undefined): { url: string; cacheId: string } {
+  if (typeof iconKey === "string" && iconKey.startsWith("http")) {
+    return { url: iconKey, cacheId: deckIconCacheId(iconKey) };
+  }
+  if (iconKey === "fort") return { url: DECK_ICON_CASTLE, cacheId: "local:poi:fort" };
+  if (iconKey === "city") return { url: DECK_ICON_CITY, cacheId: "local:poi:city" };
+  return { url: DECK_ICON_VILLAGE, cacheId: "local:poi:default" };
+}
+
 // Note: décor (arbres/vagues) retiré pour performance.
 
 export function WorldMapClient({
@@ -357,6 +398,26 @@ export function WorldMapClient({
     setMapPixelSize({ w: Math.max(2, Math.floor(r0.width)), h: Math.max(2, Math.floor(r0.height)) });
     return () => ro.disconnect();
   }, []);
+
+  const [mapFontsReady, setMapFontsReady] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        if (typeof document !== "undefined" && document.fonts?.load) {
+          await document.fonts.load("16px MiddleEarthMap");
+          await document.fonts.ready;
+        }
+      } catch {
+        /* ignore */
+      }
+      if (!cancelled) setMapFontsReady(true);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const [geographyData, setGeographyData] = useState<any | null>(null);
   const [hydroTopo, setHydroTopo] = useState<any | null>(null);
   const [topoReady, setTopoReady] = useState(false);
@@ -784,13 +845,8 @@ export function WorldMapClient({
    * semblait disparaître (océan seul) au moindre pan/zoom. La perf reste portée par startTransition, etc.
    */
   const hideHeavyGeoWhileDragging = false;
-  /** Hydro un peu plus léger au drag aux paliers denses (zoom réel = currentZoomLevel, pas renderZoomLevel figé). */
-  const hydroNationProvinceDragLite = useMemo(() => {
-    if (!isInteracting) return false;
-    if (currentZoomLevel === "nation" || currentZoomLevel === "province") return true;
-    if (isMobilePerf && mobileHardMode && currentZoomLevel === "continent") return true;
-    return false;
-  }, [isInteracting, currentZoomLevel, isMobilePerf, mobileHardMode]);
+  /** Avant : atténuait le SVG hydro au drag — inutile si la charge est portée par DeckGL ; évite les changements d’opacité à l’interaction. */
+  const hydroNationProvinceDragLite = false;
   useEffect(() => {
     if (isInteracting || isSettling) return;
     setRenderZoomLevel(currentZoomLevel);
@@ -1421,8 +1477,8 @@ export function WorldMapClient({
     },
     [],
   );
-  const showHydro = activeZoomRules.visibility.lakes && lakesOpacity > 0.001;
-  const showRivers = activeZoomRules.visibility.rivers && riversOpacity > 0.001;
+  const showHydro = activeZoomRules.visibility.lakes;
+  const showRivers = activeZoomRules.visibility.rivers;
 
   // (debug UI zoom badge mis à jour via ref, pas via state pour les perfs)
   const RIVERS_LOCK_ZOOM = 6;
@@ -1823,52 +1879,49 @@ export function WorldMapClient({
     () => geoMercator().scale(170).translate([400, 300]),
     []
   );
-  const viewportProjectedBounds = useMemo(() => {
-    const centerP = routeProjection(mapView.center);
-    if (!centerP) return null;
-    const halfW = 400 / Math.max(0.1, mapView.zoom);
-    const halfH = 300 / Math.max(0.1, mapView.zoom);
-    const margin =
-      renderZoomLevel === "monde" ? 120 : renderZoomLevel === "continent" ? 90 : renderZoomLevel === "nation" ? 70 : 55;
-    return {
-      minX: centerP[0] - halfW - margin,
-      maxX: centerP[0] + halfW + margin,
-      minY: centerP[1] - halfH - margin,
-      maxY: centerP[1] + halfH + margin,
-    };
-  }, [routeProjection, mapView.center, mapView.zoom, renderZoomLevel]);
+  const viewportLonLatPadPx = useMemo(
+    () =>
+      renderZoomLevel === "monde"
+        ? 100
+        : renderZoomLevel === "continent"
+          ? 78
+          : renderZoomLevel === "nation"
+            ? 56
+            : 48,
+    [renderZoomLevel]
+  );
+  const viewportLonLatBounds = useMemo(() => {
+    return getDeckViewportLonLatBounds(
+      mapPixelSize.w,
+      mapPixelSize.h,
+      toDeckViewState(mapView.center, mapView.zoom),
+      viewportLonLatPadPx
+    );
+  }, [mapPixelSize.w, mapPixelSize.h, mapView.center, mapView.zoom, viewportLonLatPadPx]);
   const visibleObjectsInView = useMemo(() => {
     const cap = activeZoomRules.caps.maxEntities;
-    if (!viewportProjectedBounds) return visibleObjectsAllRules.slice(0, cap);
+    if (!viewportLonLatBounds) return visibleObjectsAllRules.slice(0, cap);
+    const { minLon, maxLon, minLat, maxLat } = viewportLonLatBounds;
     const filtered = visibleObjectsAllRules.filter((o) => {
-      const p = routeProjection([Number(o.lon), Number(o.lat)]);
-      if (!p) return false;
-      const [x, y] = p;
-      return !(
-        x < viewportProjectedBounds.minX ||
-        x > viewportProjectedBounds.maxX ||
-        y < viewportProjectedBounds.minY ||
-        y > viewportProjectedBounds.maxY
-      );
+      const lon = Number(o.lon);
+      const lat = Number(o.lat);
+      if (!Number.isFinite(lon) || !Number.isFinite(lat)) return false;
+      return !(lon < minLon || lon > maxLon || lat < minLat || lat > maxLat);
     });
     return filtered.slice(0, cap);
-  }, [visibleObjectsAllRules, viewportProjectedBounds, routeProjection, activeZoomRules.caps.maxEntities]);
+  }, [visibleObjectsAllRules, viewportLonLatBounds, activeZoomRules.caps.maxEntities]);
   const visibleCitiesInView = useMemo(() => {
     const cap = activeZoomRules.caps.maxCities;
-    if (!viewportProjectedBounds) return citiesForZoomRules.slice(0, cap);
+    if (!viewportLonLatBounds) return citiesForZoomRules.slice(0, cap);
+    const { minLon, maxLon, minLat, maxLat } = viewportLonLatBounds;
     const filtered = citiesForZoomRules.filter((c) => {
-      const p = routeProjection([Number(c.lon), Number(c.lat)]);
-      if (!p) return false;
-      const [x, y] = p;
-      return !(
-        x < viewportProjectedBounds.minX ||
-        x > viewportProjectedBounds.maxX ||
-        y < viewportProjectedBounds.minY ||
-        y > viewportProjectedBounds.maxY
-      );
+      const lon = Number(c.lon);
+      const lat = Number(c.lat);
+      if (!Number.isFinite(lon) || !Number.isFinite(lat)) return false;
+      return !(lon < minLon || lon > maxLon || lat < minLat || lat > maxLat);
     });
     return filtered.slice(0, cap);
-  }, [citiesForZoomRules, viewportProjectedBounds, routeProjection, activeZoomRules.caps.maxCities]);
+  }, [citiesForZoomRules, viewportLonLatBounds, activeZoomRules.caps.maxCities]);
 
   type RoutePathItem = {
     id: string;
@@ -2251,22 +2304,30 @@ export function WorldMapClient({
 
   const visibleRoutePaths = useMemo(() => {
     if (routePaths.length === 0) return routePaths;
-    const centerP = routeProjection(mapView.center);
-    if (!centerP) return routePaths;
-    const halfW = 400 / Math.max(0.1, mapView.zoom);
-    const halfH = 300 / Math.max(0.1, mapView.zoom);
-    const margin = renderZoomLevel === "monde" ? 120 : renderZoomLevel === "continent" ? 80 : 45;
-    const minX = centerP[0] - halfW - margin;
-    const maxX = centerP[0] + halfW + margin;
-    const minY = centerP[1] - halfH - margin;
-    const maxY = centerP[1] + halfH + margin;
-    const filtered = routePaths.filter(
-      (rp) => !(rp.maxX < minX || rp.minX > maxX || rp.maxY < minY || rp.minY > maxY)
+    const routePadPx = renderZoomLevel === "monde" ? 88 : renderZoomLevel === "continent" ? 64 : 40;
+    const vb = getDeckViewportLonLatBounds(
+      mapPixelSize.w,
+      mapPixelSize.h,
+      toDeckViewState(mapView.center, mapView.zoom),
+      routePadPx
     );
+    if (!vb) return routePaths;
+    const filtered = routePaths.filter((rp) => {
+      const bb = routePathLonLatBounds(rp.lonLatPath);
+      return lonLatBoundsIntersect(vb, bb);
+    });
     const capByLevel = renderZoomLevel === "monde" ? 240 : renderZoomLevel === "continent" ? 520 : 1200;
     const cap = Math.min(capByLevel, activeZoomRules.caps.maxRouteLabels > 0 ? activeZoomRules.caps.maxRouteLabels * 6 : capByLevel);
     return filtered.slice(0, cap);
-  }, [routePaths, routeProjection, mapView.center, mapView.zoom, renderZoomLevel, activeZoomRules.caps.maxRouteLabels]);
+  }, [
+    routePaths,
+    mapPixelSize.w,
+    mapPixelSize.h,
+    mapView.center,
+    mapView.zoom,
+    renderZoomLevel,
+    activeZoomRules.caps.maxRouteLabels,
+  ]);
 
   const visibleRouteLabelCount = useMemo(() => {
     if (isInteracting && (currentZoomLevel === "nation" || currentZoomLevel === "province")) {
@@ -2328,29 +2389,35 @@ export function WorldMapClient({
 
   const deckCitiesPrepared = useMemo(() => {
     if (!isWebglRenderer) return [];
-    return visibleCitiesInView.map((c) => ({
-      id: c.id,
-      lon: c.lon,
-      lat: c.lat,
-      name: c.name,
-      fill: [235, 192, 120, 255] as [number, number, number, number],
-      radiusPx: Math.max(4, Math.min(14, cityMarkerPx * 0.14)),
-    }));
-  }, [isWebglRenderer, visibleCitiesInView, cityMarkerPx]);
+    return visibleCitiesInView.map((c) => {
+      const { url, cacheId } = resolveCityDeckIconUrl(c.icon_key, c.id, realmCapitalCityIds, provinceCapitalCityIds);
+      return {
+        id: c.id,
+        lon: c.lon,
+        lat: c.lat,
+        name: c.name,
+        iconUrl: url,
+        iconCacheId: cacheId,
+        iconSizePx: Math.max(14, Math.min(48, cityMarkerPx * 0.72)),
+      };
+    });
+  }, [isWebglRenderer, visibleCitiesInView, cityMarkerPx, realmCapitalCityIds, provinceCapitalCityIds]);
 
   const deckPoisPrepared = useMemo(() => {
     if (!isWebglRenderer) return [];
-    return visibleObjectsInView.map((o) => ({
-      id: o.id,
-      lon: Number(o.lon),
-      lat: Number(o.lat),
-      fill:
-        o.icon_key === "fort"
-          ? ([120, 78, 42, 200] as [number, number, number, number])
-          : ([150, 96, 46, 185] as [number, number, number, number]),
-      radiusPx: 5,
-    }));
-  }, [isWebglRenderer, visibleObjectsInView]);
+    return visibleObjectsInView.map((o) => {
+      const { url, cacheId } = resolvePoiDeckIconUrl(o.icon_key);
+      const basePx = o.icon_key === "fort" ? 26 : 20;
+      return {
+        id: o.id,
+        lon: Number(o.lon),
+        lat: Number(o.lat),
+        iconUrl: url,
+        iconCacheId: cacheId,
+        iconSizePx: Math.max(12, Math.min(40, basePx * activeZoomRules.scale.entities)),
+      };
+    });
+  }, [isWebglRenderer, visibleObjectsInView, activeZoomRules.scale.entities]);
 
   const deckRealmLabelsPrepared = useMemo((): WorldMapDeckRealmLabel[] => {
     if (!isWebglRenderer) return [];
@@ -2393,8 +2460,8 @@ export function WorldMapClient({
       riversGeoJson: hydro?.rivers ?? null,
       lakesOpacity,
       riversOpacity,
-      showLakesLayer: Boolean(hydro?.lakes) && showHydro && Boolean(activeZoomRules.visibility.lakes),
-      showRiversLayer: Boolean(hydro?.rivers) && showRivers && Boolean(activeZoomRules.visibility.rivers),
+      showLakesLayer: Boolean(hydro?.lakes) && showHydro,
+      showRiversLayer: Boolean(hydro?.rivers) && showRivers,
       showRealmBorders: Boolean(activeZoomRules.visibility.regionBorders),
       borderLineColor: [72, 52, 30, 178],
       routes: deckRoutesPrepared,
@@ -2405,6 +2472,7 @@ export function WorldMapClient({
       showCityLabels: citiesOpacity > 0.001 && (displayConfig.cityLabelFontSizePx ?? 0) > 0,
       cityLabelFontSizePx: Math.max(8, Math.min(22, (displayConfig.cityLabelFontSizePx ?? 10) * 0.9)),
       routeLabelFontSizePx: Math.max(8, Math.min(26, (displayConfig.routeLabelFontSizePx ?? 0.25) * routeSizeFactor * 42)),
+      mapTextLayersEnabled: mapFontsReady,
     });
   }, [
     isWebglRenderer,
@@ -2417,9 +2485,6 @@ export function WorldMapClient({
     riversOpacity,
     showHydro,
     showRivers,
-    activeZoomRules.visibility.lakes,
-    activeZoomRules.visibility.rivers,
-    activeZoomRules.visibility.regionBorders,
     deckRoutesPrepared,
     routeRenderOpacity,
     deckCitiesPrepared,
@@ -2429,6 +2494,7 @@ export function WorldMapClient({
     displayConfig.cityLabelFontSizePx,
     displayConfig.routeLabelFontSizePx,
     routeSizeFactor,
+    mapFontsReady,
   ]);
 
   useEffect(() => {
@@ -2805,7 +2871,7 @@ export function WorldMapClient({
     (info: PickingInfo) => {
       const ev = ((info as any).srcEvent ?? (info as any).sourceEvent) as MouseEvent | undefined;
       const layerId = info.layer?.id;
-      if (layerId === "wm-cities" && info.object) {
+      if (layerId === "wm-city-icons" && info.object) {
         const o = info.object as { id?: string };
         if (o?.id) openCityPanel(ev, o.id);
         return true;

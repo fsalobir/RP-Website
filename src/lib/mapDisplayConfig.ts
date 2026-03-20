@@ -96,7 +96,7 @@ const ZOOM_LEVEL_RULE_DEFAULTS: ZoomLevelRules = {
       regionBorders: true,
       realmLabels: false,
     },
-    scale: { cities: 0.72, routes: 0.72, entities: 0.72 },
+    scale: { cities: 1, routes: 1, entities: 1 },
     caps: { maxRouteLabels: 130, maxCities: 900, maxEntities: 900 },
   },
   continent: {
@@ -110,7 +110,7 @@ const ZOOM_LEVEL_RULE_DEFAULTS: ZoomLevelRules = {
       regionBorders: true,
       realmLabels: true,
     },
-    scale: { cities: 0.42, routes: 0.42, entities: 0.45 },
+    scale: { cities: 1, routes: 1, entities: 1 },
     caps: { maxRouteLabels: 0, maxCities: 600, maxEntities: 320 },
   },
   monde: {
@@ -124,7 +124,7 @@ const ZOOM_LEVEL_RULE_DEFAULTS: ZoomLevelRules = {
       regionBorders: true,
       realmLabels: true,
     },
-    scale: { cities: 0.25, routes: 0.25, entities: 0.3 },
+    scale: { cities: 1, routes: 1, entities: 1 },
     caps: { maxRouteLabels: 0, maxCities: 280, maxEntities: 180 },
   },
 };
@@ -134,16 +134,18 @@ export const DEFAULT_MAP_DISPLAY_CONFIG: MapDisplayConfig = {
   cityLabelFontSizePx: 10,
   zoomRefWorld: 1.1,
   zoomRefProvince: 8,
-  sizeAtWorldPct: 10,
+  /** 100 = facteur de taille minimal 1 : pas de réduction progressive par le zoom (config « clean », perf). */
+  sizeAtWorldPct: 100,
   sizeCurveExp: 1,
-  fadeStartPct: 33,
-  fadeEndPct: 20,
+  /** 0 / 0 = pas de fade villes sur le zoom (opaque tout le temps par défaut). */
+  fadeStartPct: 0,
+  fadeEndPct: 0,
   routeStrokeLocalPx: 0.05,
   routeStrokeRegionalPx: 0.1,
   routeStrokeNationalPx: 0.15,
-  routeFadeStartPct: 33,
-  routeFadeEndPct: 20,
-  routeSizeAtWorldPct: 10,
+  routeFadeStartPct: 0,
+  routeFadeEndPct: 0,
+  routeSizeAtWorldPct: 100,
   routeSizeCurveExp: 1,
   routeLabelFontSizePx: 0.25,
   routeSinuosityLocalPct: 80,
@@ -243,7 +245,8 @@ export function sanitizeMapDisplayConfig(raw: unknown): MapDisplayConfig {
   };
 }
 
-export const MAP_DISPLAY_CONFIG_VERSION = 2;
+/** Bump quand les defaults « clean » changent (clients avec config persistée gardent la leur jusqu’à reset MJ). */
+export const MAP_DISPLAY_CONFIG_VERSION = 3;
 export const MAP_DISPLAY_CONFIG_KEY = "map_display_config";
 
 export function parseMapDisplayConfigSnapshot(raw: unknown): { config: MapDisplayConfig; version: number } {
