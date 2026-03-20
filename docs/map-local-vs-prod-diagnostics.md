@@ -2,14 +2,11 @@
 
 Ce n’est pas une question d’opinion sur le rendu : il y a **des causes vérifiables** qui expliquent un écart **local vs prod** avec **le même code**.
 
-## 0. Cas où la base est éliminée (même host + mêmes volumes)
+## 0. Cas où la base est éliminée (même host + mêmes données)
 
-Si `?mapdiag=1` montre :
+Si **la même** URL Supabase (`.env.local` / variables Vercel) et **les mêmes** volumes en base sont utilisés pour le test,
 
-- le **même** hôte Supabase, et  
-- les **mêmes** chiffres (provinces, routes, pts chemin, etc.),
-
-alors **ce n’est pas** « la prod a plus de données ». Il reste surtout :
+alors **ce n'est pas** « la prod a plus de données ». Il reste surtout :
 
 | Local (`npm run dev`) | En ligne (Vercel) |
 |----------------------|-------------------|
@@ -27,19 +24,21 @@ npm run prod:local
 
 (Sous PowerShell, évite `npm run build && npm run start` : `&&` n’est pas toujours accepté — ce script npm est équivalent.)
 
-Puis ouvre `http://localhost:3000` (ou le port affiché) avec **`?mapdiag=1`** et teste la carte.
+Puis ouvre la carte sur `http://localhost:3000` (ou le port affiché) et teste le ressenti.
 
 - **Si ça rame comme en ligne** → le problème est **reproductible sans Vercel** : c’est le **mode production** (bundle / React), pas « le cloud ».
 - **Si ça reste fluide** comme en `next dev` → alors on cherche ailleurs (cache navigateur, autre onglet, extension, réseau au chargement, etc.).
 
-## 1. Données Supabase différentes (cause fréquente quand mapdiag diffère)
+Pour comparer le **renderer** et le **rollout** effectivement pris au build : logs au moment du build (`[map.build] …` dans la console) et variables `NEXT_PUBLIC_MAP_*` côté Vercel **Settings → Environment Variables**.
+
+## 1. Données Supabase différentes (cause fréquente)
 
 Si le **host** ou les **volumes** diffèrent entre local et prod, le coût CPU côté navigateur change (même code).
 
 ### Vérification
 
-1. Même page + **`?mapdiag=1`** en local et en prod.
-2. Comparer **Supabase (host)** et **Volumes**.
+1. Comparer `NEXT_PUBLIC_SUPABASE_URL` (local vs Vercel).
+2. Comparer les volumes (provinces, routes, points de chemin) en base ou via l’UI / outils admin.
 
 ## 2. `next dev` n’est pas une prod
 
@@ -55,4 +54,4 @@ Une grande partie **géographique** (ex. `react-simple-maps` / SVG) peut rester 
 
 ---
 
-**En résumé** : si mapdiag est **identique** sauf `NODE_ENV`, la prochaine étape objective est **`npm run prod:local`** sur la même machine.
+**En résumé** : si Supabase et données sont alignés, la prochaine étape objective est **`npm run prod:local`** sur la même machine.

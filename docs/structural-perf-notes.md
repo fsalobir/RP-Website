@@ -9,7 +9,6 @@
 
 ## Piste « memo »
 
-- Le panneau [`MapDiagnosticPanel`](../src/components/map/MapDiagnosticPanel.tsx) est **mémoïsé** : les données affichées (env build + volumes) ne dépendent pas du pan/zoom, donc le panneau évite des re-renders inutiles pendant le drag lorsque `?mapdiag=1` est actif.
 - [`MapSvgGeographyLayers`](../src/components/map/MapSvgGeographyLayers.tsx) regroupe hydro + provinces + frontières en sous-arbre **memo** : limite les reconciliations quand seules d’autres branches de la carte changent.
 
 ## Suite possible (hors scope immédiat)

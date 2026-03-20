@@ -18,13 +18,13 @@ Tu n’es pas obligé d’utiliser la CLI. Tout se gère dans l’interface Verc
 
 Redéploie le projet (**Deployments** → **Redeploy** sur le dernier build, ou un push Git) pour que le **build** reprenne les bonnes `NEXT_PUBLIC_*`.
 
-## 4. Vérification sans compétence technique
+## 4. Vérification
 
-Sur le site déployé, ouvre la carte avec **`?mapdiag=1`** : les lignes **MAP_RENDERER** et **MAP_ROLLOUT** doivent correspondre à ce que tu veux (ex. rollout affiché = `all`).
+Après déploiement, les valeurs **`NEXT_PUBLIC_MAP_RENDERER`** et **`NEXT_PUBLIC_MAP_RENDERER_ROLLOUT`** sont figées **au build**. Vérifie qu’elles correspondent à ce que tu veux dans **Settings → Environment Variables**, puis que le dernier déploiement a bien été fait **après** ces changements.
 
 ## 5. Si la prod rame mais `npm run prod:local` non
 
-Compare **`?mapdiag=1`** sur `localhost` (après `npm run prod:local`) et sur l’URL Vercel : si les valeurs diffèrent, le build Vercel n’a pas les mêmes variables que ton build local. Corrige les variables puis redeploie.
+Compare les variables `NEXT_PUBLIC_MAP_*` entre ton **`.env.local`** (pour `prod:local`) et **Vercel** : si elles diffèrent, le bundle déployé n’est pas le même. Corrige puis redeploie.
 
 ---
 

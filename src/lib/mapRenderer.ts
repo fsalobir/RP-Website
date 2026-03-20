@@ -15,9 +15,7 @@ const MAP_ENV_DIAGNOSTIC_KEYS = [
   "NEXT_PUBLIC_MAP_MOBILE_HARD_MODE",
 ] as const;
 
-/**
- * Warnings for `?mapdiag=1`: Vercel may store an empty string for a key — that used to bypass `??` defaults.
- */
+/** Avertissements build : clés `NEXT_PUBLIC_*` vides côté hébergeur (chaîne vide au lieu d’absent). */
 export function getMapEnvBuildWarnings(): string[] {
   const warnings: string[] = [];
   for (const k of MAP_ENV_DIAGNOSTIC_KEYS) {
@@ -39,11 +37,7 @@ export function getRequestedMapRenderer(): MapRendererMode {
   return raw === "webgl" ? "webgl" : "svg";
 }
 
-/**
- * Valeur affichée / diagnostic (`?mapdiag`). Ne **gate plus** le renderer effectif :
- * tout le monde en WebGL quand le moteur demandé est `webgl` (voir `resolveEffectiveRenderer`).
- * Valeurs inconnues ou legacy `off` → `all`.
- */
+/** Étape de rollout (MJ seul, canary, tous). Valeurs inconnues → `all`. */
 export function getMapRendererRolloutStage(): MapRendererRolloutStage {
   const raw = readNextPublicEnvKey("NEXT_PUBLIC_MAP_RENDERER_ROLLOUT", "all").toLowerCase();
   if (raw === "mj-only" || raw === "public-canary" || raw === "all") return raw;

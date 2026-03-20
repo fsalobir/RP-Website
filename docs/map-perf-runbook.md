@@ -18,13 +18,13 @@ Les variables `NEXT_PUBLIC_MAP_ZERO_SVG_SPIKE` / `NEXT_PUBLIC_MAP_WEBGL_PROVINCE
 | `NEXT_PUBLIC_MAP_RENDERER_FORCE_SVG` | `1` = rollback urgent tout SVG. |
 | `NEXT_PUBLIC_MAP_ZERO_SVG_SPIKE` | Legacy (tests / métriques). |
 | `NEXT_PUBLIC_MAP_WEBGL_PROVINCES` | Legacy. |
-| `NEXT_PUBLIC_MAP_DEBUG_FRAME_GAP` | `1` : métrique d’écart de frames (build de test). |
+| `NEXT_PUBLIC_MAP_DEBUG_METRICS` | `1` (dev) : métriques console optionnelles (`mapObservability`). |
 | `NEXT_PUBLIC_MAP_MOBILE_HARD_MODE` | `1` (défaut via code) : caps agressifs mobile. |
-| `NEXT_PUBLIC_VERCEL_GIT_COMMIT_SHA` | Injecté au build (Vercel) — visible dans `?mapdiag=1` comme **BUILD_COMMIT**. |
+| `NEXT_PUBLIC_VERCEL_GIT_COMMIT_SHA` | Injecté au build (Vercel) — dispo côté client via `next.config` `env`. |
 
 ## Parité « même code »
 
-1. `?mapdiag=1` : comparer **BUILD_COMMIT**, **MAP_RENDERER**, **MAP_ROLLOUT**, **Volumes**, **Supabase**.
+1. Même commit + mêmes `NEXT_PUBLIC_MAP_*` (local vs Vercel) ; même projet Supabase si tu compares les données.
 2. Hard refresh / navigation privée si doute de cache.
 3. Comparer un hash de chunk `/_next/static/chunks/...` si besoin.
 
@@ -59,4 +59,3 @@ Les variables `NEXT_PUBLIC_MAP_ZERO_SVG_SPIKE` / `NEXT_PUBLIC_MAP_WEBGL_PROVINCE
 ## Scripts utiles
 
 - `npm run benchmark:map:interaction:quick` — bench interaction (machine locale).
-- `npm run prod:local:debug` — logs session carte si variables debug activées.

@@ -49,6 +49,7 @@ import {
   getRouteSimplificationEpsilonForZoomLevel,
   type MapZoomLevelId,
 } from "@/lib/mapZoomLevels";
+import { simplify as turfSimplify } from "@turf/turf";
 import { feature, mesh } from "topojson-client";
 import { createClient } from "@/lib/supabase/client";
 import { computeRealmLabelAnchors } from "@/lib/realmMapLabels";
@@ -59,7 +60,6 @@ import { resolveMapGpuBudgetProfile, getMapGpuBudget, trimMapCacheToBudget } fro
 import { useMapRendererSession } from "@/components/map/session/useMapRendererSession";
 import { useMapDataPipeline } from "@/components/map/data/useMapDataPipeline";
 import { MapEngine } from "@/components/map/engine/MapEngine";
-import { MapDiagnosticPanel } from "@/components/map/MapDiagnosticPanel";
 import { MapSvgGeographyLayers } from "@/components/map/MapSvgGeographyLayers";
 import { MapDeckViewport } from "@/components/map/MapDeckViewport";
 import {
@@ -73,9 +73,6 @@ import type { PickingInfo } from "@deck.gl/core";
 import { toDeckViewState } from "@/lib/mapDeckViewState";
 import { getDeckViewportLonLatBounds, lonLatBoundsIntersect, routePathLonLatBounds } from "@/lib/mapLonLatViewport";
 import type { Feature, FeatureCollection } from "geojson";
-import { postDebugMapSessionToServer, pushMapDebugSessionLog } from "@/lib/mapDebugSession";
-import { getMapEnvBuildWarnings } from "@/lib/mapRenderer";
-import { readNextPublicEnvKey } from "@/lib/nextPublicEnv";
 
 const ComposableMap = dynamic(() => import("react-simple-maps").then((m) => m.ComposableMap), { ssr: false });
 const Geographies = dynamic(() => import("react-simple-maps").then((m) => m.Geographies), { ssr: false });
@@ -83,7 +80,6 @@ const Geography = dynamic(() => import("react-simple-maps").then((m) => m.Geogra
 const ZoomableGroup = dynamic(() => import("react-simple-maps").then((m) => m.ZoomableGroup), { ssr: false });
 const Marker = dynamic(() => import("react-simple-maps").then((m) => (m as any).Marker), { ssr: false });
 const ROUTE_GEOMETRY_CACHE_MAX_ENTRIES = 900;
-const ENABLE_FRAME_GAP_METRIC = process.env.NEXT_PUBLIC_MAP_DEBUG_FRAME_GAP === "1";
 const ENABLE_ROUTE_GEOMETRY_WORKER = isMapRouteWorkerEnabled();
 const ENABLE_ROUTE_BATCH_SVG = isMapRouteBatchSvgEnabled();
 const ENABLE_QUALITY_GOVERNOR = isMapQualityGovernorEnabled();
@@ -593,20 +589,6 @@ export function WorldMapClient({
   const [mjConfigVersion, setMjConfigVersion] = useState<number>(initialMapDisplayVersion);
   // N'utiliser le portail pour les réglages qu'après montage client, pour éviter un mismatch d'hydratation.
   const [usePortalForSettings, setUsePortalForSettings] = useState(false);
-  const [mapDiag, setMapDiag] = useState(false);
-  const [mapDiagPageHost, setMapDiagPageHost] = useState("");
-  useEffect(() => {
-    try {
-      setMapDiag(new URLSearchParams(window.location.search).has("mapdiag"));
-    } catch {
-      setMapDiag(false);
-    }
-    try {
-      setMapDiagPageHost(typeof window !== "undefined" ? window.location.hostname : "");
-    } catch {
-      setMapDiagPageHost("");
-    }
-  }, []);
 
   const displayConfig = useMemo(
     () =>
@@ -626,44 +608,6 @@ export function WorldMapClient({
   const enableRealmColoring = useMemo(() => isRealmColoringEnabled(), []);
   const enableMapInfoPanelsV2 = useMemo(() => isMapInfoPanelsV2Enabled(), []);
   const { tileManifest } = useMapDataPipeline();
-
-  const mapEnvWarnings = useMemo(() => getMapEnvBuildWarnings(), []);
-
-  const mapDiagSnapshot = useMemo(() => {
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-    let supabaseHost = "(absent)";
-    if (supabaseUrl) {
-      try {
-        supabaseHost = new URL(supabaseUrl).host;
-      } catch {
-        supabaseHost = "(invalide)";
-      }
-    }
-    return {
-      nodeEnv: process.env.NODE_ENV,
-      supabaseHost,
-      mapRendererEnv: readNextPublicEnvKey("NEXT_PUBLIC_MAP_RENDERER", "webgl"),
-      mapRolloutEnv: readNextPublicEnvKey("NEXT_PUBLIC_MAP_RENDERER_ROLLOUT", "all"),
-      mapForceSvgEnv: readNextPublicEnvKey("NEXT_PUBLIC_MAP_RENDERER_FORCE_SVG", "") === "1" ? "1" : "(unset)",
-      vercelGitCommitSha: process.env.NEXT_PUBLIC_VERCEL_GIT_COMMIT_SHA ?? "",
-      vercelEnv: process.env.NEXT_PUBLIC_VERCEL_ENV ?? "",
-      dataCounts: {
-        provinces: provinces.length,
-        realms: realms.length,
-        cities: cities?.length ?? 0,
-        routes: routes?.length ?? 0,
-        routePathwayPoints: routePathwayPoints?.length ?? 0,
-        mapObjects: mapObjects?.length ?? 0,
-      },
-    };
-  }, [
-    provinces.length,
-    realms.length,
-    cities?.length,
-    routes?.length,
-    routePathwayPoints?.length,
-    mapObjects?.length,
-  ]);
 
   const saveMjSettings = useCallback(() => {
     try {
@@ -1549,6 +1493,24 @@ export function WorldMapClient({
     }
   }, [geographyData]);
 
+  /**
+   * Palier monde : presque toutes les provinces sont à l’écran → Deck triangule énormément de sommets.
+   * Simplification (tolérance en °, WGS84) une fois par bascule vers ce palier : gros gain CPU/GPU déployé.
+   */
+  const provincesGeoJsonForDeckRender = useMemo((): FeatureCollection | null => {
+    if (!provincesGeoJsonForDeck?.features?.length) return null;
+    if (currentZoomLevel !== "monde") return provincesGeoJsonForDeck;
+    const features: Feature[] = [];
+    for (const f of provincesGeoJsonForDeck.features) {
+      try {
+        features.push(turfSimplify(f as Feature, { tolerance: 0.28, highQuality: false }) as Feature);
+      } catch {
+        features.push(f as Feature);
+      }
+    }
+    return { type: "FeatureCollection", features };
+  }, [provincesGeoJsonForDeck, currentZoomLevel]);
+
   const deckProvinceGetFillColor = useCallback(
     (f: Feature): [number, number, number, number] => {
       const props = (f.properties ?? {}) as MapFeatureProps;
@@ -1944,6 +1906,10 @@ export function WorldMapClient({
         await new Promise<void>((resolve) => setTimeout(resolve, 0));
         if (signal.aborted) return;
         routeGeometryWorkerClientRef.current?.invalidateAll();
+        if (!activeZoomRules.visibility.routes) {
+          setRoutePaths([]);
+          return;
+        }
         const startedAt = performance.now();
         const list = routes ?? [];
         const result: RoutePathItem[] = [];
@@ -2257,6 +2223,7 @@ export function WorldMapClient({
     mjConfigVersion,
     qualityTick,
     gpuBudget.maxRouteGeometryCacheEntries,
+    activeZoomRules.visibility.routes,
   ]);
 
   const visibleRoutePaths = useMemo(() => {
@@ -2381,7 +2348,7 @@ export function WorldMapClient({
 
   const deckRealmLabelsPrepared = useMemo((): WorldMapDeckRealmLabel[] => {
     if (!isWebglRenderer) return [];
-    const max =
+    const maxBase =
       isInteracting && (currentZoomLevel === "nation" || currentZoomLevel === "province")
         ? isMobilePerf && mobileHardMode
           ? 0
@@ -2389,6 +2356,8 @@ export function WorldMapClient({
         : isInteractionLite || reduceHeavyEffects
           ? 12
           : realmLabelAnchors.length;
+    /** Monde : limiter les étiquettes Deck (TextLayer coûteux quand tout le globe est visible). */
+    const max = currentZoomLevel === "monde" ? Math.min(maxBase, 40) : maxBase;
     return realmLabelAnchors.slice(0, max).map((r) => ({
       realmId: r.realmId,
       name: r.name,
@@ -2412,7 +2381,7 @@ export function WorldMapClient({
   const deckLayers = useMemo(() => {
     if (!isWebglRenderer) return [];
     return buildWorldMapDeckLayers({
-      provinces: provincesGeoJsonForDeck,
+      provinces: provincesGeoJsonForDeckRender,
       getProvinceFillColor: deckProvinceGetFillColor,
       realmBoundaries: realmBoundaryGeoJson,
       lakesGeoJson: hydro?.lakes ?? null,
@@ -2434,7 +2403,7 @@ export function WorldMapClient({
     });
   }, [
     isWebglRenderer,
-    provincesGeoJsonForDeck,
+    provincesGeoJsonForDeckRender,
     deckProvinceGetFillColor,
     realmBoundaryGeoJson,
     hydro?.lakes,
@@ -2476,166 +2445,6 @@ export function WorldMapClient({
       zoomLevel: currentZoomLevel,
     });
   }, [visibleRoutePaths.length, visibleRouteLabelCount, visibleCitiesInView.length, visibleObjectsInView.length, mode, currentZoomLevel]);
-
-  // #region agent log (debug session 5b6b8a — prod vs local nation/province)
-  const agentZoomLogThrottleRef = useRef(0);
-  useEffect(() => {
-    if (currentZoomLevel !== "nation" && currentZoomLevel !== "province") return;
-    const now = performance.now();
-    if (now - agentZoomLogThrottleRef.current < 380) return;
-    agentZoomLogThrottleRef.current = now;
-    let host = "";
-    try {
-      host = typeof window !== "undefined" ? window.location.hostname : "";
-    } catch {
-      host = "";
-    }
-    const payload = {
-      sessionId: "5b6b8a",
-      runId: "zoom-nation-province",
-      hypothesisId: "H1-H5",
-      location: "WorldMapClient.tsx:agent-zoom-snapshot",
-      message: "nation_province_workload_snapshot",
-      timestamp: Date.now(),
-      data: {
-        host,
-        mode,
-        zoomTier: currentZoomLevel,
-        mapZoom: mapView.zoom,
-        H1_env: {
-          NODE_ENV: process.env.NODE_ENV,
-          NEXT_PUBLIC_MAP_RENDERER: process.env.NEXT_PUBLIC_MAP_RENDERER ?? null,
-          NEXT_PUBLIC_MAP_RENDERER_ROLLOUT: process.env.NEXT_PUBLIC_MAP_RENDERER_ROLLOUT ?? null,
-          NEXT_PUBLIC_MAP_ZERO_SVG_SPIKE: process.env.NEXT_PUBLIC_MAP_ZERO_SVG_SPIKE ?? null,
-        },
-        H2_quality: { qualityTier, mobileHardMode, isMobilePerf, isZeroSvgSpike: isZeroSvgSpike },
-        H2_renderer: { effective: rendererInfo.effective, reason: rendererInfo.reason, fallback: rendererInfo.fallback },
-        H3_caps: {
-          maxRouteLabels: activeZoomRules.caps.maxRouteLabels,
-          maxCities: activeZoomRules.caps.maxCities,
-          maxEntities: activeZoomRules.caps.maxEntities,
-          mjConfigVersion,
-        },
-        H4_ready: { topoReady, routeWarmupReady, isInteractionLite, isInteracting, isSettling },
-        H5_counts: {
-          routePathsTotal: routePaths.length,
-          visibleRoutePaths: visibleRoutePaths.length,
-          visibleRouteLabelCount,
-          visibleCities: visibleCitiesInView.length,
-          visibleObjects: visibleObjectsInView.length,
-        },
-      },
-    };
-    pushMapDebugSessionLog(payload as unknown as Record<string, unknown>);
-    postDebugMapSessionToServer(payload as unknown as Record<string, unknown>);
-  }, [
-    currentZoomLevel,
-    mapView.zoom,
-    mode,
-    qualityTier,
-    mobileHardMode,
-    isMobilePerf,
-    isZeroSvgSpike,
-    rendererInfo.effective,
-    rendererInfo.reason,
-    rendererInfo.fallback,
-    activeZoomRules.caps.maxRouteLabels,
-    activeZoomRules.caps.maxCities,
-    activeZoomRules.caps.maxEntities,
-    mjConfigVersion,
-    topoReady,
-    routeWarmupReady,
-    isInteractionLite,
-    isInteracting,
-    isSettling,
-    routePaths.length,
-    visibleRoutePaths.length,
-    visibleRouteLabelCount,
-    visibleCitiesInView.length,
-    visibleObjectsInView.length,
-  ]);
-
-  const agentInteractionLogThrottleRef = useRef(0);
-  useEffect(() => {
-    if (!isInteracting) return;
-    if (currentZoomLevel !== "nation" && currentZoomLevel !== "province") return;
-    let host = "";
-    try {
-      host = typeof window !== "undefined" ? window.location.hostname : "";
-    } catch {
-      host = "";
-    }
-    const send = () => {
-      const now = performance.now();
-      if (now - agentInteractionLogThrottleRef.current < 520) return;
-      agentInteractionLogThrottleRef.current = now;
-      const payload = {
-        sessionId: "5b6b8a",
-        runId: "zoom-nation-province-interaction",
-        hypothesisId: "H6",
-        location: "WorldMapClient.tsx:agent-interaction-snapshot",
-        message: "nation_province_while_dragging",
-        timestamp: Date.now(),
-        data: {
-          host,
-          phase: "interacting",
-          mode,
-          zoomTier: currentZoomLevel,
-          mapZoom: mapView.zoom,
-          H4_ready: { topoReady, routeWarmupReady, isInteractionLite, isInteracting, isSettling },
-          H5_counts: {
-            routePathsTotal: routePaths.length,
-            visibleRoutePaths: visibleRoutePaths.length,
-            visibleRouteLabelCount,
-            visibleCities: visibleCitiesInView.length,
-            visibleObjects: visibleObjectsInView.length,
-          },
-        },
-      };
-      pushMapDebugSessionLog(payload as unknown as Record<string, unknown>);
-      postDebugMapSessionToServer(payload as unknown as Record<string, unknown>);
-    };
-    send();
-    const iv = globalThis.setInterval(send, 550);
-    return () => globalThis.clearInterval(iv);
-  }, [
-    isInteracting,
-    currentZoomLevel,
-    mapView.zoom,
-    mode,
-    topoReady,
-    routeWarmupReady,
-    isInteractionLite,
-    isSettling,
-    routePaths.length,
-    visibleRoutePaths.length,
-    visibleRouteLabelCount,
-    visibleCitiesInView.length,
-    visibleObjectsInView.length,
-  ]);
-  // #endregion
-
-  useEffect(() => {
-    if (!ENABLE_FRAME_GAP_METRIC) return;
-    let active = true;
-    let previous = performance.now();
-    let raf = 0;
-    const tick = () => {
-      if (!active) return;
-      const now = performance.now();
-      const gap = now - previous;
-      previous = now;
-      if (gap > 20) {
-        emitMapMetric("map_interaction_frame_gap_ms", gap, { mode });
-      }
-      raf = requestAnimationFrame(tick);
-    };
-    raf = requestAnimationFrame(tick);
-    return () => {
-      active = false;
-      if (raf) cancelAnimationFrame(raf);
-    };
-  }, [mode]);
 
   const handleRouteClick = useCallback(
     (e: React.MouseEvent<SVGPathElement>, routeId: string) => {
@@ -4078,9 +3887,6 @@ export function WorldMapClient({
           <div className="pointer-events-none absolute left-3 top-[6.4rem] z-20 rounded-md border border-violet-500/30 bg-black/65 px-2 py-1 text-[11px] text-violet-100">
             Tuiles: <span className="font-mono">{tileManifest.entries.length}</span>
           </div>
-        )}
-        {mapDiag && (
-          <MapDiagnosticPanel snapshot={mapDiagSnapshot} pageHost={mapDiagPageHost} envWarnings={mapEnvWarnings} />
         )}
         <MapEngine enabled={isWebglRenderer} mode={mode} />
         {isWebglRenderer ? (

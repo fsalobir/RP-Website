@@ -13,7 +13,7 @@ if (process.env.VERCEL === "1" || process.env.CI === "true") {
 }
 
 const nextConfig: NextConfig = {
-  // Expose build metadata to the client bundle for ?mapdiag=1 (parity Vercel vs local).
+  // Métadonnées build (commit / env Vercel) disponibles côté client si besoin.
   env: {
     NEXT_PUBLIC_VERCEL_GIT_COMMIT_SHA:
       process.env.VERCEL_GIT_COMMIT_SHA ?? process.env.NEXT_PUBLIC_VERCEL_GIT_COMMIT_SHA ?? "",
