@@ -1,5 +1,11 @@
 # Variables `NEXT_PUBLIC_*` carte et Vercel
 
+## Défaut dans le code
+
+Le comportement **normal** (WebGL demandé + rollout `all`) est défini dans `src/lib/mapRenderer.ts` (`getRequestedMapRenderer`, `getMapRendererRolloutStage`). **Aucune variable Vercel n’est requise** pour ça : le bundle embarque ces défauts si les env sont absentes.
+
+Les variables `NEXT_PUBLIC_MAP_*` restent utiles pour **surcharger** au build (rollback, canary, expérimentation) sans changer le code.
+
 ## Règle critique
 
 Les variables `NEXT_PUBLIC_*` sont **injectées au moment du `next build`**, pas au runtime dans le navigateur. Le bundle client contient des **littéraux** (ex. `"webgl"` ou `"svg"`).

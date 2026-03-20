@@ -5,8 +5,8 @@ const projectRoot = path.resolve(process.cwd());
 
 // NEXT_PUBLIC_* are inlined at build time. Log what the bundle will embed (helps debug prod vs local).
 if (process.env.VERCEL === "1" || process.env.CI === "true") {
-  const r = process.env.NEXT_PUBLIC_MAP_RENDERER ?? "(unset → svg)";
-  const o = process.env.NEXT_PUBLIC_MAP_RENDERER_ROLLOUT ?? "(unset → off)";
+  const r = process.env.NEXT_PUBLIC_MAP_RENDERER ?? "(unset → webgl code default)";
+  const o = process.env.NEXT_PUBLIC_MAP_RENDERER_ROLLOUT ?? "(unset → all code default)";
   const z = process.env.NEXT_PUBLIC_MAP_ZERO_SVG_SPIKE ?? "(unset → 0)";
   const f = process.env.NEXT_PUBLIC_MAP_RENDERER_FORCE_SVG ?? "(unset → 0)";
   console.log(`[map.build] VERCEL_ENV=${process.env.VERCEL_ENV ?? "?"} NEXT_PUBLIC_MAP_RENDERER=${r} ROLLOUT=${o} ZERO_SVG_SPIKE=${z} FORCE_SVG=${f}`);

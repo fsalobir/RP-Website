@@ -2,13 +2,18 @@ export type MapRendererMode = "svg" | "webgl";
 export type MapRendererRolloutStage = "off" | "mj-only" | "public-canary" | "all";
 export type MapDisplayMode = "mj" | "public";
 
+/**
+ * Defaults are the normal product behaviour (WebGL everywhere). Env vars are optional overrides:
+ * e.g. emergency rollback without a code change (`NEXT_PUBLIC_MAP_RENDERER_FORCE_SVG=1`).
+ * `NEXT_PUBLIC_MAP_RENDERER` / `NEXT_PUBLIC_MAP_RENDERER_ROLLOUT` still override when set (build-time).
+ */
 export function getRequestedMapRenderer(): MapRendererMode {
-  const raw = (process.env.NEXT_PUBLIC_MAP_RENDERER ?? "svg").toLowerCase();
+  const raw = (process.env.NEXT_PUBLIC_MAP_RENDERER ?? "webgl").toLowerCase();
   return raw === "webgl" ? "webgl" : "svg";
 }
 
 export function getMapRendererRolloutStage(): MapRendererRolloutStage {
-  const raw = (process.env.NEXT_PUBLIC_MAP_RENDERER_ROLLOUT ?? "off").toLowerCase();
+  const raw = (process.env.NEXT_PUBLIC_MAP_RENDERER_ROLLOUT ?? "all").toLowerCase();
   if (raw === "mj-only" || raw === "public-canary" || raw === "all") return raw;
   return "off";
 }
