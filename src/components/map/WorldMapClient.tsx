@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { startTransition, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import dynamic from "next/dynamic";
 import Link from "next/link";
@@ -59,7 +59,22 @@ import { resolveMapGpuBudgetProfile, getMapGpuBudget, trimMapCacheToBudget } fro
 import { useMapRendererSession } from "@/components/map/session/useMapRendererSession";
 import { useMapDataPipeline } from "@/components/map/data/useMapDataPipeline";
 import { MapEngine } from "@/components/map/engine/MapEngine";
+import { MapDiagnosticPanel } from "@/components/map/MapDiagnosticPanel";
+import { MapSvgGeographyLayers } from "@/components/map/MapSvgGeographyLayers";
+import { MapDeckViewport } from "@/components/map/MapDeckViewport";
+import {
+  buildWorldMapDeckLayers,
+  routeCssStrokeToDeckColor,
+  type WorldMapDeckRealmLabel,
+  type WorldMapDeckRoute,
+} from "@/components/map/worldMapDeckLayers";
+import { WebMercatorViewport } from "@deck.gl/core";
+import type { PickingInfo } from "@deck.gl/core";
+import { toDeckViewState } from "@/lib/mapDeckViewState";
+import type { Feature, FeatureCollection } from "geojson";
 import { postDebugMapSessionToServer, pushMapDebugSessionLog } from "@/lib/mapDebugSession";
+import { getMapEnvBuildWarnings } from "@/lib/mapRenderer";
+import { readNextPublicEnvKey } from "@/lib/nextPublicEnv";
 
 const ComposableMap = dynamic(() => import("react-simple-maps").then((m) => m.ComposableMap), { ssr: false });
 const Geographies = dynamic(() => import("react-simple-maps").then((m) => m.Geographies), { ssr: false });
@@ -71,7 +86,8 @@ const ENABLE_FRAME_GAP_METRIC = process.env.NEXT_PUBLIC_MAP_DEBUG_FRAME_GAP === 
 const ENABLE_ROUTE_GEOMETRY_WORKER = isMapRouteWorkerEnabled();
 const ENABLE_ROUTE_BATCH_SVG = isMapRouteBatchSvgEnabled();
 const ENABLE_QUALITY_GOVERNOR = isMapQualityGovernorEnabled();
-const INTERACTION_FRAME_BUDGET_MS = 16;
+/** Throttle des commits pendant l’animation zoom inertielle (~30 fps) pour aligner le budget sur le pan. */
+const ZOOM_ANIM_COMMIT_MIN_MS = 33;
 const INTERACTION_SETTLE_MS = 140;
 /** Tolérance pour éviter les boucles controlled↔d3-zoom (flottants + échos onMove). */
 const MAP_VIEW_EPS_ZOOM = 1e-5;
@@ -327,6 +343,20 @@ export function WorldMapClient({
 }: WorldMapClientProps) {
   const router = useRouter();
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
+  const deckGlRef = useRef<any>(null);
+  const [mapPixelSize, setMapPixelSize] = useState({ w: 800, h: 600 });
+  useEffect(() => {
+    const el = mapContainerRef.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(() => {
+      const r = el.getBoundingClientRect();
+      setMapPixelSize({ w: Math.max(2, Math.floor(r.width)), h: Math.max(2, Math.floor(r.height)) });
+    });
+    ro.observe(el);
+    const r0 = el.getBoundingClientRect();
+    setMapPixelSize({ w: Math.max(2, Math.floor(r0.width)), h: Math.max(2, Math.floor(r0.height)) });
+    return () => ro.disconnect();
+  }, []);
   const [geographyData, setGeographyData] = useState<any | null>(null);
   const [hydroTopo, setHydroTopo] = useState<any | null>(null);
   const [topoReady, setTopoReady] = useState(false);
@@ -546,11 +576,16 @@ export function WorldMapClient({
   const { rendererInfo, qualityTier, mobileHardMode, adapter: rendererAdapter } = useMapRendererSession(mode);
   const isWebglRenderer = rendererAdapter.isWebgl;
   const isZeroSvgSpike = rendererAdapter.isZeroSvg;
+  const showSvgProvinces = rendererAdapter.shouldRenderSvgLayer("provinces");
+  const showSvgRealmBorders = rendererAdapter.shouldRenderSvgLayer("borders");
+  const shouldRenderSvgRivers = rendererAdapter.shouldRenderSvgLayer("rivers");
   const useRouteBatchSvg = ENABLE_ROUTE_BATCH_SVG && mode === "public" && !isWebglRenderer;
   const reduceHeavyEffects = useMemo(() => getQualityTierReducedEffects(qualityTier), [qualityTier]);
   const enableRealmColoring = useMemo(() => isRealmColoringEnabled(), []);
   const enableMapInfoPanelsV2 = useMemo(() => isMapInfoPanelsV2Enabled(), []);
   const { tileManifest } = useMapDataPipeline();
+
+  const mapEnvWarnings = useMemo(() => getMapEnvBuildWarnings(), []);
 
   const mapDiagSnapshot = useMemo(() => {
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -565,9 +600,11 @@ export function WorldMapClient({
     return {
       nodeEnv: process.env.NODE_ENV,
       supabaseHost,
-      mapRendererEnv: process.env.NEXT_PUBLIC_MAP_RENDERER ?? "(défaut code)",
-      mapRolloutEnv: process.env.NEXT_PUBLIC_MAP_RENDERER_ROLLOUT ?? "(défaut code)",
-      mapForceSvgEnv: process.env.NEXT_PUBLIC_MAP_RENDERER_FORCE_SVG ?? "(unset)",
+      mapRendererEnv: readNextPublicEnvKey("NEXT_PUBLIC_MAP_RENDERER", "webgl"),
+      mapRolloutEnv: readNextPublicEnvKey("NEXT_PUBLIC_MAP_RENDERER_ROLLOUT", "all"),
+      mapForceSvgEnv: readNextPublicEnvKey("NEXT_PUBLIC_MAP_RENDERER_FORCE_SVG", "") === "1" ? "1" : "(unset)",
+      vercelGitCommitSha: process.env.NEXT_PUBLIC_VERCEL_GIT_COMMIT_SHA ?? "",
+      vercelEnv: process.env.NEXT_PUBLIC_VERCEL_ENV ?? "",
       dataCounts: {
         provinces: provinces.length,
         realms: realms.length,
@@ -738,7 +775,22 @@ export function WorldMapClient({
   const settleTimerRef = useRef<ReturnType<typeof globalThis.setTimeout> | null>(null);
   const settleStartedAtRef = useRef<number>(0);
   const lastWheelTsRef = useRef<number>(0);
+  /** Sync avec isInteracting pour commitView (évite une fermeture périmée sur startTransition). */
+  const interactionActiveRef = useRef(false);
   const isInteractionLite = isInteracting || isSettling || !routeWarmupReady || (isMobilePerf && mobileHardMode);
+  /**
+   * Ne plus masquer provinces/frontières avec `visibility:hidden` pendant le drag : `renderZoomLevel`
+   * reste figé pendant `isInteracting`, donc le palier « affiché » ne suit pas le zoom réel — tout
+   * semblait disparaître (océan seul) au moindre pan/zoom. La perf reste portée par startTransition, etc.
+   */
+  const hideHeavyGeoWhileDragging = false;
+  /** Hydro un peu plus léger au drag aux paliers denses (zoom réel = currentZoomLevel, pas renderZoomLevel figé). */
+  const hydroNationProvinceDragLite = useMemo(() => {
+    if (!isInteracting) return false;
+    if (currentZoomLevel === "nation" || currentZoomLevel === "province") return true;
+    if (isMobilePerf && mobileHardMode && currentZoomLevel === "continent") return true;
+    return false;
+  }, [isInteracting, currentZoomLevel, isMobilePerf, mobileHardMode]);
   useEffect(() => {
     if (isInteracting || isSettling) return;
     setRenderZoomLevel(currentZoomLevel);
@@ -764,11 +816,13 @@ export function WorldMapClient({
       settleTimerRef.current = null;
     }
     setIsSettling(false);
+    interactionActiveRef.current = true;
     setIsInteracting(true);
     emitMapInteractionEvent({ type: "dragStart", entityKind: "map", entityId: "map-root", mode });
   }
 
   function endInteractionWithSettle() {
+    interactionActiveRef.current = false;
     setIsInteracting(false);
     setIsSettling(true);
     emitMapInteractionEvent({ type: "dragEnd", entityKind: "map", entityId: "map-root", mode });
@@ -785,9 +839,13 @@ export function WorldMapClient({
     }, INTERACTION_SETTLE_MS);
   }
 
-  function commitView(next: { center: [number, number]; zoom: number }) {
+  function commitView(next: { center: [number, number]; zoom: number }, opts?: { sync?: boolean }) {
     const cur = viewRef.current;
     if (mapViewNearlyEqual(next, cur)) return;
+
+    // Pan : un RAF agrège déjà les onMove ; on ne réduit pas davantage la fréquence de setMapView ici car ZoomableGroup
+    // est contrôlé (props center/zoom) — sauter des frames casserait la synchro d3↔React. startTransition réduit
+    // la priorité des commits pendant l’interaction ; le commit final est synchrone (onMoveEnd / fin zoom).
 
     // Toujours cloner le centre pour une référence stable si les nombres sont identiques.
     const normalized = {
@@ -796,14 +854,22 @@ export function WorldMapClient({
     };
     viewRef.current = normalized;
     suppressEchoMoveRef.current = true;
-    setMapView(normalized);
-    if (suppressEchoClearTimerRef.current != null) {
-      globalThis.clearTimeout(suppressEchoClearTimerRef.current);
+    const flush = () => {
+      setMapView(normalized);
+      if (suppressEchoClearTimerRef.current != null) {
+        globalThis.clearTimeout(suppressEchoClearTimerRef.current);
+      }
+      suppressEchoClearTimerRef.current = globalThis.setTimeout(() => {
+        suppressEchoClearTimerRef.current = null;
+        suppressEchoMoveRef.current = false;
+      }, 0);
+    };
+    const useTransition = interactionActiveRef.current && !opts?.sync;
+    if (useTransition) {
+      startTransition(flush);
+    } else {
+      flush();
     }
-    suppressEchoClearTimerRef.current = globalThis.setTimeout(() => {
-      suppressEchoClearTimerRef.current = null;
-      suppressEchoMoveRef.current = false;
-    }, 0);
   }
 
   function startZoomAnimation() {
@@ -838,7 +904,7 @@ export function WorldMapClient({
       const centerChanged =
         Math.abs(nextCenter[0] - center[0]) > MAP_VIEW_EPS_LONLAT ||
         Math.abs(nextCenter[1] - center[1]) > MAP_VIEW_EPS_LONLAT;
-      if ((zoomChanged || centerChanged) && now - animLastCommitRef.current >= INTERACTION_FRAME_BUDGET_MS) {
+      if ((zoomChanged || centerChanged) && now - animLastCommitRef.current >= ZOOM_ANIM_COMMIT_MIN_MS) {
         animLastCommitRef.current = now;
         commitView({ center: nextCenter, zoom: nextZoom });
       }
@@ -847,6 +913,7 @@ export function WorldMapClient({
       if (sinceWheel > 520 || Math.abs(target - nextZoom) < 1e-4) {
         zoomRafRef.current = null;
         wheelAnchorRef.current = null;
+        commitView({ center: nextCenter, zoom: nextZoom }, { sync: true });
         endInteractionWithSettle();
         return;
       }
@@ -960,9 +1027,11 @@ export function WorldMapClient({
 
 
   // Listener molette non-passif : plus fiable/smooth que l'event React sur un SVG.
+  // En WebGL, deck.gl MapController gère la molette (évite double zoom).
   useEffect(() => {
     const el = mapContainerRef.current;
     if (!el) return;
+    if (isWebglRenderer) return;
 
     const onWheel = (e: WheelEvent) => {
       // Capturer avant le SVG (d3-zoom) pour assurer l'inertie.
@@ -992,7 +1061,7 @@ export function WorldMapClient({
 
     el.addEventListener("wheel", onWheel, { passive: false, capture: true });
     return () => el.removeEventListener("wheel", onWheel as any, { capture: true } as any);
-  }, []);
+  }, [isWebglRenderer]);
 
   // Placement libre d'une ville : suit le curseur + clic gauche pour valider + Échap pour annuler.
   useEffect(() => {
@@ -1447,6 +1516,48 @@ export function WorldMapClient({
     }
   }, [geographyData, regionRealmIdByRegionId]);
 
+  /** Couche WebGL (deck.gl) quand spike + WebGL — évite le trou noir sans provinces SVG. */
+  const provincesGeoJsonForDeck = useMemo((): FeatureCollection | null => {
+    const topo = geographyData;
+    const admin1 = topo?.objects?.admin1;
+    if (!topo || !admin1) return null;
+    try {
+      const fc = feature(topo, admin1) as unknown as FeatureCollection;
+      if (!fc?.features) return null;
+      return {
+        type: "FeatureCollection",
+        features: fc.features.filter((f) => {
+          const p = (f.properties ?? {}) as MapFeatureProps;
+          return p.iso_a2 !== "AQ";
+        }),
+      };
+    } catch {
+      return null;
+    }
+  }, [geographyData]);
+
+  const deckProvinceGetFillColor = useCallback(
+    (f: Feature): [number, number, number, number] => {
+      const props = (f.properties ?? {}) as MapFeatureProps;
+      const regionId = getRegionIdFromProps(props as Record<string, unknown>);
+      if (!regionId) return [196, 161, 108, 46];
+      const assigned = provinceByRegionId.get(regionId) ?? null;
+      const realm = assigned ? realmById.get(assigned.realm_id) ?? null : null;
+      if (assigned && enableRealmColoring && realm?.color_hex && /^#[0-9a-fA-F]{6}$/.test(realm.color_hex)) {
+        const hex = realm.color_hex;
+        return [
+          parseInt(hex.slice(1, 3), 16),
+          parseInt(hex.slice(3, 5), 16),
+          parseInt(hex.slice(5, 7), 16),
+          56,
+        ];
+      }
+      if (assigned) return [34, 197, 94, 51];
+      return [196, 161, 108, 46];
+    },
+    [provinceByRegionId, realmById, enableRealmColoring]
+  );
+
   // IMPORTANT perf: rendre les géographies une seule fois (hors zoom), sinon chaque tick de zoom
   // remappe des centaines/milliers de paths.
   const renderedLakes = useMemo(() => {
@@ -1566,6 +1677,7 @@ export function WorldMapClient({
                       });
                     }}
                     onMouseMove={(e: React.MouseEvent<SVGPathElement>) => {
+                      if (isInteracting) return;
                       if (!regionId) return;
                       const realmName = assigned ? (realmById.get(assigned.realm_id)?.name ?? "") : "";
                       const content = assigned
@@ -1591,6 +1703,7 @@ export function WorldMapClient({
     realms,
     selectedRegionIds,
     enableRealmColoring,
+    isInteracting,
   ]);
   const renderedRealmBoundaries = useMemo(() => {
     if (!activeZoomRules.visibility.regionBorders) return null;
@@ -1762,6 +1875,9 @@ export function WorldMapClient({
     tier: string;
     d: string;
     polyline: Array<[number, number]>;
+    /** WGS84 path for DeckGL PathLayer. */
+    lonLatPath: Array<[number, number]>;
+    labelLonLat: [number, number];
     name: string;
     labelX: number;
     labelY: number;
@@ -1904,6 +2020,7 @@ export function WorldMapClient({
         renderZoomLevel,
         datasetRevision,
         serializeSeq(sequence),
+        "deckLonLat1",
       ].join("::");
       const prevKey = routeGeometryKeyByIdRef.current.get(r.id);
       if (prevKey === cacheKey) {
@@ -2053,9 +2170,14 @@ export function WorldMapClient({
         if (x > maxX) maxX = x;
         if (y > maxY) maxY = y;
       }
+      const lonLatPath = points.map(([lon, lat]) => [lon, lat] as [number, number]);
+      const midIdx = Math.max(0, Math.floor(lonLatPath.length / 2));
+      const labelLonLat: [number, number] = [lonLatPath[midIdx][0], lonLatPath[midIdx][1]];
       const geom: Omit<RoutePathItem, "id" | "tier"> = {
         d,
         polyline: projected,
+        lonLatPath,
+        labelLonLat,
         name: routeName,
         labelX,
         labelY,
@@ -2147,6 +2269,9 @@ export function WorldMapClient({
   }, [routePaths, routeProjection, mapView.center, mapView.zoom, renderZoomLevel, activeZoomRules.caps.maxRouteLabels]);
 
   const visibleRouteLabelCount = useMemo(() => {
+    if (isInteracting && (currentZoomLevel === "nation" || currentZoomLevel === "province")) {
+      return 0;
+    }
     const gf = ENABLE_QUALITY_GOVERNOR ? qualityGovernorRef.current.getState().labelFactor : 1;
     const cap = computeRouteLabelCap({
       renderZoomLevel,
@@ -2163,6 +2288,8 @@ export function WorldMapClient({
     isInteractionLite,
     isMobilePerf,
     qualityTick,
+    isInteracting,
+    currentZoomLevel,
   ]);
 
   const routeLabelAllowSet = useMemo(() => {
@@ -2171,6 +2298,138 @@ export function WorldMapClient({
     const ids = pickRouteLabelOrder(visibleRoutePaths, centerP, cap);
     return new Set(ids);
   }, [visibleRoutePaths, visibleRouteLabelCount, mapView.center, routeProjection]);
+
+  const deckRoutesPrepared = useMemo((): WorldMapDeckRoute[] => {
+    if (!isWebglRenderer) return [];
+    return visibleRoutePaths.map((rp) => {
+      const style = routeTierStyle[(rp.tier as RouteTier) ?? "local"] ?? routeTierStyle.local;
+      const widthPx = Math.max(1, style.strokeWidth * routeSizeFactor * 14);
+      const color = routeCssStrokeToDeckColor(style.stroke, routeRenderOpacity);
+      return {
+        id: rp.id,
+        name: rp.name,
+        lonLatPath: rp.lonLatPath,
+        labelLonLat: rp.labelLonLat,
+        labelAngleDeg: rp.labelAngleDeg,
+        widthPx,
+        color,
+        showLabel: routeLabelAllowSet.has(rp.id) && (displayConfig.routeLabelFontSizePx ?? 0) > 0,
+      };
+    });
+  }, [
+    isWebglRenderer,
+    visibleRoutePaths,
+    routeTierStyle,
+    routeSizeFactor,
+    routeRenderOpacity,
+    routeLabelAllowSet,
+    displayConfig.routeLabelFontSizePx,
+  ]);
+
+  const deckCitiesPrepared = useMemo(() => {
+    if (!isWebglRenderer) return [];
+    return visibleCitiesInView.map((c) => ({
+      id: c.id,
+      lon: c.lon,
+      lat: c.lat,
+      name: c.name,
+      fill: [235, 192, 120, 255] as [number, number, number, number],
+      radiusPx: Math.max(4, Math.min(14, cityMarkerPx * 0.14)),
+    }));
+  }, [isWebglRenderer, visibleCitiesInView, cityMarkerPx]);
+
+  const deckPoisPrepared = useMemo(() => {
+    if (!isWebglRenderer) return [];
+    return visibleObjectsInView.map((o) => ({
+      id: o.id,
+      lon: Number(o.lon),
+      lat: Number(o.lat),
+      fill:
+        o.icon_key === "fort"
+          ? ([120, 78, 42, 200] as [number, number, number, number])
+          : ([150, 96, 46, 185] as [number, number, number, number]),
+      radiusPx: 5,
+    }));
+  }, [isWebglRenderer, visibleObjectsInView]);
+
+  const deckRealmLabelsPrepared = useMemo((): WorldMapDeckRealmLabel[] => {
+    if (!isWebglRenderer) return [];
+    const max =
+      isInteracting && (currentZoomLevel === "nation" || currentZoomLevel === "province")
+        ? isMobilePerf && mobileHardMode
+          ? 0
+          : 4
+        : isInteractionLite || reduceHeavyEffects
+          ? 12
+          : realmLabelAnchors.length;
+    return realmLabelAnchors.slice(0, max).map((r) => ({
+      realmId: r.realmId,
+      name: r.name,
+      lon: r.lon,
+      lat: r.lat,
+      angleDeg: r.angleDeg,
+      fontSizePx: renderZoomLevel === "monde" ? 13 : 16,
+      color: isInteractionLite || reduceHeavyEffects ? [236, 225, 188, 173] : [236, 225, 188, 235],
+    }));
+  }, [
+    isWebglRenderer,
+    realmLabelAnchors,
+    isInteracting,
+    currentZoomLevel,
+    isMobilePerf,
+    mobileHardMode,
+    isInteractionLite,
+    reduceHeavyEffects,
+    renderZoomLevel,
+  ]);
+
+  const deckLayers = useMemo(() => {
+    if (!isWebglRenderer) return [];
+    return buildWorldMapDeckLayers({
+      provinces: provincesGeoJsonForDeck,
+      getProvinceFillColor: deckProvinceGetFillColor,
+      realmBoundaries: realmBoundaryGeoJson,
+      lakesGeoJson: hydro?.lakes ?? null,
+      riversGeoJson: hydro?.rivers ?? null,
+      lakesOpacity,
+      riversOpacity,
+      showLakesLayer: Boolean(hydro?.lakes) && showHydro && Boolean(activeZoomRules.visibility.lakes),
+      showRiversLayer: Boolean(hydro?.rivers) && showRivers && Boolean(activeZoomRules.visibility.rivers),
+      showRealmBorders: Boolean(activeZoomRules.visibility.regionBorders),
+      borderLineColor: [72, 52, 30, 178],
+      routes: deckRoutesPrepared,
+      routeGroupOpacity: routeRenderOpacity,
+      cities: deckCitiesPrepared,
+      pois: deckPoisPrepared,
+      realmLabels: deckRealmLabelsPrepared,
+      showCityLabels: citiesOpacity > 0.001 && (displayConfig.cityLabelFontSizePx ?? 0) > 0,
+      cityLabelFontSizePx: Math.max(8, Math.min(22, (displayConfig.cityLabelFontSizePx ?? 10) * 0.9)),
+      routeLabelFontSizePx: Math.max(8, Math.min(26, (displayConfig.routeLabelFontSizePx ?? 0.25) * routeSizeFactor * 42)),
+    });
+  }, [
+    isWebglRenderer,
+    provincesGeoJsonForDeck,
+    deckProvinceGetFillColor,
+    realmBoundaryGeoJson,
+    hydro?.lakes,
+    hydro?.rivers,
+    lakesOpacity,
+    riversOpacity,
+    showHydro,
+    showRivers,
+    activeZoomRules.visibility.lakes,
+    activeZoomRules.visibility.rivers,
+    activeZoomRules.visibility.regionBorders,
+    deckRoutesPrepared,
+    routeRenderOpacity,
+    deckCitiesPrepared,
+    deckPoisPrepared,
+    deckRealmLabelsPrepared,
+    citiesOpacity,
+    displayConfig.cityLabelFontSizePx,
+    displayConfig.routeLabelFontSizePx,
+    routeSizeFactor,
+  ]);
 
   useEffect(() => {
     emitMapMetric("map_routes_visible_count", visibleRoutePaths.length, {
@@ -2434,6 +2693,25 @@ export function WorldMapClient({
   function previewLonLatFromPointer(clientX: number, clientY: number): { lon: number; lat: number } | null {
     const el = mapContainerRef.current;
     if (!el) return null;
+    if (isWebglRenderer && mapPixelSize.w >= 2 && mapPixelSize.h >= 2) {
+      const vs = toDeckViewState(viewRef.current.center, viewRef.current.zoom);
+      const vp = new WebMercatorViewport({
+        width: mapPixelSize.w,
+        height: mapPixelSize.h,
+        longitude: vs.longitude,
+        latitude: vs.latitude,
+        zoom: vs.zoom,
+        pitch: vs.pitch,
+        bearing: vs.bearing,
+      });
+      const rect = el.getBoundingClientRect();
+      const x = clientX - rect.left;
+      const y = clientY - rect.top;
+      const r = vp.unproject([x, y]);
+      if (r != null && Number.isFinite(r[0]) && Number.isFinite(r[1])) {
+        return { lon: r[0], lat: r[1] };
+      }
+    }
     const svgEl = el.querySelector("svg") as SVGSVGElement | null;
     if (!svgEl) return null;
 
@@ -2502,6 +2780,119 @@ export function WorldMapClient({
       setCityPanel({ open: true, cityId });
     },
     [mode, cityById, realmById],
+  );
+
+  const getDeckTooltip = useCallback(
+    (info: PickingInfo) => {
+      if (isInteracting) return null;
+      if (!info.object || info.layer?.id !== "wm-provinces") return null;
+      const f = info.object as Feature;
+      const props = (f.properties ?? {}) as MapFeatureProps;
+      const regionId = getRegionIdFromProps(props as Record<string, unknown>);
+      if (!regionId) return null;
+      const assigned = provinceByRegionId.get(regionId) ?? null;
+      const realmName = assigned ? (realmById.get(assigned.realm_id)?.name ?? "") : "";
+      const label = safeRegionLabel(props) || regionId;
+      const text = assigned
+        ? `${assigned.name}${realmName ? ` - ${realmName}` : ""}`
+        : `${label}\nAucune province assignée`;
+      return { text };
+    },
+    [isInteracting, provinceByRegionId, realmById]
+  );
+
+  const handleDeckClick = useCallback(
+    (info: PickingInfo) => {
+      const ev = ((info as any).srcEvent ?? (info as any).sourceEvent) as MouseEvent | undefined;
+      const layerId = info.layer?.id;
+      if (layerId === "wm-cities" && info.object) {
+        const o = info.object as { id?: string };
+        if (o?.id) openCityPanel(ev, o.id);
+        return true;
+      }
+      if (layerId === "wm-routes" && info.object) {
+        const o = info.object as WorldMapDeckRoute;
+        if (mode === "mj") {
+          if (!selectingEndpoint) setSelectedRouteId(o.id);
+          return true;
+        }
+        const route = (routes ?? []).find((r) => r.id === o.id);
+        setPublicInfoPanel({
+          kind: "route",
+          title: route?.name?.trim() || o.name,
+          lines: [
+            `Type: ${ROUTE_TIER_LABELS[(route?.tier as RouteTier) ?? "local"] ?? route?.tier ?? "Route"}`,
+            route?.distance_km ? `Distance: ${Math.round(route.distance_km)} km` : "Distance: inconnue",
+          ],
+        });
+        return true;
+      }
+      if (layerId === "wm-provinces" && info.object) {
+        const f = info.object as Feature;
+        const props = (f.properties ?? {}) as MapFeatureProps;
+        const regionId = getRegionIdFromProps(props as Record<string, unknown>);
+        if (!regionId) return true;
+        if (mode === "mj" && ev?.shiftKey) {
+          setSelectedRegionIds((prev) => {
+            const has = prev.includes(regionId);
+            if (has) return prev.filter((x) => x !== regionId);
+            return [...prev, regionId];
+          });
+          return true;
+        }
+        setSelectedRegionIds((prev) => (prev.length === 1 && prev[0] === regionId ? [] : [regionId]));
+        return true;
+      }
+      return false;
+    },
+    [mode, openCityPanel, routes, selectingEndpoint]
+  );
+
+  const handleDeckContextMenu = useCallback(
+    (e: React.MouseEvent) => {
+      if (!isWebglRenderer || mode !== "mj") return;
+      const deck = deckGlRef.current?.deck;
+      if (!deck) return;
+      e.preventDefault();
+      e.stopPropagation();
+      const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const y = e.clientY - rect.top;
+      const info = deck.pickObject({ x, y, radius: 12, layerIds: ["wm-provinces"] });
+      if (!info?.object) return;
+      const f = info.object as Feature;
+      const props = (f.properties ?? {}) as MapFeatureProps;
+      const regionId = getRegionIdFromProps(props as Record<string, unknown>);
+      if (!regionId) return;
+      const label = safeRegionLabel(props) || regionId;
+      setContextMenuView("choice");
+      const defaultRealmId = realms[0]?.id ?? "";
+      const [clon, clat] = geoCentroid(f as any) as [number, number];
+      const assignedProvince = provinceByRegionId.get(regionId) ?? null;
+      const suggestedName = assignedProvince?.name ?? label.split(" — ")[0] ?? regionId;
+      const attrsText = JSON.stringify(assignedProvince?.attrs ?? {}, null, 2);
+      const provinceIdForCities = assignedProvince?.id ?? null;
+      const allCities = cities ?? [];
+      const matchCity = provinceIdForCities ? allCities.find((cc) => cc.province_id === provinceIdForCities) : null;
+      const deletableCityId = matchCity?.id ?? null;
+      setContextMenu({
+        x: e.clientX,
+        y: e.clientY,
+        regionId,
+        label,
+        realmId: defaultRealmId,
+        provinceName: suggestedName,
+        attrsText,
+        centroidLon: clon,
+        centroidLat: clat,
+        objectKind: "city",
+        objectName: suggestedName,
+        isSubmitting: false,
+        error: null,
+        deletableCityId,
+      });
+    },
+    [isWebglRenderer, mode, realms, provinceByRegionId, cities]
   );
 
   // `react-simple-maps` n'expose pas tous les handlers DOM (ex: onContextMenu) dans ses types.
@@ -3717,59 +4108,32 @@ export function WorldMapClient({
           </div>
         )}
         {mapDiag && (
-          <div className="pointer-events-auto absolute bottom-3 right-3 z-[30] max-h-[min(50vh,calc(100%-1.5rem))] max-w-[min(440px,calc(100%-1.5rem))] overflow-auto rounded-md border border-rose-500/40 bg-black/85 px-3 py-2 text-left text-[10px] leading-snug text-rose-100 shadow-lg">
-            <div className="mb-1 font-semibold text-rose-200">Diagnostic carte (?mapdiag=1)</div>
-            <div className="space-y-0.5 font-mono text-[10px] text-stone-200">
-              <div>
-                <span className="text-stone-400">NODE_ENV</span> {mapDiagSnapshot.nodeEnv}
-              </div>
-              <div>
-                <span className="text-stone-400">Supabase (host)</span> {mapDiagSnapshot.supabaseHost}
-              </div>
-              <div>
-                <span className="text-stone-400">MAP_RENDERER</span> {mapDiagSnapshot.mapRendererEnv}
-              </div>
-              <div>
-                <span className="text-stone-400">MAP_ROLLOUT</span> {mapDiagSnapshot.mapRolloutEnv}
-              </div>
-              <div>
-                <span className="text-stone-400">FORCE_SVG</span> {mapDiagSnapshot.mapForceSvgEnv}
-              </div>
-              <div className="pt-1 text-amber-100">
-                <span className="text-stone-400">Volumes</span> prov. {mapDiagSnapshot.dataCounts.provinces} · rlm.{" "}
-                {mapDiagSnapshot.dataCounts.realms} · villes {mapDiagSnapshot.dataCounts.cities} · routes{" "}
-                {mapDiagSnapshot.dataCounts.routes} · pts chemin {mapDiagSnapshot.dataCounts.routePathwayPoints} · objets{" "}
-                {mapDiagSnapshot.dataCounts.mapObjects}
-              </div>
-              {mapDiagPageHost ? (
-                <div>
-                  <span className="text-stone-400">Page (hôte)</span> {mapDiagPageHost}
-                </div>
-              ) : null}
-              <p className="mt-2 border-t border-rose-500/30 pt-2 text-[9px] leading-snug text-stone-400">
-                Si <span className="text-stone-300">Supabase</span> et <span className="text-stone-300">Volumes</span>{" "}
-                sont identiques local / prod, ce n’est pas la base : la différence vient surtout de{" "}
-                <span className="text-amber-200/90">NODE_ENV</span> (tu exécutes un bundle{" "}
-                <span className="text-amber-200/90">dev</span> en local et un bundle{" "}
-                <span className="text-amber-200/90">production</span> en ligne). Test décisif sur cette machine :{" "}
-                <code className="rounded bg-black/50 px-1 text-[8px] text-cyan-200">{`npm run prod:local`}</code>{" "}
-                — si la carte rame comme en prod, le problème est reproductible sans Vercel ; si elle reste fluide, on
-                cherche ailleurs (réseau, onglet, extension).
-              </p>
-              <p className="mt-2 border-t border-rose-500/30 pt-2 text-[9px] leading-snug text-stone-400">
-                <span className="text-cyan-200/90">Prod (Vercel) vs local fluide</span> : les snapshots debug sont aussi
-                stockés dans <code className="rounded bg-black/40 px-0.5 text-[8px]">window.__MAP_DEBUG_LOGS__</code>{" "}
-                (même code déployé). En Nation/Province + quelques drags, ouvre la console (F12) puis exécute :{" "}
-                <code className="rounded bg-black/40 px-0.5 text-[8px]">
-                  copy(JSON.stringify(window.__MAP_DEBUG_LOGS__, null, 2))
-                </code>{" "}
-                et colle le résultat dans un fichier texte pour comparaison avec le local.
-              </p>
-            </div>
-          </div>
+          <MapDiagnosticPanel snapshot={mapDiagSnapshot} pageHost={mapDiagPageHost} envWarnings={mapEnvWarnings} />
         )}
         <MapEngine enabled={isWebglRenderer} mode={mode} />
-        <ComposableMap
+        {isWebglRenderer ? (
+          <div
+            className="absolute inset-0"
+            style={{
+              background: isInteractionLite || reduceHeavyEffects ? "#86b8d1" : "#7fb4cf",
+            }}
+            onContextMenu={handleDeckContextMenu}
+          >
+            <MapDeckViewport
+              ref={deckGlRef}
+              width={mapPixelSize.w}
+              height={mapPixelSize.h}
+              mapView={mapView}
+              layers={deckLayers}
+              onMapViewChange={commitView}
+              onInteractionStart={beginInteraction}
+              onInteractionEnd={endInteractionWithSettle}
+              onDeckClick={handleDeckClick}
+              getTooltip={getDeckTooltip}
+            />
+          </div>
+        ) : (
+          <ComposableMap
           projection="geoMercator"
           projectionConfig={{ scale: 170 }}
           style={{ width: "100%", height: "100%" }}
@@ -3814,7 +4178,7 @@ export function WorldMapClient({
                 moveRafRef.current = null;
               }
               pendingMoveRef.current = null;
-              commitView({ center: c, zoom: z });
+              commitView({ center: c, zoom: z }, { sync: true });
               endInteractionWithSettle();
             }}
           >
@@ -3827,46 +4191,28 @@ export function WorldMapClient({
               fill={isInteractionLite || reduceHeavyEffects ? "#86b8d1" : "#7fb4cf"}
             />
             <g>
-              {/* Hydro (décor) */}
-              {hydro?.lakes && !isZeroSvgSpike && (
-                <g
-                  style={{
-                    pointerEvents: "none",
-                    // Lacs : alignés sur les rivières (fade + lock à fort zoom).
-                    opacity:
-                      lakesLocked
-                        ? 1
-                        : isInteractionLite || isMobilePerf || reduceHeavyEffects
-                          ? Math.max(0.14, lakesOpacity * 0.25)
-                          : lakesOpacity,
-                    transition: lakesLocked || prefersReducedMotion ? "none" : "opacity 200ms ease-out",
-                  }}
-                >
-                  {(lakesLocked || showHydro) && renderedLakes}
-                </g>
-              )}
-
-              {/* Rivières : sous les provinces et marqueurs pour ne pas passer au travers des icônes */}
-              {hydro?.rivers && !isZeroSvgSpike && (
-                <g
-                  style={{
-                    opacity:
-                      riversLocked
-                        ? 1
-                        : isInteractionLite || isMobilePerf || reduceHeavyEffects
-                          ? Math.max(0.16, riversOpacity * 0.3)
-                          : riversOpacity,
-                    transition: riversLocked || prefersReducedMotion ? "none" : "opacity 200ms ease-out",
-                    pointerEvents: "none",
-                  }}
-                >
-                  {(riversLocked || showRivers) && renderedRivers}
-                </g>
-              )}
-
-              {/* Provinces (régions) : DOIVENT être sous les marqueurs */}
-              {renderedRegions}
-              <g opacity={isInteractionLite || reduceHeavyEffects ? 0.38 : 1}>{renderedRealmBoundaries}</g>
+              <MapSvgGeographyLayers
+                hydro={hydro}
+                shouldRenderSvgRivers={shouldRenderSvgRivers}
+                hydroNationProvinceDragLite={hydroNationProvinceDragLite}
+                lakesLocked={lakesLocked}
+                riversLocked={riversLocked}
+                showHydro={showHydro}
+                showRivers={showRivers}
+                lakesOpacity={lakesOpacity}
+                riversOpacity={riversOpacity}
+                isInteractionLite={isInteractionLite}
+                isMobilePerf={isMobilePerf}
+                reduceHeavyEffects={reduceHeavyEffects}
+                prefersReducedMotion={prefersReducedMotion}
+                hideHeavyGeoWhileDragging={hideHeavyGeoWhileDragging}
+                showSvgProvinces={showSvgProvinces}
+                showSvgRealmBorders={showSvgRealmBorders}
+                renderedLakes={renderedLakes}
+                renderedRivers={renderedRivers}
+                renderedRegions={renderedRegions}
+                renderedRealmBoundaries={renderedRealmBoundaries}
+              />
 
               {/* Routes (tracés sinueux entre villes) — config dédiée (opacité, taille, progressivité) */}
               {!isWebglRenderer && activeZoomRules.visibility.routes && visibleRoutePaths.length > 0 && !isZeroSvgSpike && (
@@ -4333,7 +4679,18 @@ export function WorldMapClient({
                   </MarkerAny>
                 ))}
               {!isZeroSvgSpike &&
-                realmLabelAnchors.slice(0, isInteractionLite || reduceHeavyEffects ? 12 : realmLabelAnchors.length).map((r) => (
+                realmLabelAnchors
+                  .slice(
+                    0,
+                    isInteracting && (currentZoomLevel === "nation" || currentZoomLevel === "province")
+                      ? isMobilePerf && mobileHardMode
+                        ? 0
+                        : 4
+                      : isInteractionLite || reduceHeavyEffects
+                        ? 12
+                        : realmLabelAnchors.length
+                  )
+                  .map((r) => (
                 <MarkerAny key={`realm-label-${r.realmId}`} coordinates={[r.lon, r.lat]}>
                   <text
                     className="map-label-font"
@@ -4400,6 +4757,7 @@ export function WorldMapClient({
               )}
           </ZoomableGroup>
         </ComposableMap>
+        )}
       </div>
 
       {/* Panneau d'information public (toujours visible à l'écran) */}

@@ -5,12 +5,12 @@
 Voir aussi `docs/map-webgl-migration.md` et `docs/map-webgl-rollout-checklist.md`.
 
 - `NEXT_PUBLIC_MAP_RENDERER=svg|webgl` — moteur demandé (sans rollout actif → SVG).
-- `NEXT_PUBLIC_MAP_RENDERER_ROLLOUT=off|mj-only|public-canary|all`
+- `NEXT_PUBLIC_MAP_RENDERER_ROLLOUT=…` — **affichage / diagnostic** ; le renderer effectif est **WebGL pour tout le monde** si `MAP_RENDERER=webgl` (voir `resolveEffectiveRenderer` dans `mapRenderer.ts`).
 - `NEXT_PUBLIC_MAP_RENDERER_CANARY_PCT=0..100` — part du public en canary.
 - `NEXT_PUBLIC_MAP_RENDERER_FORCE_SVG=1` — rollback immédiat tout SVG.
 - `NEXT_PUBLIC_MAP_QUALITY_TIER=perf|balanced|rich` — palier visuel/perf global (defaut: `perf`).
 - `NEXT_PUBLIC_MAP_MOBILE_HARD_MODE=1|0` — mode mobile dur (defaut: `1`) pour baisser agressivement la charge.
-- `NEXT_PUBLIC_MAP_ZERO_SVG_SPIKE=1|0` — coupe temporairement couches SVG secondaires en mode WebGL pour valider la trajectoire zero-SVG.
+- `NEXT_PUBLIC_MAP_ZERO_SVG_SPIKE=1|0` — **défaut : désactivé.** `1` = activé (test perf / build preview) ; nécessite `WEBGL_PROVINCES` aligné sinon provinces SVG coupées.
 
 Variables listées dans `.env.example`.
 

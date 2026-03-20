@@ -1,36 +1,28 @@
 import { describe, expect, it } from "vitest";
 import { getEffectiveMapRenderer, isCanaryUser, resolveEffectiveRenderer } from "@/lib/mapRenderer";
 
-describe("mapRenderer rollout", () => {
-  it("garde SVG quand le rollout est off", () => {
+describe("mapRenderer — WebGL par défaut pour tous", () => {
+  it("WebGL demandé + rollout off (opts) → WebGL quand même", () => {
     const res = resolveEffectiveRenderer("mj", {
       requested: "webgl",
       stage: "off",
       forceSvg: false,
     });
-    expect(res.effective).toBe("svg");
-    expect(res.reason).toBe("rollout-off");
-  });
-
-  it("active WebGL pour MJ en mj-only", () => {
-    const res = resolveEffectiveRenderer("mj", {
-      requested: "webgl",
-      stage: "mj-only",
-      forceSvg: false,
-    });
     expect(res.effective).toBe("webgl");
+    expect(res.reason).toBe("webgl-default");
   });
 
-  it("garde public en SVG en mj-only", () => {
+  it("WebGL demandé + mj-only → public aussi en WebGL", () => {
     const res = resolveEffectiveRenderer("public", {
       requested: "webgl",
       stage: "mj-only",
       forceSvg: false,
     });
-    expect(res.effective).toBe("svg");
+    expect(res.effective).toBe("webgl");
+    expect(res.reason).toBe("webgl-default");
   });
 
-  it("respecte le canary public", () => {
+  it("WebGL demandé + public-canary → public toujours WebGL (canary ignoré pour le renderer)", () => {
     const on = resolveEffectiveRenderer("public", {
       requested: "webgl",
       stage: "public-canary",
@@ -46,7 +38,8 @@ describe("mapRenderer rollout", () => {
       canaryPct: 0,
     });
     expect(on.effective).toBe("webgl");
-    expect(off.effective).toBe("svg");
+    expect(off.effective).toBe("webgl");
+    expect(on.reason).toBe("webgl-default");
   });
 
   it("applique toujours le kill-switch FORCE_SVG", () => {
@@ -59,7 +52,7 @@ describe("mapRenderer rollout", () => {
     expect(res.reason).toBe("force-svg");
   });
 
-  it("hash canary reste déterministe", () => {
+  it("hash canary reste déterministe (utilitaire conservé)", () => {
     expect(isCanaryUser("stable-user", 50)).toBe(isCanaryUser("stable-user", 50));
   });
 

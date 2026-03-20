@@ -13,6 +13,12 @@ if (process.env.VERCEL === "1" || process.env.CI === "true") {
 }
 
 const nextConfig: NextConfig = {
+  // Expose build metadata to the client bundle for ?mapdiag=1 (parity Vercel vs local).
+  env: {
+    NEXT_PUBLIC_VERCEL_GIT_COMMIT_SHA:
+      process.env.VERCEL_GIT_COMMIT_SHA ?? process.env.NEXT_PUBLIC_VERCEL_GIT_COMMIT_SHA ?? "",
+    NEXT_PUBLIC_VERCEL_ENV: process.env.VERCEL_ENV ?? process.env.NEXT_PUBLIC_VERCEL_ENV ?? "",
+  },
   experimental: {
     optimizePackageImports: ["@supabase/supabase-js", "@supabase/ssr"],
     turbopackFileSystemCacheForDev: true,

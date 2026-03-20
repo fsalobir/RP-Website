@@ -2,11 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { resolveEffectiveRenderer, type MapDisplayMode } from "@/lib/mapRenderer";
-import {
-  getMapQualityTierFlag,
-  isMapMobileHardModeEnabled,
-  isMapZeroSvgSpikeEnabled,
-} from "@/lib/featureFlags";
+import { getMapQualityTierFlag, isMapMobileHardModeEnabled } from "@/lib/featureFlags";
 import { createMapRendererAdapter } from "@/lib/mapRendererAdapter";
 
 export function useMapRendererSession(mode: MapDisplayMode) {
@@ -27,15 +23,7 @@ export function useMapRendererSession(mode: MapDisplayMode) {
   const rendererInfo = useMemo(() => resolveEffectiveRenderer(mode, { userKey: rendererUserKey }), [mode, rendererUserKey]);
   const qualityTier = useMemo(() => getMapQualityTierFlag(), []);
   const mobileHardMode = useMemo(() => isMapMobileHardModeEnabled(), []);
-  const zeroSvgSpikeEnabled = useMemo(() => isMapZeroSvgSpikeEnabled(), []);
-  const adapter = useMemo(
-    () =>
-      createMapRendererAdapter({
-        rendererInfo,
-        zeroSvgSpikeEnabled,
-      }),
-    [rendererInfo, zeroSvgSpikeEnabled]
-  );
+  const adapter = useMemo(() => createMapRendererAdapter({ rendererInfo }), [rendererInfo]);
 
   return {
     rendererInfo,

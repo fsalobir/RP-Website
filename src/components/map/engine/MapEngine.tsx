@@ -6,9 +6,11 @@ export type MapEngineProps = {
 };
 
 /**
- * Point d'entrée futur du renderer WebGL.
- * Intentionnellement minimal: évite un big-bang dans WorldMapClient
- * tout en donnant un ancrage clair pour les couches GPU.
+ * Point d’entrée optionnel pour une orchestration WebGL centralisée.
+ *
+ * Le rendu DeckGL effectif est dans `WorldMapClient` (`MapDeckViewport` + `buildWorldMapDeckLayers`).
+ * Ce module reste un stub (`return null`).
+ * Voir `docs/structural-perf-notes.md` et `docs/map-perf-runbook.md`.
  */
 export function MapEngine({ enabled }: MapEngineProps) {
   if (!enabled) return null;

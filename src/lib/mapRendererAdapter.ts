@@ -4,20 +4,17 @@ export type MapLayerKind = "provinces" | "borders" | "rivers" | "routes" | "labe
 
 export type MapRendererAdapterOptions = {
   rendererInfo: EffectiveRendererResult;
-  zeroSvgSpikeEnabled: boolean;
 };
 
 export function createMapRendererAdapter(opts: MapRendererAdapterOptions) {
   const isWebgl = opts.rendererInfo.effective === "webgl";
-  const isZeroSvg = isWebgl && opts.zeroSvgSpikeEnabled;
+  /** WebGL path: geography + routes + markers are drawn by DeckGL (single viewState). */
+  const isZeroSvg = isWebgl;
 
-  function shouldRenderSvgLayer(layer: MapLayerKind): boolean {
+  function shouldRenderSvgLayer(_kind: MapLayerKind): boolean {
+    void _kind;
     if (!isWebgl) return true;
-    if (!isZeroSvg) return true;
-    if (layer === "provinces" || layer === "borders" || layer === "rivers" || layer === "routes" || layer === "labels" || layer === "points") {
-      return false;
-    }
-    return true;
+    return false;
   }
 
   return {

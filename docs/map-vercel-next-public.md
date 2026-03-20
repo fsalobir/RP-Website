@@ -23,7 +23,7 @@ Le script local ne définit que :
 - `NEXT_PUBLIC_MAP_RENDERER=webgl`
 - `NEXT_PUBLIC_MAP_RENDERER_ROLLOUT=all`
 
-Pour coller à ce comportement en prod, alignez au minimum ces deux-là **et** évitez `NEXT_PUBLIC_MAP_ZERO_SVG_SPIKE=1` sauf test volontaire (en local cette variable n’est en général pas posée → spike désactivé).
+Pour coller à ce comportement en prod, alignez au minimum ces deux-là. Le **spike** et la **couche WebGL provinces** sont **opt-in** au build (`=1`) — la carte « normale » reste en **SVG** sans variable supplémentaire.
 
 ## Vérification
 

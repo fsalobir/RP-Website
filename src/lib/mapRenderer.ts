@@ -1,25 +1,57 @@
+import { isNextPublicEnvEmptyOrWhitespace, readNextPublicEnvKey } from "@/lib/nextPublicEnv";
+
 export type MapRendererMode = "svg" | "webgl";
 export type MapRendererRolloutStage = "off" | "mj-only" | "public-canary" | "all";
 export type MapDisplayMode = "mj" | "public";
+
+const MAP_ENV_DIAGNOSTIC_KEYS = [
+  "NEXT_PUBLIC_MAP_RENDERER",
+  "NEXT_PUBLIC_MAP_RENDERER_ROLLOUT",
+  "NEXT_PUBLIC_MAP_RENDERER_FORCE_SVG",
+  "NEXT_PUBLIC_MAP_RENDERER_CANARY_PCT",
+  "NEXT_PUBLIC_MAP_ZERO_SVG_SPIKE",
+  "NEXT_PUBLIC_MAP_WEBGL_PROVINCES",
+  "NEXT_PUBLIC_MAP_QUALITY_TIER",
+  "NEXT_PUBLIC_MAP_MOBILE_HARD_MODE",
+] as const;
+
+/**
+ * Warnings for `?mapdiag=1`: Vercel may store an empty string for a key — that used to bypass `??` defaults.
+ */
+export function getMapEnvBuildWarnings(): string[] {
+  const warnings: string[] = [];
+  for (const k of MAP_ENV_DIAGNOSTIC_KEYS) {
+    if (isNextPublicEnvEmptyOrWhitespace(k)) {
+      warnings.push(`${k} est vide → défaut code appliqué`);
+    }
+  }
+  return warnings;
+}
 
 /**
  * Defaults are the normal product behaviour (WebGL everywhere). Env vars are optional overrides:
  * e.g. emergency rollback without a code change (`NEXT_PUBLIC_MAP_RENDERER_FORCE_SVG=1`).
  * `NEXT_PUBLIC_MAP_RENDERER` / `NEXT_PUBLIC_MAP_RENDERER_ROLLOUT` still override when set (build-time).
+ * Perf carte (spike SVG + provinces WebGL) : opt-in dans `featureFlags.ts` — pas de config Vercel requise pour la carte « normale » (SVG).
  */
 export function getRequestedMapRenderer(): MapRendererMode {
-  const raw = (process.env.NEXT_PUBLIC_MAP_RENDERER ?? "webgl").toLowerCase();
+  const raw = readNextPublicEnvKey("NEXT_PUBLIC_MAP_RENDERER", "webgl").toLowerCase();
   return raw === "webgl" ? "webgl" : "svg";
 }
 
+/**
+ * Valeur affichée / diagnostic (`?mapdiag`). Ne **gate plus** le renderer effectif :
+ * tout le monde en WebGL quand le moteur demandé est `webgl` (voir `resolveEffectiveRenderer`).
+ * Valeurs inconnues ou legacy `off` → `all`.
+ */
 export function getMapRendererRolloutStage(): MapRendererRolloutStage {
-  const raw = (process.env.NEXT_PUBLIC_MAP_RENDERER_ROLLOUT ?? "all").toLowerCase();
+  const raw = readNextPublicEnvKey("NEXT_PUBLIC_MAP_RENDERER_ROLLOUT", "all").toLowerCase();
   if (raw === "mj-only" || raw === "public-canary" || raw === "all") return raw;
-  return "off";
+  return "all";
 }
 
 export function isRendererRollbackForced(): boolean {
-  return process.env.NEXT_PUBLIC_MAP_RENDERER_FORCE_SVG === "1";
+  return readNextPublicEnvKey("NEXT_PUBLIC_MAP_RENDERER_FORCE_SVG", "") === "1";
 }
 
 function hashString(input: string): number {
@@ -39,30 +71,21 @@ export function isCanaryUser(userKey: string, percentage: number): boolean {
   return bucket < pct;
 }
 
+/**
+ * Renderer effectif : **WebGL pour tous** (MJ + public) dès que le moteur demandé est `webgl`,
+ * sans dépendre du rollout / canary (évite tout public en SVG par défaut).
+ * Seuls cas SVG : `NEXT_PUBLIC_MAP_RENDERER_FORCE_SVG=1` ou `NEXT_PUBLIC_MAP_RENDERER=svg`.
+ */
 export function resolveEffectiveRenderer(
-  mode: MapDisplayMode,
+  _mode: MapDisplayMode,
   opts?: { requested?: MapRendererMode; stage?: MapRendererRolloutStage; forceSvg?: boolean; userKey?: string | null; canaryPct?: number }
 ): { requested: MapRendererMode; stage: MapRendererRolloutStage; effective: MapRendererMode; fallback: boolean; reason: string } {
   const requested = opts?.requested ?? getRequestedMapRenderer();
   const stage = opts?.stage ?? getMapRendererRolloutStage();
   const forceSvg = opts?.forceSvg ?? isRendererRollbackForced();
-  const canaryPct = Number.isFinite(opts?.canaryPct) ? Number(opts?.canaryPct) : Number(process.env.NEXT_PUBLIC_MAP_RENDERER_CANARY_PCT ?? 5);
   if (forceSvg) return { requested, stage, effective: "svg", fallback: true, reason: "force-svg" };
   if (requested !== "webgl") return { requested, stage, effective: "svg", fallback: false, reason: "requested-svg" };
-  if (stage === "off") return { requested, stage, effective: "svg", fallback: true, reason: "rollout-off" };
-  if (stage === "all") return { requested, stage, effective: "webgl", fallback: false, reason: "rollout-all" };
-  if (stage === "mj-only") {
-    return mode === "mj"
-      ? { requested, stage, effective: "webgl", fallback: false, reason: "rollout-mj" }
-      : { requested, stage, effective: "svg", fallback: true, reason: "public-disabled" };
-  }
-  // public-canary
-  if (mode === "mj") return { requested, stage, effective: "webgl", fallback: false, reason: "mj-with-canary" };
-  const key = opts?.userKey?.trim();
-  const canary = key ? isCanaryUser(key, canaryPct) : false;
-  return canary
-    ? { requested, stage, effective: "webgl", fallback: false, reason: "public-canary-on" }
-    : { requested, stage, effective: "svg", fallback: true, reason: "public-canary-off" };
+  return { requested, stage, effective: "webgl", fallback: false, reason: "webgl-default" };
 }
 
 export type EffectiveRendererResult = ReturnType<typeof resolveEffectiveRenderer>;
