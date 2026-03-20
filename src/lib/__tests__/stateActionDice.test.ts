@@ -95,7 +95,7 @@ function makeSupabaseMock(params: {
 
 describe("PLAN_SCENARIOS_TEST — Section 9 (Dés)", () => {
   it("Scénario 9.1 — d100 borné + modif admin + clamp 1..100", async () => {
-    vi.spyOn(Math, "random").mockReturnValue(0); // roll=1
+    const randomSpy = vi.spyOn(Math, "random").mockReturnValue(0); // roll=1
     const supabase = makeSupabaseMock({
       statsRow: { militarism: 0, industry: 0, science: 0, stability: 0 },
       rangesRow: { militarism: { min: 0, max: 0 } },
@@ -114,11 +114,11 @@ describe("PLAN_SCENARIOS_TEST — Section 9 (Dés)", () => {
     expect(result?.roll).toBe(1);
     expect(result?.modifier).toBe(10);
     expect(result?.total).toBe(11);
-    Math.random.mockRestore?.();
+    randomSpy.mockRestore();
   });
 
   it("Scénario 9.2 — Stat modifier : interpolation linéaire + round", async () => {
-    vi.spyOn(Math, "random").mockReturnValue(0); // roll=1
+    const randomSpy = vi.spyOn(Math, "random").mockReturnValue(0); // roll=1
     const supabase = makeSupabaseMock({
       statsRow: { militarism: 5, industry: 0, science: 0, stability: 0 },
       rangesRow: { militarism: { min: -10, max: 20 } },
@@ -138,11 +138,11 @@ describe("PLAN_SCENARIOS_TEST — Section 9 (Dés)", () => {
     expect(result?.stat_modifiers?.militarism).toBe(5);
     expect(result?.modifier).toBe(5);
     expect(result?.total).toBe(6);
-    Math.random.mockRestore?.();
+    randomSpy.mockRestore();
   });
 
   it("Scénario 9.3 — stat_bonus désactive une stat (science)", async () => {
-    vi.spyOn(Math, "random").mockReturnValue(0); // roll=1
+    const randomSpy = vi.spyOn(Math, "random").mockReturnValue(0); // roll=1
     const supabase = makeSupabaseMock({
       statsRow: { militarism: 0, industry: 0, science: 10, stability: 0 },
       rangesRow: { science: { min: 50, max: 50 } },
@@ -161,11 +161,11 @@ describe("PLAN_SCENARIOS_TEST — Section 9 (Dés)", () => {
     expect(result?.stat_modifiers).toEqual({}); // no stat modifiers
     expect(result?.modifier).toBe(0);
     expect(result?.total).toBe(1);
-    Math.random.mockRestore?.();
+    randomSpy.mockRestore();
   });
 
   it("Scénario 9.4 — prise_influence : relationModifier = round((relation/100)*amplitude)", async () => {
-    vi.spyOn(Math, "random").mockReturnValue(0); // roll=1
+    const randomSpy = vi.spyOn(Math, "random").mockReturnValue(0); // roll=1
     const supabase = makeSupabaseMock({
       statsRow: { militarism: 0, industry: 0, science: 0, stability: 0 },
       rangesRow: {},
@@ -183,11 +183,11 @@ describe("PLAN_SCENARIOS_TEST — Section 9 (Dés)", () => {
 
     // mocked getRelation returns -40 => round((-40/100)*30) = -12
     expect(result?.relation_modifier).toBe(-12);
-    Math.random.mockRestore?.();
+    randomSpy.mockRestore();
   });
 
   it("Scénario 9.5 — prise_influence : influenceModifier piecewise (ratio)", async () => {
-    vi.spyOn(Math, "random").mockReturnValue(0); // roll=1
+    const randomSpy = vi.spyOn(Math, "random").mockReturnValue(0); // roll=1
     const supabase = makeSupabaseMock({
       statsRow: { militarism: 0, industry: 0, science: 0, stability: 0 },
       rangesRow: {},
@@ -213,7 +213,7 @@ describe("PLAN_SCENARIOS_TEST — Section 9 (Dés)", () => {
     });
 
     expect(result?.influence_modifier).toBe(20);
-    Math.random.mockRestore?.();
+    randomSpy.mockRestore();
   });
 });
 

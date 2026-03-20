@@ -12,6 +12,7 @@ type RealmInput = {
   banner_url?: string | null;
   summary?: string | null;
   leader_name?: string | null;
+  capital_city_id?: string | null;
 };
 
 function normalizeSlug(slug: string) {
@@ -48,6 +49,7 @@ export async function createRealm(input: RealmInput): Promise<{ error?: string; 
     banner_url: input.banner_url?.trim() || null,
     summary: input.summary?.trim() || null,
     leader_name: input.leader_name?.trim() || null,
+    capital_city_id: input.capital_city_id?.trim() || null,
   };
   const { data, error } = await admin.from("realms").insert(payload).select("id").maybeSingle();
   if (error) return { error: error.message };
@@ -84,6 +86,7 @@ export async function updateRealm(input: RealmInput & { id: string }): Promise<{
     banner_url: input.banner_url?.trim() || null,
     summary: input.summary?.trim() || null,
     leader_name: input.leader_name?.trim() || null,
+    capital_city_id: input.capital_city_id?.trim() || null,
     updated_at: new Date().toISOString(),
   };
   const { error } = await admin.from("realms").update(payload).eq("id", id);
@@ -158,6 +161,68 @@ export async function assignRealmPlayer(args: {
   revalidatePath("/mj");
   revalidatePath("/mj/carte");
   revalidatePath("/royaumes");
+  revalidatePath("/");
+  return {};
+}
+
+export async function updateProvinceCapital(args: {
+  province_id: string;
+  capital_city_id?: string | null;
+}): Promise<{ error?: string }> {
+  const { user, error: authError } = await ensureMj();
+  if (authError) return { error: authError };
+  const provinceId = args.province_id.trim();
+  if (!provinceId) return { error: "Province invalide." };
+
+  const admin = createServiceRoleClient();
+  const payload = {
+    capital_city_id: args.capital_city_id?.trim() || null,
+    updated_at: new Date().toISOString(),
+  };
+  const { error } = await admin.from("provinces").update(payload).eq("id", provinceId);
+  if (error) return { error: error.message };
+
+  await admin.from("realm_audit_logs").insert({
+    realm_id: null,
+    actor_user_id: user?.id ?? null,
+    action: "province_capital_updated",
+    details: { province_id: provinceId, ...payload },
+  });
+
+  revalidatePath("/mj/royaumes");
+  revalidatePath("/mj/carte");
+  revalidatePath("/mj");
+  revalidatePath("/");
+  return {};
+}
+
+export async function updateRealmNationalCapital(args: {
+  realm_id: string;
+  capital_city_id?: string | null;
+}): Promise<{ error?: string }> {
+  const { user, error: authError } = await ensureMj();
+  if (authError) return { error: authError };
+  const realmId = args.realm_id.trim();
+  if (!realmId) return { error: "Royaume invalide." };
+
+  const admin = createServiceRoleClient();
+  const payload = {
+    capital_city_id: args.capital_city_id?.trim() || null,
+    updated_at: new Date().toISOString(),
+  };
+  const { error } = await admin.from("realms").update(payload).eq("id", realmId);
+  if (error) return { error: error.message };
+
+  await admin.from("realm_audit_logs").insert({
+    realm_id: realmId,
+    actor_user_id: user?.id ?? null,
+    action: "realm_capital_updated",
+    details: payload,
+  });
+
+  revalidatePath("/mj/royaumes");
+  revalidatePath("/mj/carte");
+  revalidatePath("/mj");
   revalidatePath("/");
   return {};
 }

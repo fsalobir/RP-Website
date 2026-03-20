@@ -3,6 +3,8 @@ export type MapMetricName =
   | "map_mj_mount_ms"
   | "map_router_refresh_ms"
   | "map_route_build_ms"
+  | "map_routes_visible_count"
+  | "map_route_labels_visible_count"
   | "map_interaction_frame_gap_ms";
 
 export function emitMapMetric(name: MapMetricName, value: number, meta?: Record<string, unknown>) {

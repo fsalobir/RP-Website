@@ -21,14 +21,27 @@ import {
 } from "@/lib/routes";
 import type { LandFeatureCollection, LandGraph, RouteTier } from "@/lib/routes";
 import { DEFAULT_MAP_DISPLAY_CONFIG, type MapDisplayConfig } from "@/lib/mapDisplayConfig";
-import { getEffectiveMapRenderer } from "@/lib/mapRenderer";
-import { simplifyPolylinePreservingCurves } from "@/lib/routesPrecompute";
+import { resolveEffectiveRenderer } from "@/lib/mapRenderer";
+import {
+  buildRouteLodVariants,
+  pickRouteLodByZoom,
+  simplifyPolylinePreservingCurves,
+} from "@/lib/routesPrecompute";
 import { emitMapMetric } from "@/lib/mapObservability";
 import { isMapInfoPanelsV2Enabled, isRealmColoringEnabled } from "@/lib/featureFlags";
 import { EntityInfoPanel } from "@/components/map/EntityInfoPanel";
 import { MapScheduler } from "@/lib/mapScheduler";
-import { feature } from "topojson-client";
+import {
+  MAP_MAX_ZOOM,
+  MAP_MIN_ZOOM,
+  getZoomLevelById,
+  getCurrentZoomLevel,
+  getRouteSimplificationEpsilonForZoomLevel,
+  type MapZoomLevelId,
+} from "@/lib/mapZoomLevels";
+import { feature, mesh } from "topojson-client";
 import { createClient } from "@/lib/supabase/client";
+import { computeRealmLabelAnchors } from "@/lib/realmMapLabels";
 
 const ComposableMap = dynamic(() => import("react-simple-maps").then((m) => m.ComposableMap), { ssr: false });
 const Geographies = dynamic(() => import("react-simple-maps").then((m) => m.Geographies), { ssr: false });
@@ -50,6 +63,7 @@ export type ProvinceRef = {
   realm_id: string;
   name: string;
   region_id: string;
+  capital_city_id?: string | null;
   attrs?: Record<string, any>;
 };
 
@@ -57,6 +71,7 @@ export type RealmRef = {
   id: string;
   slug: string;
   name: string;
+  capital_city_id?: string | null;
   is_npc: boolean;
   color_hex?: string | null;
   banner_url?: string | null;
@@ -145,6 +160,7 @@ export type WorldMapClientProps = {
     lon: number;
     lat: number;
     icon_key: string | null;
+    is_regional_capital?: boolean | null;
     attrs?: Record<string, any>;
   }>;
   routes?: Array<{
@@ -187,6 +203,26 @@ function safeRegionLabel(p: MapFeatureProps): string {
   return parts.join(" — ");
 }
 
+function getRegionIdFromProps(p: Record<string, unknown>): string | null {
+  const direct = p.regionId ?? p.id ?? p.iso_3166_2 ?? p.name;
+  if (typeof direct === "string" && direct.trim().length > 0) return direct.trim();
+  return null;
+}
+
+function isForestLikeObject(kind: string | null | undefined, iconKey: string | null | undefined): boolean {
+  const k = (kind ?? "").toLowerCase();
+  const i = (iconKey ?? "").toLowerCase();
+  return (
+    k.includes("forest") ||
+    k.includes("forêt") ||
+    k.includes("wood") ||
+    k.includes("tree") ||
+    i.includes("forest") ||
+    i.includes("tree") ||
+    i.includes("wood")
+  );
+}
+
 function formatIconCatalogLabel(k: string): string {
   if (k.startsWith("http")) {
     try {
@@ -208,6 +244,14 @@ function hexToRgba(hex: string | null | undefined, alpha: number, fallback: stri
   const g = parseInt(hex.slice(3, 5), 16);
   const b = parseInt(hex.slice(5, 7), 16);
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
+function hexToTuple(hex: string | null | undefined, alpha: number, fallback: [number, number, number, number]): [number, number, number, number] {
+  if (!hex || !/^#[0-9a-fA-F]{6}$/.test(hex)) return fallback;
+  const r = parseInt(hex.slice(1, 3), 16) / 255;
+  const g = parseInt(hex.slice(3, 5), 16) / 255;
+  const b = parseInt(hex.slice(5, 7), 16) / 255;
+  return [r, g, b, alpha];
 }
 
 // Note: décor (arbres/vagues) retiré pour performance.
@@ -424,7 +468,9 @@ export function WorldMapClient({
     "config-routes-fade": false,
     "config-routes-progress": false,
     "config-routes-sinuosity": false,
+    "config-zoom-rules": true,
   }));
+  const [zoomRulesEditorLevel, setZoomRulesEditorLevel] = useState<MapZoomLevelId>("province");
   const toggleSettingsSection = (key: string) =>
     setSettingsSectionOpen((prev) => ({ ...prev, [key]: !prev[key] }));
   const [mjSettingsSavedAt, setMjSettingsSavedAt] = useState<number | null>(null);
@@ -441,7 +487,27 @@ export function WorldMapClient({
         : { ...DEFAULT_MAP_DISPLAY_CONFIG, ...initialMapDisplayConfig },
     [mode, mjUi, initialMapDisplayConfig]
   );
-  const rendererInfo = useMemo(() => getEffectiveMapRenderer(), []);
+  const [rendererUserKey, setRendererUserKey] = useState<string | null>(null);
+  useEffect(() => {
+    try {
+      const key = "map_renderer_user_key_v1";
+      const existing = localStorage.getItem(key);
+      if (existing) {
+        setRendererUserKey(existing);
+        return;
+      }
+      const generated = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+      localStorage.setItem(key, generated);
+      setRendererUserKey(generated);
+    } catch {
+      setRendererUserKey(null);
+    }
+  }, []);
+  const rendererInfo = useMemo(
+    () => resolveEffectiveRenderer(mode, { userKey: rendererUserKey }),
+    [mode, rendererUserKey]
+  );
+  const isWebglRenderer = rendererInfo.effective === "webgl";
   const enableRealmColoring = useMemo(() => isRealmColoringEnabled(), []);
   const enableMapInfoPanelsV2 = useMemo(() => isMapInfoPanelsV2Enabled(), []);
 
@@ -517,17 +583,37 @@ export function WorldMapClient({
   }, [mode]);
 
   // Zoom/pan contrôlés : on ajoute un lissage (inertie) sur la molette.
-  const MIN_ZOOM = 1.05;
-  const MAX_ZOOM = 110;
+  const MIN_ZOOM = MAP_MIN_ZOOM;
+  const MAX_ZOOM = MAP_MAX_ZOOM;
   const [mapView, setMapView] = useState<{ center: [number, number]; zoom: number }>({
     center: [0, 22],
     zoom: MIN_ZOOM,
   });
+  const currentZoomLevel = useMemo<MapZoomLevelId>(() => getCurrentZoomLevel(mapView.zoom), [mapView.zoom]);
+  const currentZoomLevelLabel = useMemo(() => {
+    if (currentZoomLevel === "province") return "Province";
+    if (currentZoomLevel === "nation") return "Nation";
+    if (currentZoomLevel === "continent") return "Continent";
+    return "Monde";
+  }, [currentZoomLevel]);
+  const activeZoomRules = useMemo(() => {
+    return displayConfig.zoomLevelRules[currentZoomLevel];
+  }, [displayConfig.zoomLevelRules, currentZoomLevel]);
+  const zoomThresholdLabels = useMemo(
+    () =>
+      (["monde", "continent", "nation", "province"] as const).map((id) => ({
+        id,
+        label: getZoomLevelById(id).label,
+        zoom: getZoomLevelById(id).zoom,
+      })),
+    []
+  );
   const routeLodEpsilon = useMemo(() => {
-    if (mapView.zoom >= 6) return 0.1;
-    if (mapView.zoom >= 2.4) return 0.25;
-    return 0.6;
-  }, [mapView.zoom]);
+    return getRouteSimplificationEpsilonForZoomLevel(currentZoomLevel);
+  }, [currentZoomLevel]);
+  const routeLodZoomRef = useMemo(() => {
+    return currentZoomLevel === "province" ? 12 : currentZoomLevel === "nation" ? 6 : currentZoomLevel === "continent" ? 2.4 : 1.05;
+  }, [currentZoomLevel]);
   const viewRef = useRef(mapView);
   useEffect(() => {
     viewRef.current = mapView;
@@ -1000,8 +1086,8 @@ export function WorldMapClient({
     const minF = clamp01((displayConfig.sizeAtWorldPct || 0) / 100);
     const exp = Math.max(0.2, Math.min(3, displayConfig.sizeCurveExp || 1));
     const t = Math.pow(clamp01(zoomPct / 100), exp);
-    return minF + (1 - minF) * t;
-  }, [zoomPct, displayConfig.sizeAtWorldPct, displayConfig.sizeCurveExp]);
+    return (minF + (1 - minF) * t) * activeZoomRules.scale.cities;
+  }, [zoomPct, displayConfig.sizeAtWorldPct, displayConfig.sizeCurveExp, activeZoomRules.scale.cities]);
 
   const citiesRenderOpacity = useMemo(() => {
     // Opaque tant qu'on est au-dessus du seuil, puis fade-out.
@@ -1024,10 +1110,28 @@ export function WorldMapClient({
     const minF = clamp01((displayConfig.routeSizeAtWorldPct ?? 10) / 100);
     const exp = Math.max(0.2, Math.min(3, displayConfig.routeSizeCurveExp ?? 1));
     const t = Math.pow(clamp01(zoomPct / 100), exp);
-    return minF + (1 - minF) * t;
-  }, [zoomPct, displayConfig.routeSizeAtWorldPct, displayConfig.routeSizeCurveExp]);
+    return (minF + (1 - minF) * t) * activeZoomRules.scale.routes;
+  }, [zoomPct, displayConfig.routeSizeAtWorldPct, displayConfig.routeSizeCurveExp, activeZoomRules.scale.routes]);
+  const routeTierStyle = useMemo(() => {
+    const clampPx = (n: number | undefined, def: number) =>
+      Number.isFinite(n) ? Math.max(0.01, Math.min(0.3, n as number)) : def;
+    return {
+      local: {
+        strokeWidth: clampPx(displayConfig.routeStrokeLocalPx, 0.05),
+        stroke: "rgba(140, 100, 55, 0.9)",
+      },
+      regional: {
+        strokeWidth: clampPx(displayConfig.routeStrokeRegionalPx, 0.1),
+        stroke: "rgba(160, 115, 60, 0.95)",
+      },
+      national: {
+        strokeWidth: clampPx(displayConfig.routeStrokeNationalPx, 0.15),
+        stroke: "rgba(190, 140, 75, 1)",
+      },
+    } as const;
+  }, [displayConfig.routeStrokeLocalPx, displayConfig.routeStrokeRegionalPx, displayConfig.routeStrokeNationalPx]);
 
-  const citiesOpacity = citiesRenderOpacity;
+  const citiesOpacity = activeZoomRules.visibility.cities ? citiesRenderOpacity : 0;
   const cityMarkerPx = displayConfig.cityIconMaxPx * citySizeFactor;
   // Calibrage: icône dans une boîte 10x10 (unités SVG).
   // Marker est dans l’espace carte => taille écran ~= 10 * scale * zoom
@@ -1040,8 +1144,8 @@ export function WorldMapClient({
     },
     [],
   );
-  const showHydro = lakesOpacity > 0.001;
-  const showRivers = riversOpacity > 0.001;
+  const showHydro = activeZoomRules.visibility.lakes && lakesOpacity > 0.001;
+  const showRivers = activeZoomRules.visibility.rivers && riversOpacity > 0.001;
 
   // (debug UI zoom badge mis à jour via ref, pas via state pour les perfs)
   const RIVERS_LOCK_ZOOM = 6;
@@ -1094,6 +1198,46 @@ export function WorldMapClient({
       })),
     [realms]
   );
+  const regionRealmIdByRegionId = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const [regionId, province] of provinceByRegionId.entries()) {
+      if (province?.realm_id) m.set(regionId, province.realm_id);
+    }
+    return m;
+  }, [provinceByRegionId]);
+  const realmBoundaryGeoJson = useMemo(() => {
+    const topo = geographyData;
+    const admin1 = topo?.objects?.admin1;
+    if (!topo || !admin1) return null;
+    try {
+      const geometry = mesh(topo, admin1, (a: any, b: any) => {
+        if (!a) return false;
+        const aProps = (a?.properties ?? {}) as Record<string, unknown>;
+        const bProps = (b?.properties ?? {}) as Record<string, unknown>;
+        const aRegionId = getRegionIdFromProps(aProps);
+        const bRegionId = getRegionIdFromProps(bProps);
+        const aRealmId = aRegionId ? regionRealmIdByRegionId.get(aRegionId) ?? null : null;
+        if (!b) return true;
+        const bRealmId = bRegionId ? regionRealmIdByRegionId.get(bRegionId) ?? null : null;
+        if (!aRealmId || !bRealmId) return true;
+        return aRealmId !== bRealmId;
+      }) as any;
+      return {
+        type: "FeatureCollection",
+        features: geometry
+          ? [
+              {
+                type: "Feature",
+                properties: {},
+                geometry,
+              },
+            ]
+          : [],
+      } as any;
+    } catch {
+      return null;
+    }
+  }, [geographyData, regionRealmIdByRegionId]);
 
   // IMPORTANT perf: rendre les géographies une seule fois (hors zoom), sinon chaque tick de zoom
   // remappe des centaines/milliers de paths.
@@ -1160,9 +1304,9 @@ export function WorldMapClient({
                 : "rgba(196, 161, 108, 0.34)";
 
               const style = {
-                default: { fill: isSelected ? selectedFill : fill, outline: "none", ...borderStroke },
-                hover: { fill: hoverFill, outline: "none", ...borderStroke },
-                pressed: { fill: hoverFill, outline: "none", ...borderStroke },
+                default: { fill: isSelected ? selectedFill : fill, outline: "none", stroke: "transparent", strokeWidth: 0 },
+                hover: { fill: hoverFill, outline: "none", stroke: "transparent", strokeWidth: 0 },
+                pressed: { fill: hoverFill, outline: "none", stroke: "transparent", strokeWidth: 0 },
               };
 
               return (
@@ -1238,7 +1382,29 @@ export function WorldMapClient({
     realmById,
     realms,
     selectedRegionIds,
+    enableRealmColoring,
   ]);
+  const renderedRealmBoundaries = useMemo(() => {
+    if (!activeZoomRules.visibility.regionBorders) return null;
+    if (!realmBoundaryGeoJson) return null;
+    return (
+      <Geographies geography={realmBoundaryGeoJson}>
+        {({ geographies = [] }) =>
+          geographies.map((geo: any, i: number) => (
+            <GeographyAny
+              key={geo?.rsmKey ?? `realm-boundary-${i}`}
+              geography={geo}
+              style={{
+                default: { fill: "none", outline: "none", ...borderStroke },
+                hover: { fill: "none", outline: "none", ...borderStroke },
+                pressed: { fill: "none", outline: "none", ...borderStroke },
+              }}
+            />
+          ))
+        }
+      </Geographies>
+    );
+  }, [realmBoundaryGeoJson, activeZoomRules.visibility.regionBorders]);
 
   function closeContextMenu() {
     setContextMenu(null);
@@ -1254,14 +1420,37 @@ export function WorldMapClient({
   }, [selectedRegionIds, provinceByRegionId]);
 
   const visibleObjects = useMemo(() => {
-    return (mapObjects ?? []).filter((o) => o.is_visible && typeof o.lon === "number" && typeof o.lat === "number");
-  }, [mapObjects]);
+    const list = (mapObjects ?? []).filter((o) => o.is_visible && typeof o.lon === "number" && typeof o.lat === "number");
+    const filtered = list.filter((o) => {
+      const forest = isForestLikeObject(o.kind, o.icon_key);
+      if (forest && !activeZoomRules.visibility.forests) return false;
+      if (!forest && !activeZoomRules.visibility.smallEntities) return false;
+      return true;
+    });
+    return filtered.slice(0, activeZoomRules.caps.maxEntities);
+  }, [mapObjects, activeZoomRules.visibility.forests, activeZoomRules.visibility.smallEntities, activeZoomRules.caps.maxEntities]);
 
   const visibleCities = useMemo(() => {
-    return (cities ?? []).filter((c) => Number.isFinite(c.lon) && Number.isFinite(c.lat));
-  }, [cities]);
+    if (!activeZoomRules.visibility.cities) return [];
+    const list = (cities ?? []).filter((c) => Number.isFinite(c.lon) && Number.isFinite(c.lat));
+    return list.slice(0, activeZoomRules.caps.maxCities);
+  }, [cities, activeZoomRules.visibility.cities, activeZoomRules.caps.maxCities]);
 
   const cityById = useMemo(() => new Map(visibleCities.map((c) => [c.id, c])), [visibleCities]);
+  const provinceCapitalCityIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const p of provinces) {
+      if (typeof p.capital_city_id === "string" && p.capital_city_id) ids.add(p.capital_city_id);
+    }
+    return ids;
+  }, [provinces]);
+  const realmCapitalCityIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const r of realms) {
+      if (typeof r.capital_city_id === "string" && r.capital_city_id) ids.add(r.capital_city_id);
+    }
+    return ids;
+  }, [realms]);
 
   // Conversion TopoJSON → GeoJSON pour le pathfinding terre (éviter la mer).
   const landGeoJson = useMemo(() => {
@@ -1273,6 +1462,18 @@ export function WorldMapClient({
       return null;
     }
   }, [geographyData]);
+  const realmLabelAnchors = useMemo(() => {
+    const shouldShow =
+      activeZoomRules.visibility.realmLabels &&
+      (currentZoomLevel === "continent" || currentZoomLevel === "monde");
+    if (!shouldShow || !landGeoJson?.features?.length) return [];
+    return computeRealmLabelAnchors({
+      landGeoJson,
+      provinceByRegionId,
+      realmById,
+      cityById,
+    });
+  }, [activeZoomRules.visibility.realmLabels, currentZoomLevel, landGeoJson, provinceByRegionId, realmById, cityById]);
 
   // Graphe terre (adjacence régions) calculé en différé pour ne pas bloquer le premier rendu.
   const [landGraph, setLandGraph] = useState<LandGraph | null>(null);
@@ -1300,15 +1501,20 @@ export function WorldMapClient({
     id: string;
     tier: string;
     d: string;
-    strokeWidth: number;
-    stroke: string;
+    polyline: Array<[number, number]>;
     name: string;
     labelX: number;
     labelY: number;
     labelAngleDeg: number;
+    minX: number;
+    minY: number;
+    maxX: number;
+    maxY: number;
   };
   const [routePaths, setRoutePaths] = useState<RoutePathItem[]>([]);
   const routeBuildSchedulerRef = useRef<MapScheduler | null>(null);
+  const routeGeometryCacheRef = useRef<Map<string, Omit<RoutePathItem, "id" | "tier">>>(new Map());
+  const routeGeometryKeyByIdRef = useRef<Map<string, string>>(new Map());
   if (!routeBuildSchedulerRef.current) routeBuildSchedulerRef.current = new MapScheduler();
 
   useEffect(() => {
@@ -1333,23 +1539,13 @@ export function WorldMapClient({
       routeWaypointsMap.get(rid)!.push({ lat: Number(wp.lat), lon: Number(wp.lon) });
     }
         const result: RoutePathItem[] = [];
-    // Largeurs en pixels (diamètre visuel) ; non-scaling-stroke pour garder la taille à l’écran quel que soit le zoom.
-    const clampPx = (n: number | undefined, def: number) =>
-      Number.isFinite(n) ? Math.max(0.01, Math.min(0.3, n as number)) : def;
-    const tierStyle: Record<string, { strokeWidth: number; stroke: string }> = {
-      local: {
-        strokeWidth: clampPx(displayConfig.routeStrokeLocalPx, 0.05),
-        stroke: "rgba(140, 100, 55, 0.9)",
-      },
-      regional: {
-        strokeWidth: clampPx(displayConfig.routeStrokeRegionalPx, 0.1),
-        stroke: "rgba(160, 115, 60, 0.95)",
-      },
-      national: {
-        strokeWidth: clampPx(displayConfig.routeStrokeNationalPx, 0.15),
-        stroke: "rgba(190, 140, 75, 1)",
-      },
-    };
+        const maxVerticesForZoom =
+          currentZoomLevel === "monde" ? 120 : currentZoomLevel === "continent" ? 180 : currentZoomLevel === "nation" ? 280 : 400;
+        const geoRevision = `${landGeoJson?.features?.length ?? 0}:${landGraph?.adj?.size ?? 0}`;
+        const serializeSeq = (seq: Array<{ lat: number; lon: number }>) =>
+          seq
+            .map((p) => `${Number(p.lon).toFixed(3)},${Number(p.lat).toFixed(3)}`)
+            .join("|");
     for (const r of list) {
       const startPt = (r as { pathway_point_a_id?: string | null; city_a_id?: string | null; poi_a_id?: string | null }).poi_a_id
         ? poiById.get(String((r as any).poi_a_id))
@@ -1380,6 +1576,24 @@ export function WorldMapClient({
             ? (displayConfig.routeSinuosityRegionalPct ?? 50)
             : (displayConfig.routeSinuosityNationalPct ?? 20);
       const sinuosityScale = Math.max(0, Math.min(500, Number(sinuosityPct))) / 100;
+      const cacheKey = [
+        r.id,
+        tier,
+        seed ?? "na",
+        Number(sinuosityScale).toFixed(3),
+        Number(routeLodEpsilon).toFixed(3),
+        currentZoomLevel,
+        geoRevision,
+        serializeSeq(sequence),
+      ].join("::");
+      const prevKey = routeGeometryKeyByIdRef.current.get(r.id);
+      if (prevKey === cacheKey) {
+        const cached = routeGeometryCacheRef.current.get(cacheKey);
+        if (cached) {
+          result.push({ id: r.id, tier: r.tier, ...cached });
+          continue;
+        }
+      }
 
       let points: Array<[number, number]> = [];
       let landSegments = 0;
@@ -1387,7 +1601,7 @@ export function WorldMapClient({
       for (let i = 0; i < sequence.length - 1; i++) {
         const a = sequence[i];
         const b = sequence[i + 1];
-        let seg = generateLandPath({ lon: a.lon, lat: a.lat }, { lon: b.lon, lat: b.lat }, landGeoJson ?? undefined, landGraph);
+        const seg = generateLandPath({ lon: a.lon, lat: a.lat }, { lon: b.lon, lat: b.lat }, landGeoJson ?? undefined, landGraph);
         if (seg && seg.length >= 2) {
           landSegments += 1;
           if (points.length > 0) points.pop();
@@ -1429,7 +1643,13 @@ export function WorldMapClient({
         points = landSegments > 0 ? smoothLandPathWithSinuosity(toSmooth, tier, seed ?? 0, sinuosityScale) : toSmooth;
       }
       points = simplifyPolylinePreservingCurves(points, routeLodEpsilon);
-      points = capPolylineVertices(points, MAX_ROUTE_POLYLINE_VERTICES);
+      const lod = buildRouteLodVariants(points, {
+        epsilonLow: Math.max(0.45, routeLodEpsilon * 1.8),
+        epsilonMid: Math.max(0.2, routeLodEpsilon),
+        epsilonHigh: Math.max(0.08, routeLodEpsilon * 0.5),
+      });
+      points = pickRouteLodByZoom(lod, routeLodZoomRef);
+      points = capPolylineVertices(points, Math.min(MAX_ROUTE_POLYLINE_VERTICES, maxVerticesForZoom));
       const smoothedPointsLen = points.length;
       if (smoothedPointsLen > 120 || sequence.length > 4) {
       }
@@ -1440,7 +1660,6 @@ export function WorldMapClient({
       }).filter((p): p is [number, number] => p !== null);
       if (projected.length < 2) continue;
       const d = "M " + projected.map(([x, y]) => `${x} ${y}`).join(" L ");
-      const style = tierStyle[tier] ?? tierStyle.local;
       // Position du libellé à 50 % de la distance totale (pas à l'index milieu) pour que le nom ne bouge pas quand on ajoute des embranchements/waypoints
       let totalLen = 0;
       const segLengths: number[] = [];
@@ -1474,7 +1693,31 @@ export function WorldMapClient({
       if (labelAngleDeg > 90) labelAngleDeg -= 180;
       if (labelAngleDeg < -90) labelAngleDeg += 180;
       const routeName = (r as { name?: string }).name?.trim() || `Route ${r.id}`;
-      result.push({ id: r.id, tier: r.tier, d, ...style, name: routeName, labelX, labelY, labelAngleDeg });
+      let minX = Number.POSITIVE_INFINITY;
+      let minY = Number.POSITIVE_INFINITY;
+      let maxX = Number.NEGATIVE_INFINITY;
+      let maxY = Number.NEGATIVE_INFINITY;
+      for (const [x, y] of projected) {
+        if (x < minX) minX = x;
+        if (y < minY) minY = y;
+        if (x > maxX) maxX = x;
+        if (y > maxY) maxY = y;
+      }
+      const geom: Omit<RoutePathItem, "id" | "tier"> = {
+        d,
+        polyline: projected,
+        name: routeName,
+        labelX,
+        labelY,
+        labelAngleDeg,
+        minX,
+        minY,
+        maxX,
+        maxY,
+      };
+      routeGeometryKeyByIdRef.current.set(r.id, cacheKey);
+      routeGeometryCacheRef.current.set(cacheKey, geom);
+      result.push({ id: r.id, tier: r.tier, ...geom });
     }
         if (signal.aborted) return;
         setRoutePaths(result);
@@ -1494,14 +1737,50 @@ export function WorldMapClient({
     routeProjection,
     landGeoJson,
     landGraph,
-    displayConfig.routeStrokeLocalPx,
-    displayConfig.routeStrokeRegionalPx,
-    displayConfig.routeStrokeNationalPx,
     displayConfig.routeSinuosityLocalPct,
     displayConfig.routeSinuosityRegionalPct,
     displayConfig.routeSinuosityNationalPct,
     routeLodEpsilon,
+    routeLodZoomRef,
+    currentZoomLevel,
+    mode,
   ]);
+
+  const visibleRoutePaths = useMemo(() => {
+    if (routePaths.length === 0) return routePaths;
+    const centerP = routeProjection(mapView.center);
+    if (!centerP) return routePaths;
+    const halfW = 400 / Math.max(0.1, mapView.zoom);
+    const halfH = 300 / Math.max(0.1, mapView.zoom);
+    const margin = currentZoomLevel === "monde" ? 120 : currentZoomLevel === "continent" ? 80 : 45;
+    const minX = centerP[0] - halfW - margin;
+    const maxX = centerP[0] + halfW + margin;
+    const minY = centerP[1] - halfH - margin;
+    const maxY = centerP[1] + halfH + margin;
+    const filtered = routePaths.filter(
+      (rp) => !(rp.maxX < minX || rp.minX > maxX || rp.maxY < minY || rp.minY > maxY)
+    );
+    const capByLevel = currentZoomLevel === "monde" ? 240 : currentZoomLevel === "continent" ? 520 : 1200;
+    const cap = Math.min(capByLevel, activeZoomRules.caps.maxRouteLabels > 0 ? activeZoomRules.caps.maxRouteLabels * 6 : capByLevel);
+    return filtered.slice(0, cap);
+  }, [routePaths, routeProjection, mapView.center, mapView.zoom, currentZoomLevel, activeZoomRules.caps.maxRouteLabels]);
+
+  const visibleRouteLabelCount = useMemo(() => {
+    const capByLevel = currentZoomLevel === "monde" ? 35 : currentZoomLevel === "continent" ? 90 : currentZoomLevel === "nation" ? 220 : 400;
+    const cap = Math.min(capByLevel, activeZoomRules.caps.maxRouteLabels);
+    return Math.min(visibleRoutePaths.length, cap);
+  }, [visibleRoutePaths.length, currentZoomLevel, activeZoomRules.caps.maxRouteLabels]);
+
+  useEffect(() => {
+    emitMapMetric("map_routes_visible_count", visibleRoutePaths.length, {
+      mode,
+      zoomLevel: currentZoomLevel,
+    });
+    emitMapMetric("map_route_labels_visible_count", visibleRouteLabelCount, {
+      mode,
+      zoomLevel: currentZoomLevel,
+    });
+  }, [visibleRoutePaths.length, visibleRouteLabelCount, mode, currentZoomLevel]);
 
   useEffect(() => {
     let active = true;
@@ -1694,21 +1973,6 @@ export function WorldMapClient({
         </div>
       )}
 
-      {/* Légende des royaumes */}
-      {enableRealmColoring && (
-      <div className="absolute left-4 top-4 z-30 hidden max-h-[35vh] w-56 overflow-auto rounded-xl border border-white/10 bg-black/55 p-2 backdrop-blur md:block">
-        <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-amber-100">Royaumes</p>
-        <div className="space-y-1">
-          {realmLegendItems.map((item) => (
-            <div key={item.id} className="flex items-center gap-2 text-xs text-stone-200">
-              <span className="inline-block h-3 w-3 rounded-full border border-white/20" style={{ backgroundColor: item.color }} />
-              <span className="truncate">{item.name}</span>
-            </div>
-          ))}
-        </div>
-      </div>
-      )}
-
       {/* Panneau réglages MJ : en overlay à droite si pas de settingsContainerId, sinon via portail. */}
       {mode === "mj" &&
         (() => {
@@ -1823,6 +2087,218 @@ export function WorldMapClient({
                       Afficher les zones cliquables (debug)
                     </label>
                   )}
+                </div>
+              )}
+            </section>
+
+            <section className="space-y-1">
+              <button
+                type="button"
+                onClick={() => toggleSettingsSection("config-zoom-rules")}
+                className="flex w-full items-center justify-between rounded py-1 text-left text-sm font-semibold text-amber-100 hover:bg-white/5"
+              >
+                <span>Règles par palier de zoom</span>
+                <span className="text-amber-200/80" aria-hidden>{settingsSectionOpen["config-zoom-rules"] ? "▼" : "▶"}</span>
+              </button>
+              {settingsSectionOpen["config-zoom-rules"] && (
+                <div className="space-y-2 rounded-lg border border-white/10 bg-black/30 p-2 pl-2">
+                  <label className="block text-[11px] text-stone-400">
+                    Niveau édité
+                    <select
+                      className="mt-1 w-full rounded-md border border-white/10 bg-black/40 px-2 py-1 text-xs text-stone-100"
+                      value={zoomRulesEditorLevel}
+                      onChange={(e) => setZoomRulesEditorLevel(e.target.value as MapZoomLevelId)}
+                    >
+                      {zoomThresholdLabels.map((z) => (
+                        <option key={z.id} value={z.id}>
+                          {z.label} (seuil {z.zoom.toFixed(2)})
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <div className="grid grid-cols-2 gap-2 text-xs text-stone-200">
+                    {(
+                      [
+                        ["routes", "Routes"],
+                        ["cities", "Villes"],
+                        ["smallEntities", "Petites entités"],
+                        ["forests", "Forêts"],
+                        ["rivers", "Rivières"],
+                        ["lakes", "Lacs"],
+                        ["regionBorders", "Frontières"],
+                        ["realmLabels", "Noms royaumes"],
+                      ] as Array<[keyof MapDisplayConfig["zoomLevelRules"]["province"]["visibility"], string]>
+                    ).map(([key, label]) => (
+                      <label key={key} className="flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          checked={Boolean(mjUi.zoomLevelRules[zoomRulesEditorLevel].visibility[key])}
+                          onChange={(e) =>
+                            setMjUi((p) => ({
+                              ...p,
+                              zoomLevelRules: {
+                                ...p.zoomLevelRules,
+                                [zoomRulesEditorLevel]: {
+                                  ...p.zoomLevelRules[zoomRulesEditorLevel],
+                                  visibility: {
+                                    ...p.zoomLevelRules[zoomRulesEditorLevel].visibility,
+                                    [key]: e.target.checked,
+                                  },
+                                },
+                              },
+                            }))
+                          }
+                        />
+                        {label}
+                      </label>
+                    ))}
+                  </div>
+                  <div className="space-y-2 text-xs text-stone-200">
+                    <p className="text-[11px] text-stone-400">Échelles</p>
+                    {(
+                      [
+                        ["cities", "Villes"],
+                        ["routes", "Routes"],
+                        ["entities", "Entités"],
+                      ] as Array<[keyof MapDisplayConfig["zoomLevelRules"]["province"]["scale"], string]>
+                    ).map(([key, label]) => (
+                      <div key={key} className="flex items-center gap-2">
+                        <span className="w-14 text-[11px] text-stone-400">{label}</span>
+                        <input
+                          type="range"
+                          min={0.1}
+                          max={2}
+                          step={0.05}
+                          value={mjUi.zoomLevelRules[zoomRulesEditorLevel].scale[key]}
+                          onChange={(e) =>
+                            setMjUi((p) => ({
+                              ...p,
+                              zoomLevelRules: {
+                                ...p.zoomLevelRules,
+                                [zoomRulesEditorLevel]: {
+                                  ...p.zoomLevelRules[zoomRulesEditorLevel],
+                                  scale: {
+                                    ...p.zoomLevelRules[zoomRulesEditorLevel].scale,
+                                    [key]: Number(e.target.value),
+                                  },
+                                },
+                              },
+                            }))
+                          }
+                          className="flex-1"
+                        />
+                        <span className="w-10 text-right tabular-nums">
+                          {Number(mjUi.zoomLevelRules[zoomRulesEditorLevel].scale[key]).toFixed(2)}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="space-y-2 text-xs text-stone-200">
+                    <p className="text-[11px] text-stone-400">Caps</p>
+                    {(
+                      [
+                        ["maxRouteLabels", "Labels routes"],
+                        ["maxCities", "Villes max"],
+                        ["maxEntities", "Entités max"],
+                      ] as Array<[keyof MapDisplayConfig["zoomLevelRules"]["province"]["caps"], string]>
+                    ).map(([key, label]) => (
+                      <div key={key} className="flex items-center gap-2">
+                        <span className="w-20 text-[11px] text-stone-400">{label}</span>
+                        <input
+                          type="number"
+                          min={0}
+                          max={20000}
+                          value={mjUi.zoomLevelRules[zoomRulesEditorLevel].caps[key]}
+                          onChange={(e) =>
+                            setMjUi((p) => ({
+                              ...p,
+                              zoomLevelRules: {
+                                ...p.zoomLevelRules,
+                                [zoomRulesEditorLevel]: {
+                                  ...p.zoomLevelRules[zoomRulesEditorLevel],
+                                  caps: {
+                                    ...p.zoomLevelRules[zoomRulesEditorLevel].caps,
+                                    [key]: Math.max(0, Math.min(20000, Number(e.target.value) || 0)),
+                                  },
+                                },
+                              },
+                            }))
+                          }
+                          className="flex-1 rounded border border-white/10 bg-black/40 px-2 py-1 text-xs text-stone-100"
+                        />
+                      </div>
+                    ))}
+                  </div>
+                  <button
+                    type="button"
+                    className="w-full rounded-md border border-indigo-400/40 bg-indigo-950/40 px-2 py-1 text-xs font-semibold text-indigo-100 hover:bg-indigo-900/40"
+                    onClick={() =>
+                      setMjUi((p) => ({
+                        ...p,
+                        zoomLevelRules: {
+                          ...p.zoomLevelRules,
+                          province: {
+                            visibility: {
+                              routes: true,
+                              cities: true,
+                              smallEntities: true,
+                              forests: true,
+                              rivers: true,
+                              lakes: true,
+                              regionBorders: true,
+                              realmLabels: false,
+                            },
+                            scale: { cities: 1, routes: 1, entities: 1 },
+                            caps: { maxRouteLabels: 600, maxCities: 5000, maxEntities: 5000 },
+                          },
+                          nation: {
+                            visibility: {
+                              routes: true,
+                              cities: true,
+                              smallEntities: true,
+                              forests: true,
+                              rivers: true,
+                              lakes: true,
+                              regionBorders: true,
+                              realmLabels: false,
+                            },
+                            scale: { cities: 0.72, routes: 0.72, entities: 0.72 },
+                            caps: { maxRouteLabels: 260, maxCities: 2200, maxEntities: 2200 },
+                          },
+                          continent: {
+                            visibility: {
+                              routes: false,
+                              cities: true,
+                              smallEntities: false,
+                              forests: false,
+                              rivers: true,
+                              lakes: true,
+                              regionBorders: true,
+                              realmLabels: true,
+                            },
+                            scale: { cities: 0.42, routes: 0.42, entities: 0.45 },
+                            caps: { maxRouteLabels: 0, maxCities: 900, maxEntities: 500 },
+                          },
+                          monde: {
+                            visibility: {
+                              routes: false,
+                              cities: true,
+                              smallEntities: false,
+                              forests: false,
+                              rivers: false,
+                              lakes: false,
+                              regionBorders: true,
+                              realmLabels: true,
+                            },
+                            scale: { cities: 0.25, routes: 0.25, entities: 0.3 },
+                            caps: { maxRouteLabels: 0, maxCities: 450, maxEntities: 250 },
+                          },
+                        },
+                      }))
+                    }
+                  >
+                    Appliquer recommandations RP
+                  </button>
                 </div>
               )}
             </section>
@@ -2034,6 +2510,7 @@ export function WorldMapClient({
         <div className="absolute right-4 top-4 z-50 rounded-xl border border-white/10 bg-black/60 px-3 py-2 shadow backdrop-blur">
           <p className="text-[11px] text-stone-200">
             Zoom : <span className="font-mono text-stone-100/90">{mapView.zoom.toFixed(2)}</span> ·{" "}
+            <span className="font-mono text-cyan-100">{currentZoomLevel}</span> ·{" "}
             <span className="font-mono text-amber-100">{zoomPct.toFixed(0)}%</span>
           </p>
         </div>
@@ -2719,11 +3196,13 @@ export function WorldMapClient({
         className="absolute inset-0"
         style={{ overscrollBehavior: "contain" }}
       >
-        {rendererInfo.fallback && (
-          <div className="pointer-events-none absolute left-3 top-3 z-20 rounded-md border border-amber-500/30 bg-black/65 px-2 py-1 text-[11px] text-amber-100">
-            Rendu WebGL demandé, fallback SVG actif (migration en cours).
-          </div>
-        )}
+        <div className="pointer-events-none absolute left-3 top-3 z-20 rounded-md border border-amber-500/30 bg-black/65 px-2 py-1 text-[11px] text-amber-100">
+          Renderer: <span className="font-mono">{rendererInfo.effective}</span>
+          {rendererInfo.fallback ? ` (${rendererInfo.reason})` : ""}
+        </div>
+        <div className="pointer-events-none absolute left-3 top-11 z-20 rounded-md border border-cyan-500/30 bg-black/65 px-2 py-1 text-[11px] text-cyan-100">
+          Niveau: <span className="font-mono">{currentZoomLevelLabel}</span>
+        </div>
         <ComposableMap
           projection="geoMercator"
           projectionConfig={{ scale: 170 }}
@@ -2819,19 +3298,21 @@ export function WorldMapClient({
 
               {/* Provinces (régions) : DOIVENT être sous les marqueurs */}
               {renderedRegions}
+              {!isInteracting && renderedRealmBoundaries}
 
               {/* Routes (tracés sinueux entre villes) — config dédiée (opacité, taille, progressivité) */}
-              {routePaths.length > 0 && (
+              {!isWebglRenderer && activeZoomRules.visibility.routes && visibleRoutePaths.length > 0 && (
                 <g opacity={routeRenderOpacity} style={{ pointerEvents: "auto" }}>
-                  {routePaths.map((rp) => {
-                    const visibleStroke = rp.strokeWidth * routeSizeFactor;
+                  {visibleRoutePaths.map((rp, idx) => {
+                    const style = routeTierStyle[(rp.tier as RouteTier) ?? "local"] ?? routeTierStyle.local;
+                    const visibleStroke = style.strokeWidth * routeSizeFactor;
                     const labelFontSize = (displayConfig.routeLabelFontSizePx ?? 0.25) * routeSizeFactor;
                     return (
                       <g key={rp.id}>
                         <path
                           d={rp.d}
                           fill="none"
-                          stroke={rp.stroke}
+                          stroke={style.stroke}
                           strokeWidth={visibleStroke}
                           strokeLinecap="round"
                           strokeLinejoin="round"
@@ -2853,8 +3334,9 @@ export function WorldMapClient({
                             });
                           }}
                         />
-                        {labelFontSize > 0 && (
+                        {labelFontSize > 0 && idx < visibleRouteLabelCount && (
                           <text
+                            className="map-label-font"
                             x={rp.labelX}
                             y={rp.labelY}
                             fill="rgba(220, 200, 160, 0.95)"
@@ -2862,7 +3344,7 @@ export function WorldMapClient({
                             textAnchor="middle"
                             dominantBaseline="middle"
                             transform={`rotate(${rp.labelAngleDeg} ${rp.labelX} ${rp.labelY})`}
-                            style={{ cursor: "pointer", pointerEvents: "all" }}
+                            style={{ cursor: "pointer", pointerEvents: "all", fontFamily: "\"MiddleEarthMap\", serif" }}
                             onClick={() => {
                               if (mode === "mj") {
                                 setSelectedRouteId(rp.id);
@@ -2889,9 +3371,14 @@ export function WorldMapClient({
               )}
 
               {/* Objets (villes/bâtiments) */}
-              {visibleObjects.map((o) => (
+              {!isWebglRenderer && visibleObjects.map((o) => (
                 <MarkerAny key={`obj-${o.id}`} coordinates={[o.lon as number, o.lat as number]}>
-                  <g opacity={0.85} data-poi-id={mode === "mj" ? o.id : undefined} style={{ pointerEvents: mode === "mj" ? "all" : "none", cursor: mode === "mj" ? "pointer" : "default" }}>
+                  <g
+                    opacity={0.85}
+                    transform={`scale(${activeZoomRules.scale.entities})`}
+                    data-poi-id={mode === "mj" ? o.id : undefined}
+                    style={{ pointerEvents: mode === "mj" ? "all" : "none", cursor: mode === "mj" ? "pointer" : "default" }}
+                  >
                     {o.icon_key === "fort" ? (
                       <path
                         d="M-4 6 V-2 L-2 -4 L0 -2 L2 -4 L4 -2 V6 Z"
@@ -2914,8 +3401,8 @@ export function WorldMapClient({
                 </MarkerAny>
               ))}
 
-              {/* Villes (entités) — hitbox = cercle r=5 (diamètre visuel de la boîte 10Ã—10) */}
-              {visibleCities.map((c) => (
+              {/* Villes (entités) — hitbox = cercle r=5 (diamètre visuel de la boîte 10×10) */}
+              {!isWebglRenderer && visibleCities.map((c) => (
                 <MarkerAny key={`city-${c.id}`} coordinates={[c.lon, c.lat]}>
                   {(() => {
                     const cityScale = cityScaleFactorFor(c);
@@ -2986,13 +3473,36 @@ export function WorldMapClient({
                               style={{ pointerEvents: "none" }}
                             />
                           )}
+                          {provinceCapitalCityIds.has(c.id) && (
+                            <circle
+                              cx={0}
+                              cy={0}
+                              r={5.7}
+                              fill="none"
+                              stroke="rgba(253, 224, 71, 0.95)"
+                              strokeWidth={0.8}
+                              style={{ pointerEvents: "none" }}
+                            />
+                          )}
+                          {realmCapitalCityIds.has(c.id) && (
+                            <circle
+                              cx={0}
+                              cy={0}
+                              r={7.2}
+                              fill="none"
+                              stroke="rgba(250, 204, 21, 0.95)"
+                              strokeWidth={1}
+                              style={{ pointerEvents: "none" }}
+                            />
+                          )}
                           {/* Nom de la ville : même zoom/fade que l’icône (réglage taille = cityLabelFontSizePx) */}
                           <text
+                            className="map-label-font"
                             y={6}
                             textAnchor="middle"
                             fill="rgba(220, 200, 160, 0.95)"
                             fontSize={2.5 * ((displayConfig.cityLabelFontSizePx ?? 10) / 10)}
-                            style={{ pointerEvents: "none" }}
+                            style={{ pointerEvents: "none", fontFamily: "\"MiddleEarthMap\", serif" }}
                           >
                             {c.name}
                           </text>
@@ -3001,6 +3511,245 @@ export function WorldMapClient({
                     );
                   })()}
                   <title>{c.name}</title>
+                </MarkerAny>
+              ))}
+
+            </g>
+
+              {/*
+               * Mode WebGL rollout : les routes restent en SVG (stroke natif), hors fantasyGlow.
+               * La triangulation WebGL en quads produisait des artefacts énormes (échelle / micro-segments).
+               */}
+              {isWebglRenderer && activeZoomRules.visibility.routes && visibleRoutePaths.length > 0 && (
+                <g opacity={routeRenderOpacity} style={{ pointerEvents: "auto" }}>
+                  {visibleRoutePaths.map((rp, idx) => {
+                    const style = routeTierStyle[(rp.tier as RouteTier) ?? "local"] ?? routeTierStyle.local;
+                    const visibleStroke = style.strokeWidth * routeSizeFactor;
+                    const labelFontSize = (displayConfig.routeLabelFontSizePx ?? 0.25) * routeSizeFactor;
+                    return (
+                      <g key={`wgl-route-${rp.id}`}>
+                        <path
+                          d={rp.d}
+                          fill="none"
+                          stroke={style.stroke}
+                          strokeWidth={visibleStroke}
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          style={{ cursor: "pointer", pointerEvents: "all" }}
+                          data-route-id={mode === "mj" ? rp.id : undefined}
+                          onClick={() => {
+                            if (mode === "mj") {
+                              if (!selectingEndpoint) setSelectedRouteId(rp.id);
+                              return;
+                            }
+                            const route = (routes ?? []).find((r) => r.id === rp.id);
+                            setPublicInfoPanel({
+                              kind: "route",
+                              title: route?.name?.trim() || rp.name,
+                              lines: [
+                                `Type: ${ROUTE_TIER_LABELS[(route?.tier as RouteTier) ?? "local"] ?? route?.tier ?? "Route"}`,
+                                route?.distance_km ? `Distance: ${Math.round(route.distance_km)} km` : "Distance: inconnue",
+                              ],
+                            });
+                          }}
+                        />
+                        {labelFontSize > 0 && idx < visibleRouteLabelCount && (
+                          <text
+                            className="map-label-font"
+                            x={rp.labelX}
+                            y={rp.labelY}
+                            fill="rgba(220, 200, 160, 0.95)"
+                            fontSize={labelFontSize}
+                            textAnchor="middle"
+                            dominantBaseline="middle"
+                            transform={`rotate(${rp.labelAngleDeg} ${rp.labelX} ${rp.labelY})`}
+                            style={{ cursor: "pointer", pointerEvents: "all", fontFamily: "\"MiddleEarthMap\", serif" }}
+                            onClick={() => {
+                              if (mode === "mj") {
+                                setSelectedRouteId(rp.id);
+                                return;
+                              }
+                              const route = (routes ?? []).find((r) => r.id === rp.id);
+                              setPublicInfoPanel({
+                                kind: "route",
+                                title: route?.name?.trim() || rp.name,
+                                lines: [
+                                  `Type: ${ROUTE_TIER_LABELS[(route?.tier as RouteTier) ?? "local"] ?? route?.tier ?? "Route"}`,
+                                  route?.distance_km ? `Distance: ${Math.round(route.distance_km)} km` : "Distance: inconnue",
+                                ],
+                              });
+                            }}
+                          >
+                            {rp.name}
+                          </text>
+                        )}
+                      </g>
+                    );
+                  })}
+                </g>
+              )}
+
+              {isWebglRenderer &&
+                visibleObjects.map((o) => (
+                  <MarkerAny key={`obj-wgl-${o.id}`} coordinates={[o.lon as number, o.lat as number]}>
+                    <g
+                      opacity={0.85}
+                      transform={`scale(${activeZoomRules.scale.entities})`}
+                      data-poi-id={mode === "mj" ? o.id : undefined}
+                      style={{ pointerEvents: mode === "mj" ? "all" : "none", cursor: mode === "mj" ? "pointer" : "default" }}
+                    >
+                      {o.icon_key === "fort" ? (
+                        <path
+                          d="M-4 6 V-2 L-2 -4 L0 -2 L2 -4 L4 -2 V6 Z"
+                          fill="rgba(120, 78, 42, 0.75)"
+                          stroke="rgba(50, 35, 20, 0.35)"
+                          strokeWidth="0.6"
+                        />
+                      ) : o.icon_key === "city" ? (
+                        <path
+                          d="M-5 6 V0 L0 -5 L5 0 V6 Z"
+                          fill="rgba(150, 96, 46, 0.70)"
+                          stroke="rgba(50, 35, 20, 0.35)"
+                          strokeWidth="0.6"
+                        />
+                      ) : (
+                        <circle cx={0} cy={0} r={3.6} fill="rgba(150, 96, 46, 0.55)" stroke="rgba(50, 35, 20, 0.30)" strokeWidth="0.6" />
+                      )}
+                    </g>
+                    <title>{o.name}</title>
+                  </MarkerAny>
+                ))}
+
+              {isWebglRenderer &&
+                visibleCities.map((c) => (
+                  <MarkerAny key={`city-wgl-${c.id}`} coordinates={[c.lon, c.lat]}>
+                    {(() => {
+                      const cityScale = cityScaleFactorFor(c);
+                      return (
+                        <g
+                          opacity={citiesRenderOpacity}
+                          style={{ pointerEvents: "none" }}
+                          data-city-id={mode === "mj" ? c.id : undefined}
+                        >
+                          <g transform={`scale(${cityMarkerScale * cityScale})`}>
+                            <circle
+                              cx={0}
+                              cy={0}
+                              r={5}
+                              fill="transparent"
+                              style={{
+                                pointerEvents: citiesOpacity > 0.001 ? "all" : "none",
+                                cursor: "pointer",
+                                stroke: mjUi.debugCityHitboxes ? "rgba(239,68,68,0.95)" : "transparent",
+                                strokeWidth: mjUi.debugCityHitboxes ? 0.8 : 0,
+                              }}
+                              onClick={(e: any) => openCityPanel(e, c.id)}
+                            />
+                            {typeof c.icon_key === "string" && c.icon_key.startsWith("http") ? (
+                              <image
+                                href={c.icon_key}
+                                x={-5}
+                                y={-5}
+                                width={10}
+                                height={10}
+                                preserveAspectRatio="none"
+                                style={{ pointerEvents: "none", opacity: 1 }}
+                              />
+                            ) : c.icon_key === "castle" ? (
+                              <path
+                                d="M-4 6 V-2 L-2 -4 L0 -2 L2 -4 L4 -2 V6 Z"
+                                fill="rgba(235, 192, 120, 1)"
+                                stroke="rgba(20, 12, 6, 0.55)"
+                                strokeWidth="0.9"
+                                style={{ pointerEvents: "none" }}
+                              />
+                            ) : c.icon_key === "city" ? (
+                              <path
+                                d="M-5 6 V0 L0 -5 L5 0 V6 Z"
+                                fill="rgba(235, 192, 120, 1)"
+                                stroke="rgba(20, 12, 6, 0.55)"
+                                strokeWidth="0.9"
+                                style={{ pointerEvents: "none" }}
+                              />
+                            ) : c.icon_key === "village" ? (
+                              <circle
+                                cx={0}
+                                cy={0}
+                                r={3.1}
+                                fill="rgba(235, 192, 120, 1)"
+                                stroke="rgba(20, 12, 6, 0.55)"
+                                strokeWidth="0.9"
+                                style={{ pointerEvents: "none" }}
+                              />
+                            ) : (
+                              <circle
+                                cx={0}
+                                cy={0}
+                                r={3.8}
+                                fill="rgba(235, 192, 120, 1)"
+                                stroke="rgba(20, 12, 6, 0.55)"
+                                strokeWidth="0.9"
+                                style={{ pointerEvents: "none" }}
+                              />
+                            )}
+                            {provinceCapitalCityIds.has(c.id) && (
+                              <circle
+                                cx={0}
+                                cy={0}
+                                r={5.7}
+                                fill="none"
+                                stroke="rgba(253, 224, 71, 0.95)"
+                                strokeWidth={0.8}
+                                style={{ pointerEvents: "none" }}
+                              />
+                            )}
+                            {realmCapitalCityIds.has(c.id) && (
+                              <circle
+                                cx={0}
+                                cy={0}
+                                r={7.2}
+                                fill="none"
+                                stroke="rgba(250, 204, 21, 0.95)"
+                                strokeWidth={1}
+                                style={{ pointerEvents: "none" }}
+                              />
+                            )}
+                            <text
+                              className="map-label-font"
+                              y={6}
+                              textAnchor="middle"
+                              fill="rgba(220, 200, 160, 0.95)"
+                              fontSize={2.5 * ((displayConfig.cityLabelFontSizePx ?? 10) / 10)}
+                              style={{ pointerEvents: "none", fontFamily: "\"MiddleEarthMap\", serif" }}
+                            >
+                              {c.name}
+                            </text>
+                          </g>
+                        </g>
+                      );
+                    })()}
+                    <title>{c.name}</title>
+                  </MarkerAny>
+                ))}
+              {!isInteracting && realmLabelAnchors.map((r) => (
+                <MarkerAny key={`realm-label-${r.realmId}`} coordinates={[r.lon, r.lat]}>
+                  <text
+                    className="map-label-font"
+                    textAnchor="middle"
+                    dominantBaseline="middle"
+                    fill="rgba(236, 225, 188, 0.92)"
+                    fontSize={currentZoomLevel === "monde" ? 4.2 : 5.2}
+                    transform={`rotate(${r.angleDeg})`}
+                    style={{
+                      pointerEvents: "none",
+                      paintOrder: "stroke",
+                      stroke: "rgba(18, 14, 9, 0.75)",
+                      strokeWidth: 0.9,
+                      fontFamily: "\"MiddleEarthMap\", serif",
+                    }}
+                  >
+                    {r.name}
+                  </text>
                 </MarkerAny>
               ))}
 
@@ -3047,7 +3796,6 @@ export function WorldMapClient({
                   <title>{placingCity.name}</title>
                 </MarkerAny>
               )}
-            </g>
           </ZoomableGroup>
         </ComposableMap>
       </div>

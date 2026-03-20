@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
-import type { Effect, EffectTargetRef } from "@/lib/effects/engine";
+import type { Effect } from "@/types/fantasy";
+import type { EffectTargetRef } from "@/lib/effects/engine";
 import { resolveEffectsForTarget } from "@/lib/effects/engine";
 import type { EffectTargetType, UUID } from "@/types/fantasy";
 

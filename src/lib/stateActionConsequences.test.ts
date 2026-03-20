@@ -112,7 +112,11 @@ describe("stateActionConsequences", () => {
 
     expect(res.error).toBeUndefined();
     expect(upsertSpy).toHaveBeenCalledTimes(1);
-    const payload = upsertSpy.mock.calls[0]?.[0];
+    const payload = (upsertSpy as any).mock.calls[0][0] as {
+      country_a_id: string;
+      country_b_id: string;
+      value: number;
+    };
     // normalized pair: a < b
     expect(payload.country_a_id).toBe("a");
     expect(payload.country_b_id).toBe("b");

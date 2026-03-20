@@ -19,10 +19,10 @@ export default async function HomePage({
   const supabase = createAnonClientForCache();
 
   const [realmsRes, provinceRegionsRes, poiRes, citiesRes, routesRes, routePathwayPointsRes] = await Promise.all([
-    supabase.from("realms").select("id, slug, name, is_npc, color_hex, banner_url, summary, leader_name").order("name"),
+    supabase.from("realms").select("id, slug, name, is_npc, color_hex, banner_url, summary, leader_name, capital_city_id").order("name"),
     supabase
       .from("province_base_regions")
-      .select("region_id, provinces(id, realm_id, name, attrs)")
+      .select("region_id, provinces(id, realm_id, name, capital_city_id, attrs)")
       .order("created_at", { ascending: true }),
     supabase
       .from("poi")

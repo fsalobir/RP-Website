@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { createServiceRoleClient } from "@/lib/supabase/server";
-import { assignRealmPlayer, updateRealm } from "../../_actions/realms";
+import { assignRealmPlayer, updateProvinceCapital, updateRealm, updateRealmNationalCapital } from "../../_actions/realms";
 
 export const revalidate = 0;
 
@@ -12,14 +12,16 @@ export default async function MjRealmEditPage({
 }) {
   const { id } = await params;
   const admin = createServiceRoleClient();
-  const [{ data: realm }, { data: assignment }, usersRes] = await Promise.all([
+  const [{ data: realm }, { data: assignment }, usersRes, provincesRes, citiesRes] = await Promise.all([
     admin
       .from("realms")
-      .select("id, name, slug, is_npc, color_hex, banner_url, summary, leader_name, player_user_id, settings")
+      .select("id, name, slug, is_npc, color_hex, banner_url, summary, leader_name, player_user_id, capital_city_id, settings")
       .eq("id", id)
       .maybeSingle(),
     admin.from("realm_player_assignments").select("realm_id, user_id, email, display_name").eq("realm_id", id).maybeSingle(),
     admin.auth.admin.listUsers({ perPage: 1000 }),
+    admin.from("provinces").select("id, realm_id, name, capital_city_id").eq("realm_id", id).order("name"),
+    admin.from("cities").select("id, province_id, realm_id, name, lon, lat").eq("realm_id", id).order("name"),
   ]);
   if (!realm) notFound();
 
@@ -33,6 +35,20 @@ export default async function MjRealmEditPage({
   }));
 
   const selectedUserId = assignment?.user_id ?? realm.player_user_id ?? "";
+  const provinces = (provincesRes.data ?? []) as Array<{ id: string; realm_id: string; name: string; capital_city_id: string | null }>;
+  const cities = (citiesRes.data ?? []) as Array<{ id: string; province_id: string; realm_id: string; name: string; lon: number; lat: number }>;
+  const citiesByProvince = new Map<string, Array<{ id: string; name: string }>>();
+  for (const c of cities) {
+    if (!citiesByProvince.has(c.province_id)) citiesByProvince.set(c.province_id, []);
+    citiesByProvince.get(c.province_id)!.push({ id: c.id, name: c.name });
+  }
+  const regionalCapitalOptions = provinces
+    .map((p) => {
+      const city = p.capital_city_id ? cities.find((c) => c.id === p.capital_city_id) : null;
+      if (!city) return null;
+      return { id: city.id, name: city.name, provinceName: p.name };
+    })
+    .filter((x): x is { id: string; name: string; provinceName: string } => x !== null);
 
   return (
     <div className="space-y-6">
@@ -63,6 +79,7 @@ export default async function MjRealmEditPage({
             banner_url: String(fd.get("banner_url") ?? "") || null,
             summary: String(fd.get("summary") ?? "") || null,
             leader_name: String(fd.get("leader_name") ?? "") || null,
+            capital_city_id: String(fd.get("capital_city_id") ?? "") || null,
           });
         }}
         className="space-y-4"
@@ -98,6 +115,22 @@ export default async function MjRealmEditPage({
                 Royaume PNJ
               </label>
             </div>
+            <div>
+              <label className="text-xs text-stone-300">Capitale nationale</label>
+              <select
+                name="capital_city_id"
+                defaultValue={realm.capital_city_id ?? ""}
+                className="mt-1 w-full rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-sm text-white"
+              >
+                <option value="">Aucune capitale nationale</option>
+                {regionalCapitalOptions.map((opt) => (
+                  <option key={opt.id} value={opt.id}>
+                    {opt.name} ({opt.provinceName})
+                  </option>
+                ))}
+              </select>
+              <p className="mt-1 text-[11px] text-stone-400">La capitale nationale doit être une capitale régionale du royaume.</p>
+            </div>
           </div>
         </section>
 
@@ -124,6 +157,93 @@ export default async function MjRealmEditPage({
           </button>
         </div>
       </form>
+
+      <section className="rounded-2xl border border-emerald-500/20 bg-emerald-950/10">
+        <div className="border-b border-emerald-500/20 px-4 py-3">
+          <h2 className="font-semibold text-emerald-100">Catégorie: Territoire et capitales régionales</h2>
+          <p className="text-xs text-emerald-200/70">
+            Définissez la ville maîtresse de chaque province. La capitale nationale doit être choisie parmi cette liste.
+          </p>
+        </div>
+        <div className="space-y-2 p-4">
+          {provinces.length === 0 && <p className="text-sm text-stone-300">Aucune province liée à ce royaume.</p>}
+          {provinces.map((province) => {
+            const provinceCities = citiesByProvince.get(province.id) ?? [];
+            return (
+              <form
+                key={province.id}
+                action={async (fd) => {
+                  "use server";
+                  await updateProvinceCapital({
+                    province_id: province.id,
+                    capital_city_id: String(fd.get("capital_city_id") ?? "") || null,
+                  });
+                }}
+                className="grid gap-3 rounded-lg border border-white/10 bg-black/20 p-3 md:grid-cols-[1fr_1fr_auto]"
+              >
+                <div>
+                  <p className="text-sm font-semibold text-white">{province.name}</p>
+                  <p className="text-xs text-stone-400">Province</p>
+                </div>
+                <div>
+                  <label className="text-xs text-stone-300">Capitale régionale</label>
+                  <select
+                    name="capital_city_id"
+                    defaultValue={province.capital_city_id ?? ""}
+                    className="mt-1 w-full rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-sm text-white"
+                  >
+                    <option value="">Aucune capitale régionale</option>
+                    {provinceCities.map((city) => (
+                      <option key={city.id} value={city.id}>
+                        {city.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <button type="submit" className="self-end rounded-lg bg-emerald-700 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-600">
+                  Sauver
+                </button>
+              </form>
+            );
+          })}
+        </div>
+      </section>
+
+      <section className="rounded-2xl border border-amber-500/20 bg-amber-950/10">
+        <div className="border-b border-amber-500/20 px-4 py-3">
+          <h2 className="font-semibold text-amber-100">Action rapide: capitale nationale</h2>
+          <p className="text-xs text-amber-200/70">Mise à jour directe sans modifier le reste de la fiche.</p>
+        </div>
+        <form
+          action={async (fd) => {
+            "use server";
+            await updateRealmNationalCapital({
+              realm_id: realm.id,
+              capital_city_id: String(fd.get("capital_city_id") ?? "") || null,
+            });
+          }}
+          className="grid gap-3 p-4 md:grid-cols-[1fr_auto]"
+        >
+          <div>
+            <label className="text-xs text-amber-100">Capitale nationale</label>
+            <select
+              name="capital_city_id"
+              defaultValue={realm.capital_city_id ?? ""}
+              className="mt-1 w-full rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-sm text-white"
+            >
+              <option value="">Aucune capitale nationale</option>
+              {regionalCapitalOptions.map((opt) => (
+                <option key={opt.id} value={opt.id}>
+                  {opt.name} ({opt.provinceName})
+                </option>
+              ))}
+            </select>
+          </div>
+          <button type="submit" className="self-end rounded-lg bg-amber-700 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-600">
+            Mettre à jour
+          </button>
+        </form>
+      </section>
 
       <section className="rounded-2xl border border-indigo-500/20 bg-indigo-950/10">
         <div className="border-b border-indigo-500/20 px-4 py-3">
