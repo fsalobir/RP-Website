@@ -28,7 +28,7 @@ import {
   simplifyPolylinePreservingCurves,
 } from "@/lib/routesPrecompute";
 import { emitMapMetric } from "@/lib/mapObservability";
-import { isMapInfoPanelsV2Enabled, isRealmColoringEnabled } from "@/lib/featureFlags";
+import { isMapInfoPanelsV2Enabled, isMapRouteWorkerEnabled, isRealmColoringEnabled } from "@/lib/featureFlags";
 import { EntityInfoPanel } from "@/components/map/EntityInfoPanel";
 import { MapScheduler } from "@/lib/mapScheduler";
 import {
@@ -42,12 +42,45 @@ import {
 import { feature, mesh } from "topojson-client";
 import { createClient } from "@/lib/supabase/client";
 import { computeRealmLabelAnchors } from "@/lib/realmMapLabels";
+import type { RouteGeometryWorkerRequest, RouteGeometryWorkerResponse } from "@/lib/routeGeometryWorkerTypes";
 
 const ComposableMap = dynamic(() => import("react-simple-maps").then((m) => m.ComposableMap), { ssr: false });
 const Geographies = dynamic(() => import("react-simple-maps").then((m) => m.Geographies), { ssr: false });
 const Geography = dynamic(() => import("react-simple-maps").then((m) => m.Geography), { ssr: false });
 const ZoomableGroup = dynamic(() => import("react-simple-maps").then((m) => m.ZoomableGroup), { ssr: false });
 const Marker = dynamic(() => import("react-simple-maps").then((m) => (m as any).Marker), { ssr: false });
+const ROUTE_GEOMETRY_CACHE_MAX_ENTRIES = 900;
+const ENABLE_FRAME_GAP_METRIC = process.env.NEXT_PUBLIC_MAP_DEBUG_FRAME_GAP === "1";
+const ENABLE_ROUTE_GEOMETRY_WORKER = isMapRouteWorkerEnabled();
+
+function requestRouteGeometryFromWorker(
+  worker: Worker,
+  request: RouteGeometryWorkerRequest
+): Promise<Array<[number, number]> | null> {
+  return new Promise((resolve) => {
+    const timeout = window.setTimeout(() => {
+      worker.removeEventListener("message", onMessage as EventListener);
+      resolve(null);
+    }, 2500);
+    const onMessage = (event: MessageEvent<RouteGeometryWorkerResponse>) => {
+      const msg = event.data;
+      if (!msg) return;
+      if (msg.type === "route-geometry-built" && msg.payload.routeId === request.payload.routeId) {
+        window.clearTimeout(timeout);
+        worker.removeEventListener("message", onMessage as EventListener);
+        resolve(msg.payload.points);
+        return;
+      }
+      if (msg.type === "route-geometry-failed" && msg.routeId === request.payload.routeId) {
+        window.clearTimeout(timeout);
+        worker.removeEventListener("message", onMessage as EventListener);
+        resolve(null);
+      }
+    };
+    worker.addEventListener("message", onMessage as EventListener);
+    worker.postMessage(request);
+  });
+}
 
 type MapFeatureProps = {
   regionId?: string | null;
@@ -1435,6 +1468,7 @@ export function WorldMapClient({
     const list = (cities ?? []).filter((c) => Number.isFinite(c.lon) && Number.isFinite(c.lat));
     return list.slice(0, activeZoomRules.caps.maxCities);
   }, [cities, activeZoomRules.visibility.cities, activeZoomRules.caps.maxCities]);
+  const validCitiesAll = useMemo(() => filterCitiesWithValidCoords(cities ?? []), [cities]);
 
   const cityById = useMemo(() => new Map(visibleCities.map((c) => [c.id, c])), [visibleCities]);
   const provinceCapitalCityIds = useMemo(() => {
@@ -1515,7 +1549,41 @@ export function WorldMapClient({
   const routeBuildSchedulerRef = useRef<MapScheduler | null>(null);
   const routeGeometryCacheRef = useRef<Map<string, Omit<RoutePathItem, "id" | "tier">>>(new Map());
   const routeGeometryKeyByIdRef = useRef<Map<string, string>>(new Map());
+  const routeGeometryWorkerRef = useRef<Worker | null>(null);
   if (!routeBuildSchedulerRef.current) routeBuildSchedulerRef.current = new MapScheduler();
+  const poiById = useMemo(() => {
+    const map = new Map<string, { lat: number; lon: number }>();
+    for (const o of mapObjects ?? []) {
+      if (Number.isFinite(o.lon) && Number.isFinite(o.lat)) map.set(String(o.id), { lat: Number(o.lat), lon: Number(o.lon) });
+    }
+    return map;
+  }, [mapObjects]);
+  const pathwayPointsById = useMemo(() => {
+    const map = new Map<string, { lat: number; lon: number }>();
+    for (const wp of routePathwayPoints ?? []) {
+      map.set(String(wp.id), { lat: Number(wp.lat), lon: Number(wp.lon) });
+    }
+    return map;
+  }, [routePathwayPoints]);
+  const routeWaypointsMap = useMemo(() => {
+    const map = new Map<string, Array<{ id: string; seq: number; lat: number; lon: number }>>();
+    for (const wp of routePathwayPoints ?? []) {
+      const rid = String(wp.route_id);
+      if (!map.has(rid)) map.set(rid, []);
+      map.get(rid)!.push({ id: String(wp.id), seq: Number(wp.seq) || 0, lat: Number(wp.lat), lon: Number(wp.lon) });
+    }
+    for (const list of map.values()) list.sort((a, b) => a.seq - b.seq);
+    return map;
+  }, [routePathwayPoints]);
+  useEffect(() => {
+    if (!ENABLE_ROUTE_GEOMETRY_WORKER) return;
+    const worker = new Worker(new URL("../../workers/routeGeometry.worker.ts", import.meta.url));
+    routeGeometryWorkerRef.current = worker;
+    return () => {
+      routeGeometryWorkerRef.current = null;
+      worker.terminate();
+    };
+  }, []);
 
   useEffect(() => {
     const scheduler = routeBuildSchedulerRef.current!;
@@ -1525,19 +1593,6 @@ export function WorldMapClient({
         if (signal.aborted) return;
         const startedAt = performance.now();
         const list = routes ?? [];
-    const pathwayPoints = routePathwayPoints ?? [];
-    const pathwayPointsById = new Map<string, { lat: number; lon: number }>();
-    const routeWaypointsMap = new Map<string, Array<{ lat: number; lon: number }>>();
-    const poiById = new Map<string, { lat: number; lon: number }>();
-    for (const o of mapObjects ?? []) {
-      if (Number.isFinite(o.lon) && Number.isFinite(o.lat)) poiById.set(String(o.id), { lat: Number(o.lat), lon: Number(o.lon) });
-    }
-    for (const wp of pathwayPoints) {
-      pathwayPointsById.set(String(wp.id), { lat: Number(wp.lat), lon: Number(wp.lon) });
-      const rid = String(wp.route_id);
-      if (!routeWaypointsMap.has(rid)) routeWaypointsMap.set(rid, []);
-      routeWaypointsMap.get(rid)!.push({ lat: Number(wp.lat), lon: Number(wp.lon) });
-    }
         const result: RoutePathItem[] = [];
         const maxVerticesForZoom =
           currentZoomLevel === "monde" ? 120 : currentZoomLevel === "continent" ? 180 : currentZoomLevel === "nation" ? 280 : 400;
@@ -1562,7 +1617,7 @@ export function WorldMapClient({
             ? cityById.get((r as any).city_b_id)
             : null;
       if (!startPt || !endPt) continue;
-      const rawWaypoints = routeWaypointsMap.get(r.id) ?? [];
+      const rawWaypoints = (routeWaypointsMap.get(r.id) ?? []).map((wp) => ({ lat: wp.lat, lon: wp.lon }));
       const waypoints = resampleRouteWaypoints(rawWaypoints, MAX_RENDER_ROUTE_WAYPOINTS);
       const sequence: Array<{ lat: number; lon: number }> = [startPt, ...waypoints, endPt];
       if (sequence.length < 2) continue;
@@ -1597,26 +1652,46 @@ export function WorldMapClient({
 
       let points: Array<[number, number]> = [];
       let landSegments = 0;
-      let sinuousSegments = 0;
-      for (let i = 0; i < sequence.length - 1; i++) {
-        const a = sequence[i];
-        const b = sequence[i + 1];
-        const seg = generateLandPath({ lon: a.lon, lat: a.lat }, { lon: b.lon, lat: b.lat }, landGeoJson ?? undefined, landGraph);
-        if (seg && seg.length >= 2) {
-          landSegments += 1;
-          if (points.length > 0) points.pop();
-          points.push(...seg);
-        } else {
-          sinuousSegments += 1;
-          const segSinuous = generateSinuousPath(
-            { lon: a.lon, lat: a.lat },
-            { lon: b.lon, lat: b.lat },
+      if (ENABLE_ROUTE_GEOMETRY_WORKER && !landGraph && routeGeometryWorkerRef.current) {
+        const workerPoints = await requestRouteGeometryFromWorker(routeGeometryWorkerRef.current, {
+          type: "build-route-geometry",
+          payload: {
+            routeId: r.id,
             tier,
             seed,
-            sinuosityScale
-          );
-          if (points.length > 0) points.pop();
-          points.push(...segSinuous);
+            sinuosityScale,
+            routeLodEpsilon,
+            routeLodZoomRef,
+            currentZoomLevel,
+            maxVerticesForZoom: Math.min(MAX_ROUTE_POLYLINE_VERTICES, maxVerticesForZoom),
+            sequence,
+          },
+        });
+        if (signal.aborted) return;
+        if (workerPoints && workerPoints.length >= 2) {
+          points = workerPoints;
+        }
+      }
+      if (points.length === 0) {
+        for (let i = 0; i < sequence.length - 1; i++) {
+          const a = sequence[i];
+          const b = sequence[i + 1];
+          const seg = generateLandPath({ lon: a.lon, lat: a.lat }, { lon: b.lon, lat: b.lat }, landGeoJson ?? undefined, landGraph);
+          if (seg && seg.length >= 2) {
+            landSegments += 1;
+            if (points.length > 0) points.pop();
+            points.push(...seg);
+          } else {
+            const segSinuous = generateSinuousPath(
+              { lon: a.lon, lat: a.lat },
+              { lon: b.lon, lat: b.lat },
+              tier,
+              seed,
+              sinuosityScale
+            );
+            if (points.length > 0) points.pop();
+            points.push(...segSinuous);
+          }
         }
       }
       const rawPointsLen = points.length;
@@ -1717,6 +1792,11 @@ export function WorldMapClient({
       };
       routeGeometryKeyByIdRef.current.set(r.id, cacheKey);
       routeGeometryCacheRef.current.set(cacheKey, geom);
+      while (routeGeometryCacheRef.current.size > ROUTE_GEOMETRY_CACHE_MAX_ENTRIES) {
+        const oldestKey = routeGeometryCacheRef.current.keys().next().value;
+        if (!oldestKey) break;
+        routeGeometryCacheRef.current.delete(oldestKey);
+      }
       result.push({ id: r.id, tier: r.tier, ...geom });
     }
         if (signal.aborted) return;
@@ -1731,8 +1811,9 @@ export function WorldMapClient({
     };
   }, [
     routes,
-    routePathwayPoints,
-    mapObjects,
+    routeWaypointsMap,
+    pathwayPointsById,
+    poiById,
     cityById,
     routeProjection,
     landGeoJson,
@@ -1783,6 +1864,7 @@ export function WorldMapClient({
   }, [visibleRoutePaths.length, visibleRouteLabelCount, mode, currentZoomLevel]);
 
   useEffect(() => {
+    if (!ENABLE_FRAME_GAP_METRIC) return;
     let active = true;
     let previous = performance.now();
     let raf = 0;
@@ -4464,8 +4546,8 @@ export function WorldMapClient({
               </p>
               {/* Points de passage : faire éviter la mer */}
               {(mjAddPathwayPointToRoute || mjDeletePathwayPoint) && (() => {
-                const routeWaypoints = (routePathwayPoints ?? []).filter((wp) => wp.route_id === route.id).sort((a, b) => a.seq - b.seq);
-                const validCities = filterCitiesWithValidCoords(cities ?? []);
+                const routeWaypoints = routeWaypointsMap.get(route.id) ?? [];
+                const validCities = validCitiesAll;
                 return (
                   <div className="mt-4 flex flex-col gap-2 rounded-lg border border-white/10 bg-black/20 p-2">
                     <p className="text-xs font-semibold text-amber-100">Points de passage (faire éviter la mer)</p>

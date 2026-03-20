@@ -83,7 +83,7 @@ const ZOOM_LEVEL_RULE_DEFAULTS: ZoomLevelRules = {
       realmLabels: false,
     },
     scale: { cities: 1, routes: 1, entities: 1 },
-    caps: { maxRouteLabels: 600, maxCities: 5000, maxEntities: 5000 },
+    caps: { maxRouteLabels: 420, maxCities: 3200, maxEntities: 3200 },
   },
   nation: {
     visibility: {
@@ -97,7 +97,7 @@ const ZOOM_LEVEL_RULE_DEFAULTS: ZoomLevelRules = {
       realmLabels: false,
     },
     scale: { cities: 0.72, routes: 0.72, entities: 0.72 },
-    caps: { maxRouteLabels: 260, maxCities: 2200, maxEntities: 2200 },
+    caps: { maxRouteLabels: 180, maxCities: 1400, maxEntities: 1400 },
   },
   continent: {
     visibility: {
@@ -111,7 +111,7 @@ const ZOOM_LEVEL_RULE_DEFAULTS: ZoomLevelRules = {
       realmLabels: true,
     },
     scale: { cities: 0.42, routes: 0.42, entities: 0.45 },
-    caps: { maxRouteLabels: 0, maxCities: 900, maxEntities: 500 },
+    caps: { maxRouteLabels: 0, maxCities: 600, maxEntities: 320 },
   },
   monde: {
     visibility: {
@@ -125,7 +125,7 @@ const ZOOM_LEVEL_RULE_DEFAULTS: ZoomLevelRules = {
       realmLabels: true,
     },
     scale: { cities: 0.25, routes: 0.25, entities: 0.3 },
-    caps: { maxRouteLabels: 0, maxCities: 450, maxEntities: 250 },
+    caps: { maxRouteLabels: 0, maxCities: 280, maxEntities: 180 },
   },
 };
 

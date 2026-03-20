@@ -85,13 +85,50 @@ export function getRoadDistanceBetweenCities(
     graph.get(b)!.push({ neighbor: a, weight: w });
   }
 
+  type QueueItem = { id: string; d: number };
+  const pushMin = (heap: QueueItem[], item: QueueItem) => {
+    heap.push(item);
+    let i = heap.length - 1;
+    while (i > 0) {
+      const p = Math.floor((i - 1) / 2);
+      if (heap[p].d <= heap[i].d) break;
+      const tmp = heap[p];
+      heap[p] = heap[i];
+      heap[i] = tmp;
+      i = p;
+    }
+  };
+  const popMin = (heap: QueueItem[]): QueueItem | undefined => {
+    if (heap.length === 0) return undefined;
+    const min = heap[0];
+    const last = heap.pop()!;
+    if (heap.length > 0) {
+      heap[0] = last;
+      let i = 0;
+      while (true) {
+        const l = i * 2 + 1;
+        const r = i * 2 + 2;
+        let m = i;
+        if (l < heap.length && heap[l].d < heap[m].d) m = l;
+        if (r < heap.length && heap[r].d < heap[m].d) m = r;
+        if (m === i) break;
+        const tmp = heap[i];
+        heap[i] = heap[m];
+        heap[m] = tmp;
+        i = m;
+      }
+    }
+    return min;
+  };
+
   const dist = new Map<string, number>();
-  const heap: Array<{ id: string; d: number }> = [{ id: cityIdA, d: 0 }];
+  const heap: QueueItem[] = [{ id: cityIdA, d: 0 }];
   dist.set(cityIdA, 0);
 
   while (heap.length > 0) {
-    heap.sort((x, y) => x.d - y.d);
-    const { id: u, d: du } = heap.shift()!;
+    const next = popMin(heap);
+    if (!next) break;
+    const { id: u, d: du } = next;
     if (u === cityIdB) return du;
     const cur = dist.get(u);
     if (cur !== undefined && du > cur) continue;
@@ -101,7 +138,7 @@ export function getRoadDistanceBetweenCities(
       const prev = dist.get(v);
       if (prev === undefined || alt < prev) {
         dist.set(v, alt);
-        heap.push({ id: v, d: alt });
+        pushMin(heap, { id: v, d: alt });
       }
     }
   }

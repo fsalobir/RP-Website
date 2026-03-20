@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useRef, useCallback, useEffect } from "react";
 import dynamic from "next/dynamic";
 import { InfoTooltipWithWikiLink } from "@/components/ui/InfoTooltipWithWikiLink";
 import { geoMercator, geoPath } from "d3-geo";
@@ -77,6 +77,8 @@ export function RelationMapClient({
   const [selectedRegionId, setSelectedRegionId] = useState<string | null>(defaultSelectedRegionId ?? null);
   const [tooltip, setTooltip] = useState<{ x: number; y: number; content: string } | null>(null);
   const [mapFilter, setMapFilter] = useState<"relations" | "spheres">("relations");
+  const tooltipRafRef = useRef<number | null>(null);
+  const pendingTooltipRef = useRef<{ x: number; y: number; content: string } | null>(null);
 
   const map = useMemo(() => {
     const m = new Map<string, number>();
@@ -147,6 +149,26 @@ export function RelationMapClient({
 
   const features = geoJson?.features ?? [];
   const hasData = features.length > 0;
+  const scheduleTooltip = useCallback((x: number, y: number, content: string) => {
+    pendingTooltipRef.current = { x, y, content };
+    if (tooltipRafRef.current !== null) return;
+    tooltipRafRef.current = requestAnimationFrame(() => {
+      tooltipRafRef.current = null;
+      const next = pendingTooltipRef.current;
+      if (next) setTooltip(next);
+    });
+  }, []);
+  const clearTooltip = useCallback(() => {
+    pendingTooltipRef.current = null;
+    if (tooltipRafRef.current !== null) {
+      cancelAnimationFrame(tooltipRafRef.current);
+      tooltipRafRef.current = null;
+    }
+    setTooltip(null);
+  }, []);
+  useEffect(() => () => {
+    if (tooltipRafRef.current !== null) cancelAnimationFrame(tooltipRafRef.current);
+  }, []);
 
   return (
     <div className="space-y-6">
@@ -361,8 +383,8 @@ export function RelationMapClient({
                       geography={geo}
                       style={sphereStyle}
                       onClick={isSphereMode ? undefined : () => setSelectedRegionId((prev) => (prev === regionId ? null : regionId))}
-                      onMouseMove={(e) => setTooltip({ x: e.clientX, y: e.clientY, content: tooltipContent })}
-                      onMouseLeave={() => setTooltip(null)}
+                      onMouseMove={(e) => scheduleTooltip(e.clientX, e.clientY, tooltipContent)}
+                      onMouseLeave={clearTooltip}
                       title={
                         isSphereMode
                           ? tooltipContent

@@ -14,7 +14,9 @@ export function emitMapMetric(name: MapMetricName, value: number, meta?: Record<
     const sink = (window as any).__mapMetricsSink;
     if (typeof sink === "function") sink(payload);
   }
-  // Signal simple pour benchmark local/staging.
-  if (process.env.NODE_ENV !== "production") console.info("[map-metric]", payload);
+  // Signal local activable à la demande pour éviter du bruit runtime.
+  if (process.env.NODE_ENV !== "production" && process.env.NEXT_PUBLIC_MAP_DEBUG_METRICS === "1") {
+    console.info("[map-metric]", payload);
+  }
 }
 
