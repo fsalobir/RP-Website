@@ -35,9 +35,12 @@ import { RouteGeometryWorkerClient } from "@/lib/routeGeometryWorkerClient";
 import { RouteBatchSvgLayer } from "@/components/map/RouteBatchSvgLayer";
 import {
   isMapInfoPanelsV2Enabled,
+  isMapMobileHardModeEnabled,
   isMapQualityGovernorEnabled,
   isMapRouteBatchSvgEnabled,
   isMapRouteWorkerEnabled,
+  isMapZeroSvgSpikeEnabled,
+  getMapQualityTierFlag,
   isRealmColoringEnabled,
 } from "@/lib/featureFlags";
 import { EntityInfoPanel } from "@/components/map/EntityInfoPanel";
@@ -54,6 +57,8 @@ import { feature, mesh } from "topojson-client";
 import { createClient } from "@/lib/supabase/client";
 import { computeRealmLabelAnchors } from "@/lib/realmMapLabels";
 import type { RouteGeometryWorkerRequest } from "@/lib/routeGeometryWorkerTypes";
+import { applyQualityTierToZoomRule, getQualityTierReducedEffects } from "@/lib/mapQualityTier";
+import { emitMapInteractionEvent } from "@/lib/mapInteractionEvents";
 
 const ComposableMap = dynamic(() => import("react-simple-maps").then((m) => m.ComposableMap), { ssr: false });
 const Geographies = dynamic(() => import("react-simple-maps").then((m) => m.Geographies), { ssr: false });
@@ -313,6 +318,7 @@ export function WorldMapClient({
   const [topoReady, setTopoReady] = useState(false);
   const [routeWarmupReady, setRouteWarmupReady] = useState(false);
   const [isMobilePerf, setIsMobilePerf] = useState(false);
+  const [prefersReducedMotion, setPrefersReducedMotion] = useState(false);
   const [selectedRegionIds, setSelectedRegionIds] = useState<string[]>([]);
   const [tooltip, setTooltip] = useState<{ x: number; y: number; content: string } | null>(null);
   const [mergeForm, setMergeForm] = useState<{
@@ -530,7 +536,12 @@ export function WorldMapClient({
     [mode, rendererUserKey]
   );
   const isWebglRenderer = rendererInfo.effective === "webgl";
+  const zeroSvgSpikeEnabled = useMemo(() => isMapZeroSvgSpikeEnabled(), []);
+  const isZeroSvgSpike = isWebglRenderer && zeroSvgSpikeEnabled;
   const useRouteBatchSvg = ENABLE_ROUTE_BATCH_SVG && mode === "public" && !isWebglRenderer;
+  const qualityTier = useMemo(() => getMapQualityTierFlag(), []);
+  const mobileHardMode = useMemo(() => isMapMobileHardModeEnabled(), []);
+  const reduceHeavyEffects = useMemo(() => getQualityTierReducedEffects(qualityTier), [qualityTier]);
   const enableRealmColoring = useMemo(() => isRealmColoringEnabled(), []);
   const enableMapInfoPanelsV2 = useMemo(() => isMapInfoPanelsV2Enabled(), []);
 
@@ -621,8 +632,12 @@ export function WorldMapClient({
     return "Monde";
   }, [renderZoomLevel]);
   const activeZoomRules = useMemo(() => {
-    return displayConfig.zoomLevelRules[renderZoomLevel];
-  }, [displayConfig.zoomLevelRules, renderZoomLevel]);
+    const base = displayConfig.zoomLevelRules[renderZoomLevel];
+    return applyQualityTierToZoomRule(base, {
+      tier: qualityTier,
+      isMobilePerf: isMobilePerf && mobileHardMode,
+    });
+  }, [displayConfig.zoomLevelRules, renderZoomLevel, qualityTier, isMobilePerf, mobileHardMode]);
   const zoomThresholdLabels = useMemo(
     () =>
       (["monde", "continent", "nation", "province"] as const).map((id) => ({
@@ -674,7 +689,7 @@ export function WorldMapClient({
   const settleTimerRef = useRef<ReturnType<typeof globalThis.setTimeout> | null>(null);
   const settleStartedAtRef = useRef<number>(0);
   const lastWheelTsRef = useRef<number>(0);
-  const isInteractionLite = isInteracting || isSettling || !routeWarmupReady;
+  const isInteractionLite = isInteracting || isSettling || !routeWarmupReady || (isMobilePerf && mobileHardMode);
   useEffect(() => {
     if (isInteracting || isSettling) return;
     setRenderZoomLevel(currentZoomLevel);
@@ -701,11 +716,13 @@ export function WorldMapClient({
     }
     setIsSettling(false);
     setIsInteracting(true);
+    emitMapInteractionEvent({ type: "dragStart", entityKind: "map", entityId: "map-root", mode });
   }
 
   function endInteractionWithSettle() {
     setIsInteracting(false);
     setIsSettling(true);
+    emitMapInteractionEvent({ type: "dragEnd", entityKind: "map", entityId: "map-root", mode });
     settleStartedAtRef.current = performance.now();
     if (settleTimerRef.current != null) globalThis.clearTimeout(settleTimerRef.current);
     settleTimerRef.current = globalThis.setTimeout(() => {
@@ -819,10 +836,17 @@ export function WorldMapClient({
   useEffect(() => {
     if (typeof window === "undefined") return;
     const media = window.matchMedia("(pointer: coarse), (max-width: 900px)");
+    const reduceMotionMedia = window.matchMedia("(prefers-reduced-motion: reduce)");
     const apply = () => setIsMobilePerf(media.matches);
+    const applyReducedMotion = () => setPrefersReducedMotion(reduceMotionMedia.matches);
     apply();
+    applyReducedMotion();
     media.addEventListener("change", apply);
-    return () => media.removeEventListener("change", apply);
+    reduceMotionMedia.addEventListener("change", applyReducedMotion);
+    return () => {
+      media.removeEventListener("change", apply);
+      reduceMotionMedia.removeEventListener("change", applyReducedMotion);
+    };
   }, []);
 
   const qualityGovernorRef = useRef(createMapQualityGovernor());
@@ -3459,7 +3483,11 @@ export function WorldMapClient({
       <div
         ref={mapContainerRef}
         className="absolute inset-0"
-        style={{ overscrollBehavior: "contain", touchAction: isMobilePerf ? "pan-x pan-y" : "none" }}
+        style={{
+          overscrollBehavior: "contain",
+          touchAction: isMobilePerf ? "pan-x pan-y" : "none",
+          scrollBehavior: prefersReducedMotion ? "auto" : "smooth",
+        }}
       >
         {!topoReady && (
           <div className="pointer-events-none absolute inset-0 z-40 flex items-center justify-center bg-black/35">
@@ -3496,6 +3524,7 @@ export function WorldMapClient({
               beginInteraction();
             }}
             onMove={(pos: any) => {
+              emitMapInteractionEvent({ type: "dragMove", entityKind: "map", entityId: "map-root", mode });
               const c = (pos?.coordinates ?? mapView.center) as [number, number];
               const z = clampZoom(Number(pos?.zoom ?? mapView.zoom));
               zoomTargetRef.current = z;
@@ -3528,17 +3557,22 @@ export function WorldMapClient({
               y={-5000}
               width={10000}
               height={10000}
-              fill={isInteractionLite ? "#86b8d1" : "#7fb4cf"}
+              fill={isInteractionLite || reduceHeavyEffects ? "#86b8d1" : "#7fb4cf"}
             />
             <g>
               {/* Hydro (décor) */}
-              {hydro?.lakes && (
+              {hydro?.lakes && !isZeroSvgSpike && (
                 <g
                   style={{
                     pointerEvents: "none",
                     // Lacs : alignés sur les rivières (fade + lock à fort zoom).
-                    opacity: lakesLocked ? 1 : isInteractionLite || isMobilePerf ? Math.max(0.14, lakesOpacity * 0.25) : lakesOpacity,
-                    transition: lakesLocked ? "none" : "opacity 200ms ease-out",
+                    opacity:
+                      lakesLocked
+                        ? 1
+                        : isInteractionLite || isMobilePerf || reduceHeavyEffects
+                          ? Math.max(0.14, lakesOpacity * 0.25)
+                          : lakesOpacity,
+                    transition: lakesLocked || prefersReducedMotion ? "none" : "opacity 200ms ease-out",
                   }}
                 >
                   {(lakesLocked || showHydro) && renderedLakes}
@@ -3546,11 +3580,16 @@ export function WorldMapClient({
               )}
 
               {/* Rivières : sous les provinces et marqueurs pour ne pas passer au travers des icônes */}
-              {hydro?.rivers && (
+              {hydro?.rivers && !isZeroSvgSpike && (
                 <g
                   style={{
-                    opacity: riversLocked ? 1 : isInteractionLite || isMobilePerf ? Math.max(0.16, riversOpacity * 0.3) : riversOpacity,
-                    transition: riversLocked ? "none" : "opacity 200ms ease-out",
+                    opacity:
+                      riversLocked
+                        ? 1
+                        : isInteractionLite || isMobilePerf || reduceHeavyEffects
+                          ? Math.max(0.16, riversOpacity * 0.3)
+                          : riversOpacity,
+                    transition: riversLocked || prefersReducedMotion ? "none" : "opacity 200ms ease-out",
                     pointerEvents: "none",
                   }}
                 >
@@ -3560,10 +3599,10 @@ export function WorldMapClient({
 
               {/* Provinces (régions) : DOIVENT être sous les marqueurs */}
               {renderedRegions}
-              <g opacity={isInteractionLite ? 0.38 : 1}>{renderedRealmBoundaries}</g>
+              <g opacity={isInteractionLite || reduceHeavyEffects ? 0.38 : 1}>{renderedRealmBoundaries}</g>
 
               {/* Routes (tracés sinueux entre villes) — config dédiée (opacité, taille, progressivité) */}
-              {!isWebglRenderer && activeZoomRules.visibility.routes && visibleRoutePaths.length > 0 && (
+              {!isWebglRenderer && activeZoomRules.visibility.routes && visibleRoutePaths.length > 0 && !isZeroSvgSpike && (
                 <g opacity={routeRenderOpacity} style={{ pointerEvents: "auto" }}>
                   {useRouteBatchSvg && (
                     <RouteBatchSvgLayer
@@ -3664,7 +3703,7 @@ export function WorldMapClient({
               )}
 
               {/* Objets (villes/bâtiments) */}
-              {!isWebglRenderer && visibleObjectsInView.map((o) => (
+              {!isWebglRenderer && !isZeroSvgSpike && visibleObjectsInView.map((o) => (
                 <MarkerAny key={`obj-${o.id}`} coordinates={[o.lon as number, o.lat as number]}>
                   <g
                     opacity={0.85}
@@ -3695,7 +3734,7 @@ export function WorldMapClient({
               ))}
 
               {/* Villes (entités) — hitbox = cercle r=5 (diamètre visuel de la boîte 10×10) */}
-              {!isWebglRenderer && visibleCitiesInView.map((c) => (
+              {!isWebglRenderer && !isZeroSvgSpike && visibleCitiesInView.map((c) => (
                 <MarkerAny key={`city-${c.id}`} coordinates={[c.lon, c.lat]}>
                   {(() => {
                     const cityScale = cityScaleFactorFor(c);
@@ -3813,7 +3852,7 @@ export function WorldMapClient({
                * Mode WebGL rollout : les routes restent en SVG (stroke natif), hors fantasyGlow.
                * La triangulation WebGL en quads produisait des artefacts énormes (échelle / micro-segments).
                */}
-              {isWebglRenderer && activeZoomRules.visibility.routes && visibleRoutePaths.length > 0 && (
+              {isWebglRenderer && activeZoomRules.visibility.routes && visibleRoutePaths.length > 0 && !isZeroSvgSpike && (
                 <g opacity={routeRenderOpacity} style={{ pointerEvents: "auto" }}>
                   {visibleRoutePaths.map((rp) => {
                     const style = routeTierStyle[(rp.tier as RouteTier) ?? "local"] ?? routeTierStyle.local;
@@ -3883,6 +3922,7 @@ export function WorldMapClient({
               )}
 
               {isWebglRenderer &&
+                !isZeroSvgSpike &&
                 visibleObjectsInView.map((o) => (
                   <MarkerAny key={`obj-wgl-${o.id}`} coordinates={[o.lon as number, o.lat as number]}>
                     <g
@@ -3914,6 +3954,7 @@ export function WorldMapClient({
                 ))}
 
               {isWebglRenderer &&
+                !isZeroSvgSpike &&
                 visibleCitiesInView.map((c) => (
                   <MarkerAny key={`city-wgl-${c.id}`} coordinates={[c.lon, c.lat]}>
                     {(() => {
@@ -4024,13 +4065,14 @@ export function WorldMapClient({
                     <title>{c.name}</title>
                   </MarkerAny>
                 ))}
-              {realmLabelAnchors.slice(0, isInteractionLite ? 12 : realmLabelAnchors.length).map((r) => (
+              {!isZeroSvgSpike &&
+                realmLabelAnchors.slice(0, isInteractionLite || reduceHeavyEffects ? 12 : realmLabelAnchors.length).map((r) => (
                 <MarkerAny key={`realm-label-${r.realmId}`} coordinates={[r.lon, r.lat]}>
                   <text
                     className="map-label-font"
                     textAnchor="middle"
                     dominantBaseline="middle"
-                    fill={isInteractionLite ? "rgba(236, 225, 188, 0.68)" : "rgba(236, 225, 188, 0.92)"}
+                    fill={isInteractionLite || reduceHeavyEffects ? "rgba(236, 225, 188, 0.68)" : "rgba(236, 225, 188, 0.92)"}
                     fontSize={renderZoomLevel === "monde" ? 4.2 : 5.2}
                     transform={`rotate(${r.angleDeg})`}
                     style={{

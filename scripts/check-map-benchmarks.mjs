@@ -4,6 +4,7 @@ const THRESHOLDS_PATH = process.env.MAP_BENCH_THRESHOLDS || "docs/map-benchmark-
 const INTERACTION_PATH = process.env.MAP_INTERACTION_BENCH || "tmp/map-benchmark-interaction.json";
 const BASELINE_PATH = process.env.MAP_INTERACTION_BASELINE || "";
 const PROFILE = process.env.MAP_BENCH_PROFILE || "medium";
+const EXPECT_ZERO_SVG = process.env.MAP_BENCH_EXPECT_ZERO_SVG === "1";
 
 function pickResult(results, page) {
   return (results || []).find((r) => r.page === page);
@@ -43,6 +44,20 @@ async function main() {
       fail(`${name}=${value} dépasse le seuil ${max}`);
     } else {
       console.log(`[map-bench-check] OK ${name}=${value} (<= ${max})`);
+    }
+  }
+
+  if (EXPECT_ZERO_SVG) {
+    const svgChecks = [
+      ["public.svgNodesMax", publicRes.svgNodesMax],
+      ["mj.svgNodesMax", mjRes.svgNodesMax],
+    ];
+    for (const [name, value] of svgChecks) {
+      if (value > 0) {
+        fail(`${name}=${value} attendu a 0 en mode zero-SVG`);
+      } else {
+        console.log(`[map-bench-check] OK ${name}=0 (zero-SVG)`);
+      }
     }
   }
 

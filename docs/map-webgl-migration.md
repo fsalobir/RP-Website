@@ -17,6 +17,13 @@
 4. **Phase 3**: canary public (5% -> 25% -> 50% -> 100%)
 5. **Phase 4**: retrait pipeline SVG après 2 semaines stables
 
+Références de gouvernance:
+
+- `docs/map-product-principles.md`
+- `docs/map-slo.md`
+- `docs/map-interaction-contract.md`
+- `docs/map-mj-public-parity-matrix.md`
+
 ## Contrat MVP WebGL (phase 1)
 
 - **Routes** : rendu **SVG** (stroke natif), même quand le rollout WebGL est actif — la triangulation WebGL en quads produisait des artefacts d’échelle ; réintroduction WebGL routes prévue avec ligne robuste (miters / instancing).

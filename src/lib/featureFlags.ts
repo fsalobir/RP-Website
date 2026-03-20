@@ -24,3 +24,21 @@ export function isMapQualityGovernorEnabled(): boolean {
   return process.env.NEXT_PUBLIC_MAP_QUALITY_GOVERNOR !== "0";
 }
 
+/** Force le palier qualité global: perf|balanced|rich (défaut perf). */
+export function getMapQualityTierFlag(): "perf" | "balanced" | "rich" {
+  const raw = (process.env.NEXT_PUBLIC_MAP_QUALITY_TIER ?? "perf").toLowerCase();
+  if (raw === "balanced") return "balanced";
+  if (raw === "rich") return "rich";
+  return "perf";
+}
+
+/** Si activé, coupe agressivement labels/effets pendant interaction pour sécuriser les devices faibles. */
+export function isMapMobileHardModeEnabled(): boolean {
+  return process.env.NEXT_PUBLIC_MAP_MOBILE_HARD_MODE !== "0";
+}
+
+/** Spike devalidation: coupe les couches SVG geographiques secondaires en mode WebGL. */
+export function isMapZeroSvgSpikeEnabled(): boolean {
+  return process.env.NEXT_PUBLIC_MAP_ZERO_SVG_SPIKE === "1";
+}
+

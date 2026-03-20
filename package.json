@@ -26,6 +26,7 @@
     "benchmark:map:interaction": "node scripts/benchmark-map-interaction.mjs",
     "benchmark:map:interaction:quick": "cross-env MAP_BENCH_ITERATIONS=1 MAP_BENCH_PROFILE=small node scripts/benchmark-map-interaction.mjs",
     "benchmark:map:check": "node scripts/check-map-benchmarks.mjs",
+    "benchmark:map:check:zero-svg": "cross-env MAP_BENCH_EXPECT_ZERO_SVG=1 node scripts/check-map-benchmarks.mjs",
     "precompute:routes:lod": "node scripts/precompute-routes-lod.mjs",
     "precompute:map:artifacts": "node scripts/precompute-map-artifacts.mjs",
     "precompute:map:artifact:resolve": "node scripts/resolve-map-artifact.mjs",
