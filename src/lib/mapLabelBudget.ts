@@ -46,15 +46,15 @@ export function pickRouteLabelOrder(
 }
 
 export function computeRouteLabelCap(args: {
-  renderZoomLevel: MapZoomLevelId;
+  zoomLevel: MapZoomLevelId;
   maxRouteLabelsRule: number;
   isInteractionLite: boolean;
   isMobilePerf: boolean;
   governorLabelFactor: number;
 }): number {
-  const { renderZoomLevel, maxRouteLabelsRule, isInteractionLite, isMobilePerf, governorLabelFactor } = args;
+  const { zoomLevel, maxRouteLabelsRule, isInteractionLite, isMobilePerf, governorLabelFactor } = args;
   const capByLevel =
-    renderZoomLevel === "monde" ? 35 : renderZoomLevel === "continent" ? 90 : renderZoomLevel === "nation" ? 220 : 400;
+    zoomLevel === "monde" ? 35 : zoomLevel === "continent" ? 90 : zoomLevel === "nation" ? 220 : 400;
   const interactionCap = isInteractionLite ? Math.max(10, Math.floor(capByLevel * 0.25)) : capByLevel;
   const mobileCap = isMobilePerf ? Math.max(0, Math.floor(interactionCap * 0.6)) : interactionCap;
   const base = Math.min(mobileCap, maxRouteLabelsRule);
