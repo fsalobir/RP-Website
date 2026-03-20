@@ -819,10 +819,10 @@ export function WorldMapClient({
         (window as any).cancelIdleCallback?.(id);
       };
     }
-    const t = window.setTimeout(markReady, 450);
+    const t = globalThis.setTimeout(markReady, 450);
     return () => {
       cancelled = true;
-      window.clearTimeout(t);
+      globalThis.clearTimeout(t);
     };
   }, [topoReady]);
 
