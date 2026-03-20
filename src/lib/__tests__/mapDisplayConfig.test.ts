@@ -18,10 +18,13 @@ describe("sanitizeMapDisplayConfig", () => {
     expect(out.routeSinuosityNationalPct).toBe(100);
   });
 
-  it("initialise les règles de zoom par défaut", () => {
+  it("initialise les règles de zoom par défaut (paliers binaires)", () => {
     const out = sanitizeMapDisplayConfig({});
     expect(out.zoomLevelRules.province.visibility.routes).toBe(true);
+    expect(out.zoomLevelRules.province.visibility.realmLabels).toBe(true);
+    expect(out.zoomLevelRules.nation.visibility.realmLabels).toBe(true);
     expect(out.zoomLevelRules.continent.visibility.routes).toBe(false);
+    expect(out.zoomLevelRules.monde.visibility.cities).toBe(false);
     expect(out.zoomLevelRules.monde.visibility.rivers).toBe(false);
   });
 });

@@ -8,8 +8,6 @@ export type MapSvgGeographyLayersProps = {
   hydro: HydroLike;
   shouldRenderSvgRivers: boolean;
   hydroNationProvinceDragLite: boolean;
-  lakesLocked: boolean;
-  riversLocked: boolean;
   showHydro: boolean;
   showRivers: boolean;
   lakesOpacity: number;
@@ -35,8 +33,6 @@ export const MapSvgGeographyLayers = memo(function MapSvgGeographyLayers({
   hydro,
   shouldRenderSvgRivers,
   hydroNationProvinceDragLite,
-  lakesLocked,
-  riversLocked,
   showHydro,
   showRivers,
   lakesOpacity,
@@ -55,39 +51,28 @@ export const MapSvgGeographyLayers = memo(function MapSvgGeographyLayers({
 }: MapSvgGeographyLayersProps) {
   return (
     <g>
-      {Boolean(hydro?.lakes) && shouldRenderSvgRivers && (
+      {Boolean(hydro?.lakes) && shouldRenderSvgRivers && showHydro && (
         <g
           style={{
             pointerEvents: "none",
-            opacity: hydroNationProvinceDragLite
-              ? 0.05
-              : lakesLocked
-                ? 1
-                : isInteractionLite || isMobilePerf || reduceHeavyEffects
-                  ? Math.max(0.14, lakesOpacity * 0.25)
-                  : lakesOpacity,
-            transition: lakesLocked || prefersReducedMotion ? "none" : "opacity 200ms ease-out",
+            /** Binaire par palier (showHydro) ; pas d’atténuation liée au zoom ou au mode mobile. */
+            opacity: hydroNationProvinceDragLite ? 0.05 : lakesOpacity,
+            transition: prefersReducedMotion ? "none" : "opacity 200ms ease-out",
           }}
         >
-          {(lakesLocked || showHydro) && renderedLakes}
+          {renderedLakes}
         </g>
       )}
 
-      {Boolean(hydro?.rivers) && shouldRenderSvgRivers && (
+      {Boolean(hydro?.rivers) && shouldRenderSvgRivers && showRivers && (
         <g
           style={{
-            opacity: hydroNationProvinceDragLite
-              ? 0.06
-              : riversLocked
-                ? 1
-                : isInteractionLite || isMobilePerf || reduceHeavyEffects
-                  ? Math.max(0.16, riversOpacity * 0.3)
-                  : riversOpacity,
-            transition: riversLocked || prefersReducedMotion ? "none" : "opacity 200ms ease-out",
+            opacity: hydroNationProvinceDragLite ? 0.06 : riversOpacity,
+            transition: prefersReducedMotion ? "none" : "opacity 200ms ease-out",
             pointerEvents: "none",
           }}
         >
-          {(riversLocked || showRivers) && renderedRivers}
+          {renderedRivers}
         </g>
       )}
 

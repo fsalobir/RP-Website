@@ -70,6 +70,7 @@ export type PersistedMapDisplayConfig = {
   config: MapDisplayConfig;
 };
 
+/** Paliers binaires : pas de fade dans les règles — tout ON province/nation ; routes OFF continent ; villes OFF monde. */
 const ZOOM_LEVEL_RULE_DEFAULTS: ZoomLevelRules = {
   province: {
     visibility: {
@@ -80,10 +81,10 @@ const ZOOM_LEVEL_RULE_DEFAULTS: ZoomLevelRules = {
       rivers: true,
       lakes: true,
       regionBorders: true,
-      realmLabels: false,
+      realmLabels: true,
     },
     scale: { cities: 1, routes: 1, entities: 1 },
-    caps: { maxRouteLabels: 260, maxCities: 2000, maxEntities: 2000 },
+    caps: { maxRouteLabels: 320, maxCities: 2500, maxEntities: 2500 },
   },
   nation: {
     visibility: {
@@ -94,10 +95,10 @@ const ZOOM_LEVEL_RULE_DEFAULTS: ZoomLevelRules = {
       rivers: true,
       lakes: true,
       regionBorders: true,
-      realmLabels: false,
+      realmLabels: true,
     },
     scale: { cities: 1, routes: 1, entities: 1 },
-    caps: { maxRouteLabels: 130, maxCities: 900, maxEntities: 900 },
+    caps: { maxRouteLabels: 260, maxCities: 2000, maxEntities: 2000 },
   },
   continent: {
     visibility: {
@@ -116,7 +117,7 @@ const ZOOM_LEVEL_RULE_DEFAULTS: ZoomLevelRules = {
   monde: {
     visibility: {
       routes: false,
-      cities: true,
+      cities: false,
       smallEntities: false,
       forests: false,
       rivers: false,
@@ -125,7 +126,7 @@ const ZOOM_LEVEL_RULE_DEFAULTS: ZoomLevelRules = {
       realmLabels: true,
     },
     scale: { cities: 1, routes: 1, entities: 1 },
-    caps: { maxRouteLabels: 0, maxCities: 280, maxEntities: 180 },
+    caps: { maxRouteLabels: 0, maxCities: 0, maxEntities: 180 },
   },
 };
 
@@ -245,8 +246,11 @@ export function sanitizeMapDisplayConfig(raw: unknown): MapDisplayConfig {
   };
 }
 
-/** Bump quand les defaults « clean » changent (clients avec config persistée gardent la leur jusqu’à reset MJ). */
-export const MAP_DISPLAY_CONFIG_VERSION = 3;
+/**
+ * Bump quand les defaults officiels changent (paliers binaires DeckGL, etc.).
+ * Une entrée `rule_parameters` plus ancienne peut rester obsolète jusqu’au reset MJ ou migration.
+ */
+export const MAP_DISPLAY_CONFIG_VERSION = 4;
 export const MAP_DISPLAY_CONFIG_KEY = "map_display_config";
 
 export function parseMapDisplayConfigSnapshot(raw: unknown): { config: MapDisplayConfig; version: number } {

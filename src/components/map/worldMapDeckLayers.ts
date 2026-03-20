@@ -1,7 +1,7 @@
 import type { Layer } from "@deck.gl/core";
 import { COORDINATE_SYSTEM } from "@deck.gl/core";
-import { GeoJsonLayer, IconLayer, PathLayer, TextLayer } from "@deck.gl/layers";
-import type { Feature, FeatureCollection } from "geojson";
+import { GeoJsonLayer, IconLayer, TextLayer } from "@deck.gl/layers";
+import type { Feature, FeatureCollection, LineString } from "geojson";
 
 /** Désactive le depth test : sinon les routes disparaissent sous les polygones remplis. */
 // deck.gl typings: `parameters` attend le type luma `Parameters`, pas un simple littéral.
@@ -165,23 +165,57 @@ export function buildWorldMapDeckLayers(opts: BuildWorldMapDeckLayersOpts): Laye
 
   const routeOpacity = Math.max(0, Math.min(1, opts.routeGroupOpacity));
   if (opts.routes.length > 0 && routeOpacity > 0.01) {
-    layers.push(
-      new PathLayer<WorldMapDeckRoute>({
-        id: "wm-routes",
-        data: opts.routes,
-        pickable: true,
-        parameters: DECK_MAP_LAYER_PARAMETERS,
-        coordinateSystem: COORDINATE_SYSTEM.LNGLAT,
-        widthUnits: "pixels",
-        widthMinPixels: 2,
-        capRounded: true,
-        jointRounded: true,
-        opacity: routeOpacity,
-        getPath: (d) => d.lonLatPath,
-        getColor: (d) => d.color,
-        getWidth: (d) => Math.max(2, d.widthPx),
-      })
-    );
+    /** Même pipeline que les frontières : LineString en GeoJSON (PathLayer seul posait souci avec MapView). */
+    const routeLineFeatures: Feature<LineString, { routeId: string; name: string; lineWidth: number; lineColor: [number, number, number, number] }>[] =
+      opts.routes
+        .filter((r) => r.lonLatPath.length >= 2)
+        .map((r) => ({
+          type: "Feature",
+          properties: {
+            routeId: r.id,
+            name: r.name,
+            lineWidth: Math.max(2, r.widthPx),
+            lineColor: r.color,
+          },
+          geometry: {
+            type: "LineString",
+            coordinates: r.lonLatPath.map(([lo, la]) => [lo, la]),
+          },
+        }));
+
+    if (routeLineFeatures.length > 0) {
+      layers.push(
+        new GeoJsonLayer<{
+          routeId: string;
+          name: string;
+          lineWidth: number;
+          lineColor: [number, number, number, number];
+        }>({
+          id: "wm-routes",
+          data: { type: "FeatureCollection", features: routeLineFeatures },
+          pickable: true,
+          parameters: DECK_MAP_LAYER_PARAMETERS,
+          stroked: true,
+          filled: false,
+          extruded: false,
+          opacity: routeOpacity,
+          lineWidthUnits: "pixels",
+          lineWidthMinPixels: 2,
+          lineWidthMaxPixels: 16,
+          getLineWidth: (f) => Math.max(2, f.properties?.lineWidth ?? 2),
+          getLineColor: (f) => {
+            const c = f.properties?.lineColor;
+            if (!c) return [180, 140, 90, 230];
+            return [
+              c[0],
+              c[1],
+              c[2],
+              Math.max(0, Math.min(255, Math.round((c[3] / 255) * routeOpacity * 255))),
+            ];
+          },
+        })
+      );
+    }
 
     const routeLabelData = opts.routes.filter((r) => r.showLabel && r.name);
     if (routeLabelData.length > 0) {

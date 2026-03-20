@@ -238,6 +238,8 @@ export type WorldMapClientProps = {
     config: MapDisplayConfig,
     expectedVersion?: number
   ) => Promise<{ error?: string; version?: number } | void>;
+  /** Réinitialise la config persistée (serveur) aux défauts officiels — met à jour version + audit. */
+  onResetMapDisplayConfig?: () => Promise<{ error?: string; version?: number } | void>;
   /** Si défini (ex. "mj-settings-below"), le panneau réglages MJ est rendu dans ce conteneur (sous la carte). */
   settingsContainerId?: string | null;
 };
@@ -376,6 +378,7 @@ export function WorldMapClient({
   initialMapDisplayConfig,
   initialMapDisplayVersion = 0,
   onSaveMapDisplayConfig,
+  onResetMapDisplayConfig,
   settingsContainerId,
   mapObjects,
   cities,
@@ -573,16 +576,13 @@ export function WorldMapClient({
     "config-icons": true,
     "config-routes": true,
     "config-icons-size": true,
-    "config-icons-zoom": false,
-    "config-icons-curve": false,
-    "config-icons-fade": false,
     "config-icons-debug": false,
     "config-routes-stroke": false,
     "config-routes-labels": false,
-    "config-routes-fade": false,
-    "config-routes-progress": false,
     "config-routes-sinuosity": false,
+    "config-routes-deprecated": false,
     "config-zoom-rules": true,
+    "config-display-deprecated": false,
   }));
   const [zoomRulesEditorLevel, setZoomRulesEditorLevel] = useState<MapZoomLevelId>("province");
   const toggleSettingsSection = (key: string) =>
@@ -714,6 +714,35 @@ export function WorldMapClient({
       setMjSettingsSaving(false);
     }
   }, [onSaveMapDisplayConfig, mjUi, mjConfigVersion, router]);
+
+  const resetAllMapDisplayToServerDefaults = useCallback(async () => {
+    if (!onResetMapDisplayConfig) return;
+    if (
+      !window.confirm(
+        "Réinitialiser tous les réglages d’affichage aux défauts officiels ? Les paliers, icônes et routes seront remis aux valeurs par défaut et enregistrés sur le serveur (carte publique incluse).",
+      )
+    ) {
+      return;
+    }
+    setMjSettingsError(null);
+    setMjSettingsSaving(true);
+    try {
+      const res = await onResetMapDisplayConfig();
+      if (res && "error" in res && res.error) {
+        setMjSettingsError(res.error);
+        return;
+      }
+      const keepDebug = mjUi.debugCityHitboxes;
+      setMjUi(() => ({ ...DEFAULT_MAP_DISPLAY_CONFIG, debugCityHitboxes: keepDebug }));
+      if (res && "version" in res && typeof res.version === "number" && Number.isFinite(res.version)) {
+        setMjConfigVersion(res.version);
+      }
+      setMjSettingsSavedAt(Date.now());
+      router.refresh();
+    } finally {
+      setMjSettingsSaving(false);
+    }
+  }, [onResetMapDisplayConfig, mjUi.debugCityHitboxes, router]);
 
   useEffect(() => {
     setMjConfigVersion(initialMapDisplayVersion);
@@ -1382,50 +1411,17 @@ export function WorldMapClient({
     }
   }, [hydroTopo]);
 
-  // Fade-in/out des couches hydro selon le zoom.
   function clamp01(x: number) {
     return Math.max(0, Math.min(1, x));
   }
-  const lakesOpacity = useMemo(() => clamp01((mapView.zoom - 1.6) / 0.6), [mapView.zoom]);
-  const riversOpacity = useMemo(() => clamp01((mapView.zoom - 2.6) / 0.7), [mapView.zoom]);
-  // Zoom normalisé 0..100 basé sur des ancres réelles configurables.
-  const zoomPct = useMemo(() => {
-    const z0 = Math.max(0.0001, Math.min(displayConfig.zoomRefWorld, displayConfig.zoomRefProvince - 0.0001));
-    const z1 = Math.max(z0 + 0.0001, Math.max(displayConfig.zoomRefWorld, displayConfig.zoomRefProvince));
-    return clamp01((mapView.zoom - z0) / (z1 - z0)) * 100;
-  }, [mapView.zoom, displayConfig.zoomRefWorld, displayConfig.zoomRefProvince]);
+  /** Opacité hydro : binaire par palier (visibilité), pas de rampe sur mapView.zoom. */
+  const lakesOpacity = 1;
+  const riversOpacity = 1;
 
-  const citySizeFactor = useMemo(() => {
-    // Proportionnel du zoom normalisé, avec minimum configurable et courbe configurable.
-    const minF = clamp01((displayConfig.sizeAtWorldPct || 0) / 100);
-    const exp = Math.max(0.2, Math.min(3, displayConfig.sizeCurveExp || 1));
-    const t = Math.pow(clamp01(zoomPct / 100), exp);
-    return (minF + (1 - minF) * t) * activeZoomRules.scale.cities;
-  }, [zoomPct, displayConfig.sizeAtWorldPct, displayConfig.sizeCurveExp, activeZoomRules.scale.cities]);
-
-  const citiesRenderOpacity = useMemo(() => {
-    // Opaque tant qu'on est au-dessus du seuil, puis fade-out.
-    const start = Math.max(0, Math.min(100, displayConfig.fadeStartPct));
-    const end = Math.max(0, Math.min(start, displayConfig.fadeEndPct));
-    if (zoomPct >= start) return 1;
-    if (start === end) return zoomPct >= start ? 1 : 0;
-    return clamp01((zoomPct - end) / (start - end));
-  }, [zoomPct, displayConfig.fadeStartPct, displayConfig.fadeEndPct]);
-
-  const routeRenderOpacity = useMemo(() => {
-    const start = Math.max(0, Math.min(100, displayConfig.routeFadeStartPct ?? 33));
-    const end = Math.max(0, Math.min(start, displayConfig.routeFadeEndPct ?? 20));
-    if (zoomPct >= start) return 1;
-    if (start === end) return zoomPct >= start ? 1 : 0;
-    return clamp01((zoomPct - end) / (start - end));
-  }, [zoomPct, displayConfig.routeFadeStartPct, displayConfig.routeFadeEndPct]);
-
-  const routeSizeFactor = useMemo(() => {
-    const minF = clamp01((displayConfig.routeSizeAtWorldPct ?? 10) / 100);
-    const exp = Math.max(0.2, Math.min(3, displayConfig.routeSizeCurveExp ?? 1));
-    const t = Math.pow(clamp01(zoomPct / 100), exp);
-    return (minF + (1 - minF) * t) * activeZoomRules.scale.routes;
-  }, [zoomPct, displayConfig.routeSizeAtWorldPct, displayConfig.routeSizeCurveExp, activeZoomRules.scale.routes]);
+  /** Tailles icônes / routes : uniquement l’échelle du palier (plus de courbe zoom). */
+  const citySizeFactor = activeZoomRules.scale.cities;
+  const routeRenderOpacity = activeZoomRules.visibility.routes ? 1 : 0;
+  const routeSizeFactor = activeZoomRules.scale.routes;
   const routeTierStyle = useMemo(() => {
     const clampPx = (n: number | undefined, def: number) =>
       Number.isFinite(n) ? Math.max(0.01, Math.min(0.3, n as number)) : def;
@@ -1445,7 +1441,7 @@ export function WorldMapClient({
     } as const;
   }, [displayConfig.routeStrokeLocalPx, displayConfig.routeStrokeRegionalPx, displayConfig.routeStrokeNationalPx]);
 
-  const citiesOpacity = activeZoomRules.visibility.cities ? citiesRenderOpacity : 0;
+  const citiesOpacity = activeZoomRules.visibility.cities ? 1 : 0;
   const cityMarkerPx = displayConfig.cityIconMaxPx * citySizeFactor;
   // Calibrage: icône dans une boîte 10x10 (unités SVG).
   // Marker est dans l’espace carte => taille écran ~= 10 * scale * zoom
@@ -1461,10 +1457,9 @@ export function WorldMapClient({
   const showHydro = activeZoomRules.visibility.lakes;
   const showRivers = activeZoomRules.visibility.rivers;
 
-  // (debug UI zoom badge mis à jour via ref, pas via state pour les perfs)
-  const RIVERS_LOCK_ZOOM = 6;
-  const riversLocked = mapView.zoom >= RIVERS_LOCK_ZOOM;
-  const lakesLocked = riversLocked;
+  /** Hydro SVG : opacité pleine quand la couche est affichée (pas de seuil zoom). */
+  const riversLocked = true;
+  const lakesLocked = true;
 
   // Stabiliser les props/styles (éviter de recréer des objets à chaque frame de zoom).
   const lakesStyle = useMemo(
@@ -2859,16 +2854,23 @@ export function WorldMapClient({
         if (o?.id) openCityPanel(ev, o.id);
         return true;
       }
-      if (layerId === "wm-routes" && info.object) {
-        const o = info.object as WorldMapDeckRoute;
+      const routeLayerId = typeof layerId === "string" ? layerId : "";
+      const isRouteDeckPick =
+        routeLayerId === "wm-routes" || routeLayerId.startsWith("wm-routes-linestrings");
+      if (isRouteDeckPick && info.object) {
+        const feat = info.object as Feature;
+        const p = (feat.properties ?? {}) as { routeId?: string; name?: string };
+        const rid = typeof p.routeId === "string" ? p.routeId : null;
+        if (!rid) return true;
         if (mode === "mj") {
-          if (!selectingEndpoint) setSelectedRouteId(o.id);
+          if (!selectingEndpoint) setSelectedRouteId(rid);
           return true;
         }
-        const route = (routes ?? []).find((r) => r.id === o.id);
+        const route = (routes ?? []).find((r) => r.id === rid);
+        const title = route?.name?.trim() || p.name || "Route";
         setPublicInfoPanel({
           kind: "route",
-          title: route?.name?.trim() || o.name,
+          title,
           lines: [
             `Type: ${ROUTE_TIER_LABELS[(route?.tier as RouteTier) ?? "local"] ?? route?.tier ?? "Route"}`,
             route?.distance_km ? `Distance: ${Math.round(route.distance_km)} km` : "Distance: inconnue",
@@ -3015,7 +3017,7 @@ export function WorldMapClient({
                           <input type="range" min={6} max={24} value={mjUi.cityLabelFontSizePx ?? 10} onChange={(e) => setMjUi((p) => ({ ...p, cityLabelFontSizePx: Number(e.target.value) }))} className="w-full" />
                           <span className="w-10 text-right text-xs text-stone-200 tabular-nums">{mjUi.cityLabelFontSizePx ?? 10}px</span>
                         </div>
-                        <p className="mt-1 text-[11px] text-stone-400">Même zoom / fade que les icônes.</p>
+                        <p className="mt-1 text-[11px] text-stone-400">Visible si les villes sont actives au palier courant.</p>
                       </div>
                       {placingCity?.active && (
                         <div className="rounded-lg border border-emerald-500/20 bg-emerald-950/20 p-2">
@@ -3028,49 +3030,44 @@ export function WorldMapClient({
                       )}
                     </div>
                   )}
-                  <button type="button" onClick={() => toggleSettingsSection("config-icons-zoom")} className="flex w-full items-center justify-between rounded py-0.5 text-left text-xs font-semibold text-stone-200 hover:bg-white/5">
-                    <span>Ancrage du zoom</span><span aria-hidden>{settingsSectionOpen["config-icons-zoom"] ? "▼" : "▶"}</span>
+                  <button type="button" onClick={() => toggleSettingsSection("config-display-deprecated")} className="flex w-full items-center justify-between rounded py-0.5 text-left text-xs font-semibold text-amber-200/90 hover:bg-white/5">
+                    <span>Avancé (déprécié — ignoré par la carte)</span><span aria-hidden>{settingsSectionOpen["config-display-deprecated"] ? "▼" : "▶"}</span>
                   </button>
-                  {settingsSectionOpen["config-icons-zoom"] && (
-                    <div className="rounded-lg border border-white/10 bg-black/30 p-2 pl-2">
-                      <p className="text-xs font-semibold text-stone-200">0% ↔ 100%</p>
-                      <div className="mt-2 grid grid-cols-2 gap-2">
-                        <button type="button" className="rounded-md border border-white/10 bg-white/5 px-2 py-1 text-[11px] text-stone-200 hover:bg-white/10" onClick={() => setMjUi((p) => ({ ...p, zoomRefWorld: mapView.zoom }))}>Définir 0%</button>
-                        <button type="button" className="rounded-md border border-white/10 bg-white/5 px-2 py-1 text-[11px] text-stone-200 hover:bg-white/10" onClick={() => setMjUi((p) => ({ ...p, zoomRefProvince: mapView.zoom }))}>Définir 100%</button>
+                  {settingsSectionOpen["config-display-deprecated"] && (
+                    <div className="space-y-3 rounded-lg border border-amber-800/30 bg-black/20 p-2 pl-2">
+                      <p className="text-[11px] text-amber-200/70">Ces curseurs restent en base mais ne pilotent plus l’affichage (paliers binaires uniquement).</p>
+                      <div className="rounded-lg border border-white/10 bg-black/30 p-2 pl-2">
+                        <p className="text-xs font-semibold text-stone-200">Ancrage zoom (0% ↔ 100%)</p>
+                        <div className="mt-2 grid grid-cols-2 gap-2">
+                          <button type="button" className="rounded-md border border-white/10 bg-white/5 px-2 py-1 text-[11px] text-stone-200 hover:bg-white/10" onClick={() => setMjUi((p) => ({ ...p, zoomRefWorld: mapView.zoom }))}>Définir 0%</button>
+                          <button type="button" className="rounded-md border border-white/10 bg-white/5 px-2 py-1 text-[11px] text-stone-200 hover:bg-white/10" onClick={() => setMjUi((p) => ({ ...p, zoomRefProvince: mapView.zoom }))}>Définir 100%</button>
+                        </div>
+                        <p className="mt-2 text-[11px] text-stone-400">0%={mjUi.zoomRefWorld.toFixed(2)} · 100%={mjUi.zoomRefProvince.toFixed(2)}</p>
                       </div>
-                      <p className="mt-2 text-[11px] text-stone-400">0%={mjUi.zoomRefWorld.toFixed(2)} · 100%={mjUi.zoomRefProvince.toFixed(2)}</p>
-                    </div>
-                  )}
-                  <button type="button" onClick={() => toggleSettingsSection("config-icons-curve")} className="flex w-full items-center justify-between rounded py-0.5 text-left text-xs font-semibold text-stone-200 hover:bg-white/5">
-                    <span>Courbe de taille</span><span aria-hidden>{settingsSectionOpen["config-icons-curve"] ? "▼" : "▶"}</span>
-                  </button>
-                  {settingsSectionOpen["config-icons-curve"] && (
-                    <div className="rounded-lg border border-white/10 bg-black/30 p-2 pl-2">
-                      <p className="text-[11px] text-stone-400">Taille à 0%</p>
-                      <div className="mt-1 flex items-center gap-2">
-                        <input type="range" min={0} max={100} value={mjUi.sizeAtWorldPct} onChange={(e) => setMjUi((p) => ({ ...p, sizeAtWorldPct: Number(e.target.value) }))} className="w-full" />
-                        <span className="w-10 text-right text-xs text-stone-200 tabular-nums">{mjUi.sizeAtWorldPct}%</span>
+                      <div className="rounded-lg border border-white/10 bg-black/30 p-2 pl-2">
+                        <p className="text-xs font-semibold text-stone-200">Courbe de taille (icônes)</p>
+                        <p className="text-[11px] text-stone-400">Taille à 0%</p>
+                        <div className="mt-1 flex items-center gap-2">
+                          <input type="range" min={0} max={100} value={mjUi.sizeAtWorldPct} onChange={(e) => setMjUi((p) => ({ ...p, sizeAtWorldPct: Number(e.target.value) }))} className="w-full" />
+                          <span className="w-10 text-right text-xs text-stone-200 tabular-nums">{mjUi.sizeAtWorldPct}%</span>
+                        </div>
+                        <p className="mt-2 text-[11px] text-stone-400">Progressivité</p>
+                        <div className="mt-1 flex items-center gap-2">
+                          <input type="range" min={0.4} max={2.2} step={0.05} value={mjUi.sizeCurveExp} onChange={(e) => setMjUi((p) => ({ ...p, sizeCurveExp: Number(e.target.value) }))} className="w-full" />
+                          <span className="w-10 text-right text-xs text-stone-200 tabular-nums">{mjUi.sizeCurveExp.toFixed(2)}</span>
+                        </div>
                       </div>
-                      <p className="mt-2 text-[11px] text-stone-400">Progressivité</p>
-                      <div className="mt-1 flex items-center gap-2">
-                        <input type="range" min={0.4} max={2.2} step={0.05} value={mjUi.sizeCurveExp} onChange={(e) => setMjUi((p) => ({ ...p, sizeCurveExp: Number(e.target.value) }))} className="w-full" />
-                        <span className="w-10 text-right text-xs text-stone-200 tabular-nums">{mjUi.sizeCurveExp.toFixed(2)}</span>
-                      </div>
-                    </div>
-                  )}
-                  <button type="button" onClick={() => toggleSettingsSection("config-icons-fade")} className="flex w-full items-center justify-between rounded py-0.5 text-left text-xs font-semibold text-stone-200 hover:bg-white/5">
-                    <span>Fade-out (opacité)</span><span aria-hidden>{settingsSectionOpen["config-icons-fade"] ? "▼" : "▶"}</span>
-                  </button>
-                  {settingsSectionOpen["config-icons-fade"] && (
-                    <div className="rounded-lg border border-white/10 bg-black/30 p-2 pl-2">
-                      <p className="text-[11px] text-stone-400">Début / Fin fade (%)</p>
-                      <div className="mt-1 flex items-center gap-2">
-                        <input type="range" min={0} max={100} value={mjUi.fadeStartPct} onChange={(e) => setMjUi((p) => ({ ...p, fadeStartPct: Number(e.target.value) }))} className="w-full" />
-                        <span className="w-10 text-right text-xs text-stone-200 tabular-nums">{mjUi.fadeStartPct}%</span>
-                      </div>
-                      <div className="mt-1 flex items-center gap-2">
-                        <input type="range" min={0} max={100} value={mjUi.fadeEndPct} onChange={(e) => setMjUi((p) => ({ ...p, fadeEndPct: Number(e.target.value) }))} className="w-full" />
-                        <span className="w-10 text-right text-xs text-stone-200 tabular-nums">{mjUi.fadeEndPct}%</span>
+                      <div className="rounded-lg border border-white/10 bg-black/30 p-2 pl-2">
+                        <p className="text-xs font-semibold text-stone-200">Fade villes (opacité)</p>
+                        <p className="text-[11px] text-stone-400">Début / Fin fade (%)</p>
+                        <div className="mt-1 flex items-center gap-2">
+                          <input type="range" min={0} max={100} value={mjUi.fadeStartPct} onChange={(e) => setMjUi((p) => ({ ...p, fadeStartPct: Number(e.target.value) }))} className="w-full" />
+                          <span className="w-10 text-right text-xs text-stone-200 tabular-nums">{mjUi.fadeStartPct}%</span>
+                        </div>
+                        <div className="mt-1 flex items-center gap-2">
+                          <input type="range" min={0} max={100} value={mjUi.fadeEndPct} onChange={(e) => setMjUi((p) => ({ ...p, fadeEndPct: Number(e.target.value) }))} className="w-full" />
+                          <span className="w-10 text-right text-xs text-stone-200 tabular-nums">{mjUi.fadeEndPct}%</span>
+                        </div>
                       </div>
                     </div>
                   )}
@@ -3231,69 +3228,11 @@ export function WorldMapClient({
                     onClick={() =>
                       setMjUi((p) => ({
                         ...p,
-                        zoomLevelRules: {
-                          ...p.zoomLevelRules,
-                          province: {
-                            visibility: {
-                              routes: true,
-                              cities: true,
-                              smallEntities: true,
-                              forests: true,
-                              rivers: true,
-                              lakes: true,
-                              regionBorders: true,
-                              realmLabels: false,
-                            },
-                            scale: { cities: 1, routes: 1, entities: 1 },
-                            caps: { maxRouteLabels: 600, maxCities: 5000, maxEntities: 5000 },
-                          },
-                          nation: {
-                            visibility: {
-                              routes: true,
-                              cities: true,
-                              smallEntities: true,
-                              forests: true,
-                              rivers: true,
-                              lakes: true,
-                              regionBorders: true,
-                              realmLabels: false,
-                            },
-                            scale: { cities: 0.72, routes: 0.72, entities: 0.72 },
-                            caps: { maxRouteLabels: 260, maxCities: 2200, maxEntities: 2200 },
-                          },
-                          continent: {
-                            visibility: {
-                              routes: false,
-                              cities: true,
-                              smallEntities: false,
-                              forests: false,
-                              rivers: true,
-                              lakes: true,
-                              regionBorders: true,
-                              realmLabels: true,
-                            },
-                            scale: { cities: 0.42, routes: 0.42, entities: 0.45 },
-                            caps: { maxRouteLabels: 0, maxCities: 900, maxEntities: 500 },
-                          },
-                          monde: {
-                            visibility: {
-                              routes: false,
-                              cities: true,
-                              smallEntities: false,
-                              forests: false,
-                              rivers: false,
-                              lakes: false,
-                              regionBorders: true,
-                              realmLabels: true,
-                            },
-                            scale: { cities: 0.25, routes: 0.25, entities: 0.3 },
-                            caps: { maxRouteLabels: 0, maxCities: 450, maxEntities: 250 },
-                          },
-                        },
+                        zoomLevelRules: structuredClone(DEFAULT_MAP_DISPLAY_CONFIG.zoomLevelRules),
                       }))
                     }
                   >
-                    Appliquer recommandations RP
+                    Réinitialiser les paliers (défauts officiels)
                   </button>
                 </div>
               )}
@@ -3367,39 +3306,7 @@ export function WorldMapClient({
                         <input type="range" min={0.01} max={1} step={0.01} value={Math.max(0.01, Math.min(1, Number(mjUi.routeLabelFontSizePx ?? 0.25)))} onChange={(e) => setMjUi((p) => ({ ...p, routeLabelFontSizePx: Number(e.target.value) }))} className="flex-1" />
                         <span className="w-12 text-right text-xs text-stone-200 tabular-nums">{(Number(mjUi.routeLabelFontSizePx ?? 0.25)).toFixed(2)}px</span>
                       </div>
-                      <p className="mt-1 text-[11px] text-stone-400">0,01 à 1 px (pas 0,01). Même zoom / fade que les routes.</p>
-                    </div>
-                  )}
-                  <button type="button" onClick={() => toggleSettingsSection("config-routes-fade")} className="flex w-full items-center justify-between rounded py-0.5 text-left text-xs font-semibold text-stone-200 hover:bg-white/5">
-                    <span>Fade-out routes</span><span aria-hidden>{settingsSectionOpen["config-routes-fade"] ? "▼" : "▶"}</span>
-                  </button>
-                  {settingsSectionOpen["config-routes-fade"] && (
-                    <div className="rounded-lg border border-white/10 bg-black/30 p-2 pl-2">
-                      <p className="text-[11px] text-stone-400">Début / Fin fade (%)</p>
-                      <div className="mt-1 flex items-center gap-2">
-                        <input type="range" min={0} max={100} value={mjUi.routeFadeStartPct} onChange={(e) => setMjUi((p) => ({ ...p, routeFadeStartPct: Number(e.target.value) }))} className="w-full" />
-                        <span className="w-10 text-right text-xs text-stone-200 tabular-nums">{mjUi.routeFadeStartPct}%</span>
-                      </div>
-                      <div className="mt-1 flex items-center gap-2">
-                        <input type="range" min={0} max={100} value={mjUi.routeFadeEndPct} onChange={(e) => setMjUi((p) => ({ ...p, routeFadeEndPct: Number(e.target.value) }))} className="w-full" />
-                        <span className="w-10 text-right text-xs text-stone-200 tabular-nums">{mjUi.routeFadeEndPct}%</span>
-                      </div>
-                    </div>
-                  )}
-                  <button type="button" onClick={() => toggleSettingsSection("config-routes-progress")} className="flex w-full items-center justify-between rounded py-0.5 text-left text-xs font-semibold text-stone-200 hover:bg-white/5">
-                    <span>Progressivité routes</span><span aria-hidden>{settingsSectionOpen["config-routes-progress"] ? "▼" : "▶"}</span>
-                  </button>
-                  {settingsSectionOpen["config-routes-progress"] && (
-                    <div className="rounded-lg border border-white/10 bg-black/30 p-2 pl-2">
-                      <p className="text-[11px] text-stone-400">Taille à 0% / Progressivité</p>
-                      <div className="mt-1 flex items-center gap-2">
-                        <input type="range" min={0} max={100} value={mjUi.routeSizeAtWorldPct} onChange={(e) => setMjUi((p) => ({ ...p, routeSizeAtWorldPct: Number(e.target.value) }))} className="w-full" />
-                        <span className="w-10 text-right text-xs text-stone-200 tabular-nums">{mjUi.routeSizeAtWorldPct}%</span>
-                      </div>
-                      <div className="mt-1 flex items-center gap-2">
-                        <input type="range" min={0.4} max={2.2} step={0.05} value={mjUi.routeSizeCurveExp} onChange={(e) => setMjUi((p) => ({ ...p, routeSizeCurveExp: Number(e.target.value) }))} className="w-full" />
-                        <span className="w-10 text-right text-xs text-stone-200 tabular-nums">{mjUi.routeSizeCurveExp.toFixed(2)}</span>
-                      </div>
+                      <p className="mt-1 text-[11px] text-stone-400">0,01 à 1 (pas 0,01). Échelle liée au palier et au trait ci-dessus.</p>
                     </div>
                   )}
                   <button type="button" onClick={() => toggleSettingsSection("config-routes-sinuosity")} className="flex w-full items-center justify-between rounded py-0.5 text-left text-xs font-semibold text-stone-200 hover:bg-white/5">
@@ -3425,6 +3332,38 @@ export function WorldMapClient({
                       </div>
                     </div>
                   )}
+                  <button type="button" onClick={() => toggleSettingsSection("config-routes-deprecated")} className="flex w-full items-center justify-between rounded py-0.5 text-left text-xs font-semibold text-amber-200/90 hover:bg-white/5">
+                    <span>Avancé routes (déprécié — ignoré par la carte)</span><span aria-hidden>{settingsSectionOpen["config-routes-deprecated"] ? "▼" : "▶"}</span>
+                  </button>
+                  {settingsSectionOpen["config-routes-deprecated"] && (
+                    <div className="space-y-3 rounded-lg border border-amber-800/30 bg-black/20 p-2 pl-2">
+                      <p className="text-[11px] text-amber-200/70">Fade et progressivité : conservés en base mais sans effet sur le rendu (paliers binaires).</p>
+                      <div className="rounded-lg border border-white/10 bg-black/30 p-2 pl-2">
+                        <p className="text-xs font-semibold text-stone-200">Fade-out routes</p>
+                        <p className="text-[11px] text-stone-400">Début / Fin fade (%)</p>
+                        <div className="mt-1 flex items-center gap-2">
+                          <input type="range" min={0} max={100} value={mjUi.routeFadeStartPct} onChange={(e) => setMjUi((p) => ({ ...p, routeFadeStartPct: Number(e.target.value) }))} className="w-full" />
+                          <span className="w-10 text-right text-xs text-stone-200 tabular-nums">{mjUi.routeFadeStartPct}%</span>
+                        </div>
+                        <div className="mt-1 flex items-center gap-2">
+                          <input type="range" min={0} max={100} value={mjUi.routeFadeEndPct} onChange={(e) => setMjUi((p) => ({ ...p, routeFadeEndPct: Number(e.target.value) }))} className="w-full" />
+                          <span className="w-10 text-right text-xs text-stone-200 tabular-nums">{mjUi.routeFadeEndPct}%</span>
+                        </div>
+                      </div>
+                      <div className="rounded-lg border border-white/10 bg-black/30 p-2 pl-2">
+                        <p className="text-xs font-semibold text-stone-200">Progressivité routes</p>
+                        <p className="text-[11px] text-stone-400">Taille à 0% / Progressivité</p>
+                        <div className="mt-1 flex items-center gap-2">
+                          <input type="range" min={0} max={100} value={mjUi.routeSizeAtWorldPct} onChange={(e) => setMjUi((p) => ({ ...p, routeSizeAtWorldPct: Number(e.target.value) }))} className="w-full" />
+                          <span className="w-10 text-right text-xs text-stone-200 tabular-nums">{mjUi.routeSizeAtWorldPct}%</span>
+                        </div>
+                        <div className="mt-1 flex items-center gap-2">
+                          <input type="range" min={0.4} max={2.2} step={0.05} value={mjUi.routeSizeCurveExp} onChange={(e) => setMjUi((p) => ({ ...p, routeSizeCurveExp: Number(e.target.value) }))} className="w-full" />
+                          <span className="w-10 text-right text-xs text-stone-200 tabular-nums">{mjUi.routeSizeCurveExp.toFixed(2)}</span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
             </section>
@@ -3445,6 +3384,16 @@ export function WorldMapClient({
                   className="w-full rounded-lg border border-emerald-500/50 bg-emerald-950/50 px-4 py-2.5 text-sm font-semibold text-emerald-100 hover:bg-emerald-900/50 transition-colors disabled:opacity-60"
                 >
                   {mjSettingsSaving ? "Enregistrement..." : "Enregistrer pour toute la carte"}
+                </button>
+              )}
+              {onResetMapDisplayConfig && (
+                <button
+                  type="button"
+                  onClick={resetAllMapDisplayToServerDefaults}
+                  disabled={mjSettingsSaving}
+                  className="w-full rounded-lg border border-rose-500/40 bg-rose-950/30 px-4 py-2.5 text-sm font-semibold text-rose-100/95 hover:bg-rose-900/35 transition-colors disabled:opacity-60"
+                >
+                  Réinitialiser tous les réglages d’affichage (défauts officiels)
                 </button>
               )}
               {mjSettingsSavedAt != null && (
@@ -3506,8 +3455,8 @@ export function WorldMapClient({
         <div className="absolute right-4 top-4 z-50 rounded-xl border border-white/10 bg-black/60 px-3 py-2 shadow backdrop-blur">
           <p className="text-[11px] text-stone-200">
             Zoom : <span className="font-mono text-stone-100/90">{mapView.zoom.toFixed(2)}</span> ·{" "}
-            <span className="font-mono text-cyan-100">{currentZoomLevel}</span> ·{" "}
-            <span className="font-mono text-amber-100">{zoomPct.toFixed(0)}%</span>
+            <span className="font-mono text-cyan-100">{currentZoomLevel}</span> · affiché{" "}
+            <span className="font-mono text-amber-100">{renderZoomLevel}</span>
           </p>
         </div>
       )}
@@ -4244,8 +4193,6 @@ export function WorldMapClient({
                 hydro={hydro}
                 shouldRenderSvgRivers={shouldRenderSvgRivers}
                 hydroNationProvinceDragLite={hydroNationProvinceDragLite}
-                lakesLocked={lakesLocked}
-                riversLocked={riversLocked}
                 showHydro={showHydro}
                 showRivers={showRivers}
                 lakesOpacity={lakesOpacity}
@@ -4402,7 +4349,7 @@ export function WorldMapClient({
                     const cityScale = cityScaleFactorFor(c);
                     return (
                       <g
-                        opacity={citiesRenderOpacity}
+                        opacity={citiesOpacity}
                         style={{ pointerEvents: "none" }}
                         data-city-id={mode === "mj" ? c.id : undefined}
                       >
@@ -4623,7 +4570,7 @@ export function WorldMapClient({
                       const cityScale = cityScaleFactorFor(c);
                       return (
                         <g
-                          opacity={citiesRenderOpacity}
+                          opacity={citiesOpacity}
                           style={{ pointerEvents: "none" }}
                           data-city-id={mode === "mj" ? c.id : undefined}
                         >
@@ -4764,7 +4711,7 @@ export function WorldMapClient({
               {/* Prévisualisation placement Ville */}
               {placingCity?.active && Number.isFinite(placingCity.previewLon) && Number.isFinite(placingCity.previewLat) && (
                 <MarkerAny key="city-preview" coordinates={[placingCity.previewLon, placingCity.previewLat]}>
-                  <g opacity={citiesRenderOpacity * (placingCity.isSubmitting ? 0.45 : 1)}>
+                  <g opacity={citiesOpacity * (placingCity.isSubmitting ? 0.45 : 1)}>
                     {typeof placingCity.iconKey === "string" && placingCity.iconKey.startsWith("http") ? (
                       <g transform={`scale(${cityMarkerScale * Math.max(0.1, Math.min(4, placingCity.iconScalePct / 100))})`}>
                         <image

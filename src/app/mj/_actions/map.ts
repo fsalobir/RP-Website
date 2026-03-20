@@ -11,6 +11,7 @@ function pathwayPointsLimitMessage(): string {
 import {
   MAP_DISPLAY_CONFIG_KEY,
   MAP_DISPLAY_CONFIG_VERSION,
+  DEFAULT_MAP_DISPLAY_CONFIG,
   parseMapDisplayConfigSnapshot,
   sanitizeMapDisplayConfig,
   type MapDisplayConfig,
@@ -1274,6 +1275,11 @@ export async function saveMapDisplayConfig(
   });
 
   return { version: nextVersion };
+}
+
+/** Réinitialise la config d’affichage carte en base (défauts officiels), sans exiger de version attendue. */
+export async function resetMapDisplayConfigToDefaults(): Promise<{ error?: string; version?: number }> {
+  return saveMapDisplayConfig(DEFAULT_MAP_DISPLAY_CONFIG);
 }
 
 

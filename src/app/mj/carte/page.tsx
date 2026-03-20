@@ -20,6 +20,7 @@ import {
   undoProvinceMapOp,
   getMapDisplayConfigSnapshot,
   saveMapDisplayConfig,
+  resetMapDisplayConfigToDefaults,
 } from "../_actions/map";
 
 export const revalidate = 0;
@@ -139,6 +140,7 @@ export default async function MjCartePage() {
           initialMapDisplayConfig={mapDisplaySnapshot.config}
           initialMapDisplayVersion={mapDisplaySnapshot.version}
           onSaveMapDisplayConfig={saveMapDisplayConfig}
+          onResetMapDisplayConfig={resetMapDisplayConfigToDefaults}
           mapObjects={poi as any}
           cities={cities as any}
           routes={routes}
