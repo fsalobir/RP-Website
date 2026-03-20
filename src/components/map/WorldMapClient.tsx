@@ -59,7 +59,7 @@ import { resolveMapGpuBudgetProfile, getMapGpuBudget, trimMapCacheToBudget } fro
 import { useMapRendererSession } from "@/components/map/session/useMapRendererSession";
 import { useMapDataPipeline } from "@/components/map/data/useMapDataPipeline";
 import { MapEngine } from "@/components/map/engine/MapEngine";
-import { pushMapDebugSessionLog } from "@/lib/mapDebugSession";
+import { postDebugMapSessionToServer, pushMapDebugSessionLog } from "@/lib/mapDebugSession";
 
 const ComposableMap = dynamic(() => import("react-simple-maps").then((m) => m.ComposableMap), { ssr: false });
 const Geographies = dynamic(() => import("react-simple-maps").then((m) => m.Geographies), { ssr: false });
@@ -2246,11 +2246,7 @@ export function WorldMapClient({
       },
     };
     pushMapDebugSessionLog(payload as unknown as Record<string, unknown>);
-    fetch("/api/debug-map-session", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    }).catch(() => {});
+    postDebugMapSessionToServer(payload as unknown as Record<string, unknown>);
   }, [
     renderZoomLevel,
     currentZoomLevel,
@@ -2318,11 +2314,7 @@ export function WorldMapClient({
         },
       };
       pushMapDebugSessionLog(payload as unknown as Record<string, unknown>);
-      fetch("/api/debug-map-session", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      }).catch(() => {});
+      postDebugMapSessionToServer(payload as unknown as Record<string, unknown>);
     };
     send();
     const iv = globalThis.setInterval(send, 550);

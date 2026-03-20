@@ -2,6 +2,24 @@
 
 const MAX_ENTRIES = 100;
 
+/**
+ * POST /api/debug-map-session n’est activé côté serveur qu’en dev ou si DEBUG_MAP_SESSION=1 (local).
+ * En prod déployée (Vercel), l’API répond 403 : ne pas appeler pour éviter le bruit console.
+ */
+export function shouldPostDebugMapSessionToServer(): boolean {
+  if (process.env.NODE_ENV === "development") return true;
+  return process.env.NEXT_PUBLIC_DEBUG_MAP_SESSION === "1";
+}
+
+export function postDebugMapSessionToServer(payload: Record<string, unknown>): void {
+  if (!shouldPostDebugMapSessionToServer()) return;
+  fetch("/api/debug-map-session", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  }).catch(() => {});
+}
+
 declare global {
   interface Window {
     __MAP_DEBUG_LOGS__?: Array<Record<string, unknown>>;

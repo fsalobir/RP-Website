@@ -12,7 +12,7 @@
     "dev:watch": "node scripts/dev-with-restart.js",
     "test:prod": "next build && next start",
     "prod:local": "next build && next start",
-    "prod:local:debug": "next build && cross-env DEBUG_MAP_SESSION=1 next start",
+    "prod:local:debug": "cross-env DEBUG_MAP_SESSION=1 NEXT_PUBLIC_DEBUG_MAP_SESSION=1 next build && cross-env DEBUG_MAP_SESSION=1 NEXT_PUBLIC_DEBUG_MAP_SESSION=1 next start",
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
