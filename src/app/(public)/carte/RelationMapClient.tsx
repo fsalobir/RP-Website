@@ -77,6 +77,7 @@ export function RelationMapClient({
   const [selectedRegionId, setSelectedRegionId] = useState<string | null>(defaultSelectedRegionId ?? null);
   const [tooltip, setTooltip] = useState<{ x: number; y: number; content: string } | null>(null);
   const [mapFilter, setMapFilter] = useState<"relations" | "spheres">("relations");
+  const [isMobilePerf, setIsMobilePerf] = useState(false);
   const tooltipRafRef = useRef<number | null>(null);
   const pendingTooltipRef = useRef<{ x: number; y: number; content: string } | null>(null);
 
@@ -149,6 +150,27 @@ export function RelationMapClient({
 
   const features = geoJson?.features ?? [];
   const hasData = features.length > 0;
+  const sphereGeometryByRegion = useMemo(() => {
+    const out = new Map<string, { geoPathD: string; xMin: number; yMin: number; bboxWidth: number; bboxHeight: number }>();
+    if (!isSphereMode) return out;
+    for (let i = 0; i < features.length; i++) {
+      const g = features[i] as { properties?: { regionId?: string | null }; geometry?: unknown };
+      const regionId = g.properties?.regionId ?? null;
+      if (!regionId || !g.geometry) continue;
+      const geoPathD = pathBuilder(g.geometry as never);
+      if (!geoPathD) continue;
+      const bounds = pathBuilder.bounds(g.geometry as never);
+      const xMin = bounds[0][0];
+      const yMin = bounds[0][1];
+      const xMax = bounds[1][0];
+      const yMax = bounds[1][1];
+      const bboxWidth = Math.max(0, xMax - xMin);
+      const bboxHeight = Math.max(0, yMax - yMin);
+      if (bboxWidth <= 0 || bboxHeight <= 0) continue;
+      out.set(regionId, { geoPathD, xMin, yMin, bboxWidth, bboxHeight });
+    }
+    return out;
+  }, [isSphereMode, features, pathBuilder]);
   const scheduleTooltip = useCallback((x: number, y: number, content: string) => {
     pendingTooltipRef.current = { x, y, content };
     if (tooltipRafRef.current !== null) return;
@@ -168,6 +190,14 @@ export function RelationMapClient({
   }, []);
   useEffect(() => () => {
     if (tooltipRafRef.current !== null) cancelAnimationFrame(tooltipRafRef.current);
+  }, []);
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const media = window.matchMedia("(pointer: coarse), (max-width: 900px)");
+    const apply = () => setIsMobilePerf(media.matches);
+    apply();
+    media.addEventListener("change", apply);
+    return () => media.removeEventListener("change", apply);
   }, []);
 
   return (
@@ -224,7 +254,7 @@ export function RelationMapClient({
         style={{ borderColor: "var(--border)", background: "var(--background-panel)" }}
       >
         {/* Légende dans le container, en bas à gauche — taille réduite sur petit écran */}
-        <div className="absolute bottom-1.5 left-1.5 sm:bottom-3 sm:left-3 z-20 max-w-[55vw] sm:max-w-none rounded-md sm:rounded-lg border border-[var(--border)] bg-[var(--background-panel)]/95 px-1.5 py-1 sm:px-3 sm:py-2 shadow-lg backdrop-blur-sm">
+        <div className={`absolute bottom-1.5 left-1.5 sm:bottom-3 sm:left-3 z-20 max-w-[55vw] sm:max-w-none rounded-md sm:rounded-lg border border-[var(--border)] bg-[var(--background-panel)]/95 px-1.5 py-1 sm:px-3 sm:py-2 shadow-lg ${isMobilePerf ? "" : "backdrop-blur-sm"}`}>
           {isSphereMode ? (
             <div className="flex flex-col gap-0.5 sm:gap-1">
               {(sphereData?.empires ?? []).map((empire) => (
@@ -392,16 +422,9 @@ export function RelationMapClient({
                       }
                     />
                     {(isSphereMode && sphereControl && !sphereControl.is100Single && g.geometry && (() => {
-                      const bounds = pathBuilder.bounds(g.geometry as never);
-                      const geoPathD = pathBuilder(g.geometry as never);
-                      if (!geoPathD) return null;
-                      const xMin = bounds[0][0];
-                      const yMin = bounds[0][1];
-                      const xMax = bounds[1][0];
-                      const yMax = bounds[1][1];
-                      const bboxWidth = Math.max(0, xMax - xMin);
-                      const bboxHeight = Math.max(0, yMax - yMin);
-                      if (bboxWidth <= 0 || bboxHeight <= 0) return null;
+                      const pre = sphereGeometryByRegion.get(regionId);
+                      if (!pre) return null;
+                      const { geoPathD, xMin, yMin, bboxWidth, bboxHeight } = pre;
 
                       const totalTaken = sphereControl.slices.reduce((sum, slice) => sum + slice.sharePct, 0);
                       const remaining = Math.max(0, 100 - totalTaken);

@@ -84,3 +84,25 @@ Conclusion provisoire:
 - Le worker apporte un gain mesurable cote public sur ce run court.
 - En MJ, le resultat est proche de l'egalite sur cet echantillon; il faut confirmer sur plusieurs iterations et datasets `medium/large`.
 
+## Matrice fluidite (worker OFF/ON, 2 iterations)
+
+Fichiers:
+- `tmp/map-benchmark-fluidity-worker-off-small.json`
+- `tmp/map-benchmark-fluidity-worker-off-medium.json`
+- `tmp/map-benchmark-fluidity-worker-on-small.json`
+- `tmp/map-benchmark-fluidity-worker-on-medium.json`
+
+Resultats synthese:
+- OFF `small/public wheelStepP95Ms`: `236.89`
+- ON `small/public wheelStepP95Ms`: `196.43` (~`-17.1%`)
+- OFF `small/mj wheelStepP95Ms`: `224.16`
+- ON `small/mj wheelStepP95Ms`: `246.90` (~`+10.1%`, variation)
+- OFF `medium/public wheelStepP95Ms`: `189.57`
+- ON `medium/public wheelStepP95Ms`: `210.20` (~`+10.9%`, variation avec un sample outlier)
+- OFF `medium/mj wheelStepP95Ms`: `192.60`
+- ON `medium/mj wheelStepP95Ms`: `196.71` (~`+2.1%`, quasi neutre)
+
+Lecture:
+- Les changements de fluidite (RAF coalesce + interaction lite + mobile perf profile) ont surtout baisse le jank percu.
+- L'effet worker reste variable selon page/profil; il faut conserver un rollout progressif avec monitoring.
+

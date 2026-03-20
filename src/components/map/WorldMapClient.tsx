@@ -52,6 +52,7 @@ const Marker = dynamic(() => import("react-simple-maps").then((m) => (m as any).
 const ROUTE_GEOMETRY_CACHE_MAX_ENTRIES = 900;
 const ENABLE_FRAME_GAP_METRIC = process.env.NEXT_PUBLIC_MAP_DEBUG_FRAME_GAP === "1";
 const ENABLE_ROUTE_GEOMETRY_WORKER = isMapRouteWorkerEnabled();
+const INTERACTION_FRAME_BUDGET_MS = 16;
 
 function requestRouteGeometryFromWorker(
   worker: Worker,
@@ -324,6 +325,9 @@ export function WorldMapClient({
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
   const [geographyData, setGeographyData] = useState<any | null>(null);
   const [hydroTopo, setHydroTopo] = useState<any | null>(null);
+  const [topoReady, setTopoReady] = useState(false);
+  const [routeWarmupReady, setRouteWarmupReady] = useState(false);
+  const [isMobilePerf, setIsMobilePerf] = useState(false);
   const [selectedRegionIds, setSelectedRegionIds] = useState<string[]>([]);
   const [tooltip, setTooltip] = useState<{ x: number; y: number; content: string } | null>(null);
   const [mergeForm, setMergeForm] = useState<{
@@ -676,9 +680,11 @@ export function WorldMapClient({
   const zoomRafRef = useRef<number | null>(null);
   const wheelAnchorRef = useRef<{ x: number; y: number } | null>(null);
   const animLastCommitRef = useRef<number>(0);
-  const moveLastCommitRef = useRef<number>(0);
+  const moveRafRef = useRef<number | null>(null);
+  const pendingMoveRef = useRef<{ center: [number, number]; zoom: number } | null>(null);
   const [isInteracting, setIsInteracting] = useState(false);
   const lastWheelTsRef = useRef<number>(0);
+  const isInteractionLite = isInteracting || !routeWarmupReady;
 
   function clampZoom(z: number) {
     return Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, z));
@@ -735,7 +741,7 @@ export function WorldMapClient({
       }
 
       // Throttle de commits (≈30fps) pour éviter de rerender trop souvent.
-      if ((nextZoom !== zoom || nextCenter !== center) && now - animLastCommitRef.current >= 33) {
+      if ((nextZoom !== zoom || nextCenter !== center) && now - animLastCommitRef.current >= INTERACTION_FRAME_BUDGET_MS) {
         animLastCommitRef.current = now;
         commitView({ center: nextCenter, zoom: nextZoom });
       }
@@ -773,6 +779,9 @@ export function WorldMapClient({
       })
       .catch(() => {
         if (alive) setGeographyData(null);
+      })
+      .finally(() => {
+        if (alive) setTopoReady(true);
       });
 
     fetch("/geo/hydro.topo.json")
@@ -787,6 +796,35 @@ export function WorldMapClient({
       alive = false;
     };
   }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const media = window.matchMedia("(pointer: coarse), (max-width: 900px)");
+    const apply = () => setIsMobilePerf(media.matches);
+    apply();
+    media.addEventListener("change", apply);
+    return () => media.removeEventListener("change", apply);
+  }, []);
+
+  useEffect(() => {
+    if (!topoReady) return;
+    let cancelled = false;
+    const markReady = () => {
+      if (!cancelled) setRouteWarmupReady(true);
+    };
+    if (typeof window !== "undefined" && "requestIdleCallback" in window) {
+      const id = (window as any).requestIdleCallback(markReady, { timeout: 1200 });
+      return () => {
+        cancelled = true;
+        (window as any).cancelIdleCallback?.(id);
+      };
+    }
+    const t = window.setTimeout(markReady, 450);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(t);
+    };
+  }, [topoReady]);
 
 
   // Listener molette non-passif : plus fiable/smooth que l'event React sur un SVG.
@@ -1848,9 +1886,11 @@ export function WorldMapClient({
 
   const visibleRouteLabelCount = useMemo(() => {
     const capByLevel = currentZoomLevel === "monde" ? 35 : currentZoomLevel === "continent" ? 90 : currentZoomLevel === "nation" ? 220 : 400;
-    const cap = Math.min(capByLevel, activeZoomRules.caps.maxRouteLabels);
+    const interactionCap = isInteractionLite ? Math.max(0, Math.floor(capByLevel * 0.25)) : capByLevel;
+    const mobileCap = isMobilePerf ? Math.max(0, Math.floor(interactionCap * 0.6)) : interactionCap;
+    const cap = Math.min(mobileCap, activeZoomRules.caps.maxRouteLabels);
     return Math.min(visibleRoutePaths.length, cap);
-  }, [visibleRoutePaths.length, currentZoomLevel, activeZoomRules.caps.maxRouteLabels]);
+  }, [visibleRoutePaths.length, currentZoomLevel, activeZoomRules.caps.maxRouteLabels, isInteractionLite, isMobilePerf]);
 
   useEffect(() => {
     emitMapMetric("map_routes_visible_count", visibleRoutePaths.length, {
@@ -2645,69 +2685,6 @@ export function WorldMapClient({
         </>
       )}
 
-      {/* Panneau bas-gauche: sélection + actions */}
-      {mode !== "mj" && (
-      <div className="absolute left-4 top-4 z-30 w-[min(420px,calc(100vw-2rem))] rounded-2xl border border-amber-500/20 bg-black/45 p-4 shadow-[0_0_0_1px_rgba(255,255,255,0.04)] backdrop-blur">
-        <h1 className="font-serif text-lg font-semibold tracking-wide text-amber-100">
-          Carte du monde
-        </h1>
-        <p className="mt-1 text-xs text-stone-300/80">
-          Cliquez sur une région pour voir les détails.
-        </p>
-
-        {primarySelectedRegionId ? (
-          (() => {
-            const p = provinceByRegionId.get(primarySelectedRegionId) ?? null;
-            const realm = p ? realmById.get(p.realm_id) ?? null : null;
-            return (
-              <div className="mt-4 rounded-xl border border-white/10 bg-black/30 p-3">
-                <p className="text-sm text-stone-200">
-                  Région : <span className="font-semibold text-amber-100">{primarySelectedRegionId}</span>
-                </p>
-                {p ? (
-                  <div className="mt-2 text-sm text-stone-300">
-                    <p>
-                      Province : <span className="font-semibold text-stone-100">{p.name}</span>
-                    </p>
-                    {realm ? (
-                      <p className="mt-1">
-                        Royaume :{" "}
-                        <span className="font-semibold text-stone-100">{realm.name}</span>
-                      </p>
-                    ) : null}
-                    <div className="mt-2 flex flex-wrap gap-2">
-                      <Link
-                        href={`/province/${p.id}`}
-                        className="rounded-lg bg-amber-600/80 px-3 py-1.5 text-xs font-semibold text-black hover:bg-amber-500"
-                      >
-                        Ouvrir la province
-                      </Link>
-                      {realm?.slug ? (
-                        <Link
-                          href={`/royaume/${realm.slug}`}
-                          className="rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-semibold text-stone-100 hover:bg-white/10"
-                        >
-                          Ouvrir le royaume
-                        </Link>
-                      ) : null}
-                    </div>
-                  </div>
-                ) : (
-                  <p className="mt-2 text-sm text-stone-400">
-                    Aucune province n’est encore rattachée à cette région.
-                  </p>
-                )}
-              </div>
-            );
-          })()
-        ) : (
-          <div className="mt-4 rounded-xl border border-white/10 bg-black/30 p-3 text-sm text-stone-400">
-            Aucune région sélectionnée.
-          </div>
-        )}
-      </div>
-      )}
-
       {/* Menu contextuel MJ */}
       {mode === "mj" && contextMenu && (
         <div
@@ -3276,8 +3253,15 @@ export function WorldMapClient({
       <div
         ref={mapContainerRef}
         className="absolute inset-0"
-        style={{ overscrollBehavior: "contain" }}
+        style={{ overscrollBehavior: "contain", touchAction: isMobilePerf ? "pan-x pan-y" : "none" }}
       >
+        {!topoReady && (
+          <div className="pointer-events-none absolute inset-0 z-40 flex items-center justify-center bg-black/35">
+            <div className="rounded-xl border border-amber-500/30 bg-[#0f0b07]/85 px-4 py-2 text-sm text-amber-100">
+              Préparation de la carte...
+            </div>
+          </div>
+        )}
         <div className="pointer-events-none absolute left-3 top-3 z-20 rounded-md border border-amber-500/30 bg-black/65 px-2 py-1 text-[11px] text-amber-100">
           Renderer: <span className="font-mono">{rendererInfo.effective}</span>
           {rendererInfo.fallback ? ` (${rendererInfo.reason})` : ""}
@@ -3328,14 +3312,16 @@ export function WorldMapClient({
               setIsInteracting(true);
             }}
             onMove={(pos: any) => {
-              // Pendant le drag/pinch, on doit suivre en continu (sinon ça "bloque").
-              const now = performance.now();
-              if (now - moveLastCommitRef.current < 33) return;
-              moveLastCommitRef.current = now;
               const c = (pos?.coordinates ?? mapView.center) as [number, number];
               const z = clampZoom(Number(pos?.zoom ?? mapView.zoom));
               zoomTargetRef.current = z;
-              commitView({ center: c, zoom: z });
+              pendingMoveRef.current = { center: c, zoom: z };
+              if (moveRafRef.current != null) return;
+              moveRafRef.current = requestAnimationFrame(() => {
+                moveRafRef.current = null;
+                if (!pendingMoveRef.current) return;
+                commitView(pendingMoveRef.current);
+              });
             }}
             onMoveEnd={(pos: any) => {
               // Sync du center/zoom si l'utilisateur pan (drag) ou pinche sur mobile.
@@ -3343,21 +3329,33 @@ export function WorldMapClient({
               const c = (pos?.coordinates ?? mapView.center) as [number, number];
               const z = clampZoom(Number(pos?.zoom ?? mapView.zoom));
               zoomTargetRef.current = z;
+              if (moveRafRef.current != null) {
+                cancelAnimationFrame(moveRafRef.current);
+                moveRafRef.current = null;
+              }
+              pendingMoveRef.current = null;
               commitView({ center: c, zoom: z });
               setIsInteracting(false);
             }}
           >
             {/* Océan bleu "carte ancienne" + grain parchemin léger */}
-            <rect x={-5000} y={-5000} width={10000} height={10000} fill="#7fb4cf" filter="url(#parchmentNoise)" />
+            <rect
+              x={-5000}
+              y={-5000}
+              width={10000}
+              height={10000}
+              fill="#7fb4cf"
+              filter={isInteractionLite || isMobilePerf ? undefined : "url(#parchmentNoise)"}
+            />
             {/* Garder un visuel constant (parchemin + glow léger) pour éviter l'effet “flash”. */}
-            <g style={{ filter: "url(#fantasyGlow)" }}>
+            <g style={{ filter: isInteractionLite || isMobilePerf ? "none" : "url(#fantasyGlow)" }}>
               {/* Hydro (décor) */}
               {hydro?.lakes && (
                 <g
                   style={{
                     pointerEvents: "none",
                     // Lacs : alignés sur les rivières (fade + lock à fort zoom).
-                    opacity: lakesLocked ? 1 : isInteracting ? 0 : lakesOpacity,
+                    opacity: lakesLocked ? 1 : isInteractionLite || isMobilePerf ? 0 : lakesOpacity,
                     transition: lakesLocked ? "none" : "opacity 200ms ease-out",
                   }}
                 >
@@ -3369,7 +3367,7 @@ export function WorldMapClient({
               {hydro?.rivers && (
                 <g
                   style={{
-                    opacity: riversLocked ? 1 : isInteracting ? 0 : riversOpacity,
+                    opacity: riversLocked ? 1 : isInteractionLite || isMobilePerf ? 0 : riversOpacity,
                     transition: riversLocked ? "none" : "opacity 200ms ease-out",
                     pointerEvents: "none",
                   }}
@@ -3380,7 +3378,7 @@ export function WorldMapClient({
 
               {/* Provinces (régions) : DOIVENT être sous les marqueurs */}
               {renderedRegions}
-              {!isInteracting && renderedRealmBoundaries}
+              {!isInteractionLite && renderedRealmBoundaries}
 
               {/* Routes (tracés sinueux entre villes) — config dédiée (opacité, taille, progressivité) */}
               {!isWebglRenderer && activeZoomRules.visibility.routes && visibleRoutePaths.length > 0 && (
