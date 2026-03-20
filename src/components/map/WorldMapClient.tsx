@@ -507,6 +507,14 @@ export function WorldMapClient({
   const [mjConfigVersion, setMjConfigVersion] = useState<number>(initialMapDisplayVersion);
   // N'utiliser le portail pour les réglages qu'après montage client, pour éviter un mismatch d'hydratation.
   const [usePortalForSettings, setUsePortalForSettings] = useState(false);
+  const [mapDiag, setMapDiag] = useState(false);
+  useEffect(() => {
+    try {
+      setMapDiag(new URLSearchParams(window.location.search).has("mapdiag"));
+    } catch {
+      setMapDiag(false);
+    }
+  }, []);
 
   const displayConfig = useMemo(
     () =>
@@ -523,6 +531,40 @@ export function WorldMapClient({
   const enableRealmColoring = useMemo(() => isRealmColoringEnabled(), []);
   const enableMapInfoPanelsV2 = useMemo(() => isMapInfoPanelsV2Enabled(), []);
   const { tileManifest } = useMapDataPipeline();
+
+  const mapDiagSnapshot = useMemo(() => {
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    let supabaseHost = "(absent)";
+    if (supabaseUrl) {
+      try {
+        supabaseHost = new URL(supabaseUrl).host;
+      } catch {
+        supabaseHost = "(invalide)";
+      }
+    }
+    return {
+      nodeEnv: process.env.NODE_ENV,
+      supabaseHost,
+      mapRendererEnv: process.env.NEXT_PUBLIC_MAP_RENDERER ?? "(défaut code)",
+      mapRolloutEnv: process.env.NEXT_PUBLIC_MAP_RENDERER_ROLLOUT ?? "(défaut code)",
+      mapForceSvgEnv: process.env.NEXT_PUBLIC_MAP_RENDERER_FORCE_SVG ?? "(unset)",
+      dataCounts: {
+        provinces: provinces.length,
+        realms: realms.length,
+        cities: cities?.length ?? 0,
+        routes: routes?.length ?? 0,
+        routePathwayPoints: routePathwayPoints?.length ?? 0,
+        mapObjects: mapObjects?.length ?? 0,
+      },
+    };
+  }, [
+    provinces.length,
+    realms.length,
+    cities?.length,
+    routes?.length,
+    routePathwayPoints?.length,
+    mapObjects?.length,
+  ]);
 
   const saveMjSettings = useCallback(() => {
     try {
@@ -3494,6 +3536,34 @@ export function WorldMapClient({
         {tileManifest && (
           <div className="pointer-events-none absolute left-3 top-[6.4rem] z-20 rounded-md border border-violet-500/30 bg-black/65 px-2 py-1 text-[11px] text-violet-100">
             Tuiles: <span className="font-mono">{tileManifest.entries.length}</span>
+          </div>
+        )}
+        {mapDiag && (
+          <div className="pointer-events-auto absolute bottom-3 right-3 z-[30] max-h-[min(50vh,calc(100%-1.5rem))] max-w-[min(440px,calc(100%-1.5rem))] overflow-auto rounded-md border border-rose-500/40 bg-black/85 px-3 py-2 text-left text-[10px] leading-snug text-rose-100 shadow-lg">
+            <div className="mb-1 font-semibold text-rose-200">Diagnostic carte (?mapdiag=1)</div>
+            <div className="space-y-0.5 font-mono text-[10px] text-stone-200">
+              <div>
+                <span className="text-stone-400">NODE_ENV</span> {mapDiagSnapshot.nodeEnv}
+              </div>
+              <div>
+                <span className="text-stone-400">Supabase (host)</span> {mapDiagSnapshot.supabaseHost}
+              </div>
+              <div>
+                <span className="text-stone-400">MAP_RENDERER</span> {mapDiagSnapshot.mapRendererEnv}
+              </div>
+              <div>
+                <span className="text-stone-400">MAP_ROLLOUT</span> {mapDiagSnapshot.mapRolloutEnv}
+              </div>
+              <div>
+                <span className="text-stone-400">FORCE_SVG</span> {mapDiagSnapshot.mapForceSvgEnv}
+              </div>
+              <div className="pt-1 text-amber-100">
+                <span className="text-stone-400">Volumes</span> prov. {mapDiagSnapshot.dataCounts.provinces} · rlm.{" "}
+                {mapDiagSnapshot.dataCounts.realms} · villes {mapDiagSnapshot.dataCounts.cities} · routes{" "}
+                {mapDiagSnapshot.dataCounts.routes} · pts chemin {mapDiagSnapshot.dataCounts.routePathwayPoints} · objets{" "}
+                {mapDiagSnapshot.dataCounts.mapObjects}
+              </div>
+            </div>
           </div>
         )}
         <MapEngine enabled={isWebglRenderer} mode={mode} />
