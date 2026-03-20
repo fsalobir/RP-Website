@@ -72,6 +72,19 @@ const ENABLE_ROUTE_BATCH_SVG = isMapRouteBatchSvgEnabled();
 const ENABLE_QUALITY_GOVERNOR = isMapQualityGovernorEnabled();
 const INTERACTION_FRAME_BUDGET_MS = 16;
 const INTERACTION_SETTLE_MS = 140;
+/** Tolérance pour éviter les boucles controlled↔d3-zoom (flottants + échos onMove). */
+const MAP_VIEW_EPS_ZOOM = 1e-5;
+const MAP_VIEW_EPS_LONLAT = 1e-5;
+
+function mapViewNearlyEqual(
+  a: { center: [number, number]; zoom: number },
+  b: { center: [number, number]; zoom: number }
+): boolean {
+  const dz = Math.abs((a.zoom ?? 0) - (b.zoom ?? 0));
+  const dx = Math.abs((a.center?.[0] ?? 0) - (b.center?.[0] ?? 0));
+  const dy = Math.abs((a.center?.[1] ?? 0) - (b.center?.[1] ?? 0));
+  return dz < MAP_VIEW_EPS_ZOOM && dx < MAP_VIEW_EPS_LONLAT && dy < MAP_VIEW_EPS_LONLAT;
+}
 
 type MapFeatureProps = {
   regionId?: string | null;
@@ -716,6 +729,9 @@ export function WorldMapClient({
   const animLastCommitRef = useRef<number>(0);
   const moveRafRef = useRef<number | null>(null);
   const pendingMoveRef = useRef<{ center: [number, number]; zoom: number } | null>(null);
+  /** Ignore les onMove immédiats après notre setMapView (évite "Maximum update depth exceeded"). */
+  const suppressEchoMoveRef = useRef(false);
+  const suppressEchoClearTimerRef = useRef<ReturnType<typeof globalThis.setTimeout> | null>(null);
   const [isInteracting, setIsInteracting] = useState(false);
   const [isSettling, setIsSettling] = useState(false);
   const settleTimerRef = useRef<ReturnType<typeof globalThis.setTimeout> | null>(null);
@@ -770,15 +786,23 @@ export function WorldMapClient({
 
   function commitView(next: { center: [number, number]; zoom: number }) {
     const cur = viewRef.current;
-    const dz = Math.abs((next.zoom ?? 0) - (cur.zoom ?? 0));
-    const dx = Math.abs((next.center?.[0] ?? 0) - (cur.center?.[0] ?? 0));
-    const dy = Math.abs((next.center?.[1] ?? 0) - (cur.center?.[1] ?? 0));
-    // Évite les boucles "controlled component" quand ZoomableGroup renvoie des callbacks
-    // en réaction à nos propres updates.
-    if (dz < 1e-6 && dx < 1e-6 && dy < 1e-6) return;
+    if (mapViewNearlyEqual(next, cur)) return;
 
-    viewRef.current = next;
-    setMapView(next);
+    // Toujours cloner le centre pour une référence stable si les nombres sont identiques.
+    const normalized = {
+      center: [next.center[0], next.center[1]] as [number, number],
+      zoom: next.zoom,
+    };
+    viewRef.current = normalized;
+    suppressEchoMoveRef.current = true;
+    setMapView(normalized);
+    if (suppressEchoClearTimerRef.current != null) {
+      globalThis.clearTimeout(suppressEchoClearTimerRef.current);
+    }
+    suppressEchoClearTimerRef.current = globalThis.setTimeout(() => {
+      suppressEchoClearTimerRef.current = null;
+      suppressEchoMoveRef.current = false;
+    }, 0);
   }
 
   function startZoomAnimation() {
@@ -809,7 +833,11 @@ export function WorldMapClient({
       }
 
       // Throttle de commits (≈30fps) pour éviter de rerender trop souvent.
-      if ((nextZoom !== zoom || nextCenter !== center) && now - animLastCommitRef.current >= INTERACTION_FRAME_BUDGET_MS) {
+      const zoomChanged = Math.abs(nextZoom - zoom) > MAP_VIEW_EPS_ZOOM;
+      const centerChanged =
+        Math.abs(nextCenter[0] - center[0]) > MAP_VIEW_EPS_LONLAT ||
+        Math.abs(nextCenter[1] - center[1]) > MAP_VIEW_EPS_LONLAT;
+      if ((zoomChanged || centerChanged) && now - animLastCommitRef.current >= INTERACTION_FRAME_BUDGET_MS) {
         animLastCommitRef.current = now;
         commitView({ center: nextCenter, zoom: nextZoom });
       }
@@ -924,6 +952,7 @@ export function WorldMapClient({
   useEffect(
     () => () => {
       if (settleTimerRef.current != null) globalThis.clearTimeout(settleTimerRef.current);
+      if (suppressEchoClearTimerRef.current != null) globalThis.clearTimeout(suppressEchoClearTimerRef.current);
     },
     []
   );
@@ -3609,6 +3638,7 @@ export function WorldMapClient({
               beginInteraction();
             }}
             onMove={(pos: any) => {
+              if (suppressEchoMoveRef.current) return;
               emitMapInteractionEvent({ type: "dragMove", entityKind: "map", entityId: "map-root", mode });
               const c = (pos?.coordinates ?? mapView.center) as [number, number];
               const z = clampZoom(Number(pos?.zoom ?? mapView.zoom));
