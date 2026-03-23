@@ -1,5 +1,38 @@
 {
-  "version": 1,
-  "generatedAt": "2026-03-20T00:00:00.000Z",
-  "entries": []
+  "version": 2,
+  "schemaVersion": 2,
+  "generatedAt": "2026-03-23T15:37:51.899Z",
+  "entries": [],
+  "active": {
+    "versionHash": "21ac6e049d7e",
+    "generatedAt": "2026-03-23T15:36:42.683Z",
+    "tileUrlTemplate": "/geo/tiles/21ac6e049d7e/{z}/{x}/{y}.mvt"
+  },
+  "previous": {
+    "versionHash": "58289b53182e",
+    "generatedAt": "2026-03-23T15:37:25.164Z",
+    "tileUrlTemplate": "/geo/tiles/58289b53182e/{z}/{x}/{y}.mvt"
+  },
+  "layers": [
+    {
+      "id": "provinces_fill",
+      "geometryType": "fill",
+      "sourceLayer": "provinces_fill"
+    },
+    {
+      "id": "provinces_border",
+      "geometryType": "line",
+      "sourceLayer": "provinces_border"
+    },
+    {
+      "id": "water_lakes",
+      "geometryType": "fill",
+      "sourceLayer": "water_lakes"
+    },
+    {
+      "id": "water_rivers",
+      "geometryType": "line",
+      "sourceLayer": "water_rivers"
+    }
+  ]
 }

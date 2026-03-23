@@ -37,6 +37,9 @@ export default async function MjLayout({ children }: { children: React.ReactNode
               <Link href="/mj/carte" className="text-white/80 hover:text-white">
                 Carte
               </Link>
+              <Link href="/mj/carte-comparaison" className="text-white/80 hover:text-white">
+                Cartes proto
+              </Link>
               <Link href="/mj/entites" className="text-white/80 hover:text-white">
                 Entités
               </Link>

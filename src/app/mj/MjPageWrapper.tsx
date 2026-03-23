@@ -4,10 +4,10 @@ import { usePathname } from "next/navigation";
 
 export function MjPageWrapper({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const isCartePage = pathname === "/mj/carte";
+  const isCartePage = pathname === "/mj/carte" || pathname === "/mj/carte-comparaison";
 
   if (isCartePage) {
-    return <main className="flex min-h-0 flex-1 flex-col overflow-hidden">{children}</main>;
+    return <main className="flex min-h-0 flex-1 flex-col overflow-y-auto">{children}</main>;
   }
 
   return (

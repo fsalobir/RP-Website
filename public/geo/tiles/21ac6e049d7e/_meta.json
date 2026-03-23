@@ -1,0 +1,30 @@
+{
+  "versionHash": "21ac6e049d7e",
+  "generatedAt": "2026-03-23T15:36:42.683Z",
+  "zMin": 0,
+  "zMax": 6,
+  "tileCount": 177,
+  "sourceSnapshot": "tmp\\map-tiles\\21ac6e049d7e\\static-geo.json",
+  "layers": [
+    {
+      "id": "provinces_fill",
+      "geometryType": "fill",
+      "sourceLayer": "provinces_fill"
+    },
+    {
+      "id": "provinces_border",
+      "geometryType": "line",
+      "sourceLayer": "provinces_border"
+    },
+    {
+      "id": "water_lakes",
+      "geometryType": "fill",
+      "sourceLayer": "water_lakes"
+    },
+    {
+      "id": "water_rivers",
+      "geometryType": "line",
+      "sourceLayer": "water_rivers"
+    }
+  ]
+}

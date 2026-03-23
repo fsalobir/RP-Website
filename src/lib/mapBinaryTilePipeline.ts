@@ -11,6 +11,18 @@ export type MapTileManifest = {
   version: number;
   generatedAt: string;
   entries: MapTileManifestEntry[];
+  schemaVersion?: number;
+  active?: {
+    versionHash: string;
+    tileUrlTemplate: string;
+    generatedAt: string;
+  };
+  previous?: {
+    versionHash: string;
+    tileUrlTemplate: string;
+    generatedAt: string;
+  } | null;
+  layers?: Array<{ id: string; geometryType: "fill" | "line"; sourceLayer: string }>;
 };
 
 export type MapViewportBounds = {
@@ -34,7 +46,10 @@ export async function fetchMapTileManifest(url = "/geo/tiles/manifest.json"): Pr
     const res = await fetch(url, { cache: "force-cache" });
     if (!res.ok) return null;
     const json = (await res.json()) as MapTileManifest;
-    if (!json || !Array.isArray(json.entries)) return null;
+    if (!json) return null;
+    if (!Array.isArray(json.entries)) {
+      json.entries = [];
+    }
     return json;
   } catch {
     return null;
