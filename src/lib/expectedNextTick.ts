@@ -73,7 +73,11 @@ function getGlobalGrowthRates(
   country: CountrySnapshot,
 ): GlobalGrowthRates {
   const raw = rulesByKey["global_growth_effects"]?.value;
-  const arr = Array.isArray(raw) ? raw : [];
+  const arr = Array.isArray(raw)
+    ? raw
+    : (raw && typeof raw === "object" && Array.isArray((raw as { value?: unknown }).value))
+      ? (raw as { value: unknown[] }).value
+      : [];
   const mil = country.militarism ?? 0;
   const ind = country.industry ?? 0;
   const sci = country.science ?? 0;

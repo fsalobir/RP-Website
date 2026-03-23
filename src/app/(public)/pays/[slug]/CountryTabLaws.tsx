@@ -15,7 +15,6 @@ import {
 import { BUDGET_MINISTRY_LABELS } from "@/lib/ruleParameters";
 import { formatNumber } from "@/lib/format";
 import { setLawTarget } from "./actions";
-import { InfoTooltip } from "@/components/ui/InfoTooltip";
 
 function resolveTargetLabel(
   effectKind: string,
@@ -50,6 +49,7 @@ function EffectLine({
   value: number;
   rosterNameById: Map<string, string>;
 }) {
+  const glassMutedClass = "text-white/90 drop-shadow-[0_1px_2px_rgba(0,0,0,0.45)]";
   const label = EFFECT_KIND_LABELS[effectKind] ?? effectKind;
   const targetStr = resolveTargetLabel(effectKind, effectTarget, rosterNameById);
   const valStr = formatEffectValue(effectKind, value);
@@ -62,12 +62,12 @@ function EffectLine({
         className="inline-block w-1.5 h-1.5 rounded-full shrink-0 mt-[5px]"
         style={{ background: isPositive ? "var(--accent)" : isNegative ? "var(--danger)" : "var(--foreground-muted)" }}
       />
-      <span className="text-[var(--foreground-muted)]">
+      <span className={glassMutedClass}>
         {label}{targetStr ? ` — ${targetStr}` : ""}
       </span>
       <span
         className="font-semibold ml-auto shrink-0"
-        style={{ color: isPositive ? "var(--accent)" : isNegative ? "var(--danger)" : "var(--foreground)" }}
+        style={{ color: isPositive ? "var(--accent)" : isNegative ? "var(--danger)" : "#ffffff" }}
       >
         {valStr}
       </span>
@@ -92,6 +92,9 @@ function LawCard({
   ruleParametersByKey: Record<string, { value: unknown }>;
   rosterNameById: Map<string, string>;
 }) {
+  const glassBorderClass = "border-white/25";
+  const glassTextClass = "text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.5)]";
+  const glassMutedClass = "text-white/90 drop-shadow-[0_1px_2px_rgba(0,0,0,0.4)]";
   const router = useRouter();
   const [settingLevel, setSettingLevel] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -163,67 +166,73 @@ function LawCard({
     }
   };
 
-  const lawTooltip = "Fixez un objectif de politique ; le score du pays évoluera progressivement vers la cible.";
   const currentLabel = def.levels.find((l) => l.key === currentLevelKey)?.label ?? currentLevelKey ?? "—";
   const targetLabel = def.levels.find((l) => l.key === targetLevelKey)?.label ?? targetLevelKey ?? "—";
   const targetDiffersFromCurrent = currentLevelKey !== targetLevelKey;
   const inTransition = targetDiffersFromCurrent && daysToTarget !== null && scoreDistance > 0;
-  const barSummary =
-    inTransition
-      ? `${currentLabel} → ${targetLabel} // ${formatNumber(daysToTarget)} jour(s) restants`
-      : currentLabel;
+  const rightSummary = inTransition
+    ? `${targetLabel} // ${formatNumber(daysToTarget)} jour(s) restants`
+    : currentLabel;
 
   return (
     <div
-      className={`rounded-lg border ${expanded ? "p-5" : "flex items-center px-3 h-8"}`}
+      className={`rounded-xl border ${glassBorderClass}`}
       style={{
-        background: "var(--background-panel)",
-        borderColor: "var(--border)",
+        background: "rgba(255,255,255,0.12)",
+        backdropFilter: "blur(12px)",
       }}
     >
       <button
         type="button"
         onClick={() => setExpanded((e) => !e)}
-        className={`flex w-full items-center gap-3 text-left ${expanded ? "border-b pb-3" : "h-full leading-none"}`}
-        style={expanded ? { borderColor: "var(--border)" } : undefined}
+        className={`relative w-full text-left transition-all duration-200 ${expanded ? "px-5 py-4 border-b" : "h-10 px-3"}`}
+        style={expanded ? { borderColor: "rgba(255,255,255,0.22)" } : undefined}
         aria-expanded={expanded}
       >
-        {/* Gauche : titre + chevron + infobulle */}
-        <span className="flex min-w-0 flex-1 items-center gap-1.5 leading-tight">
-          <span className={`truncate font-bold text-[var(--foreground)] ${expanded ? "text-lg" : "text-sm"}`}>
-            {def.title_fr}
-          </span>
-          <span
-            className="shrink-0 text-[var(--foreground-muted)] text-xs transition-transform duration-200 ease-out"
-            style={{ transform: expanded ? "rotate(0deg)" : "rotate(-90deg)" }}
-            aria-hidden
-          >
-            ▾
-          </span>
-          <span className="shrink-0">
-            <InfoTooltip content={lawTooltip} side="top" />
-          </span>
-        </span>
-        {/* Droite : libellé (état actuel ou transition) */}
-        <span className={`shrink-0 font-bold text-[var(--foreground)] text-right leading-tight whitespace-nowrap ${expanded ? "text-sm" : "text-xs"}`}>
-          {barSummary}
-        </span>
+        {expanded ? (
+          <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3">
+            <span className="flex min-w-0 items-center gap-1.5 leading-tight">
+              <span className={`truncate text-lg font-bold ${glassTextClass}`}>{def.title_fr}</span>
+              <span className={`shrink-0 text-xs ${glassMutedClass}`} aria-hidden>
+                ▾
+              </span>
+            </span>
+            <span
+              className={`shrink-0 whitespace-nowrap text-right text-sm font-bold leading-tight ${glassTextClass}`}
+              title={rightSummary}
+            >
+              {rightSummary}
+            </span>
+          </div>
+        ) : (
+          <>
+            <div className="flex h-full min-w-0 items-center gap-1.5 pr-[45%]">
+              <span className={`truncate text-sm font-bold ${glassTextClass}`}>{def.title_fr}</span>
+              <span className={`shrink-0 text-xs ${glassMutedClass}`} aria-hidden>
+                ▾
+              </span>
+            </div>
+            <span
+              className={`absolute right-3 top-1/2 -translate-y-1/2 text-right text-xs font-bold leading-tight ${glassTextClass}`}
+              style={{ maxWidth: "42%" }}
+              title={rightSummary}
+            >
+              <span className="block truncate whitespace-nowrap">{rightSummary}</span>
+            </span>
+          </>
+        )}
       </button>
 
       <div
-        className="relative min-h-0 overflow-hidden"
-        style={{
-          display: "grid",
-          gridTemplateRows: expanded ? "1fr" : "0fr",
-          transition: "grid-template-rows 0.25s ease-out",
-        }}
+        className={`overflow-hidden transition-[max-height,opacity] duration-300 ease-in-out ${expanded ? "opacity-100" : "opacity-0"}`}
+        style={{ maxHeight: expanded ? "2000px" : "0px" }}
       >
-        <div className="relative min-h-0 min-w-0 overflow-hidden pt-3">
-        <div
-          className={`space-y-1 pt-1 transition-[filter] duration-200 ${isLoading ? "pointer-events-none select-none blur-[3px]" : ""}`}
-          aria-busy={isLoading}
-          aria-live="polite"
-        >
+        <div className="relative px-5 pt-3 pb-5">
+          <div
+            className={`space-y-1 pt-1 transition-[filter] duration-200 ${isLoading ? "pointer-events-none select-none blur-[3px]" : ""}`}
+            aria-busy={isLoading}
+            aria-live="polite"
+          >
           {def.levels.map((level) => {
             const isCurrent = currentLevelKey === level.key;
             const isTarget = targetLevelKey === level.key;
@@ -233,8 +242,13 @@ function LawCard({
               ? "var(--accent)"
               : isTarget
                 ? "var(--accent-muted)"
-                : "var(--border)";
+                : "rgba(255,255,255,0.28)";
             const bottomClr = levelEffects.length > 0 ? "transparent" : borderClr;
+            const cardShadow = isCurrent
+              ? "0 0 0 1px rgba(16,185,129,0.45), 0 0 16px rgba(16,185,129,0.28)"
+              : isTarget
+                ? "0 0 0 1px rgba(148,163,184,0.45), 0 0 14px rgba(148,163,184,0.22)"
+                : "0 0 0 1px rgba(255,255,255,0.08)";
             return (
               <div key={level.key}>
                 <button
@@ -248,44 +262,26 @@ function LawCard({
                     borderBottomColor: bottomClr,
                     borderLeftColor: borderClr,
                     background: isCurrent
-                      ? "var(--accent-muted)"
+                      ? "rgba(16,185,129,0.22)"
                       : isTarget
-                        ? "var(--background-elevated)"
-                        : "transparent",
-                    color: "var(--foreground)",
+                        ? "rgba(255,255,255,0.24)"
+                        : "rgba(255,255,255,0.14)",
+                    color: "#ffffff",
                     borderRadius: levelEffects.length > 0 ? "0.375rem 0.375rem 0 0" : "0.375rem",
+                    boxShadow: cardShadow,
                   }}
                 >
-                  <span className="flex-1 text-[var(--foreground)] font-normal">{level.label}</span>
-                  <InfoTooltip
-                    content={
-                      levelEffects.length > 0 ? (
-                        <ul className="space-y-0.5 text-left text-xs max-h-48 overflow-y-auto">
-                          {levelEffects.map((e, i) => (
-                            <li key={i} className="flex items-baseline gap-1.5">
-                              <span className="text-[var(--foreground-muted)]">
-                                {EFFECT_KIND_LABELS[e.effect_kind] ?? e.effect_kind}
-                                {resolveTargetLabel(e.effect_kind, e.effect_target, rosterNameById)
-                                  ? ` — ${resolveTargetLabel(e.effect_kind, e.effect_target, rosterNameById)}`
-                                  : ""}
-                              </span>
-                              <span className="font-medium shrink-0">{formatEffectValue(e.effect_kind, e.value)}</span>
-                            </li>
-                          ))}
-                        </ul>
-                      ) : (
-                        "Aucun effet configuré pour ce palier."
-                      )
-                    }
-                    side="bottom"
-                  />
+                  <span className="flex-1 font-semibold text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.5)]">{level.label}</span>
                   {isCurrent && (
                     <span className="text-xs px-1.5 py-0.5 rounded" style={{ background: "var(--accent)", color: "#0f1419" }}>
                       Actuel
                     </span>
                   )}
                   {isTarget && !isCurrent && (
-                    <span className="text-xs px-1.5 py-0.5 rounded" style={{ background: "var(--background-elevated)", color: "var(--foreground-muted)", border: "1px solid var(--border)" }}>
+                    <span
+                      className="text-xs px-1.5 py-0.5 rounded text-white/95"
+                      style={{ background: "rgba(255,255,255,0.18)", border: "1px solid rgba(255,255,255,0.28)" }}
+                    >
                       Cible
                     </span>
                   )}
@@ -298,8 +294,9 @@ function LawCard({
                         ? "var(--accent)"
                         : isTarget
                           ? "var(--accent-muted)"
-                          : "var(--border)",
-                      background: "var(--background)",
+                          : "rgba(255,255,255,0.22)",
+                      background: "rgba(15,23,42,0.55)",
+                      boxShadow: cardShadow,
                     }}
                   >
                     <ul className="space-y-0.5">
@@ -318,22 +315,22 @@ function LawCard({
               </div>
             );
           })}
-        </div>
-
-        {isLoading && (
-          <div
-            className="absolute inset-0 flex items-center justify-center rounded-lg bg-[var(--background-panel)]/70"
-            aria-hidden
-          >
-            <span
-              className="text-4xl animate-spin"
-              style={{ filter: "drop-shadow(0 0 4px var(--background))" }}
-              title="Mise à jour en cours…"
-            >
-              ⏳
-            </span>
           </div>
-        )}
+
+          {isLoading && (
+            <div
+              className="absolute inset-0 flex items-center justify-center rounded-lg bg-[var(--background-panel)]/70"
+              aria-hidden
+            >
+              <span
+                className="text-4xl animate-spin"
+                style={{ filter: "drop-shadow(0 0 4px var(--background))" }}
+                title="Mise à jour en cours…"
+              >
+                ⏳
+              </span>
+            </div>
+          )}
         </div>
       </div>
 
@@ -361,6 +358,9 @@ export function CountryTabLaws({
   ruleParametersByKey: Record<string, { value: unknown }>;
   rosterUnitsFlat: Array<{ id: string; name_fr: string }>;
 }) {
+  const glassBorderClass = "border-white/25";
+  const glassTextClass = "text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.5)]";
+  const glassMutedClass = "text-white/90 drop-shadow-[0_1px_2px_rgba(0,0,0,0.4)]";
   const rosterNameById = useMemo(() => {
     const m = new Map<string, string>();
     for (const u of rosterUnitsFlat) m.set(u.id, u.name_fr);
@@ -368,11 +368,14 @@ export function CountryTabLaws({
   }, [rosterUnitsFlat]);
 
   return (
-    <section className={panelClass} style={panelStyle}>
-      <h2 className="mb-4 text-lg font-semibold text-[var(--foreground)]">
+    <section
+      className={`${panelClass} rounded-xl border p-4 ${glassBorderClass}`}
+      style={{ ...panelStyle, background: "rgba(255,255,255,0.12)", backdropFilter: "blur(12px)" }}
+    >
+      <h2 className={`mb-4 text-lg font-semibold ${glassTextClass}`}>
         Lois nationales
       </h2>
-      <p className="mb-6 text-sm text-[var(--foreground-muted)]">
+      <p className={`mb-6 text-sm ${glassMutedClass}`}>
         Orientez les politiques nationales en fixant un objectif pour chaque loi. Le score évoluera chaque jour vers la cible choisie.
       </p>
       <div className="space-y-4">

@@ -1,5 +1,7 @@
 # Déploiement Edge Function: process-ai-events-due
 
+Projet Supabase cible (Fates of Nations, moderne) : **`ssnqervwthlqvbewhtrd`**. Les secrets ci-dessous doivent utiliser l’URL et la **service_role** de **ce** projet uniquement (pas un autre `*.supabase.co`).
+
 ## 1) Déployer la function
 
 ```bash
@@ -12,7 +14,7 @@ npx supabase functions deploy process-ai-events-due --no-verify-jwt
 npx supabase secrets set PROCESS_DUE_EDGE_ENABLED=false
 npx supabase secrets set PROCESS_DUE_EDGE_SECRET="VALEUR_SECRET"
 npx supabase secrets set DISCORD_BOT_TOKEN="..."
-npx supabase secrets set NEXT_PUBLIC_SUPABASE_URL="https://<project-ref>.supabase.co"
+npx supabase secrets set NEXT_PUBLIC_SUPABASE_URL="https://ssnqervwthlqvbewhtrd.supabase.co"
 npx supabase secrets set SUPABASE_SERVICE_ROLE_KEY="..."
 ```
 

@@ -61,6 +61,12 @@ export type TickBreakdownActiveEffectLine = { description: string };
 
 /** Liste exhaustive des effets de mobilisation qui s’appliquent. */
 export type TickBreakdownMobilisationEffectLine = { description: string };
+export type TickBreakdownLawEffectGroup = {
+  lawLabel: string;
+  levelLabel: string;
+  effects: Array<{ description: string }>;
+};
+export type TickBreakdownExtraSourceEffectLine = { description: string };
 
 export type TickBreakdown = {
   population: TickBreakdownRateCategory;
@@ -76,6 +82,10 @@ export type TickBreakdown = {
   activeEffectsExhaustive: TickBreakdownActiveEffectLine[];
   /** Liste exhaustive : tous les effets du niveau de mobilisation appliqués. */
   mobilisationEffectsExhaustive: TickBreakdownMobilisationEffectLine[];
+  /** Liste exhaustive des effets actifs regroupés par loi et palier courant. */
+  lawEffectsByLaw: TickBreakdownLawEffectGroup[];
+  /** Liste exhaustive : effets non-croissance/non-stat issus des sources IA/Idéologie/Avantages. */
+  extraSourceEffectsExhaustive: TickBreakdownExtraSourceEffectLine[];
 };
 
 type EffectLike = { effect_kind: string; effect_target: string | null; value: number; duration_remaining?: number; duration_kind?: string };
@@ -131,8 +141,14 @@ export type TickBreakdownContext = {
   ai_status?: string | null;
   aiMajorEffects?: Array<{ effect_kind: string; effect_target: string | null; value: number }>;
   aiMinorEffects?: Array<{ effect_kind: string; effect_target: string | null; value: number }>;
+  perkEffects?: Array<{ effect_kind: string; effect_target: string | null; value: number; sourceLabel?: string }>;
   ideologyScores?: Record<string, number>;
   ideologyEffectsConfig?: Array<{ ideology_id: string; effect_kind: string; effect_target: string | null; value: number }>;
+  lawEffectsByLaw?: Array<{
+    lawLabel: string;
+    levelLabel: string;
+    effects: Array<{ effect_kind: string; effect_target: string | null; value: number }>;
+  }>;
 };
 
 export type GetTickBreakdownOptions = {
@@ -175,6 +191,7 @@ export function getTickBreakdown(
     ai_status: context.ai_status,
     aiMajorEffects: context.aiMajorEffects,
     aiMinorEffects: context.aiMinorEffects,
+    perkEffects: context.perkEffects,
     ideologyScores: context.ideologyScores,
     ideologyEffectsConfig: context.ideologyEffectsConfig,
   });
@@ -187,6 +204,7 @@ export function getTickBreakdown(
     ai_status: context.ai_status,
     aiMajorEffects: context.aiMajorEffects,
     aiMinorEffects: context.aiMinorEffects,
+    perkEffects: context.perkEffects,
     ideologyScores: context.ideologyScores,
     ideologyEffectsConfig: context.ideologyEffectsConfig,
   });
@@ -341,6 +359,30 @@ export function getTickBreakdown(
       return { description: getEffectDescription(resolved, effectDescOpts) };
     });
 
+  const extraSourceEffectsExhaustive: TickBreakdownExtraSourceEffectLine[] = resolvedEffects
+    .filter((e) => (e.source === "perk" || e.source === "ai" || e.source === "ideology") && !effectKindsAlreadyInBreakdown.has(e.effect_kind))
+    .map((e) => ({
+      description: e.sourceLabel ? `${e.sourceLabel} : ${getEffectDescription(e, effectDescOpts)}` : getEffectDescription(e, effectDescOpts),
+    }));
+
+  const lawEffectsByLaw: TickBreakdownLawEffectGroup[] = (context.lawEffectsByLaw ?? [])
+    .map((group) => ({
+      lawLabel: group.lawLabel,
+      levelLabel: group.levelLabel,
+      effects: group.effects
+        .filter((e) => !effectKindsAlreadyInBreakdown.has(e.effect_kind))
+        .map((e) => {
+          const resolved: ResolvedEffect = {
+            effect_kind: e.effect_kind,
+            effect_target: e.effect_target ?? null,
+            value: Number(e.value),
+            duration_remaining: 1,
+          };
+          return { description: getEffectDescription(resolved, effectDescOpts) };
+        }),
+    }))
+    .filter((g) => g.effects.length > 0);
+
   const breakdown: TickBreakdown = {
     population: {
       contributions: popContributions,
@@ -381,6 +423,8 @@ export function getTickBreakdown(
     globalEffectsExhaustive,
     activeEffectsExhaustive,
     mobilisationEffectsExhaustive,
+    lawEffectsByLaw,
+    extraSourceEffectsExhaustive,
   };
 
   return { breakdown, expected };

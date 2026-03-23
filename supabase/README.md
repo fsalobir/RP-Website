@@ -1,4 +1,6 @@
-# Supabase – Nation Simulator
+# Supabase – Fates of Nations (Nation Simulator)
+
+Le dépôt contient [`config.toml`](config.toml) avec `project_id = "ssnqervwthlqvbewhtrd"` (projet cloud de référence). Après `supabase login`, utiliser `supabase link` si besoin, puis `supabase db push` / `supabase migration up` selon ton flux. Pour lister les projets accessibles : `npm run supabase -- projects list` (à la racine du repo).
 
 ## Première installation
 

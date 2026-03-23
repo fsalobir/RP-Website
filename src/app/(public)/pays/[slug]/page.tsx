@@ -8,8 +8,8 @@ import type { RosterRowByBranch } from "./countryTabsTypes";
 import { computeHardPowerByCountry } from "@/lib/hardPower";
 import { computeInfluenceForAll, applyInfluenceModifiers } from "@/lib/influence";
 import { getAllRelationRows, relationRowsToMap, getRelationFromMap } from "@/lib/relations";
-import { getEffectsForCountry, getInfluenceModifiersFromEffects } from "@/lib/countryEffects";
-import { resolveAllLawEffectsForCountry, LAW_DEFINITIONS, type CountryLawRow } from "@/lib/laws";
+import { getInfluenceModifiersByCountry } from "@/lib/countryEffects";
+import { LAW_DEFINITIONS, type CountryLawRow } from "@/lib/laws";
 import { isPerkActive } from "@/lib/perkRequirements";
 import { computeFoggedRoster, type FoggedRoster } from "@/lib/intelFog";
 import { fetchWorldIdeologyState } from "@/lib/ideologyServer";
@@ -89,7 +89,7 @@ async function fetchCountryPagePublicData(slug: string) {
 
   if (error || !country) return { country: null as typeof country | null };
 
-  const [macrosRes, limitsRes, countryPerksRes, budgetRes, effectsRes, countriesRes, controlRes, countryLawsRes, countryMilitaryUnitsRes, countryMilitaryUnitsAllRes, etatMajorFocusRes] = await Promise.all([
+  const [macrosRes, limitsRes, countryPerksRes, budgetRes, effectsRes, countriesRes, controlRes, controlAllRes, countryLawsRes, countryLawsAllRes, countryEffectsAllRes, countryMilitaryUnitsRes, countryMilitaryUnitsAllRes, etatMajorFocusRes] = await Promise.all([
     supabase.from("country_macros").select("*").eq("country_id", country.id),
     supabase
       .from("country_military_limits")
@@ -100,7 +100,10 @@ async function fetchCountryPagePublicData(slug: string) {
     supabase.from("country_effects").select("*").eq("country_id", country.id).or("duration_remaining.gt.0,duration_kind.eq.permanent"),
     supabase.from("countries").select("id, population, gdp, militarism, industry, science, stability"),
     supabase.from("country_control").select("country_id, share_pct, is_annexed").eq("controller_country_id", country.id),
+    supabase.from("country_control").select("country_id, controller_country_id, share_pct, is_annexed"),
     supabase.from("country_laws").select("law_key, score, target_score").eq("country_id", country.id),
+    supabase.from("country_laws").select("country_id, law_key, score"),
+    supabase.from("country_effects").select("country_id, effect_kind, effect_target, value, duration_remaining, duration_kind").or("duration_remaining.gt.0,duration_kind.eq.permanent"),
     supabase.from("country_military_units").select("*").eq("country_id", country.id),
     supabase.from("country_military_units").select("country_id, roster_unit_id, current_level, extra_count"),
     supabase
@@ -126,20 +129,15 @@ async function fetchCountryPagePublicData(slug: string) {
     effectsRes,
     countriesRes,
     controlRows,
+    controlAllRes,
     sphereCountries,
     countryLawsRes,
+    countryLawsAllRes,
+    countryEffectsAllRes,
     countryMilitaryUnitsRes,
     countryMilitaryUnitsAllRes,
     etatMajorFocusRes,
   };
-}
-
-function getCachedCountryPagePublicData(slug: string) {
-  return unstable_cache(
-    () => fetchCountryPagePublicData(slug),
-    ["country-page-public", slug],
-    { revalidate: 60, tags: [`country-page:${slug}`] }
-  )();
 }
 
 export default async function CountryPage({
@@ -149,7 +147,9 @@ export default async function CountryPage({
 }) {
   const { slug } = await params;
   const cachedGlobals = await getCachedCountryPageGlobals();
-  const publicData = await getCachedCountryPagePublicData(slug);
+  // Données mutables par joueur/admin (effets actifs, avantages débloqués, budget, etc.) :
+  // on évite unstable_cache ici pour refléter immédiatement les changements après router.refresh().
+  const publicData = await fetchCountryPagePublicData(slug);
   const country = publicData.country;
   if (!country) notFound();
 
@@ -264,16 +264,79 @@ export default async function CountryPage({
   const rosterUnitsForInfluence = rosterUnits as Array<{ id: string; branch: MilitaryBranch; base_count: number }>;
   const rosterLevelsForInfluence = rosterLevels as Array<{ unit_id: string; level: number; hard_power: number }>;
   const hardPowerByCountry = computeHardPowerByCountry(countryMilitaryUnitsAll, rosterUnitsForInfluence, rosterLevelsForInfluence);
+  const globalGrowthEffects = (Array.isArray(ruleParametersByKey.global_growth_effects?.value) ? ruleParametersByKey.global_growth_effects.value : []) as Array<{ effect_kind: string; effect_target: string | null; value: number }>;
   const influenceConfig = ruleParametersByKey.influence_config?.value as Record<string, unknown> | undefined;
-  const { byCountry: influenceByCountry } = computeInfluenceForAll(
+  const { byCountry: influenceByCountryRaw } = computeInfluenceForAll(
     countries,
     hardPowerByCountry,
     (influenceConfig ?? {}) as Parameters<typeof computeInfluenceForAll>[2]
   );
-  let influenceResult = influenceByCountry.get(country.id) ?? null;
+  const countryIds = countries.map((c) => c.id);
+  const countryEffectsRowsAll = (Array.isArray(publicData.countryEffectsAllRes?.data) ? publicData.countryEffectsAllRes.data : []) as Array<{ country_id: string; effect_kind: string; effect_target: string | null; value: number; duration_remaining?: number }>;
+  const countryLawRowsAll = (Array.isArray(publicData.countryLawsAllRes?.data) ? publicData.countryLawsAllRes.data : []) as Array<{ country_id: string; law_key: string; score: number }>;
+  const influenceModifiersByCountry = getInfluenceModifiersByCountry(
+    countryIds,
+    countryEffectsRowsAll,
+    countryLawRowsAll,
+    ruleParametersByKey,
+    globalGrowthEffects
+  );
+  const influenceByCountry = new Map(
+    countryIds.map((id) => {
+      const raw = influenceByCountryRaw.get(id);
+      const mods = influenceModifiersByCountry.get(id);
+      if (!raw) return [id, null] as const;
+      const result = mods ? applyInfluenceModifiers(raw, mods) : raw;
+      return [id, result] as const;
+    })
+  );
+  const controlRowsAll = (Array.isArray(publicData.controlAllRes?.data) ? publicData.controlAllRes.data : []) as Array<{ country_id: string; controller_country_id: string; share_pct: number; is_annexed: boolean }>;
+  const sphereInfluencePct = ruleParametersByKey.sphere_influence_pct?.value as SphereInfluencePct | undefined;
+  const sphereInfluenceBonusByController = new Map<string, number>();
+  for (const r of controlRowsAll) {
+    const controllerId = r.controller_country_id;
+    const targetInfluence = influenceByCountry.get(r.country_id)?.influence ?? 0;
+    const controlRow = { country_id: r.country_id, controller_country_id: controllerId, share_pct: Number(r.share_pct ?? 0), is_annexed: !!r.is_annexed };
+    const effectivePct = getEffectiveSpherePct(controlRow, sphereInfluencePct);
+    const influenceGiven = targetInfluence * (controlRow.share_pct / 100) * (effectivePct / 100);
+    const prev = sphereInfluenceBonusByController.get(controllerId) ?? 0;
+    sphereInfluenceBonusByController.set(controllerId, prev + influenceGiven);
+  }
+  const totalInfluenceByCountry = new Map<string, number>();
+  for (const c of countries) {
+    const base = influenceByCountry.get(c.id)?.influence ?? 0;
+    const sphereBonus = sphereInfluenceBonusByController.get(c.id) ?? 0;
+    totalInfluenceByCountry.set(c.id, Math.round(base + sphereBonus));
+  }
+  const byInfluence = [...countries].sort(
+    (a, b) => Number(totalInfluenceByCountry.get(b.id) ?? 0) - Number(totalInfluenceByCountry.get(a.id) ?? 0)
+  );
+  const byHardPower = [...countries].sort(
+    (a, b) => Number(hardPowerByCountry.get(b.id)?.total ?? 0) - Number(hardPowerByCountry.get(a.id)?.total ?? 0)
+  );
+  const byHardPowerTerre = [...countries].sort(
+    (a, b) => Number(hardPowerByCountry.get(b.id)?.terre ?? 0) - Number(hardPowerByCountry.get(a.id)?.terre ?? 0)
+  );
+  const byHardPowerAir = [...countries].sort(
+    (a, b) => Number(hardPowerByCountry.get(b.id)?.air ?? 0) - Number(hardPowerByCountry.get(a.id)?.air ?? 0)
+  );
+  const byHardPowerMer = [...countries].sort(
+    (a, b) => Number(hardPowerByCountry.get(b.id)?.mer ?? 0) - Number(hardPowerByCountry.get(a.id)?.mer ?? 0)
+  );
+  const byHardPowerStrategique = [...countries].sort(
+    (a, b) => Number(hardPowerByCountry.get(b.id)?.strategique ?? 0) - Number(hardPowerByCountry.get(a.id)?.strategique ?? 0)
+  );
+  const rankInfluence = byInfluence.findIndex((c) => c.id === country.id) + 1 || 0;
+  const rankHardPower = byHardPower.findIndex((c) => c.id === country.id) + 1 || 0;
+  const rankHardPowerByType = {
+    terre: byHardPowerTerre.findIndex((c) => c.id === country.id) + 1 || 0,
+    air: byHardPowerAir.findIndex((c) => c.id === country.id) + 1 || 0,
+    mer: byHardPowerMer.findIndex((c) => c.id === country.id) + 1 || 0,
+    strategique: byHardPowerStrategique.findIndex((c) => c.id === country.id) + 1 || 0,
+  };
+  const influenceResult = influenceByCountry.get(country.id) ?? null;
 
   if (sphereCountries.length > 0) {
-    const sphereInfluencePct = ruleParametersByKey.sphere_influence_pct?.value as SphereInfluencePct | undefined;
     const controlByCountryId = new Map(controlRows.map((r) => [r.country_id, r]));
     const deriveControlStatus = (share_pct: number, is_annexed: boolean): "Contesté" | "Occupé" | "Annexé" => {
       if (is_annexed) return "Annexé";
@@ -350,74 +413,64 @@ export default async function CountryPage({
     }
   }
 
-  const lawLevelEffects = resolveAllLawEffectsForCountry(countryLawRows, ruleParametersByKey);
-
-  const globalGrowthEffects = (Array.isArray(ruleParametersByKey.global_growth_effects?.value) ? ruleParametersByKey.global_growth_effects.value : []) as Array<{ effect_kind: string; effect_target: string | null; value: number }>;
   const aiMajorEffects = (Array.isArray(ruleParametersByKey.ai_major_effects?.value) ? ruleParametersByKey.ai_major_effects.value : []) as Array<{ effect_kind: string; effect_target: string | null; value: number }>;
   const aiMinorEffects = (Array.isArray(ruleParametersByKey.ai_minor_effects?.value) ? ruleParametersByKey.ai_minor_effects.value : []) as Array<{ effect_kind: string; effect_target: string | null; value: number }>;
-  const ideologySummaryForContext = ideologyState.ideologyByCountry.get(country.id) ?? null;
-  const ideologyEffectsConfigRaw = ruleParametersByKey.ideology_effects?.value;
-  const ideologyEffectsConfig = Array.isArray(ideologyEffectsConfigRaw)
-    ? (ideologyEffectsConfigRaw as Array<{ ideology_id: string; effect_kind: string; effect_target: string | null; value: number }>).filter(
-        (e) => e && typeof e.ideology_id === "string" && typeof e.effect_kind === "string" && typeof e.value === "number"
-      )
-    : [];
-  const effectsContext = {
-    countryId: country.id,
-    countryEffects: effects,
-    lawLevelEffects,
-    globalGrowthEffects,
-    ai_status: country.ai_status ?? null,
-    aiMajorEffects,
-    aiMinorEffects,
-    perkEffects,
-    ideologyScores: ideologySummaryForContext?.scores ?? undefined,
-    ideologyEffectsConfig: ideologyEffectsConfig.length > 0 ? ideologyEffectsConfig : undefined,
-  };
-  const resolvedEffects = getEffectsForCountry(effectsContext);
-  const influenceMods = getInfluenceModifiersFromEffects(resolvedEffects, (e) => e.duration_kind === "permanent" || (e.duration_remaining ?? 0) > 0);
-  if (influenceResult && (influenceMods.global !== 1 || influenceMods.gdp !== 1 || influenceMods.population !== 1 || influenceMods.hard_power !== 1)) {
-    influenceResult = applyInfluenceModifiers(influenceResult, influenceMods);
-  }
   sphereData.masterInfluence = influenceResult?.influence ?? 0;
   sphereData.totalInfluence = sphereData.masterInfluence + sphereData.countries.reduce((s, c) => s + c.influenceGiven, 0);
   const latestUpdateLog = updateLogs[0] ?? null;
-  const getInfluenceForCountrySnapshot = (overrides?: { population?: number | null; gdp?: number | null; stability?: number | null }) => {
-    const snapshotCountries = countries.map((c) =>
-      c.id === country.id
-        ? {
-            ...c,
-            population: Number(overrides?.population ?? c.population ?? 0),
-            gdp: Number(overrides?.gdp ?? c.gdp ?? 0),
-            stability: Number(overrides?.stability ?? c.stability ?? 0),
-          }
-        : c
-    );
-    const { byCountry } = computeInfluenceForAll(
-      snapshotCountries,
-      hardPowerByCountry,
-      (influenceConfig ?? {}) as Parameters<typeof computeInfluenceForAll>[2]
-    );
-    let value = byCountry.get(country.id) ?? null;
-    if (value && (influenceMods.global !== 1 || influenceMods.gdp !== 1 || influenceMods.population !== 1 || influenceMods.hard_power !== 1)) {
-      value = applyInfluenceModifiers(value, influenceMods);
-    }
-    return value;
-  };
-  const previousInfluenceResult = latestUpdateLog
-    ? getInfluenceForCountrySnapshot({
-        population: latestUpdateLog.population_before,
-        gdp: latestUpdateLog.gdp_before,
-        stability: latestUpdateLog.stability_before,
-      })
-    : null;
-  const lastCronInfluenceAfterResult = latestUpdateLog
-    ? getInfluenceForCountrySnapshot({
-        population: latestUpdateLog.population_after,
-        gdp: latestUpdateLog.gdp_after,
-        stability: latestUpdateLog.stability_after,
-      })
-    : null;
+  let previousInfluenceValue: number | null = null;
+  let lastCronInfluenceAfterValue: number | null = null;
+  if (latestUpdateLog) {
+    const { data: logsAtLastRun } = await supabase
+      .from("country_update_logs")
+      .select("country_id, population_before, gdp_before, stability_before, population_after, gdp_after, stability_after")
+      .eq("run_at", latestUpdateLog.run_at);
+
+    const byCountryLog = new Map((logsAtLastRun ?? []).map((r) => [r.country_id, r]));
+    const buildTotalInfluenceForCountry = (mode: "before" | "after"): number => {
+      const snapshotCountries = countries.map((c) => {
+        const row = byCountryLog.get(c.id);
+        if (!row) return c;
+        return {
+          ...c,
+          population: Number((mode === "before" ? row.population_before : row.population_after) ?? c.population ?? 0),
+          gdp: Number((mode === "before" ? row.gdp_before : row.gdp_after) ?? c.gdp ?? 0),
+          stability: Number((mode === "before" ? row.stability_before : row.stability_after) ?? c.stability ?? 0),
+        };
+      });
+      const { byCountry: baseByCountry } = computeInfluenceForAll(
+        snapshotCountries,
+        hardPowerByCountry,
+        (influenceConfig ?? {}) as Parameters<typeof computeInfluenceForAll>[2]
+      );
+      const adjustedByCountry = new Map(
+        countries.map((c) => {
+          const raw = baseByCountry.get(c.id);
+          const mods = influenceModifiersByCountry.get(c.id);
+          if (!raw) return [c.id, null] as const;
+          return [c.id, mods ? applyInfluenceModifiers(raw, mods) : raw] as const;
+        })
+      );
+      let sphereBonus = 0;
+      for (const r of controlRowsAll) {
+        if (r.controller_country_id !== country.id) continue;
+        const targetInfluence = adjustedByCountry.get(r.country_id)?.influence ?? 0;
+        const effectivePct = getEffectiveSpherePct(
+          {
+            country_id: r.country_id,
+            controller_country_id: r.controller_country_id,
+            share_pct: Number(r.share_pct ?? 0),
+            is_annexed: !!r.is_annexed,
+          },
+          sphereInfluencePct
+        );
+        sphereBonus += targetInfluence * (Number(r.share_pct ?? 0) / 100) * (effectivePct / 100);
+      }
+      return Math.round((adjustedByCountry.get(country.id)?.influence ?? 0) + sphereBonus);
+    };
+    previousInfluenceValue = buildTotalInfluenceForCountry("before");
+    lastCronInfluenceAfterValue = buildTotalInfluenceForCountry("after");
+  }
   if (countriesForTarget.length > 0) {
     const relationRows = await getAllRelationRows(supabase);
     const relationMap = relationRowsToMap(relationRows);
@@ -569,6 +622,9 @@ export default async function CountryPage({
         effects={effects}
         rankPopulation={rankPopulation}
         rankGdp={rankGdp}
+        rankInfluence={rankInfluence}
+        rankHardPower={rankHardPower}
+        rankHardPowerByType={rankHardPowerByType}
         isAdmin={isAdmin}
         isPlayerForThisCountry={isPlayerForThisCountry}
         assignedPlayerEmail={assignedPlayerEmail}
@@ -581,8 +637,8 @@ export default async function CountryPage({
         countryLawRows={countryLawRows}
         worldDate={ruleParametersByKey.world_date?.value as { month: number; year: number } | undefined}
         influenceResult={influenceResult}
-        previousInfluenceValue={previousInfluenceResult?.influence ?? null}
-        lastCronInfluenceAfterValue={lastCronInfluenceAfterResult?.influence ?? null}
+        previousInfluenceValue={previousInfluenceValue}
+        lastCronInfluenceAfterValue={lastCronInfluenceAfterValue}
         hardPowerByBranch={hardPowerByCountry.get(country.id) ?? null}
         ai_status={country.ai_status ?? null}
         aiMajorEffects={aiMajorEffects}

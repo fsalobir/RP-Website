@@ -4,10 +4,10 @@ globs:
 alwaysApply: true
 ---
 
-# Simulateur de nations (RP-Website)
+# Fates of Nations — simulateur de nations (RP-Website)
 
 ## Stack
-- **Frontend:** Next.js 14+ (App Router), TypeScript, Tailwind CSS.
+- **Frontend:** Next.js (App Router), TypeScript, Tailwind CSS.
 - **Backend / DB / Auth:** Supabase (PostgreSQL, RLS, Auth). Pas de backend séparé ; le client Supabase (côté serveur et client) est utilisé avec RLS.
 
 ## Langue
@@ -29,5 +29,6 @@ alwaysApply: true
 - **UI/UX** : conserver une interface cohérente et lisible (thème type tableau de bord QG militaire : fond sombre, panneaux, accents verts). Utiliser les variables CSS du thème (`var(--background-panel)`, `var(--accent)`, etc.) et les composants existants. États de chargement et listes vides en français.
 
 ## Structure des routes
-- **Public** : `/` = table des nations (Pays, Régime, Population, PIB, Militarisme, Industrie, Science, Stabilité avec variation vert/rouge si historique) ; `/pays/[slug]` (fiche 3 onglets) ; `/regles`.
-- **Admin** : `/admin/connexion`, `/admin/inscription` ; après auth `/admin`, `/admin/pays`, `/admin/pays/nouveau`, `/admin/pays/[id]`, `/admin/regles`. Middleware protège `/admin` sauf connexion/inscription.
+- **Public** : `/` = table des nations (indicateurs + variations si `country_history`) ; `/pays/[slug]` = fiche pays avec onglets **Cabinet, Généralités, Militaire, État-major, Avantages, Budget, Lois, Actions d’État** (et **Debug** admin) — visibilité selon joueur assigné / admin ; `/regles` et autres pages sous `src/app/(public)/`.
+- **Admin** : `/admin/connexion`, `/admin/inscription` ; après auth tableau de bord, CRUD pays, règles, joueurs, outils (ex. bot Discord), etc. Middleware protège `/admin` sauf connexion/inscription.
+- **Projet Supabase documenté** : ref `ssnqervwthlqvbewhtrd` — variables : `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` ; pas de service_role côté client. Voir `.env.example` et `SETUP.md`.

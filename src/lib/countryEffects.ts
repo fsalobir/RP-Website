@@ -890,11 +890,13 @@ export function getEffectsForCountry(context: EffectResolutionContext): Resolved
   return out;
 }
 
-/** Effets à passer à getExpectedNextTick uniquement (country_effects + lois + idéologie). Exclut global_growth_effects pour éviter de les compter deux fois (déjà dans getGlobalGrowthRates). */
+/** Effets à passer à getExpectedNextTick (parité cron SQL): country_effects + lois + perks + IA + idéologie. Exclut global_growth_effects (déjà dans getGlobalGrowthRates). */
 export function getEffectsForCountryTickRates(context: EffectResolutionContext): ResolvedEffect[] {
   return [
     ...countryEffectsSource(context),
     ...lawLevelEffectsSource(context),
+    ...perkEffectsSource(context),
+    ...aiEffectsSource(context),
     ...ideologyEffectsSource(context),
   ];
 }

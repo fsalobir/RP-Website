@@ -1,7 +1,14 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import {
+  buildRosterTemplateCsv,
+  parseRosterCsv,
+  ROSTER_CSV_MAX_LEVELS,
+  ROSTER_DISPLAY_BRANCH_ORDER,
+} from "@/lib/rosterCsv";
 import type { MilitaryBranch, MilitaryRosterUnit, MilitaryRosterUnitLevel } from "@/types/database";
 
 type UnitRow = Omit<MilitaryRosterUnit, "created_at" | "updated_at"> & {
@@ -38,6 +45,8 @@ function clampInt(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n));
 }
 
+const ROSTER_LEVEL_MAX = ROSTER_CSV_MAX_LEVELS;
+
 function makeNewUnit(): UnitRow {
   return {
     id: `new_${crypto.randomUUID()}`,
@@ -58,11 +67,16 @@ export function RosterEditor({
   initialUnits: MilitaryRosterUnit[];
   initialLevels: MilitaryRosterUnitLevel[];
 }) {
+  const router = useRouter();
+  const importFileRef = useRef<HTMLInputElement>(null);
   const [units, setUnits] = useState<UnitRow[]>(initialUnits);
   const [levels, setLevels] = useState<LevelRow[]>(initialLevels);
   const [savingId, setSavingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
+  const [csvImporting, setCsvImporting] = useState(false);
+  const [csvImportReport, setCsvImportReport] = useState<string | null>(null);
+  const [csvImportErrors, setCsvImportErrors] = useState<string[]>([]);
 
   const levelsByUnitId = useMemo(() => {
     const m = new Map<string, LevelRow[]>();
@@ -145,7 +159,7 @@ export function RosterEditor({
         sub_type: unit.sub_type && unit.sub_type.trim() ? unit.sub_type.trim() : null,
         name_fr: unit.name_fr.trim(),
         icon_url: unit.icon_url?.trim() ? unit.icon_url.trim() : null,
-        level_count: clampInt(Number(unit.level_count) || 1, 1, 10),
+        level_count: clampInt(Number(unit.level_count) || 1, 1, ROSTER_LEVEL_MAX),
         base_count: Math.max(0, Number(unit.base_count) || 0),
         sort_order: Number(unit.sort_order) || 0,
       };
@@ -237,7 +251,133 @@ export function RosterEditor({
     }
   }
 
-  const branches: MilitaryBranch[] = ["terre", "air", "mer", "strategique"];
+  function downloadCsvTemplate() {
+    setCsvImportErrors([]);
+    setCsvImportReport(null);
+    const csv = buildRosterTemplateCsv(units as MilitaryRosterUnit[], levels as MilitaryRosterUnitLevel[]);
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `roster-template-mj-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  async function refetchRosterFromDb() {
+    const supabase = createClient();
+    const [unitsRes, levelsRes] = await Promise.all([
+      supabase.from("military_roster_units").select("*").order("branch").order("sort_order").order("name_fr"),
+      supabase.from("military_roster_unit_levels").select("*").order("unit_id").order("level"),
+    ]);
+    if (unitsRes.error) throw new Error(unitsRes.error.message);
+    if (levelsRes.error) throw new Error(levelsRes.error.message);
+    setUnits((unitsRes.data ?? []) as UnitRow[]);
+    setLevels((levelsRes.data ?? []) as LevelRow[]);
+  }
+
+  async function importRosterCsv(file: File) {
+    setCsvImportErrors([]);
+    setCsvImportReport(null);
+    setError(null);
+    setCsvImporting(true);
+    try {
+      const text = await file.text();
+      const parsed = parseRosterCsv(text);
+      if (!parsed.ok) {
+        setCsvImportErrors(parsed.errors.map((e) => `Ligne ${e.ligne}: ${e.message}`));
+        return;
+      }
+
+      const validIds = new Set(units.filter((u) => !u.id.startsWith("new_")).map((u) => u.id));
+      const unknown: string[] = [];
+      for (const r of parsed.units) {
+        if (!validIds.has(r.id_unite)) {
+          unknown.push(
+            `ID_Unite inconnu ou unité non enregistrée (enregistrez d’abord les nouvelles unités dans l’interface) : ${r.id_unite}`
+          );
+        }
+      }
+      if (unknown.length > 0) {
+        setCsvImportErrors(unknown);
+        return;
+      }
+
+      const supabase = createClient();
+
+      for (const r of parsed.units) {
+        const { error: uErr } = await supabase
+          .from("military_roster_units")
+          .update({
+            name_fr: r.nom.trim(),
+            base_count: r.base,
+            level_count: r.niveaux,
+          })
+          .eq("id", r.id_unite);
+        if (uErr) {
+          throw new Error(`« ${r.nom} » (${r.id_unite}) : ${uErr.message}`);
+        }
+
+        const { data: orphanRows, error: selErr } = await supabase
+          .from("military_roster_unit_levels")
+          .select("id")
+          .eq("unit_id", r.id_unite)
+          .gt("level", r.niveaux);
+        if (selErr) {
+          throw new Error(`« ${r.nom} » : ${selErr.message}`);
+        }
+        if (orphanRows && orphanRows.length > 0) {
+          const ids = orphanRows.map((o) => o.id as string);
+          const { error: delErr } = await supabase.from("military_roster_unit_levels").delete().in("id", ids);
+          if (delErr) {
+            throw new Error(`« ${r.nom} » : ${delErr.message}`);
+          }
+        }
+
+        const toUpsert = [];
+        for (let lvl = 1; lvl <= r.niveaux; lvl++) {
+          const L = r.levelsByNumber.get(lvl);
+          if (!L) {
+            throw new Error(`« ${r.nom} » : données internes manquantes pour le niveau ${lvl}.`);
+          }
+          toUpsert.push({
+            unit_id: r.id_unite,
+            level: lvl,
+            manpower: L.manpower,
+            hard_power: L.hard_power,
+            mobilization_cost: L.cout_par_unite,
+            science_required: L.science_requise,
+          });
+        }
+        const { error: upErr } = await supabase.from("military_roster_unit_levels").upsert(toUpsert, {
+          onConflict: "unit_id,level",
+        });
+        if (upErr) {
+          throw new Error(`« ${r.nom} » : ${upErr.message}`);
+        }
+      }
+
+      await refetchRosterFromDb();
+      router.refresh();
+      const ignored = parsed.ignoredRows.length;
+      setCsvImportReport(
+        ignored > 0
+          ? `Import réussi : ${parsed.units.length} unité(s) mise(s) à jour. ${ignored} ligne(s) ignorée(s) (colonne « Niveau » supérieure à « Niveaux » pour l’unité).`
+          : `Import réussi : ${parsed.units.length} unité(s) mise(s) à jour.`
+      );
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Erreur inconnue.";
+      setCsvImportErrors([
+        msg,
+        "Si l’erreur est survenue en cours de traitement, les lignes déjà traitées avant l’erreur peuvent avoir été enregistrées.",
+      ]);
+    } finally {
+      setCsvImporting(false);
+      if (importFileRef.current) importFileRef.current.value = "";
+    }
+  }
+
+  const branches: MilitaryBranch[] = [...ROSTER_DISPLAY_BRANCH_ORDER];
   const unitsByBranch = useMemo(() => {
     const m = new Map<MilitaryBranch, UnitRow[]>();
     for (const b of branches) m.set(b, []);
@@ -256,32 +396,74 @@ export function RosterEditor({
             <h2 className="text-lg font-semibold text-[var(--foreground)]">Unités</h2>
             <p className="mt-1 text-sm text-[var(--foreground-muted)]">
               Les niveaux sont “graduels” (100 points par niveau). Ici, vous définissez seulement le nombre de niveaux et le manpower par niveau.
+              {" "}
+              <strong className="text-[var(--foreground)]">CSV :</strong> une ligne par <strong>niveau</strong> ; colonne « Niveau » = 1, 2, 3… — <strong>Nom</strong>, <strong>Base</strong> et <strong>Niveaux</strong> uniquement sur la ligne où « Niveau » = 1 (cellules vides ensuite ; vous pouvez griser ces colonnes dans Google Sheets). L’import lit ces valeurs sur cette ligne seule.
             </p>
           </div>
-          <button
-            type="button"
-            onClick={() =>
-              setUnits((prev) => {
-                const u = makeNewUnit();
-                setExpandedIds((prevSet) => {
-                  const next = new Set(prevSet);
-                  next.add(u.id);
-                  return next;
-                });
-                return [u, ...prev];
-              })
-            }
-            className="rounded py-2 px-4 text-sm font-medium"
-            style={{ background: "var(--accent)", color: "#0f1419" }}
-          >
-            Ajouter une unité
-          </button>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => downloadCsvTemplate()}
+              className="rounded border py-2 px-3 text-sm font-medium"
+              style={{ borderColor: "var(--border)", color: "var(--foreground)" }}
+            >
+              Télécharger CSV roster (template MJ)
+            </button>
+            <input
+              ref={importFileRef}
+              type="file"
+              accept=".csv,text/csv"
+              className="hidden"
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (f) void importRosterCsv(f);
+              }}
+            />
+            <button
+              type="button"
+              onClick={() => importFileRef.current?.click()}
+              disabled={csvImporting}
+              className="rounded border py-2 px-3 text-sm font-medium disabled:opacity-50"
+              style={{ borderColor: "var(--border)", color: "var(--foreground)" }}
+            >
+              {csvImporting ? "Import CSV…" : "Importer CSV roster"}
+            </button>
+            <button
+              type="button"
+              onClick={() =>
+                setUnits((prev) => {
+                  const u = makeNewUnit();
+                  setExpandedIds((prevSet) => {
+                    const next = new Set(prevSet);
+                    next.add(u.id);
+                    return next;
+                  });
+                  return [u, ...prev];
+                })
+              }
+              className="rounded py-2 px-4 text-sm font-medium"
+              style={{ background: "var(--accent)", color: "#0f1419" }}
+            >
+              Ajouter une unité
+            </button>
+          </div>
         </div>
 
         {error && (
           <p className="mt-4 text-sm text-[var(--danger)]">
             {error}
           </p>
+        )}
+
+        {csvImportReport && (
+          <p className="mt-4 text-sm text-[var(--accent)]">{csvImportReport}</p>
+        )}
+        {csvImportErrors.length > 0 && (
+          <ul className="mt-4 list-inside list-disc space-y-1 text-sm text-[var(--danger)]">
+            {csvImportErrors.map((line, i) => (
+              <li key={i}>{line}</li>
+            ))}
+          </ul>
         )}
       </section>
 
@@ -507,12 +689,12 @@ export function RosterEditor({
                               <input
                                 type="number"
                                 min={1}
-                                max={10}
+                                max={ROSTER_LEVEL_MAX}
                                 className={`${inputClass} mt-1 font-mono w-20`}
                                 style={inputStyle}
                                 value={u.level_count}
                                 onChange={(e) => {
-                                  const n = clampInt(toInt(e.target.value, 1), 1, 10);
+                                  const n = clampInt(toInt(e.target.value, 1), 1, ROSTER_LEVEL_MAX);
                                   updateUnit(u.id, { level_count: n });
                                 }}
                                 onBlur={() => ensureLevelsForUnit(u)}

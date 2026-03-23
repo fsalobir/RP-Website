@@ -1,51 +1,57 @@
-# Contexte de session – Simulateur de nations
+# Contexte de session – Fates of Nations
 
-Document de référence pour reprendre le projet ou une session. À mettre à jour après des changements importants.
+Document de référence pour reprendre le projet. À mettre à jour après des changements majeurs du produit.
 
 ---
 
-## État actuel du projet (dernière mise à jour)
+## Produit et dépôt
 
-- **Next.js** (App Router) + **Supabase** (PostgreSQL, Auth, Storage). Pas de cron encore ; prévu pg_cron ou Edge Function.
-- **UI** : 100 % en français. Thème « QG militaire » (fond sombre, panneaux, accent vert). Drapeaux : upload dans le bucket Storage `flags` ou URL.
+- **Nom :** Fates of Nations (simulateur moderne).
+- **Repo :** `fsalobir/RP-Website` (branche principale de travail : `main`).
+- **Supabase de référence (documenté) :** projet **`ssnqervwthlqvbewhtrd`**. Variables : voir `.env.example` et [SETUP.md](SETUP.md).
 
-### Ce qui est en place
+## Stack
 
-1. **Public**
-   - Accueil : **table** des pays (Pays, Régime, Population, PIB, Militarisme, Industrie, Science, Stabilité). PIB affiché en « X Bn ». Variations (vert/rouge) affichées entre parenthèses quand des lignes existent dans `country_history`.
-   - Fiche pays : 3 onglets (Généralités/Société/Macros, Militaire, Avantages). Nombres formatés avec `formatNumber` / `formatGdp`.
-   - Page Règles : lecture seule des `rule_parameters`.
+- Next.js (App Router), TypeScript, Tailwind.
+- Supabase : PostgreSQL, RLS, Auth, Storage.
+- **Automatisation :** jobs **pg_cron** (snapshots, tick pays, IA, etc.) décrits dans [supabase/CRON.md](supabase/CRON.md) ; Edge Function `process-ai-events-due` ([docs/process-due-edge-deploy.md](docs/process-due-edge-deploy.md)).
 
-2. **Admin**
-   - Connexion / Inscription. Protection par middleware + table `admins`.
-   - CRUD pays (formulaire 3 blocs) avec **upload de drapeau** (Storage `flags`) ou champ URL.
-   - CRUD rule_parameters (édition valeur par ligne).
+## Public
 
-3. **Données**
-   - `countries`, `country_macros`, `rule_parameters`, `military_unit_types`, `country_military_limits`, `perks`, `country_perks`, `admins`, **`country_history`**.
-   - Migrations : `001_initial_schema.sql`, `002_storage_flags_bucket.sql` (politiques uniquement ; créer le bucket « flags » à la main), `003_country_history.sql`.
+- **Accueil** : table des nations avec indicateurs et variations (via `country_history`).
+- **Fiche pays** : onglets Cabinet, Généralités, Militaire, État-major, Avantages, Budget, Lois, Actions d’État, Debug (admin) — voir `CountryTabs.tsx`.
+- **Règles** : lecture des `rule_parameters`.
+- Carte / autres vues selon routes sous `src/app/(public)/`.
 
-4. **Formatage**
-   - `src/lib/format.ts` : `formatNumber(value)` → séparateur "." (ex. 32.000.000) ; `formatGdp(value)` → "1,2 Bn". À utiliser partout pour l’affichage des nombres et du PIB.
+## Admin
 
-### Décisions / conventions
+- Auth Supabase + table `admins`.
+- CRUD pays, règles (global, mobilisation, …), joueurs, outils Discord selon pages `src/app/admin/`.
 
-- Pas de `next/image` pour les drapeaux : `<img>` utilisé pour accepter toute URL (dont externes et Storage).
-- Variations sur la liste : comparaison `countries` (actuel) vs dernière ligne `country_history` (précédent). Vert si hausse, rouge si baisse. Sans historique, pas de parenthèses.
-- Cron à faire : lire `rule_parameters`, mettre à jour `countries`, et **écrire un snapshot dans `country_history`** pour que les variations s’affichent.
+## Données (non exhaustif)
 
-### Fichiers clés
+- Cœur : `countries`, `country_macros`, `country_history`, `rule_parameters`, `country_effects`.
+- Jeu : budget pays, militaire (types, limites, unités), perks, lois, actions d’état, événements IA, relations, carte/régions selon migrations.
+- Migrations : répertoire `supabase/migrations/` (nombreuses ; le schéma source de vérité est la dernière migration appliquée).
+
+## Conventions
+
+- UI 100 % français ; code / commentaires peuvent rester en anglais.
+- Nombres : `formatNumber` / `formatGdp` (`src/lib/format.ts`).
+- Drapeaux : souvent `<img>` (URLs Storage ou externes).
+- Effets : toujours penser `getEffectsForCountry` pour la logique métier côté app.
+
+## Fichiers clés
 
 | Rôle | Fichiers |
 |------|----------|
 | Clients Supabase | `src/lib/supabase/server.ts`, `client.ts` |
-| Formatage | `src/lib/format.ts` |
-| Liste pays (table + variations) | `src/app/(public)/page.tsx` |
-| Fiche pays 3 onglets | `src/app/(public)/pays/[slug]/page.tsx`, `CountryTabs.tsx` |
-| Formulaire pays (upload drapeau) | `src/components/admin/CountryForm.tsx` |
+| Effets | `src/lib/countryEffects.ts` |
+| Fiche pays | `src/app/(public)/pays/[slug]/page.tsx`, `CountryTabs.tsx` |
+| Cron / SQL | `supabase/migrations/`, `supabase/CRON.md` |
 | Règles Cursor | `.cursor/rules/nation-simulator.mdc` |
-| Résumé agent | `AGENTS.md` |
+| Agent / onboarding | `AGENTS.md` |
 
 ---
 
-Mettre à jour ce fichier après des évolutions majeures (nouvelles tables, nouvelles pages, changements de convention).
+Mettre à jour ce fichier après d’importantes évolutions (nouvelles tables visibles joueur, nouveaux jobs, changements d’auth).

@@ -11,6 +11,7 @@ import type { CountryUpdateLog } from "@/types/database";
 import { createClient } from "@/lib/supabase/client";
 import {
   ALL_EFFECT_KIND_IDS,
+  DURATION_DAYS_MAX,
   getDefaultTargetForKind,
   getEffectKindValueHelper,
   getForcedMinPcts,
@@ -20,7 +21,7 @@ import {
   getEffectsForCountry,
   getEffectsForCountryTickRates,
 } from "@/lib/countryEffects";
-import { resolveAllLawEffectsForCountry, getLawLevelKeyFromScore, getLawLevelLabel, LAW_DEFINITIONS, type CountryLawRow } from "@/lib/laws";
+import { resolveAllLawEffectsForCountry, getLawEffectsForLevel, getLawLevelKeyFromScore, getLawLevelLabel, LAW_DEFINITIONS, type CountryLawRow } from "@/lib/laws";
 import { getTickBreakdown } from "@/lib/tickBreakdown";
 import { saveMilitaryUnit } from "./actions";
 import type { RosterRowByBranch } from "./countryTabsTypes";
@@ -88,6 +89,9 @@ export function CountryTabs({
   effects,
   rankPopulation,
   rankGdp,
+  rankInfluence,
+  rankHardPower,
+  rankHardPowerByType,
   isAdmin,
   isPlayerForThisCountry = false,
   assignedPlayerEmail = null,
@@ -143,6 +147,9 @@ export function CountryTabs({
   effects: CountryEffect[];
   rankPopulation: number;
   rankGdp: number;
+  rankInfluence: number;
+  rankHardPower: number;
+  rankHardPowerByType: { terre: number; air: number; mer: number; strategique: number };
   isAdmin: boolean;
   isPlayerForThisCountry?: boolean;
   assignedPlayerEmail?: string | null;
@@ -278,8 +285,13 @@ export function CountryTabs({
 
   const globalGrowthEffects = useMemo(() => {
     const raw = ruleParametersByKey.global_growth_effects?.value;
-    if (!Array.isArray(raw)) return [];
-    return raw.filter(
+    const arr = Array.isArray(raw)
+      ? raw
+      : (raw && typeof raw === "object" && Array.isArray((raw as { value?: unknown }).value))
+        ? (raw as { value: unknown[] }).value
+        : [];
+    if (!Array.isArray(arr)) return [];
+    return arr.filter(
       (e: unknown): e is { effect_kind: string; effect_target: string | null; value: number } =>
         e != null &&
         typeof (e as { effect_kind?: unknown }).effect_kind === "string" &&
@@ -295,6 +307,22 @@ export function CountryTabs({
       };
     });
   }, [ruleParametersByKey.global_growth_effects?.value]);
+
+  const lawEffectsByLaw = useMemo(() => {
+    return LAW_DEFINITIONS.map((def) => {
+      const lawRow = countryLawRows.find((r) => r.law_key === def.lawKey);
+      if (!lawRow) return null;
+      const config = ruleParametersByKey[def.configRuleKey]?.value as { level_thresholds?: Record<string, number> } | undefined;
+      const currentLevelKey = getLawLevelKeyFromScore(lawRow.score, config?.level_thresholds, def.levels);
+      const currentLevelLabel = def.levels.find((l) => l.key === currentLevelKey)?.label ?? currentLevelKey;
+      const effects = getLawEffectsForLevel(def.lawKey, currentLevelKey, ruleParametersByKey);
+      return {
+        lawLabel: def.title_fr,
+        levelLabel: currentLevelLabel,
+        effects,
+      };
+    }).filter((x): x is { lawLabel: string; levelLabel: string; effects: Array<{ effect_kind: string; effect_target: string | null; value: number }> } => x != null);
+  }, [countryLawRows, ruleParametersByKey]);
 
   const ideologyEffectsConfig = useMemo(() => {
     const raw = ruleParametersByKey.ideology_effects?.value;
@@ -340,10 +368,11 @@ export function CountryTabs({
         ai_status,
         aiMajorEffects,
         aiMinorEffects,
+        perkEffects,
         ideologyScores: ideologySummary?.scores,
         ideologyEffectsConfig: ideologyEffectsConfig.length > 0 ? ideologyEffectsConfig : undefined,
       }),
-    [country.id, effects, lawLevelEffects, globalGrowthEffects, ai_status, aiMajorEffects, aiMinorEffects, ideologySummary?.scores, ideologyEffectsConfig]
+    [country.id, effects, lawLevelEffects, globalGrowthEffects, ai_status, aiMajorEffects, aiMinorEffects, perkEffects, ideologySummary?.scores, ideologyEffectsConfig]
   );
 
   const tickBreakdownResult = useMemo(() => {
@@ -379,8 +408,10 @@ export function CountryTabs({
         ai_status,
         aiMajorEffects,
         aiMinorEffects,
+        perkEffects,
         ideologyScores: ideologySummary?.scores,
         ideologyEffectsConfig: ideologyEffectsConfig.length > 0 ? ideologyEffectsConfig : undefined,
+        lawEffectsByLaw,
       },
       {
         mobilisationLevelName: getLawLevelLabel("mobilisation", mobilisationLevelKey),
@@ -404,9 +435,11 @@ export function CountryTabs({
     ai_status,
     aiMajorEffects,
     aiMinorEffects,
+    perkEffects,
     mobilisationLevelKey,
     ideologySummary?.scores,
     ideologyEffectsConfig,
+    lawEffectsByLaw,
     rosterUnitsFlat,
   ]);
 
@@ -665,7 +698,13 @@ export function CountryTabs({
       return;
     }
     const isPermanent = effectDurationKind === "permanent";
-    const durationNum = isPermanent ? 0 : Math.min(100, Math.max(0, Math.floor(Number(effectDurationRemaining) || 0)));
+    const durationRaw = Number(effectDurationRemaining);
+    if (!isPermanent && (!Number.isFinite(durationRaw) || durationRaw < 1)) {
+      setEffectError("La durée doit être d'au moins 1 jour.");
+      setEffectSaving(false);
+      return;
+    }
+    const durationNum = isPermanent ? 0 : Math.min(DURATION_DAYS_MAX, Math.max(1, Math.floor(durationRaw)));
     const valueToStore = getEffectKindValueHelper(effect_kind).displayToStored(valueNum);
     const supabase = createClient();
     const row = {
@@ -1067,6 +1106,9 @@ export function CountryTabs({
           country={country}
           rankPopulation={rankPopulation}
           rankGdp={rankGdp}
+          rankInfluence={rankInfluence}
+          rankHardPower={rankHardPower}
+          rankHardPowerByType={rankHardPowerByType}
           rankEmoji={rankEmoji}
           panelClass={panelClass}
           panelStyle={panelStyle}
@@ -1103,6 +1145,8 @@ export function CountryTabs({
           hardPowerByBranch={localHardPowerByBranch ?? hardPowerByBranch}
           sphereData={sphereData}
           ideologySummary={ideologySummary}
+          countryLawRows={countryLawRows}
+          ruleParametersByKey={ruleParametersByKey}
           otherCountriesForRelation={otherCountriesForRelation}
           resolvedEffects={resolvedEffects}
         />
@@ -1238,6 +1282,7 @@ export function CountryTabs({
           breakdown={tickBreakdownResult.breakdown}
           expected={tickBreakdownResult.expected}
           country={country}
+          latestUpdateLog={updateLogs[0] ?? null}
           panelClass={panelClass}
           panelStyle={panelStyle}
         />
