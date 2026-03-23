@@ -64,6 +64,42 @@ export function normalizeWikiImageAttrs(attrs: Record<string, unknown>): Record<
 }
 
 /**
+ * Dans une liste, le texte du &lt;li&gt; peut encore commencer par « - » ou « 1. »
+ * (saisie Markdown / conversion) alors que le navigateur affiche déjà une puce ou un numéro → doublon visuel.
+ */
+function stripListItemParagraphPrefix(
+  paragraph: JSONContent,
+  parentListType: string | undefined
+): JSONContent {
+  if (
+    parentListType !== "bulletList" &&
+    parentListType !== "orderedList"
+  ) {
+    return paragraph;
+  }
+  if (paragraph.type !== "paragraph" || !Array.isArray(paragraph.content) || paragraph.content.length === 0) {
+    return paragraph;
+  }
+  const first = paragraph.content[0];
+  if (first.type !== "text" || typeof first.text !== "string") {
+    return paragraph;
+  }
+  /** Tiret / puce déjà rendus par &lt;ul&gt;/&lt;ol&gt; : on retire le préfixe même si seul « - » en fin de segment. */
+  const pattern =
+    parentListType === "bulletList"
+      ? /^\s*[-*•](?:\s+|$)/
+      : /^\s*\d+[.)](?:\s+|$)/;
+  const newText = first.text.replace(pattern, "");
+  if (newText === first.text) {
+    return paragraph;
+  }
+  return {
+    ...paragraph,
+    content: [{ ...first, text: newText }, ...paragraph.content.slice(1)],
+  };
+}
+
+/**
  * Corrige les attributs image invalides (ex. width "50%" → le NodeView TipTap
  * fait `${width}px` → "50%px", ce qui casse le resize et peut corrompre le doc).
  */
@@ -72,7 +108,7 @@ export function normalizeWikiDoc(doc: JSONContent | null | undefined): JSONConte
     return { ...FALLBACK_DOC };
   }
 
-  const walk = (node: JSONContent): JSONContent => {
+  const walk = (node: JSONContent, parentType?: string): JSONContent => {
     /**
      * Si `attrs` est absent (JSON DB / vieux exports), `Node.fromJSON` reçoit
      * `create(undefined)` et ProseMirror remplit uniquement avec `defaultAttrs` → src/storagePath perdus.
@@ -87,8 +123,20 @@ export function normalizeWikiDoc(doc: JSONContent | null | undefined): JSONConte
       return { ...node, attrs };
     }
 
+    if (node.type === "listItem" && Array.isArray(node.content)) {
+      return {
+        ...node,
+        content: node.content.map((child, idx) => {
+          if (idx === 0 && child.type === "paragraph") {
+            return stripListItemParagraphPrefix(child, parentType);
+          }
+          return walk(child, "listItem");
+        }),
+      };
+    }
+
     if (Array.isArray(node.content)) {
-      return { ...node, content: node.content.map(walk) };
+      return { ...node, content: node.content.map((child) => walk(child, node.type)) };
     }
     return node;
   };

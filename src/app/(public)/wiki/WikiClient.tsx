@@ -159,7 +159,7 @@ export function WikiClient({ initialPages }: { initialPages: WikiPageRow[] }) {
 
   if (!pages.length) {
     return (
-      <div className="mx-auto max-w-6xl px-4 py-6">
+      <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6">
         <div className={`p-6 ${glassPanelClass}`}>
           <p className="text-white/85">
             Le wiki n’a pas encore de contenu. Les administrateurs peuvent l’alimenter depuis le tableau de bord.
@@ -170,7 +170,7 @@ export function WikiClient({ initialPages }: { initialPages: WikiPageRow[] }) {
   }
 
   return (
-    <div className="mx-auto max-w-6xl px-4 py-6">
+    <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6">
       <div className={`mb-4 p-3 ${glassPanelClass}`}>
         <label htmlFor="wiki-search" className="sr-only">
           Rechercher dans le wiki
@@ -219,7 +219,7 @@ export function WikiClient({ initialPages }: { initialPages: WikiPageRow[] }) {
           </nav>
         </aside>
 
-        <main className="min-w-0 flex-1" style={{ maxWidth: "70ch" }}>
+        <main className="min-w-0 w-full flex-1">
           <div className={glassPanelClass}>
             <article
               id={displayPage?.slug ?? displaySlug}
