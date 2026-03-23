@@ -92,3 +92,66 @@ body {
   color: var(--accent);
   border-bottom-color: var(--accent);
 }
+
+/* Wiki (TipTap) : images + texte autour (float). Largeur via barre d’outils (pas de resize TipTap). */
+.wiki-tiptap .ProseMirror {
+  overflow: auto;
+}
+
+/* Drag natif du navigateur désactivé ; ProseMirror gère le déplacement du bloc (nœud draggable). */
+.wiki-tiptap .ProseMirror img.wiki-img {
+  -webkit-user-drag: none;
+  user-drag: none;
+  cursor: pointer;
+  position: relative;
+  z-index: 1;
+  /* Filet de sécurité si width/height JSON sont encore corrompus (évite le « point » 1px). */
+  min-width: 2rem;
+  min-height: 2rem;
+}
+
+/* Pas de halo sur le conteneur éditable ; la sélection d’image doit rester visible (barre d’outils). */
+.wiki-tiptap .ProseMirror,
+.wiki-tiptap .ProseMirror:focus,
+.wiki-tiptap .ProseMirror-focused {
+  outline: none !important;
+}
+/* Nœud image = <img> atom : ProseMirror met la classe sur l’img, pas sur un parent. */
+.wiki-tiptap .ProseMirror-selectednode img.wiki-img,
+.wiki-tiptap .ProseMirror img.wiki-img.ProseMirror-selectednode {
+  outline: 2px solid var(--accent, #22c55e);
+  outline-offset: 2px;
+  border-radius: 0.75rem;
+}
+
+.wiki-tiptap img.wiki-img[data-align="left"],
+.wiki-tiptap img.wiki-img--left {
+  float: left;
+  margin: 0 1rem 0.75rem 0;
+  max-width: min(50%, 100%);
+}
+
+.wiki-tiptap img.wiki-img[data-align="right"],
+.wiki-tiptap img.wiki-img--right {
+  float: right;
+  margin: 0 0 0.75rem 1rem;
+  max-width: min(50%, 100%);
+}
+
+.wiki-tiptap img.wiki-img[data-align="center"],
+.wiki-tiptap img.wiki-img--center {
+  display: block;
+  float: none;
+  clear: both;
+  margin: 0.75rem auto;
+  max-width: 100%;
+}
+
+.wiki-tiptap img.wiki-img[data-align="none"],
+.wiki-tiptap img.wiki-img--block {
+  display: block;
+  float: none;
+  clear: both;
+  margin: 0.75rem 0;
+  max-width: 100%;
+}

@@ -1,11 +1,13 @@
 import { WikiClient } from "./WikiClient";
+import { fetchWikiPages } from "@/lib/wiki/queries";
 
 export const metadata = {
   title: "Wiki",
   description: "Guide du simulateur : accueil, fiche pays, carte, classement, idéologie, règles.",
 };
 
-export default function WikiPage() {
+export default async function WikiPage() {
+  const pages = await fetchWikiPages();
   return (
     <div className="relative min-h-screen">
       {/* Arrière-plan fixe (aligné accueil / classement / fiche pays) */}
@@ -24,7 +26,7 @@ export default function WikiPage() {
         <div className="absolute inset-0 bg-black/40" />
       </div>
       <div className="relative z-10" style={{ isolation: "isolate" }}>
-        <WikiClient />
+        <WikiClient initialPages={pages} />
       </div>
     </div>
   );

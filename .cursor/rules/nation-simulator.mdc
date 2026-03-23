@@ -32,3 +32,4 @@ alwaysApply: true
 - **Public** : `/` = table des nations (indicateurs + variations si `country_history`) ; `/pays/[slug]` = fiche pays avec onglets **Cabinet, Généralités, Militaire, État-major, Avantages, Budget, Lois, Actions d’État** (et **Debug** admin) — visibilité selon joueur assigné / admin ; `/regles` et autres pages sous `src/app/(public)/`.
 - **Admin** : `/admin/connexion`, `/admin/inscription` ; après auth tableau de bord, CRUD pays, règles, joueurs, outils (ex. bot Discord), etc. Middleware protège `/admin` sauf connexion/inscription.
 - **Projet Supabase documenté** : ref `ssnqervwthlqvbewhtrd` — variables : `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` ; pas de service_role côté client. Voir `.env.example` et `SETUP.md`.
+- **Migrations distantes** : l’agent peut exécuter `npx --yes supabase db push` (voir `.cursor/rules/agent-cursor-supabase-cli.mdc` et `docs/agent-supabase-cli.md`) — ne pas renvoyer l’utilisateur sans avoir tenté.

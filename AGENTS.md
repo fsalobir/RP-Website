@@ -59,3 +59,8 @@ Implémentation : `src/app/(public)/pays/[slug]/CountryTabs.tsx`. Visibilité se
 - `supabase/migrations/`, `supabase/config.toml`, `supabase/CRON.md`
 - **Tests / logique** : `PLAN_SCENARIOS_TEST.md`
 - **Installation / déploiement** : `SETUP.md`
+
+## Agent Cursor — migrations Supabase (à ne pas oublier)
+
+- **L’agent peut exécuter** `npx --yes supabase db push` (permissions réseau) depuis la racine du repo pour appliquer les migrations sur la base liée — **ne pas** renvoyer l’utilisateur vers un « tu dois le faire seul » sans avoir tenté cette commande.
+- Détails : `docs/agent-supabase-cli.md` ; règle Cursor : `.cursor/rules/agent-cursor-supabase-cli.mdc` (always on).

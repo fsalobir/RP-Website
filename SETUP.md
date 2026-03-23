@@ -60,6 +60,18 @@ npm run supabase -- projects list
 
 (en cas d’erreur d’accès, reconnecte-toi au bon compte organisation.)
 
+#### Pousser les migrations vers la base distante
+
+Après `git pull` ou ajout de fichiers dans `supabase/migrations/` :
+
+```bash
+npx --yes supabase db push
+```
+
+Cette commande fonctionne **même si** `supabase` n’est pas dans le PATH Windows (le CLI est pris via `npx`). **Cursor / l’agent peut l’exécuter** pour toi — voir [docs/agent-supabase-cli.md](docs/agent-supabase-cli.md).
+
+Alternative si le CLI est installé localement : `npm run supabase -- db push`.
+
 ### 4. Vercel (production et previews)
 
 1. **Git** : *Settings* → *Git* — dépôt `fsalobir/RP-Website`, branche de production (souvent `main`).
@@ -78,3 +90,9 @@ Sur le dashboard Supabase du projet **`ssnqervwthlqvbewhtrd`**, les secrets de l
 - `.env.example` est **suivi** par Git (modèle sans secrets).
 - `.env.local` est **ignoré** — ne jamais le committer.
 - Après ajout de `.env.example`, `git status` doit le lister comme fichier suivi (pas « ignoré »).
+
+### 7. Wiki (contenu éditable)
+
+- **Lecture** : page publique `/wiki` ; données dans la table `wiki_pages` (contenu JSON TipTap).
+- **Édition** : `/admin/wiki` (comptes **admin** uniquement). Images : bucket Storage **`wiki-images`** (upload max. **5 Mo** côté app ; politiques RLS : lecture publique, écriture réservée aux admins).
+- **Migrations** : `146_wiki_pages_and_storage.sql` (schéma + bucket), `147_seed_wiki_pages.sql` (pages racine), `148_wiki_subsections_seed.sql` (sous-sections / pages enfants). Régénération : `npm run wiki:generate-seed`, `npm run wiki:generate-subsections`.
