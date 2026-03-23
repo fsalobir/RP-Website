@@ -213,7 +213,7 @@ export function CarteIIMapLibre({ initialDataset }: Props) {
         style: createStyle(basemap),
         center: [0, 20],
         zoom: 2.7,
-        attributionControl: true,
+        attributionControl: {},
       });
       mapRef.current = map;
       map.on("error", (event) => {

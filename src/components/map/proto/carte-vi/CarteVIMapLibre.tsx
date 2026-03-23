@@ -146,7 +146,7 @@ export function CarteVIMapLibre({ initialDataset }: Props) {
         style: createCarteVIStyle(tileTemplate),
         center: [0, 20],
         zoom: 2.6,
-        attributionControl: true,
+        attributionControl: {},
       });
       mapRef.current = map;
       map.on("load", () => {

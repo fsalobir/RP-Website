@@ -234,7 +234,7 @@ export function CarteVDeckMinimal({ initialDataset }: Props) {
                   controller={{ type: MapController, dragPan: true, scrollZoom: true, doubleClickZoom: true }}
                   layers={layers}
                   onClick={handleClick}
-                  style={{ position: "absolute", inset: 0 }}
+                  style={{ position: "absolute", inset: "0" }}
                 />
               </CarteVDeckBoundary>
             </>
