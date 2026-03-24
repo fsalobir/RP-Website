@@ -59,7 +59,7 @@ const BUDGET_MINISTRIES = [
 
 type BudgetPctKey = (typeof BUDGET_MINISTRIES)[number]["key"];
 
-const DEFAULT_BUDGET_FRACTION = 0.1;
+const DEFAULT_BUDGET_FRACTION = 0.3;
 
 function getDefaultPcts(): Record<BudgetPctKey, number> {
   return {
@@ -558,8 +558,10 @@ export function CountryTabs({
   }, [budget?.id, resolvedEffects]);
 
   const totalPct = BUDGET_MINISTRIES.reduce((s, m) => s + pcts[m.key], 0);
+  const totalPctDisplay = Math.round(totalPct * 10) / 10;
   const forcedMinPcts = getForcedMinPcts(resolvedEffects);
   const allocationCap = getAllocationCapPercent(resolvedEffects);
+  const overAllocation = totalPctDisplay > allocationCap;
   const gdpNum = Number(country.gdp) || 0;
   const totalBudgetAnnual = gdpNum * budgetFraction;
   const totalBudgetMonthly = totalBudgetAnnual / 12;
@@ -826,7 +828,7 @@ export function CountryTabs({
   };
 
   const handleSaveBudget = async () => {
-    if (totalPct > allocationCap) {
+    if (overAllocation) {
       setBudgetError(`La somme des allocations ne doit pas dépasser ${allocationCap} %.`);
       return;
     }
@@ -841,7 +843,7 @@ export function CountryTabs({
     } else {
       const { error } = await supabase.from("country_budget").insert({
         country_id: country.id,
-        budget_fraction: budgetFraction,
+        budget_fraction: isAdmin ? budgetFraction : DEFAULT_BUDGET_FRACTION,
         ...pcts,
       });
       if (error) setBudgetError(error.message);
@@ -1211,7 +1213,8 @@ export function CountryTabs({
           setBudgetFraction={setBudgetFraction}
           pcts={pcts}
           setPcts={setPcts}
-          totalPct={totalPct}
+          totalPct={totalPctDisplay}
+          overAllocation={overAllocation}
           forcedMinPcts={forcedMinPcts}
           allocationCap={allocationCap}
           totalBudgetMonthly={totalBudgetMonthly}
