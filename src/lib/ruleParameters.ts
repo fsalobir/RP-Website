@@ -78,8 +78,8 @@ export const BUDGET_MINISTRY_LABELS: Record<string, string> = {
   budget_procuration_militaire: "Procuration Militaire",
 };
 
-/** Types d’effet budget (agrégats : population, PIB, stats). */
-export const BUDGET_EFFECT_TYPE_IDS = [
+/** Types d’effet budget classiques (population, PIB, stats société). */
+export const BUDGET_STAT_EFFECT_TYPE_IDS = [
   "population",
   "gdp",
   "militarism",
@@ -87,9 +87,28 @@ export const BUDGET_EFFECT_TYPE_IDS = [
   "science",
   "stability",
 ] as const;
+export type BudgetStatEffectType = (typeof BUDGET_STAT_EFFECT_TYPE_IDS)[number];
+
+/** Relations bilatérales + vitesse État-major (cron + admin). */
+export const BUDGET_EXTENDED_EFFECT_TYPE_IDS = [
+  "bilateral_relations",
+  "etat_major_design",
+  "etat_major_recrutement",
+  "etat_major_procuration",
+  "etat_major_stock",
+] as const;
+export type BudgetExtendedEffectType = (typeof BUDGET_EXTENDED_EFFECT_TYPE_IDS)[number];
+
+/** Tous les types d’effet configurables dans `value.effects` d’un ministère. */
+export const BUDGET_EFFECT_TYPE_IDS = [
+  ...BUDGET_STAT_EFFECT_TYPE_IDS,
+  ...BUDGET_EXTENDED_EFFECT_TYPE_IDS,
+] as const;
 export type BudgetMinistryEffectType = (typeof BUDGET_EFFECT_TYPE_IDS)[number];
 
-/** Un type d’effet avec libellé FR et défaut pour gravity_applies (true pour stats, false pour pop/gdp). */
+export type BilateralRelationScope = "world" | "same_continent" | "neighbors";
+
+/** Un type d’effet avec libellé FR et défaut pour gravity_applies. */
 export const BUDGET_EFFECT_TYPES: { id: BudgetMinistryEffectType; label: string; defaultGravityApplies: boolean }[] = [
   { id: "population", label: "Population", defaultGravityApplies: false },
   { id: "gdp", label: "PIB", defaultGravityApplies: false },
@@ -97,6 +116,11 @@ export const BUDGET_EFFECT_TYPES: { id: BudgetMinistryEffectType; label: string;
   { id: "industry", label: "Industrie", defaultGravityApplies: true },
   { id: "science", label: "Science", defaultGravityApplies: true },
   { id: "stability", label: "Stabilité", defaultGravityApplies: true },
+  { id: "bilateral_relations", label: "Relations bilatérales (portée + plage)", defaultGravityApplies: false },
+  { id: "etat_major_design", label: "État-major — vitesse Bureau de design", defaultGravityApplies: true },
+  { id: "etat_major_recrutement", label: "État-major — vitesse Recrutement", defaultGravityApplies: true },
+  { id: "etat_major_procuration", label: "État-major — vitesse Procuration", defaultGravityApplies: true },
+  { id: "etat_major_stock", label: "État-major — vitesse Stock stratégique", defaultGravityApplies: true },
 ];
 
 export const BUDGET_EFFECT_TYPE_LABELS: Record<string, string> = Object.fromEntries(
@@ -110,6 +134,10 @@ export type BudgetMinistryEffectDef = {
   malus: number;
   /** Si true, appliquer le facteur gravité (moyenne mondiale vs pays). Défaut selon le type. */
   gravity_applies?: boolean;
+  /** Uniquement si effect_type === bilateral_relations */
+  relation_scope?: BilateralRelationScope;
+  relation_band_min?: number;
+  relation_band_max?: number;
 };
 
 /**
@@ -160,24 +188,181 @@ export function getEffectsListForMinistry(
   const numBonus = (v: unknown) => { const n = Number(v); return typeof n === "number" && !Number.isNaN(n) ? n : 0; };
   const numMalus = (v: unknown) => { const n = Number(v); return typeof n === "number" && !Number.isNaN(n) ? n : -0.05; };
   if (value?.effects && value.effects.length > 0) {
-    return value.effects.map((e) => ({
-      effect_type: e.effect_type,
-      bonus: numBonus(e.bonus),
-      malus: numMalus(e.malus),
-      gravity_applies: e.gravity_applies ?? BUDGET_EFFECT_TYPES.find((t) => t.id === e.effect_type)?.defaultGravityApplies ?? false,
-    }));
+    return value.effects.map((e) => {
+      const meta = BUDGET_EFFECT_TYPES.find((t) => t.id === e.effect_type);
+      const base: BudgetMinistryEffectDef = {
+        effect_type: e.effect_type,
+        bonus: numBonus(e.bonus),
+        malus: numMalus(e.malus),
+        gravity_applies: e.gravity_applies ?? meta?.defaultGravityApplies ?? false,
+      };
+      if (e.effect_type === "bilateral_relations") {
+        const scope = (e as BudgetMinistryEffectDef).relation_scope;
+        const validScope: BilateralRelationScope =
+          scope === "same_continent" || scope === "neighbors" ? scope : "world";
+        const bmin = Number((e as BudgetMinistryEffectDef).relation_band_min);
+        const bmax = Number((e as BudgetMinistryEffectDef).relation_band_max);
+        return {
+          ...base,
+          relation_scope: validScope,
+          relation_band_min: Number.isFinite(bmin) ? Math.max(-100, Math.min(100, Math.round(bmin))) : -100,
+          relation_band_max: Number.isFinite(bmax) ? Math.max(-100, Math.min(100, Math.round(bmax))) : 100,
+        };
+      }
+      return base;
+    });
   }
   const fallbackList = BUDGET_MINISTRY_EFFECTS[ministryKey] ?? [];
   const bonuses = value?.bonuses ?? {};
   const maluses = value?.maluses ?? {};
   return fallbackList
-    .filter(({ key }) => BUDGET_EFFECT_TYPE_IDS.includes(key as BudgetMinistryEffectType))
+    .filter(({ key }) => BUDGET_STAT_EFFECT_TYPE_IDS.includes(key as BudgetStatEffectType))
     .map(({ key }) => ({
       effect_type: key as BudgetMinistryEffectType,
       bonus: numBonus(bonuses[key]),
       malus: numMalus(maluses[key]),
       gravity_applies: BUDGET_EFFECT_TYPES.find((t) => t.id === key)?.defaultGravityApplies ?? false,
     }));
+}
+
+/** Contribution brute budget (même formule que le CTE `bc` SQL du cron). */
+export function budgetMinistryRawContrib(pct: number, minPct: number, bonus: number, malus: number): number {
+  const min = Math.max(0, minPct);
+  if (pct >= min) return (pct / 100) * bonus;
+  return ((min - pct) / Math.max(min, 1e-9)) * malus;
+}
+
+/** Réplique de `public.cron_gravity_factor` pour prévisions UI (TypeScript). */
+export function cronGravityFactorTs(c: number, ga: boolean, gp: number, av: number, cv: number): number {
+  if (!ga) return c;
+  const avSafe = av === 0 ? 1e-9 : av;
+  const signC = c >= 0 ? 1 : -1;
+  const term =
+    1 +
+    (gp / 100) *
+      (((av - cv) / avSafe) * ((1 + signC) / 2) + ((cv - av) / avSafe) * ((1 - signC) / 2));
+  const clamped = Math.max(0.1, Math.min(2, term));
+  return c * clamped;
+}
+
+/** Stat monde vs pays pour la gravité selon le type d’effet (aligné sur le cron SQL). */
+export function budgetEffectGravityStatPair(
+  effectType: string,
+  world: { pop: number; gdp: number; mil: number; ind: number; sci: number; stab: number },
+  country: { population: number; gdp: number; militarism: number; industry: number; science: number; stability: number }
+): { avg: number; cv: number } {
+  switch (effectType) {
+    case "population":
+      return { avg: world.pop, cv: country.population };
+    case "gdp":
+    case "etat_major_procuration":
+    case "bilateral_relations":
+      return { avg: world.gdp, cv: country.gdp };
+    case "militarism":
+    case "etat_major_recrutement":
+      return { avg: world.mil, cv: country.militarism };
+    case "industry":
+    case "etat_major_design":
+      return { avg: world.ind, cv: country.industry };
+    case "science":
+    case "etat_major_stock":
+      return { avg: world.sci, cv: country.science };
+    case "stability":
+      return { avg: world.stab, cv: country.stability };
+    default:
+      return { avg: world.gdp, cv: country.gdp };
+  }
+}
+
+/** Champ `pct_*` dans `country_budget` / état local budget pour chaque ministère (clé rule_parameters). */
+export const BUDGET_MINISTRY_TO_PCT_KEY: Record<string, string> = {
+  budget_etat: "pct_etat",
+  budget_education: "pct_education",
+  budget_recherche: "pct_recherche",
+  budget_infrastructure: "pct_infrastructure",
+  budget_sante: "pct_sante",
+  budget_industrie: "pct_industrie",
+  budget_defense: "pct_defense",
+  budget_interieur: "pct_interieur",
+  budget_affaires_etrangeres: "pct_affaires_etrangeres",
+  budget_procuration_militaire: "pct_procuration_militaire",
+};
+
+export const BILATERAL_RELATION_SCOPE_LABELS: Record<BilateralRelationScope, string> = {
+  world: "Monde (tous les pays)",
+  same_continent: "Même continent",
+  neighbors: "Voisins (carte)",
+};
+
+export function budgetMinistryFinalContrib(
+  pct: number,
+  minPct: number,
+  bonus: number,
+  malus: number,
+  gravityApplies: boolean,
+  gravityPct: number,
+  effectType: string,
+  world: { pop: number; gdp: number; mil: number; ind: number; sci: number; stab: number },
+  country: { population: number; gdp: number; militarism: number; industry: number; science: number; stability: number }
+): number {
+  const raw = budgetMinistryRawContrib(pct, minPct, bonus, malus);
+  const { avg, cv } = budgetEffectGravityStatPair(effectType, world, country);
+  return cronGravityFactorTs(raw, gravityApplies, gravityPct, avg, cv);
+}
+
+/** Somme des bonus budget ministères pour les quatre vitesse État-major (aligné cron / gravité). */
+export function sumEtatMajorBudgetBonusesFromRules(
+  ruleParametersByKey: Record<string, { value: unknown } | undefined>,
+  budgetPctByField: Record<string, number>,
+  worldAvgs: { pop_avg: number; gdp_avg: number; mil_avg: number; ind_avg: number; sci_avg: number; stab_avg: number } | null,
+  country: { population: number; gdp: number; militarism: number; industry: number; science: number; stability: number }
+): { em_design_bonus: number; em_rec_bonus: number; em_proc_bonus: number; em_stock_bonus: number } {
+  const world = worldAvgs ?? {
+    pop_avg: country.population,
+    gdp_avg: country.gdp,
+    mil_avg: country.militarism,
+    ind_avg: country.industry,
+    sci_avg: country.science,
+    stab_avg: country.stability,
+  };
+  const w = { pop: world.pop_avg, gdp: world.gdp_avg, mil: world.mil_avg, ind: world.ind_avg, sci: world.sci_avg, stab: world.stab_avg };
+  const sums = { em_design_bonus: 0, em_rec_bonus: 0, em_proc_bonus: 0, em_stock_bonus: 0 };
+  for (const mk of BUDGET_MINISTRY_KEYS) {
+    const pctKey = BUDGET_MINISTRY_TO_PCT_KEY[mk];
+    const pct = pctKey ? Number(budgetPctByField[pctKey] ?? 0) : 0;
+    const rule = ruleParametersByKey[mk];
+    const val = rule?.value as BudgetMinistryValue | undefined;
+    const effects = getEffectsListForMinistry(mk, val);
+    const minPct = val?.min_pct ?? 5;
+    const gravPct = val?.gravity_pct ?? 50;
+    for (const eff of effects) {
+      const t = eff.effect_type;
+      if (
+        t !== "etat_major_design" &&
+        t !== "etat_major_recrutement" &&
+        t !== "etat_major_procuration" &&
+        t !== "etat_major_stock"
+      ) {
+        continue;
+      }
+      const fc = budgetMinistryFinalContrib(
+        pct,
+        minPct,
+        eff.bonus,
+        eff.malus,
+        eff.gravity_applies ?? true,
+        gravPct,
+        t,
+        w,
+        country
+      );
+      if (t === "etat_major_design") sums.em_design_bonus += fc;
+      else if (t === "etat_major_recrutement") sums.em_rec_bonus += fc;
+      else if (t === "etat_major_procuration") sums.em_proc_bonus += fc;
+      else sums.em_stock_bonus += fc;
+    }
+  }
+  return sums;
 }
 
 export function getRuleLabel(key: string): string {

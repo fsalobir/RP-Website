@@ -129,7 +129,10 @@ export function ClassementContent({ rows }: { rows: Row[] }) {
 
   const rankedInfluence = useRanked(rows, "influence");
   const top3 = rankedInfluence.slice(0, 3);
-  const rest = rankedInfluence.slice(3);
+  const middle5 = rankedInfluence.slice(3, 8);
+  const middle5Top = middle5.slice(0, 3);
+  const middle5Bottom = middle5.slice(3);
+  const rest = rankedInfluence.slice(8);
 
   const rankedMilitaire = useRanked(rows, "militarism");
   const rankedHPTerre = useRanked(rows, "hard_power_terre");
@@ -171,7 +174,7 @@ export function ClassementContent({ rows }: { rows: Row[] }) {
         </button>
         <span className="ml-2 inline-flex items-center" onClick={(e) => e.stopPropagation()}>
           <InfoTooltipWithWikiLink
-            text="Rangs des pays par influence, puissance militaire ou indicateurs économiques. Les flèches indiquent l'évolution du rang."
+            text="Rangs des pays par influence totale (influence propre + bonus de sphère), puissance militaire ou indicateurs économiques. Les flèches indiquent l'évolution du rang."
             wikiSectionId="classement-metrics"
             side="bottom"
           />
@@ -197,15 +200,6 @@ export function ClassementContent({ rows }: { rows: Row[] }) {
                     <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-lg font-bold text-white/90 bg-white/20">
                       {rank}
                     </span>
-                    {prev_rank != null && prev_rank !== rank && (
-                      <span
-                        className="text-lg leading-none"
-                        style={{ color: rank < prev_rank ? "#86efac" : "#fca5a5" }}
-                        aria-hidden
-                      >
-                        {rank < prev_rank ? "▲" : "▼"}
-                      </span>
-                    )}
                     {row.country.flag_url ? (
                       <Image loader={flagLoader} unoptimized src={row.country.flag_url} alt="" width={48} height={32} className="h-8 w-12 rounded object-cover" />
                     ) : (
@@ -215,7 +209,7 @@ export function ClassementContent({ rows }: { rows: Row[] }) {
                       <span className="font-medium text-white">{row.country.name}</span>
                       {row.influence != null && !Number.isNaN(row.influence) && (
                         <p className={`text-xs ${glassMutedClass}`}>
-                          Influence : {Number(row.influence).toLocaleString("fr-FR", { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
+                          Influence totale : {Number(row.influence).toLocaleString("fr-FR", { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
                         </p>
                       )}
                     </div>
@@ -224,9 +218,74 @@ export function ClassementContent({ rows }: { rows: Row[] }) {
               )}
             </div>
           </section>
+          <section className={`${glassPanelClass} p-6`}>
+            <h2 className={`mb-4 ${glassTitleClass}`}>
+              Les 5 puissances moyennes
+            </h2>
+            {middle5.length === 0 ? (
+              <p className={glassMutedClass}>Aucun pays en base.</p>
+            ) : (
+              <>
+                <div className="grid gap-4 sm:grid-cols-3">
+                  {middle5Top.map(({ row, rank }) => (
+                    <Link
+                      key={row.country.id}
+                      href={`/pays/${row.country.slug}`}
+                      className="flex items-center gap-4 rounded-xl border border-white/25 bg-white/10 p-4 backdrop-blur-sm transition-colors hover:bg-white/20 hover:border-white/35"
+                    >
+                      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-lg font-bold text-white/90 bg-white/20">
+                        {rank}
+                      </span>
+                      {row.country.flag_url ? (
+                        <Image loader={flagLoader} unoptimized src={row.country.flag_url} alt="" width={48} height={32} className="h-8 w-12 rounded object-cover" />
+                      ) : (
+                        <div className="h-8 w-12 rounded bg-white/20" />
+                      )}
+                      <div className="min-w-0 flex-1">
+                        <span className="font-medium text-white">{row.country.name}</span>
+                        {row.influence != null && !Number.isNaN(row.influence) && (
+                          <p className={`text-xs ${glassMutedClass}`}>
+                            Influence totale : {Number(row.influence).toLocaleString("fr-FR", { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
+                          </p>
+                        )}
+                      </div>
+                    </Link>
+                  ))}
+                </div>
+                {middle5Bottom.length > 0 && (
+                  <div className="mt-4 grid gap-4 sm:grid-cols-6">
+                    {middle5Bottom.map(({ row, rank }, idx) => (
+                      <Link
+                        key={row.country.id}
+                        href={`/pays/${row.country.slug}`}
+                        className={`flex items-center gap-4 rounded-xl border border-white/25 bg-white/10 p-4 backdrop-blur-sm transition-colors hover:bg-white/20 hover:border-white/35 sm:col-span-2 ${idx === 0 ? "sm:col-start-2" : "sm:col-start-4"}`}
+                      >
+                        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-lg font-bold text-white/90 bg-white/20">
+                          {rank}
+                        </span>
+                        {row.country.flag_url ? (
+                          <Image loader={flagLoader} unoptimized src={row.country.flag_url} alt="" width={48} height={32} className="h-8 w-12 rounded object-cover" />
+                        ) : (
+                          <div className="h-8 w-12 rounded bg-white/20" />
+                        )}
+                        <div className="min-w-0 flex-1">
+                          <span className="font-medium text-white">{row.country.name}</span>
+                          {row.influence != null && !Number.isNaN(row.influence) && (
+                            <p className={`text-xs ${glassMutedClass}`}>
+                              Influence totale : {Number(row.influence).toLocaleString("fr-FR", { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
+                            </p>
+                          )}
+                        </div>
+                      </Link>
+                    ))}
+                  </div>
+                )}
+              </>
+            )}
+          </section>
           <section className={`${glassPanelClass} overflow-hidden`}>
             <h2 className={`mb-0 px-6 pt-6 pb-4 ${glassTitleClass}`}>
-              Autres nations
+              Les puissances mineures
             </h2>
             {rest.length === 0 ? (
               <p className={`p-6 text-center ${glassMutedClass}`}>Aucune autre nation.</p>
@@ -237,7 +296,7 @@ export function ClassementContent({ rows }: { rows: Row[] }) {
                     <th className={`p-3 font-medium ${glassMutedClass}`}>Rang</th>
                     <th className={`p-3 font-medium ${glassMutedClass}`}></th>
                     <th className={`p-3 font-medium ${glassMutedClass}`}>Pays</th>
-                    <th className={`p-3 font-medium ${glassMutedClass}`}>Influence</th>
+                    <th className={`p-3 font-medium ${glassMutedClass}`}>Influence totale</th>
                   </tr>
                 </thead>
                 <tbody>

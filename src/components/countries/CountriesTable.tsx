@@ -59,7 +59,7 @@ export type Row = {
 
 const COLUMNS: { key: SortKey; label: string }[] = [
   { key: "name", label: "Pays" },
-  { key: "influence", label: "Influence" },
+  { key: "influence", label: "Influence totale" },
   { key: "gdp", label: "PIB" },
   { key: "population", label: "Population" },
   { key: "stability", label: "Stabilité" },
@@ -159,7 +159,7 @@ export function CountriesTable({
   const playedSet = useMemo(() => new Set(countryIdsWithPlayer), [countryIdsWithPlayer]);
   const wikiAccueil = showWikiTooltips ? (
     <InfoTooltipWithWikiLink
-      text="Colonnes de la table : pays, sphère, influence, PIB, population, stabilité. Les flèches vertes/rouges indiquent la variation par rapport au dernier enregistrement."
+      text="Colonnes de la table : pays, sphère, influence totale (influence propre + bonus de sphère), PIB, population, stabilité. Les flèches vertes/rouges indiquent la variation par rapport au dernier enregistrement."
       wikiSectionId="accueil-colonnes"
       side="bottom"
     />

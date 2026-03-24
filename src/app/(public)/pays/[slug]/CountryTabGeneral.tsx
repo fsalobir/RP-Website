@@ -323,6 +323,12 @@ export function CountryTabGeneral({
   otherCountriesForRelation = [],
   resolvedEffects = [],
 }: CountryTabGeneralProps) {
+  const baseInfluenceValue = influenceResult?.influence ?? null;
+  const totalInfluenceValue = displayInfluence ?? baseInfluenceValue;
+  const sphereInfluenceBonus =
+    totalInfluenceValue != null && baseInfluenceValue != null
+      ? totalInfluenceValue - baseInfluenceValue
+      : 0;
   const [effectsView, setEffectsView] = useState<"active" | "perks" | "ideology" | "influence" | "laws">("active");
   const strongestNeighborInfluence = Math.max(
     0,
@@ -421,19 +427,27 @@ export function CountryTabGeneral({
             {(influenceResult != null || displayInfluence != null) && (
               <div className="text-center">
                 <dt className={`text-sm font-semibold ${glassMutedClass}`}>
-                  <strong className={glassTextClass}>Influence</strong>
+                  <strong className={glassTextClass}>Influence totale</strong>
                   {rankInfluence > 0 && ` — ${rankEmoji(rankInfluence) ? `${rankEmoji(rankInfluence)} ` : ""}#${rankInfluence}`}
                 </dt>
-                <dd className={`stat-value mt-0.5 text-2xl font-bold ${glassTextClass}`}>{formatNumber(Math.round(displayInfluence ?? influenceResult?.influence ?? 0))}</dd>
+                <dd className={`stat-value mt-0.5 text-2xl font-bold ${glassTextClass}`}>{formatNumber(Math.round(totalInfluenceValue ?? 0))}</dd>
               </div>
             )}
           </div>
           {influenceResult != null && (
             <dl className={`mt-3 flex flex-wrap justify-center gap-x-4 gap-y-1 text-xs ${glassMutedClass}`}>
+              <span>Influence propre : {formatNumber(Math.round(baseInfluenceValue ?? 0))}</span>
+              {sphereInfluenceBonus !== 0 && (
+                <span>
+                  Bonus sphère : {sphereInfluenceBonus > 0 ? "+" : ""}
+                  {formatNumber(Math.round(sphereInfluenceBonus))}
+                </span>
+              )}
               <span>PIB : {formatNumber(Math.round(influenceResult.componentsAfterGravity.gdp))}</span>
               <span>Population : {formatNumber(Math.round(influenceResult.componentsAfterGravity.population))}</span>
               <span>Stabilité : ×{Number(influenceResult.componentsAfterGravity.stabilityMultiplier).toLocaleString("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-              <span>Hard Power : {formatNumber(Math.round(influenceResult.componentsAfterGravity.military))}</span>
+              <span>Hard Power brut : {formatNumber(Math.round(hardPowerByBranch?.total ?? 0))}</span>
+              <span>Hard Power (pondéré) : {formatNumber(Math.round(influenceResult.componentsAfterGravity.military))}</span>
             </dl>
           )}
         </div>

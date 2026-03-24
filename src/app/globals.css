@@ -38,6 +38,12 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
+/* Au-dessus du menu public (sticky z-50) : les modales en createPortal ciblent ce nœud (sibling du shell). */
+#fon-modal-root {
+  position: relative;
+  z-index: 100000;
+}
+
 /* Panneaux type dashboard */
 .panel {
   background: var(--background-panel);

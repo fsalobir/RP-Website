@@ -25,9 +25,11 @@ export default function RootLayout({
   return (
     <html lang="fr">
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased min-h-screen flex flex-col`}
+        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
-        {children}
+        {/* flex sur un wrapper : évite que les modales (portail) soient des flex items du body avec un empilement bizarre sous le header sticky */}
+        <div className="flex min-h-screen flex-col">{children}</div>
+        <div id="fon-modal-root" />
       </body>
     </html>
   );

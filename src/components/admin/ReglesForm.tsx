@@ -11,8 +11,11 @@ import {
   BUDGET_EFFECT_TYPES,
   BUDGET_EFFECT_TYPE_LABELS,
   getEffectsListForMinistry,
+  budgetMinistryFinalContrib,
+  BILATERAL_RELATION_SCOPE_LABELS,
   type BudgetMinistryValue,
   type BudgetMinistryEffectDef,
+  type BilateralRelationScope,
 } from "@/lib/ruleParameters";
 import { DEFAULT_IDEOLOGY_CONFIG, getIdeologyConfig as parseIdeologyConfig, IDEOLOGY_IDS, IDEOLOGY_LABELS, type IdeologyConfig } from "@/lib/ideology";
 import { MOIS_LABELS } from "@/lib/worldDate";
@@ -1059,23 +1062,51 @@ export function ReglesForm({
   const baseNum = Number(simulatorBase);
   const worldAvgNum = Number(simulatorWorldAvg);
   const validNums = !Number.isNaN(baseNum) && !Number.isNaN(worldAvgNum) && simulatorParams;
-  const catchUpFactor = validNums && worldAvgNum > 0
-    ? 1 + ((simulatorParams.gravity_pct ?? 50) / 100) * (worldAvgNum - baseNum) / Math.max(worldAvgNum, 0.01)
-    : 1;
   const minPct = simulatorParams?.min_pct ?? 5;
   const effectsResolved = (simulatorParams && getEffectsListForMinistry(simulatorMinistry, simulatorParams)) ?? [];
   const allocationBelowMin = simulatorAllocationPct < minPct;
-  const malusScale = allocationBelowMin && minPct > 0
-    ? (minPct - simulatorAllocationPct) / minPct
-    : 0;
-  const bonusScale = !allocationBelowMin && minPct < 100
-    ? (simulatorAllocationPct - minPct) / (100 - minPct)
-    : 0;
-  const bonusesPerDay = effectsResolved.map((eff) => {
+  const gravPctSim = simulatorParams?.gravity_pct ?? 50;
+  const bonusesPerDay = effectsResolved.map((eff, effIdx) => {
     const label = BUDGET_EFFECT_TYPE_LABELS[eff.effect_type] ?? eff.effect_type;
-    const malus = malusScale * eff.malus;
-    const bonus = !allocationBelowMin ? eff.bonus * bonusScale * catchUpFactor : 0;
-    return { label, perDay: bonus, malusPerDay: malus };
+    if (!validNums) {
+      return { key: `${eff.effect_type}-${effIdx}`, line: `${label} : (saisir valeurs numériques)` };
+    }
+    const w = { pop: worldAvgNum, gdp: worldAvgNum, mil: worldAvgNum, ind: worldAvgNum, sci: worldAvgNum, stab: worldAvgNum };
+    const c = {
+      population: baseNum,
+      gdp: baseNum,
+      militarism: baseNum,
+      industry: baseNum,
+      science: baseNum,
+      stability: baseNum,
+    };
+    const ga = eff.gravity_applies ?? BUDGET_EFFECT_TYPES.find((t) => t.id === eff.effect_type)?.defaultGravityApplies ?? false;
+    const fc = budgetMinistryFinalContrib(
+      simulatorAllocationPct,
+      minPct,
+      eff.bonus,
+      eff.malus,
+      ga,
+      gravPctSim,
+      eff.effect_type,
+      w,
+      c
+    );
+    const scopeNote =
+      eff.effect_type === "bilateral_relations"
+        ? ` [${BILATERAL_RELATION_SCOPE_LABELS[(eff.relation_scope as BilateralRelationScope) ?? "world"] ?? eff.relation_scope}]`
+        : "";
+    if (eff.effect_type === "bilateral_relations") {
+      const r = Math.round(fc);
+      return {
+        key: `${eff.effect_type}-${effIdx}`,
+        line: `${label}${scopeNote} : ${r >= 0 ? "+" : ""}${r} / jour (points de relation, si plage courante respectée côté cron)`,
+      };
+    }
+    return {
+      key: `${eff.effect_type}-${effIdx}`,
+      line: `${label}${scopeNote} : ${fc >= 0 ? "+" : ""}${fc.toFixed(4)} / jour${allocationBelowMin ? " (sous seuil → malus intégré)" : ""}`,
+    };
   });
 
   return (
@@ -1535,7 +1566,16 @@ export function ReglesForm({
                                 </label>
                                 <select
                                   value={effect.effect_type}
-                                  onChange={(e) => updateBudgetEffectAt(r, idx, { effect_type: e.target.value as BudgetMinistryEffectDef["effect_type"] })}
+                                  onChange={(e) => {
+                                    const v = e.target.value as BudgetMinistryEffectDef["effect_type"];
+                                    const patch: Partial<BudgetMinistryEffectDef> = { effect_type: v };
+                                    if (v === "bilateral_relations") {
+                                      patch.relation_scope = "world";
+                                      patch.relation_band_min = -100;
+                                      patch.relation_band_max = 100;
+                                    }
+                                    updateBudgetEffectAt(r, idx, patch);
+                                  }}
                                   className={`${inputClassNarrow} min-w-28`}
                                   style={inputStyle}
                                 >
@@ -1584,6 +1624,63 @@ export function ReglesForm({
                                   <FormLabel label="Gravité" tooltip="Si activé, l'effet tient compte de l'écart entre le pays et la moyenne mondiale pour renforcer le rattrapage." />
                                 </label>
                               </div>
+                              {effect.effect_type === "bilateral_relations" && (
+                                <>
+                                  <div className="flex flex-col gap-0.5">
+                                    <label className="text-xs text-[var(--foreground-muted)]">
+                                      <FormLabel label="Portée" tooltip="Cibles dont la relation avec le pays sera modifiée chaque jour (si la valeur actuelle est dans la plage ci-dessous)." />
+                                    </label>
+                                    <select
+                                      value={(effect.relation_scope as BilateralRelationScope) ?? "world"}
+                                      onChange={(e) =>
+                                        updateBudgetEffectAt(r, idx, { relation_scope: e.target.value as BilateralRelationScope })
+                                      }
+                                      className={`${inputClassNarrow} min-w-40`}
+                                      style={inputStyle}
+                                    >
+                                      {(Object.keys(BILATERAL_RELATION_SCOPE_LABELS) as BilateralRelationScope[]).map((sc) => (
+                                        <option key={sc} value={sc}>
+                                          {BILATERAL_RELATION_SCOPE_LABELS[sc]}
+                                        </option>
+                                      ))}
+                                    </select>
+                                  </div>
+                                  <div className="flex flex-col gap-0.5">
+                                    <label className="text-xs text-[var(--foreground-muted)]">
+                                      <FormLabel label="Rel. min" tooltip="Niveau de relation (-100 à 100) en dessous duquel l'effet ne s'applique pas." />
+                                    </label>
+                                    <input
+                                      type="number"
+                                      min={-100}
+                                      max={100}
+                                      step={1}
+                                      value={effect.relation_band_min ?? -100}
+                                      onChange={(e) =>
+                                        updateBudgetEffectAt(r, idx, { relation_band_min: Math.round(Number(e.target.value)) || -100 })
+                                      }
+                                      className={`${inputClassNarrow} w-16`}
+                                      style={inputStyle}
+                                    />
+                                  </div>
+                                  <div className="flex flex-col gap-0.5">
+                                    <label className="text-xs text-[var(--foreground-muted)]">
+                                      <FormLabel label="Rel. max" tooltip="Niveau de relation au-dessus duquel l'effet ne s'applique pas." />
+                                    </label>
+                                    <input
+                                      type="number"
+                                      min={-100}
+                                      max={100}
+                                      step={1}
+                                      value={effect.relation_band_max ?? 100}
+                                      onChange={(e) =>
+                                        updateBudgetEffectAt(r, idx, { relation_band_max: Math.round(Number(e.target.value)) || 100 })
+                                      }
+                                      className={`${inputClassNarrow} w-16`}
+                                      style={inputStyle}
+                                    />
+                                  </div>
+                                </>
+                              )}
                               <button
                                 type="button"
                                 onClick={() => removeBudgetEffect(r, idx)}
@@ -1671,12 +1768,8 @@ export function ReglesForm({
               <div className="mt-3 rounded border p-2" style={{ borderColor: "var(--border-muted)" }}>
                 <div className="text-xs font-medium text-[var(--foreground-muted)]">Résultat / jour (× 30 ≈ / mois)</div>
                 <ul className="mt-1 list-none space-y-0.5 font-mono text-sm text-[var(--foreground)]">
-                  {bonusesPerDay.map(({ label, perDay, malusPerDay }) => (
-                    <li key={label}>
-                      {allocationBelowMin
-                        ? `${label} : malus ${malusPerDay.toFixed(4)} / jour`
-                        : `${label} : +${perDay.toFixed(4)} / jour`}
-                    </li>
+                  {bonusesPerDay.map(({ key, line }) => (
+                    <li key={key}>{line}</li>
                   ))}
                   {bonusesPerDay.length === 0 && <li className="text-[var(--foreground-muted)]">Aucun effet</li>}
                 </ul>
@@ -1691,7 +1784,7 @@ export function ReglesForm({
               ? (etatMajorRule.value as Record<string, unknown>)
               : {};
             const design = (raw.design as Record<string, number>) ?? { min_points_per_tick: 1, max_points_per_tick: 10 };
-            const recrutement = (raw.recrutement as Record<string, number>) ?? { min_points_per_tick: 1, max_points_per_tick: 10 };
+            const recrutement = (raw.recrutement as Record<string, number>) ?? { min_points_per_tick: 1, max_points_per_tick: 10, points_per_pct_defense: 0 };
             const stock = (raw.stock as Record<string, number>) ?? { min_points_per_tick: 1, max_points_per_tick: 10 };
             const procuration = (raw.procuration as Record<string, number>) ?? { base_points_per_tick: 0, points_per_pct_budget: 0.5 };
             const updateEtatMajor = (path: string, field: string, val: number) => {
@@ -1704,7 +1797,7 @@ export function ReglesForm({
               <CollapsibleBlock
                 key="etat_major"
                 title="État Major"
-                infoContent={<TooltipBody text="Points par tick : Design (industrie), Recrutement (militarisme), Stock (science), Procuration (budget)." />}
+                infoContent={<TooltipBody text="Points par tick : Design (industrie), Recrutement (militarisme + pts par % budget Défense), Stock (science), Procuration (budget)." />}
                 open={etatMajorOpen}
                 onToggle={() => setEtatMajorOpen((o) => !o)}
               >
@@ -1723,7 +1816,7 @@ export function ReglesForm({
                     </div>
                   </div>
                   <div>
-                    <div className="mb-1 text-xs font-medium text-[var(--foreground-muted)]">Recrutement (militarisme)</div>
+                    <div className="mb-1 text-xs font-medium text-[var(--foreground-muted)]">Recrutement (militarisme + budget Défense)</div>
                     <div className="flex flex-wrap gap-4">
                       <label className="flex items-center gap-2">
                         <span className="text-xs text-[var(--foreground-muted)]">Min pts/tick</span>
@@ -1732,6 +1825,10 @@ export function ReglesForm({
                       <label className="flex items-center gap-2">
                         <span className="text-xs text-[var(--foreground-muted)]">Max pts/tick</span>
                         <input type="number" min={0} step={0.5} value={recrutement.max_points_per_tick ?? 10} onChange={(e) => updateEtatMajor("recrutement", "max_points_per_tick", Number(e.target.value) || 0)} className={`${inputClassNarrow} w-20`} style={inputStyle} />
+                      </label>
+                      <label className="flex items-center gap-2">
+                        <span className="text-xs text-[var(--foreground-muted)]">Pts par % budget Défense (0–100)</span>
+                        <input type="number" min={0} step={0.01} value={recrutement.points_per_pct_defense ?? 0} onChange={(e) => updateEtatMajor("recrutement", "points_per_pct_defense", Number(e.target.value) || 0)} className={`${inputClassNarrow} w-20`} style={inputStyle} />
                       </label>
                     </div>
                   </div>

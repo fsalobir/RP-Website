@@ -7,6 +7,7 @@ import type { Country } from "@/types/database";
 import type { RosterRowByBranch } from "./countryTabsTypes";
 import type { ResolvedEffect } from "@/lib/countryEffects";
 import { saveEtatMajorFocus, type EtatMajorFocusPayload } from "./actions";
+import { sumEtatMajorBudgetBonusesFromRules } from "@/lib/ruleParameters";
 
 const BRANCH_LABELS: Record<MilitaryBranch, string> = {
   terre: "Terre",
@@ -17,7 +18,7 @@ const BRANCH_LABELS: Record<MilitaryBranch, string> = {
 
 type EtatMajorConfig = {
   design?: { min_points_per_tick?: number; max_points_per_tick?: number };
-  recrutement?: { min_points_per_tick?: number; max_points_per_tick?: number };
+  recrutement?: { min_points_per_tick?: number; max_points_per_tick?: number; points_per_pct_defense?: number };
   stock?: { min_points_per_tick?: number; max_points_per_tick?: number };
   procuration?: { base_points_per_tick?: number; points_per_pct_budget?: number };
 };
@@ -51,6 +52,10 @@ type CountryTabEtatMajorProps = {
   ruleParametersByKey: Record<string, { value: unknown }>;
   resolvedEffects: ResolvedEffect[];
   pctProcurationMilitaire?: number;
+  pctDefense?: number;
+  /** Pour estimer les bonus budget État-major (aligné cron). */
+  worldAverages?: { pop_avg: number; gdp_avg: number; mil_avg: number; ind_avg: number; sci_avg: number; stab_avg: number } | null;
+  budgetPctFields?: Record<string, number>;
   panelClass: string;
   panelStyle: React.CSSProperties;
   canEditCountry: boolean;
@@ -65,6 +70,9 @@ export function CountryTabEtatMajor({
   ruleParametersByKey,
   resolvedEffects,
   pctProcurationMilitaire = 0,
+  pctDefense = 0,
+  worldAverages = null,
+  budgetPctFields = {},
   panelClass,
   panelStyle,
   canEditCountry,
@@ -75,7 +83,7 @@ export function CountryTabEtatMajor({
 
   const config = (ruleParametersByKey.etat_major_config?.value ?? {}) as EtatMajorConfig;
   const designCfg = config.design ?? { min_points_per_tick: 1, max_points_per_tick: 10 };
-  const recrutementCfg = config.recrutement ?? { min_points_per_tick: 1, max_points_per_tick: 10 };
+  const recrutementCfg = config.recrutement ?? { min_points_per_tick: 1, max_points_per_tick: 10, points_per_pct_defense: 0 };
   const stockCfg = config.stock ?? { min_points_per_tick: 1, max_points_per_tick: 10 };
   const procurationCfg = config.procuration ?? { base_points_per_tick: 0, points_per_pct_budget: 0.5 };
 
@@ -87,25 +95,39 @@ export function CountryTabEtatMajor({
   const procurationBonus = getBonusFromEffects(resolvedEffects, "procuration_bonus_percent");
   const procurationPointsPerDay = getProcurationPointsPerDay(resolvedEffects);
 
+  const emFromBudget = sumEtatMajorBudgetBonusesFromRules(ruleParametersByKey, budgetPctFields, worldAverages, {
+    population: Number(country.population ?? 0),
+    gdp: Number(country.gdp ?? 0),
+    militarism: Number(country.militarism ?? 0),
+    industry: Number(country.industry ?? 0),
+    science: Number(country.science ?? 0),
+    stability: Number(country.stability ?? 0),
+  });
+
   const designPtsPerTick =
     (designCfg.min_points_per_tick ?? 1) +
     ((designCfg.max_points_per_tick ?? 10) - (designCfg.min_points_per_tick ?? 1)) * Math.min(10, Math.max(0, industry)) / 10;
-  const designPtsPerDay = Math.round(designPtsPerTick * (1 + designBonus));
+  const designPtsPerDay = Math.round(designPtsPerTick * (1 + designBonus + emFromBudget.em_design_bonus));
 
-  const recrutementPtsPerTick =
+  const recrutementBaseMil =
     (recrutementCfg.min_points_per_tick ?? 1) +
     ((recrutementCfg.max_points_per_tick ?? 10) - (recrutementCfg.min_points_per_tick ?? 1)) * Math.min(10, Math.max(0, militarism)) / 10;
-  const recrutementPtsPerDay = Math.round(recrutementPtsPerTick * (1 + recrutementBonus));
+  const recrutementDefenseAdd =
+    (recrutementCfg.points_per_pct_defense ?? 0) * Math.min(100, Math.max(0, pctDefense));
+  const recrutementPtsPerTick = recrutementBaseMil + recrutementDefenseAdd;
+  const recrutementPtsPerDay = Math.round(recrutementPtsPerTick * (1 + recrutementBonus + emFromBudget.em_rec_bonus));
 
   const stockPtsPerTick =
     (stockCfg.min_points_per_tick ?? 1) +
     ((stockCfg.max_points_per_tick ?? 10) - (stockCfg.min_points_per_tick ?? 1)) * Math.min(10, Math.max(0, science)) / 10;
-  const stockPtsPerDay = Math.round(stockPtsPerTick);
+  const stockPtsPerDay = Math.round(stockPtsPerTick * (1 + emFromBudget.em_stock_bonus));
 
   const procurationPct = pctProcurationMilitaire;
   const procurationPtsPerTick =
     (procurationCfg.base_points_per_tick ?? 0) + (procurationCfg.points_per_pct_budget ?? 0.5) * procurationPct;
-  const procurationPtsPerDay = Math.round((procurationPtsPerTick * (1 + procurationBonus)) + procurationPointsPerDay);
+  const procurationPtsPerDay = Math.round(
+    procurationPtsPerTick * (1 + procurationBonus + emFromBudget.em_proc_bonus) + procurationPointsPerDay
+  );
 
   const focus = etatMajorFocus ?? {
     design_roster_unit_id: null,

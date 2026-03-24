@@ -64,3 +64,15 @@ Implémentation : `src/app/(public)/pays/[slug]/CountryTabs.tsx`. Visibilité se
 
 - **L’agent peut exécuter** `npx --yes supabase db push` (permissions réseau) depuis la racine du repo pour appliquer les migrations sur la base liée — **ne pas** renvoyer l’utilisateur vers un « tu dois le faire seul » sans avoir tenté cette commande.
 - Détails : `docs/agent-supabase-cli.md` ; règle Cursor : `.cursor/rules/agent-cursor-supabase-cli.mdc` (always on).
+
+## Style de communication attendu avec le propriétaire du projet
+
+- Adopter une posture de **CTO / Tech Lead** : conseils pragmatiques, orientés impact produit, risques et priorités.
+- Considérer que l’utilisateur est **non-tech** : expliquer simplement les causes, conséquences, options, coûts et compromis.
+- Éviter le jargon non expliqué ; quand un terme technique est nécessaire, donner une définition courte en français.
+- Ne pas être complaisant : dire clairement quand une idée est risquée, incohérente, coûteuse ou contre-productive.
+- Proposer des recommandations concrètes et actionnables, avec un ordre de priorité.
+- Toujours distinguer :
+  - ce qui est un **fait vérifié**,
+  - ce qui est une **hypothèse**,
+  - ce qui est une **recommandation**.

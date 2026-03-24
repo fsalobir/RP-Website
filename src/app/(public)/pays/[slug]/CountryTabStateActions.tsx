@@ -1,7 +1,9 @@
 "use client";
 
-import { useState, Fragment, useMemo } from "react";
+import { useState, Fragment, useMemo, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
+import { getModalPortalRoot } from "@/lib/modalPortal";
 import {
   submitStateActionRequest,
   acceptTargetStateActionRequest,
@@ -121,6 +123,15 @@ export function CountryTabStateActions({
   );
   const [historySearch, setHistorySearch] = useState("");
   const [historyPage, setHistoryPage] = useState(1);
+
+  useEffect(() => {
+    if (!modalType) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, [modalType]);
 
   const typesByCategory = useMemo(() => {
     const keyToTypes = new Map<string, ActionType[]>();
@@ -510,18 +521,21 @@ export function CountryTabStateActions({
         )}
       </section>
 
-      {modalType && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="modal-title"
-        >
+      {modalType &&
+        createPortal(
           <div
-            className="mx-4 max-w-lg rounded-lg border p-6 shadow-lg"
-            style={{ background: "var(--background-panel)", borderColor: "var(--border)" }}
-            onClick={(e) => e.stopPropagation()}
+            className="fixed inset-0 overflow-y-auto bg-black/50"
+            style={{ zIndex: 100001 }}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="modal-title"
           >
+            <div className="flex min-h-full items-center justify-center p-4 py-10">
+              <div
+                className="w-full max-w-lg max-h-[min(85dvh,calc(100dvh-5rem))] overflow-y-auto overscroll-contain rounded-lg border p-6 shadow-lg"
+                style={{ background: "var(--background-panel)", borderColor: "var(--border)" }}
+                onClick={(e) => e.stopPropagation()}
+              >
             {modalType.key === "insulte_diplomatique" ? (
               <InsulteDiplomatiqueModalContent
                 cost={modalType.cost}
@@ -722,9 +736,11 @@ export function CountryTabStateActions({
                 onCancel={() => setModalType(null)}
               />
             )}
-          </div>
-        </div>
-      )}
+              </div>
+            </div>
+          </div>,
+          getModalPortalRoot()
+        )}
     </div>
   );
 }

@@ -1,7 +1,9 @@
 "use client";
 
 import { useState, useEffect, useMemo, useRef } from "react";
+import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
+import { getModalPortalRoot } from "@/lib/modalPortal";
 import Link from "next/link";
 import type { Country } from "@/types/database";
 import type { MilitaryBranch } from "@/types/database";
@@ -249,6 +251,15 @@ export function CountryTabs({
   const [generalEditMode, setGeneralEditMode] = useState(false);
   const [generalSaving, setGeneralSaving] = useState(false);
   const [generalError, setGeneralError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!generalEditMode) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, [generalEditMode]);
 
   const rosterUnitsFlat = useMemo(() => {
     const out: { id: string; name_fr: string }[] = [];
@@ -923,18 +934,22 @@ export function CountryTabs({
         )}
       </div>
 
-      {canEditCountry && generalEditMode && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="general-edit-modal-title"
-        >
+      {canEditCountry &&
+        generalEditMode &&
+        createPortal(
           <div
-            className="mx-4 max-w-lg rounded-lg border p-6 shadow-lg"
-            style={{ background: "var(--background-panel)", borderColor: "var(--border)" }}
-            onClick={(e) => e.stopPropagation()}
+            className="fixed inset-0 overflow-y-auto bg-black/50"
+            style={{ zIndex: 100001 }}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="general-edit-modal-title"
           >
+            <div className="flex min-h-full items-center justify-center p-4 py-10">
+              <div
+                className="w-full max-w-lg max-h-[min(85dvh,calc(100dvh-5rem))] overflow-y-auto overscroll-contain rounded-lg border p-6 shadow-lg"
+                style={{ background: "var(--background-panel)", borderColor: "var(--border)" }}
+                onClick={(e) => e.stopPropagation()}
+              >
             <h2 id="general-edit-modal-title" className="mb-4 text-lg font-semibold text-[var(--foreground)]">
               Changer informations nationales
             </h2>
@@ -1010,9 +1025,11 @@ export function CountryTabs({
                 Annuler
               </button>
             </div>
-          </div>
-        </div>
-      )}
+              </div>
+            </div>
+          </div>,
+          getModalPortalRoot()
+        )}
 
       <div
         className={`tab-list mb-6 flex flex-wrap items-center gap-2 rounded-xl border border-white/25 px-4 py-3`}
@@ -1185,6 +1202,20 @@ export function CountryTabs({
           ruleParametersByKey={ruleParametersByKey}
           resolvedEffects={resolvedEffects}
           pctProcurationMilitaire={pcts.pct_procuration_militaire ?? 0}
+          pctDefense={pcts.pct_defense ?? 0}
+          worldAverages={worldAverages}
+          budgetPctFields={{
+            pct_etat: pcts.pct_etat ?? 0,
+            pct_education: pcts.pct_education ?? 0,
+            pct_recherche: pcts.pct_recherche ?? 0,
+            pct_infrastructure: pcts.pct_infrastructure ?? 0,
+            pct_sante: pcts.pct_sante ?? 0,
+            pct_industrie: pcts.pct_industrie ?? 0,
+            pct_defense: pcts.pct_defense ?? 0,
+            pct_interieur: pcts.pct_interieur ?? 0,
+            pct_affaires_etrangeres: pcts.pct_affaires_etrangeres ?? 0,
+            pct_procuration_militaire: pcts.pct_procuration_militaire ?? 0,
+          }}
           panelClass={panelClass}
           panelStyle={panelStyle}
           canEditCountry={canEditCountry}
