@@ -26,10 +26,10 @@ type CountryTabMilitaryProps = {
   effectiveLimitByBranch: Record<MilitaryBranch, number>;
   militaryEdit: Record<string, { current_level: number; extra_count: number }>;
   setMilitaryEdit: React.Dispatch<React.SetStateAction<Record<string, { current_level: number; extra_count: number }>>>;
-  militarySavingId: string | null;
+  militarySavingAll: boolean;
   isAdmin: boolean;
   effects: ResolvedEffect[];
-  onSaveMilitaryUnit: (rosterUnitId: string, currentLevel: number, extraCount: number) => Promise<void>;
+  onSaveAllMilitaryUnits: () => Promise<void>;
   intelLevel?: number | null;
   foggedRoster?: FoggedRoster | null;
 };
@@ -46,10 +46,10 @@ export function CountryTabMilitary({
   effectiveLimitByBranch,
   militaryEdit,
   setMilitaryEdit,
-  militarySavingId,
+  militarySavingAll,
   isAdmin,
   effects,
-  onSaveMilitaryUnit,
+  onSaveAllMilitaryUnits,
   intelLevel = null,
   foggedRoster = null,
 }: CountryTabMilitaryProps) {
@@ -172,7 +172,6 @@ export function CountryTabMilitary({
                                   <th className={`w-[14%] pb-1.5 pt-1 px-2 text-center font-medium text-xs ${glassMutedClass}`}>Nombre</th>
                                   <th className={`w-[12%] pb-1.5 pt-1 px-2 text-center font-medium text-xs ${glassMutedClass}`}>Personnel</th>
                                   <th className={`pb-1.5 pt-1 px-2 text-center font-medium text-xs ${glassMutedClass}`}>Niveaux</th>
-                                  {isAdmin && <th className={`w-20 pb-1.5 pt-1 px-2 text-center font-medium text-xs ${glassMutedClass}`} />}
                                 </tr>
                               </thead>
                               <tbody>
@@ -196,7 +195,7 @@ export function CountryTabMilitary({
                                       : 0;
                                   const personnel = totalCount * manpowerLevel;
                                   const isLocked = points < 100;
-                                  const isSaving = militarySavingId === row.unit.id;
+                                  const isSaving = militarySavingAll;
 
                                   return (
                                     <tr key={row.unit.id} className="border-b border-white/25">
@@ -315,19 +314,6 @@ export function CountryTabMilitary({
                                           )}
                                         </div>
                                       </td>
-                                      {isAdmin && (
-                                        <td className="w-20 py-0.5 px-2 align-middle text-center">
-                                          <button
-                                            type="button"
-                                            disabled={isSaving}
-                                            onClick={() => onSaveMilitaryUnit(row.unit.id, edit.current_level, edit.extra_count)}
-                                            className="rounded border border-[var(--accent)] py-0.5 px-1.5 text-[10px] font-medium disabled:opacity-50"
-                                            style={{ background: "var(--accent)", color: "#0f1419" }}
-                                          >
-                                            {isSaving ? "…" : "Enregistrer"}
-                                          </button>
-                                        </td>
-                                      )}
                                     </tr>
                                   );
                                 })}
@@ -339,6 +325,19 @@ export function CountryTabMilitary({
                     </div>
                   );
                 })}
+              </div>
+            )}
+            {isAdmin && canEditCountry && (
+              <div className="mt-4 flex justify-end">
+                <button
+                  type="button"
+                  disabled={militarySavingAll}
+                  onClick={onSaveAllMilitaryUnits}
+                  className="rounded-lg border border-[var(--accent)] px-3 py-1.5 text-sm font-medium disabled:opacity-50"
+                  style={{ background: "var(--accent)", color: "#0f1419" }}
+                >
+                  {militarySavingAll ? "Enregistrement…" : "Enregistrer toutes les modifications"}
+                </button>
               </div>
             )}
           </>

@@ -237,7 +237,7 @@ export function CountryTabs({
   const [militaryEdit, setMilitaryEdit] = useState<Record<string, { current_level: number; extra_count: number }>>({});
   const militaryEditInitialized = useRef(false);
   const [localHardPowerByBranch, setLocalHardPowerByBranch] = useState<HardPowerByBranch | null>(null);
-  const [militarySavingId, setMilitarySavingId] = useState<string | null>(null);
+  const [militarySavingAll, setMilitarySavingAll] = useState(false);
   const [militaryError, setMilitaryError] = useState<string | null>(null);
   const [militarySubtypeOpen, setMilitarySubtypeOpen] = useState<Record<string, boolean>>({});
   
@@ -810,20 +810,27 @@ export function CountryTabs({
 
   
 
-  const handleSaveMilitaryUnit = async (rosterUnitId: string, currentLevel: number, extraCount: number) => {
+  const handleSaveAllMilitaryUnits = async () => {
     setMilitaryError(null);
-    setMilitarySavingId(rosterUnitId);
+    setMilitarySavingAll(true);
     const slug = country.slug ?? "";
-    const result = await saveMilitaryUnit(country.id, slug, rosterUnitId, currentLevel, extraCount);
-    setMilitarySavingId(null);
-    if (result.error) {
-      setMilitaryError(result.error);
-    } else {
-      setMilitaryEdit((prev) => ({
-        ...prev,
-        [rosterUnitId]: { current_level: currentLevel, extra_count: extraCount },
-      }));
+    const allRows = rosterByBranch.terre.concat(rosterByBranch.air, rosterByBranch.mer, rosterByBranch.strategique);
+    for (const row of allRows) {
+      const edit = militaryEdit[row.unit.id] ?? {
+        current_level: Math.max(0, row.countryState?.current_level ?? 0),
+        extra_count: Math.max(0, row.countryState?.extra_count ?? 0),
+      };
+      const prevLevel = Math.max(0, row.countryState?.current_level ?? 0);
+      const prevExtra = Math.max(0, row.countryState?.extra_count ?? 0);
+      if (edit.current_level === prevLevel && edit.extra_count === prevExtra) continue;
+      const result = await saveMilitaryUnit(country.id, slug, row.unit.id, edit.current_level, edit.extra_count);
+      if (result.error) {
+        setMilitaryError(result.error);
+        setMilitarySavingAll(false);
+        return;
+      }
     }
+    setMilitarySavingAll(false);
   };
 
   const handleSaveBudget = async () => {
@@ -1159,10 +1166,10 @@ export function CountryTabs({
           effectiveLimitByBranch={effectiveLimitByBranch}
           militaryEdit={militaryEdit}
           setMilitaryEdit={setMilitaryEdit}
-          militarySavingId={militarySavingId}
+          militarySavingAll={militarySavingAll}
           isAdmin={isAdmin}
           effects={resolvedEffects}
-          onSaveMilitaryUnit={handleSaveMilitaryUnit}
+          onSaveAllMilitaryUnits={handleSaveAllMilitaryUnits}
           intelLevel={intelLevel}
           foggedRoster={foggedRoster}
         />

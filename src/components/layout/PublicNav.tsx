@@ -29,7 +29,7 @@ export function PublicNav({
           href="/"
           className="text-lg font-semibold text-[var(--foreground)] hover:text-[var(--accent)] transition-colors"
         >
-          Roleplay
+          FoN
         </Link>
         <nav className="flex items-center gap-5">
           <Link href={paysHref} className={navLinkClass}>
