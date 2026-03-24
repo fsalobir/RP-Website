@@ -37,7 +37,6 @@ import { CountryTabCabinet } from "./CountryTabCabinet";
 import { CountryTabStateActions } from "./CountryTabStateActions";
 import { CountryTabLaws } from "./CountryTabLaws";
 import { CountryTabEtatMajor } from "./CountryTabEtatMajor";
-import { InfoTooltipWithWikiLink } from "@/components/ui/InfoTooltipWithWikiLink";
 /** Subset of CountryEtatMajorFocus used by the page (only the 4 focus roster ids). */
 export type EtatMajorFocusForTabs = Pick<
   import("@/types/database").CountryEtatMajorFocus,
@@ -1094,13 +1093,6 @@ export function CountryTabs({
             Debug
           </button>
         )}
-        <span className="ml-2 inline-flex items-center self-center text-white/80" onClick={(e) => e.stopPropagation()}>
-          <InfoTooltipWithWikiLink
-            text="La fiche pays se lit onglet par onglet : Rapport du Cabinet, Généralités, Militaire, Avantages, Budget, Lois et Actions d'État (selon votre accès)."
-            wikiSectionId="fiche-pays-onglets"
-            side="bottom"
-          />
-        </span>
       </div>
 
       {tab === "general" && (

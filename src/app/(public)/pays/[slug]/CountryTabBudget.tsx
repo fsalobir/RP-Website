@@ -23,6 +23,7 @@ type CountryTabBudgetProps = {
   pcts: Record<string, number>;
   setPcts: React.Dispatch<React.SetStateAction<Record<string, number>>>;
   totalPct: number;
+  overAllocation: boolean;
   forcedMinPcts: Record<string, number>;
   allocationCap: number;
   totalBudgetMonthly: number;
@@ -52,6 +53,7 @@ export function CountryTabBudget({
   pcts,
   setPcts,
   totalPct,
+  overAllocation,
   forcedMinPcts,
   allocationCap,
   totalBudgetMonthly,
@@ -70,9 +72,26 @@ export function CountryTabBudget({
   worldAverages,
   effectsForTick,
 }: CountryTabBudgetProps) {
+  const glassSectionClass = `${panelClass} border-white/25 bg-white/10 shadow-[0_8px_30px_rgba(0,0,0,0.25)] backdrop-blur-xl`;
+  const glassSectionStyle: React.CSSProperties = {
+    ...panelStyle,
+    background: "rgba(255,255,255,0.10)",
+    borderColor: "rgba(255,255,255,0.25)",
+  };
+  const glassInputClass =
+    "rounded-lg border border-white/25 bg-white/10 px-2 py-1.5 text-sm font-mono text-[var(--foreground)] shadow-[inset_0_1px_0_rgba(255,255,255,0.2)] backdrop-blur-sm disabled:opacity-60";
+  const glassSliderClass =
+    "h-2 w-full rounded-full border border-white/25 bg-white/10 accent-[var(--accent)] shadow-[inset_0_1px_0_rgba(255,255,255,0.2)]";
+  const glassButtonStyle: React.CSSProperties = {
+    background: "linear-gradient(180deg, rgba(255,255,255,0.34) 0%, rgba(255,255,255,0.16) 100%)",
+    color: "var(--foreground)",
+    borderColor: "rgba(255,255,255,0.35)",
+    backdropFilter: "blur(8px)",
+  };
+
   return (
     <div className="space-y-6">
-      <section className={panelClass} style={panelStyle}>
+      <section className={glassSectionClass} style={glassSectionStyle}>
         <h2 className="mb-4 text-lg font-semibold text-[var(--foreground)]">
           Budget d'état
         </h2>
@@ -113,8 +132,7 @@ export function CountryTabBudget({
                   value={Math.round(budgetFraction * 100)}
                   onChange={(e) => setBudgetFraction(Math.min(1, Math.max(0, Number(e.target.value) / 100)))}
                   disabled={!isAdmin}
-                  className="w-20 rounded border bg-[var(--background)] px-2 py-1.5 text-sm font-mono text-[var(--foreground)] disabled:opacity-60"
-                  style={{ borderColor: "var(--border)" }}
+                  className={`w-20 ${glassInputClass}`}
                 />
                 <span className="text-sm text-[var(--foreground-muted)]">%</span>
               </>
@@ -138,7 +156,7 @@ export function CountryTabBudget({
         </div>
       </section>
 
-      <section className={panelClass} style={panelStyle}>
+      <section className={glassSectionClass} style={glassSectionStyle}>
         <h2 className="mb-4 text-lg font-semibold text-[var(--foreground)]">
           Répartition par ministère
         </h2>
@@ -149,7 +167,7 @@ export function CountryTabBudget({
           {[1, 2, 3].map((groupNum) => (
             <div key={groupNum}>
               {groupNum > 1 && (
-                <hr className="my-4 border-t" style={{ borderColor: "var(--border)" }} />
+                <hr className="my-4 border-t border-white/20" />
               )}
               {BUDGET_MINISTRIES.filter((m) => m.group === groupNum).map(({ key, label, tooltip }) => {
                 const value = pcts[key];
@@ -189,12 +207,28 @@ export function CountryTabBudget({
                               step={0.5}
                               value={value}
                               onChange={(e) => setPcts((prev) => ({ ...prev, [key]: Math.max(forcedMin, Number(e.target.value)) }))}
-                              className="h-2 w-full accent-[var(--accent)]"
+                              className={glassSliderClass}
                             />
                           </div>
-                          <span className="w-12 shrink-0 text-right text-sm font-mono text-[var(--foreground-muted)]">
-                            {value.toFixed(1)} %
-                          </span>
+                          <div className="flex w-[92px] shrink-0 items-center justify-end gap-1">
+                            <input
+                              type="number"
+                              min={forcedMin}
+                              max={100}
+                              step={0.5}
+                              value={value.toFixed(1)}
+                              onChange={(e) => {
+                                const next = Number.parseFloat(e.target.value);
+                                if (!Number.isFinite(next)) return;
+                                setPcts((prev) => ({
+                                  ...prev,
+                                  [key]: Math.min(100, Math.max(forcedMin, next)),
+                                }));
+                              }}
+                              className={`w-16 text-right ${glassInputClass}`}
+                            />
+                            <span className="text-sm font-mono text-[var(--foreground-muted)]">%</span>
+                          </div>
                         </>
                       ) : (
                         <span className="text-sm font-mono text-[var(--foreground-muted)]">
@@ -211,19 +245,19 @@ export function CountryTabBudget({
             </div>
           ))}
         </div>
-        <div className="mt-4 space-y-3 border-t pt-4" style={{ borderColor: "var(--border-muted)" }}>
+        <div className="mt-4 space-y-3 border-t border-white/20 pt-4">
           <div className="flex items-center gap-3">
             <span className="w-24 shrink-0 text-sm text-[var(--foreground-muted)]">Total alloué</span>
-            <div className="h-4 flex-1 overflow-hidden rounded" style={{ background: "var(--background-elevated)" }}>
+            <div className="h-4 flex-1 overflow-hidden rounded border border-white/25 bg-white/10">
               <div
                 className="h-full rounded transition-all"
                 style={{
                   width: `${Math.min(100, (totalPct / allocationCap) * 100)}%`,
-                  background: totalPct > allocationCap ? "var(--danger)" : "var(--accent)",
+                  background: overAllocation ? "var(--danger)" : "var(--accent)",
                 }}
               />
             </div>
-            <span className={`w-14 shrink-0 text-right text-sm font-mono ${totalPct > allocationCap ? "text-[var(--danger)]" : "text-[var(--foreground-muted)]"}`}>
+            <span className={`w-14 shrink-0 text-right text-sm font-mono ${overAllocation ? "text-[var(--danger)]" : "text-[var(--foreground-muted)]"}`}>
               {totalPct.toFixed(1)} %
             </span>
           </div>
@@ -232,7 +266,7 @@ export function CountryTabBudget({
               Maximum autorisé : {allocationCap} %.
             </p>
           )}
-          {totalPct > allocationCap && (
+          {overAllocation && (
             <p className="text-sm text-[var(--danger)]">
               La somme ne doit pas dépasser {allocationCap} %. Réduisez les pourcentages pour pouvoir enregistrer.
             </p>
@@ -241,10 +275,10 @@ export function CountryTabBudget({
             <div className="flex justify-end">
               <button
                 type="button"
-                disabled={budgetSaving || totalPct > allocationCap}
+                disabled={budgetSaving || overAllocation}
                 onClick={onSaveBudget}
-                className="rounded py-2 px-4 text-sm font-medium disabled:opacity-50"
-                style={{ background: "var(--accent)", color: "#0f1419" }}
+                className="rounded-lg border px-4 py-2 text-sm font-medium transition hover:bg-white/20 disabled:opacity-50"
+                style={glassButtonStyle}
               >
                 {budgetSaving ? "Enregistrement…" : "Enregistrer"}
               </button>

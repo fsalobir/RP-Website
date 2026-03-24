@@ -35,7 +35,7 @@ function TreeNav({
   activeSlug: string;
   expandedSlugs: Set<string>;
   toggleExpand: (slug: string) => void;
-  goToSlug: (slug: string) => void;
+  goToSlug: (slug: string, options?: { expandSubsections?: boolean }) => void;
   depth: number;
 }) {
   return (
@@ -63,7 +63,7 @@ function TreeNav({
               <button
                 type="button"
                 onClick={() => {
-                  goToSlug(node.slug);
+                  goToSlug(node.slug, { expandSubsections: hasChildren });
                 }}
                 className={`flex-1 rounded px-3 py-2 text-left text-sm transition-colors ${
                   isActive
@@ -111,10 +111,18 @@ export function WikiClient({ initialPages }: { initialPages: WikiPageRow[] }) {
   const displayPage = findWikiPageBySlug(pages, displaySlug);
 
   const goToSlug = useCallback(
-    (slug: string) => {
+    (slug: string, options?: { expandSubsections?: boolean }) => {
       setActiveSlug(slug);
       router.push(`/wiki#${slug}`, { scroll: false });
       setMenuOpen(false);
+      /** Déplier les sous-sections quand on sélectionne une entrée qui en a. */
+      if (options?.expandSubsections) {
+        setExpandedSlugs((prev) => {
+          const next = new Set(prev);
+          next.add(slug);
+          return next;
+        });
+      }
     },
     [router]
   );
@@ -198,10 +206,10 @@ export function WikiClient({ initialPages }: { initialPages: WikiPageRow[] }) {
         </button>
       </div>
 
-      <div className="flex flex-col gap-6 md:flex-row">
+      <div className="flex flex-col gap-6 md:flex-row md:items-start">
         <aside
           id="wiki-nav-drawer"
-          className={`w-full shrink-0 md:w-60 ${glassPanelClass} ${menuOpen ? "block" : "hidden md:block"}`}
+          className={`w-full shrink-0 md:sticky md:top-6 md:max-h-[calc(100dvh-3rem)] md:overflow-y-auto md:w-60 ${glassPanelClass} ${menuOpen ? "block" : "hidden md:block"}`}
         >
           <nav className="p-2" aria-label="Sections du wiki">
             {filteredTree.length === 0 ? (
