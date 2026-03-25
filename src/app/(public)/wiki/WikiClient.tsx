@@ -5,7 +5,9 @@ import { useRouter } from "next/navigation";
 import { WikiPageBody } from "./WikiPageBody";
 import {
   buildWikiTree,
+  collectDescendantSlugs,
   filterTreeByQuery,
+  findNodeWithSiblings,
   findWikiPageBySlug,
   getAncestorSlugs,
 } from "@/lib/wiki/tree";
@@ -115,16 +117,29 @@ export function WikiClient({ initialPages }: { initialPages: WikiPageRow[] }) {
       setActiveSlug(slug);
       router.push(`/wiki#${slug}`, { scroll: false });
       setMenuOpen(false);
-      /** Déplier les sous-sections quand on sélectionne une entrée qui en a. */
-      if (options?.expandSubsections) {
-        setExpandedSlugs((prev) => {
-          const next = new Set(prev);
+      /** Accordéon : repli des frères + dépli récursif des sous-sections si demandé. */
+      setExpandedSlugs((prev) => {
+        const next = new Set(prev);
+        const located = findNodeWithSiblings(tree, slug);
+        if (located) {
+          const { siblings } = located;
+          for (const sib of siblings) {
+            if (sib.slug === slug) continue;
+            next.delete(sib.slug);
+            for (const d of collectDescendantSlugs(sib)) next.delete(d);
+          }
+        }
+        for (const anc of getAncestorSlugs(pages, slug)) {
+          next.add(anc);
+        }
+        if (located && options?.expandSubsections && located.node.children.length > 0) {
           next.add(slug);
-          return next;
-        });
-      }
+          for (const d of collectDescendantSlugs(located.node)) next.add(d);
+        }
+        return next;
+      });
     },
-    [router]
+    [router, tree, pages]
   );
 
   const toggleExpand = useCallback((slug: string) => {

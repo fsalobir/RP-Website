@@ -1,11 +1,13 @@
 "use client";
 
+import { useState } from "react";
 import type { MilitaryBranch } from "@/types/database";
 import { formatNumber } from "@/lib/format";
 import { Tooltip } from "@/components/ui/Tooltip";
 import { getUnitExtraEffectSum, type ResolvedEffect } from "@/lib/countryEffects";
 import type { RosterRowByBranch } from "./countryTabsTypes";
 import type { FoggedRoster, FoggedBranchEstimate, FoggedUnitEstimate } from "@/lib/intelFog";
+import { adjustTargetCountryIntelForTesting } from "./actions";
 
 const BRANCH_LABELS: Record<MilitaryBranch, string> = {
   terre: "Terre",
@@ -32,6 +34,8 @@ type CountryTabMilitaryProps = {
   onSaveAllMilitaryUnits: () => Promise<void>;
   intelLevel?: number | null;
   foggedRoster?: FoggedRoster | null;
+  canAdjustIntelForTesting?: boolean;
+  countrySlug: string;
 };
 
 export function CountryTabMilitary({
@@ -52,16 +56,71 @@ export function CountryTabMilitary({
   onSaveAllMilitaryUnits,
   intelLevel = null,
   foggedRoster = null,
+  canAdjustIntelForTesting = false,
+  countrySlug,
 }: CountryTabMilitaryProps) {
   const glassPanelClass = "rounded-2xl border border-white/25 p-6";
   const glassPanelStyle: React.CSSProperties = { background: "rgba(255,255,255,0.12)", backdropFilter: "blur(12px)" };
   const glassTextClass = "text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.4)]";
   const glassMutedClass = "text-white/90";
+  const [intelDeltaInput, setIntelDeltaInput] = useState("0");
+  const [intelUpdating, setIntelUpdating] = useState(false);
+  const [intelAdjustError, setIntelAdjustError] = useState<string | null>(null);
+
+  const handleAdjustIntelForTesting = async () => {
+    const parsed = Number(intelDeltaInput);
+    if (!Number.isFinite(parsed)) {
+      setIntelAdjustError("Delta invalide.");
+      return;
+    }
+    const bounded = Math.max(-100, Math.min(100, Math.trunc(parsed)));
+    if (bounded === 0) {
+      setIntelAdjustError("Le delta doit être différent de 0.");
+      return;
+    }
+    setIntelUpdating(true);
+    setIntelAdjustError(null);
+    const result = await adjustTargetCountryIntelForTesting(countryId, countrySlug, bounded);
+    setIntelUpdating(false);
+    if (result?.error) {
+      setIntelAdjustError(result.error);
+      return;
+    }
+    setIntelDeltaInput("0");
+    window.location.reload();
+  };
 
   if (foggedRoster != null && intelLevel != null) {
     return (
       <div className="space-y-6">
         <IntelGauge level={intelLevel} panelClass={glassPanelClass} panelStyle={glassPanelStyle} textClass={glassTextClass} mutedClass={glassMutedClass} />
+        {canAdjustIntelForTesting && (
+          <section className={glassPanelClass} style={glassPanelStyle}>
+            <h3 className={`mb-2 text-sm font-semibold ${glassTextClass}`}>Test - Ajuster le renseignement</h3>
+            <p className={`mb-3 text-xs ${glassMutedClass}`}>
+              Outil temporaire de test. Delta exact appliqué sur le niveau de renseignement de ce pays.
+            </p>
+            <div className="flex flex-wrap items-center gap-2">
+              <input
+                type="number"
+                min={-100}
+                max={100}
+                value={intelDeltaInput}
+                onChange={(e) => setIntelDeltaInput(e.target.value)}
+                className="w-28 rounded border border-white/25 bg-white/10 px-2 py-1.5 text-sm text-white"
+              />
+              <button
+                type="button"
+                onClick={handleAdjustIntelForTesting}
+                disabled={intelUpdating}
+                className="rounded border border-[var(--accent)] bg-[var(--accent)] px-3 py-1.5 text-sm font-medium text-[#0f1419] disabled:opacity-50"
+              >
+                {intelUpdating ? "Application..." : "Ajouter niveau de renseignement"}
+              </button>
+            </div>
+            {intelAdjustError && <p className="mt-2 text-sm text-[var(--danger)]">{intelAdjustError}</p>}
+          </section>
+        )}
         {foggedRoster.type === "none" && (
           <section className="relative overflow-hidden rounded-2xl border border-white/25" style={{ background: "transparent" }}>
             <div className="absolute inset-0 overflow-hidden rounded-2xl" aria-hidden>

@@ -658,6 +658,7 @@ export default async function CountryPage({
           regime: country.regime ?? null,
           influence: Math.round(sphereData.totalInfluence),
         }}
+        canAdjustIntelForTesting={!isAdmin && !!auth.playerCountryId && !isPlayerForThisCountry}
       />
       </div>
     </div>

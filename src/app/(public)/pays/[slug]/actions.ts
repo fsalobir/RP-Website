@@ -83,6 +83,55 @@ export async function getCountryMilitaryUnits(countryId: string) {
   return { units: (data ?? []) as { roster_unit_id: string; current_level: number; extra_count: number; recrutement_points: number; procuration_points: number; stock_points: number }[] };
 }
 
+export async function adjustTargetCountryIntelForTesting(targetCountryId: string, targetCountrySlug: string, delta: number) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Non connecté." };
+
+  const { data: adminRow } = await supabase.from("admins").select("id").eq("user_id", user.id).single();
+  if (adminRow) return { error: "Ce bouton de test est réservé aux joueurs." };
+
+  const { data: playerRow } = await supabase
+    .from("country_players")
+    .select("country_id")
+    .eq("user_id", user.id)
+    .maybeSingle();
+  const observerCountryId = playerRow?.country_id ?? null;
+  if (!observerCountryId) return { error: "Aucun pays joueur associé." };
+  if (observerCountryId === targetCountryId) return { error: "Action indisponible sur votre propre pays." };
+
+  const boundedDelta = Math.max(-100, Math.min(100, Math.trunc(delta)));
+  if (boundedDelta === 0) return { error: "Le delta doit être différent de 0." };
+
+  const { data: existing, error: readError } = await supabase
+    .from("country_intel")
+    .select("intel_level")
+    .eq("observer_country_id", observerCountryId)
+    .eq("target_country_id", targetCountryId)
+    .maybeSingle();
+  if (readError) return { error: readError.message };
+
+  const currentLevel = Number(existing?.intel_level ?? 0);
+  const nextLevel = Math.max(0, Math.min(100, currentLevel + boundedDelta));
+
+  const { error: writeError } = await supabase
+    .from("country_intel")
+    .upsert(
+      {
+        observer_country_id: observerCountryId,
+        target_country_id: targetCountryId,
+        intel_level: nextLevel,
+        display_seed: Math.floor(Math.random() * 2147483647),
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: "observer_country_id,target_country_id" }
+    );
+  if (writeError) return { error: writeError.message };
+
+  revalidatePath(`/pays/${targetCountrySlug}`, "page");
+  return { intelLevel: nextLevel };
+}
+
 export type EtatMajorFocusPayload = {
   design_roster_unit_id: string | null;
   recrutement_roster_unit_id: string | null;

@@ -121,6 +121,7 @@ export function CountryTabs({
   intelLevel = null,
   foggedRoster = null,
   etatMajorFocus = null,
+  canAdjustIntelForTesting = false,
 }: {
   country: Country;
   macros: { key: string; value: number }[];
@@ -216,6 +217,7 @@ export function CountryTabs({
   intelLevel?: number | null;
   foggedRoster?: FoggedRoster | null;
   etatMajorFocus?: EtatMajorFocusForTabs;
+  canAdjustIntelForTesting?: boolean;
 }) {
   const canEditCountry = isAdmin || isPlayerForThisCountry;
   const canSeeCabinetAndBudget = isAdmin || isPlayerForThisCountry;
@@ -1189,6 +1191,8 @@ export function CountryTabs({
           onSaveAllMilitaryUnits={handleSaveAllMilitaryUnits}
           intelLevel={intelLevel}
           foggedRoster={foggedRoster}
+          canAdjustIntelForTesting={canAdjustIntelForTesting}
+          countrySlug={country.slug ?? ""}
         />
       )}
 

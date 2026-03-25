@@ -73,13 +73,21 @@ const SPHERE_PIE_COLORS = [
   "#164e63",
 ];
 
+/** Arrondi stable SSR/client pour les attributs d (évite les hydratations qui divergent d'un ULP). */
+function svgPathCoord(n: number): number {
+  return Math.round(n * 1e6) / 1e6;
+}
+
 function slicePath(cx: number, cy: number, r: number, startAngle: number, endAngle: number): string {
-  const x1 = cx + r * Math.cos(startAngle);
-  const y1 = cy + r * Math.sin(startAngle);
-  const x2 = cx + r * Math.cos(endAngle);
-  const y2 = cy + r * Math.sin(endAngle);
+  const cxc = svgPathCoord(cx);
+  const cyc = svgPathCoord(cy);
+  const rc = svgPathCoord(r);
+  const x1 = svgPathCoord(cx + r * Math.cos(startAngle));
+  const y1 = svgPathCoord(cy + r * Math.sin(startAngle));
+  const x2 = svgPathCoord(cx + r * Math.cos(endAngle));
+  const y2 = svgPathCoord(cy + r * Math.sin(endAngle));
   const large = endAngle - startAngle > Math.PI ? 1 : 0;
-  return `M ${cx} ${cy} L ${x1} ${y1} A ${r} ${r} 0 ${large} 1 ${x2} ${y2} Z`;
+  return `M ${cxc} ${cyc} L ${x1} ${y1} A ${rc} ${rc} 0 ${large} 1 ${x2} ${y2} Z`;
 }
 
 function SpherePieChart({

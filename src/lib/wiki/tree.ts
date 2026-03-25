@@ -44,6 +44,32 @@ export function getAncestorSlugs(pages: WikiPageRow[], slug: string): string[] {
   return out;
 }
 
+/** Slugs de tous les descendants (profondeur quelconque), sans le nœud racine passé en argument. */
+export function collectDescendantSlugs(node: WikiTreeNode): string[] {
+  const out: string[] = [];
+  for (const c of node.children) {
+    out.push(c.slug);
+    out.push(...collectDescendantSlugs(c));
+  }
+  return out;
+}
+
+/** Repère le nœud et la liste des frères (même parent : enfants du parent, ou racines). */
+export function findNodeWithSiblings(
+  roots: WikiTreeNode[],
+  slug: string
+): { node: WikiTreeNode; siblings: WikiTreeNode[] } | null {
+  function walk(nodes: WikiTreeNode[]): { node: WikiTreeNode; siblings: WikiTreeNode[] } | null {
+    for (const n of nodes) {
+      if (n.slug === slug) return { node: n, siblings: nodes };
+      const sub = walk(n.children);
+      if (sub) return sub;
+    }
+    return null;
+  }
+  return walk(roots);
+}
+
 export function filterWikiPagesByQuery(pages: WikiPageRow[], query: string): WikiPageRow[] {
   const q = query.trim().toLowerCase();
   if (!q) return pages;
