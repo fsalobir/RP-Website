@@ -434,7 +434,7 @@ export function CountryTabGeneral({
               </div>
             )}
           </div>
-          {influenceResult != null && (
+          {isAdmin && influenceResult != null && (
             <dl className={`mt-3 flex flex-wrap justify-center gap-x-4 gap-y-1 text-xs ${glassMutedClass}`}>
               <span>Influence propre : {formatNumber(Math.round(baseInfluenceValue ?? 0))}</span>
               {sphereInfluenceBonus !== 0 && (
