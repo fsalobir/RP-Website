@@ -11,7 +11,9 @@ import {
   IDEOLOGY_HEX_LAYER_IMAGE,
   type IdeologyId,
 } from "@/lib/ideology";
-import { EFFECT_KIND_LABELS, formatEffectValue, isEffectDisplayPositive, STAT_LABELS } from "@/lib/countryEffects";
+import { BUDGET_MINISTRY_LABELS } from "@/lib/ruleParameters";
+import { EFFECT_KINDS_WITH_BUDGET_TARGET, isEffectDisplayPositive, STAT_LABELS } from "@/lib/countryEffects";
+import { formatIdeologyEffectsEffectValue, getIdeologyEffectsKindLabel } from "@/lib/ideologyEffectsDisplay";
 
 const flagLoader = ({ src }: { src: string }) => src;
 
@@ -161,6 +163,8 @@ function HexagonSvg() {
 }
 
 const INFOBOX_FADEOUT_MS = 2500;
+/** Durée du fondu infobulle / drapeaux (ms), alignée sur la classe Tailwind du panneau. */
+const INFOBOX_OPACITY_TRANSITION_MS = 2000;
 
 export type IdeologyEffectEntry = { ideology_id: string; effect_kind: string; effect_target: string | null; value: number };
 
@@ -335,8 +339,9 @@ export function IdeologyHexagon({
             </div>
             {displayedIdeology && (
               <div
-                className="absolute inset-0 z-[200] flex flex-col border shadow-lg transition-opacity duration-[2000ms]"
+                className="absolute inset-0 z-[200] flex flex-col border shadow-lg transition-opacity"
                 style={{
+                  transitionDuration: `${INFOBOX_OPACITY_TRANSITION_MS}ms`,
                   clipPath: `polygon(${HEX_CLIP_POLYGON})`,
                   WebkitClipPath: `polygon(${HEX_CLIP_POLYGON})`,
                   borderColor: "rgba(255,255,255,0.25)",
@@ -373,20 +378,39 @@ export function IdeologyHexagon({
                             </p>
                           )}
                           {effectsForIdeology.length > 0 && (
-                            <div className="mt-2">
-                              <div className="font-bold text-[var(--accent)]">Effets maximums</div>
-                              <ul className="mt-0.5 list-inside list-disc font-medium" style={{ overflowWrap: "break-word", wordBreak: "break-word" }}>
+                            <div
+                              className="mt-2 w-full rounded-md border py-1.5 pl-2 pr-1.5 text-left"
+                              style={{
+                                borderColor: "rgba(255,255,255,0.2)",
+                                borderLeftWidth: 3,
+                                borderLeftColor: "var(--accent)",
+                                background: "rgba(0,0,0,0.32)",
+                              }}
+                            >
+                              <div className="mb-1 border-b border-white/12 pb-1 text-center text-[9.5px] font-semibold leading-tight text-[var(--accent)] sm:text-[10.5px]">
+                                Effets maximums
+                              </div>
+                              <ul
+                                className="list-none space-y-1 pl-0 text-[9.5px] font-medium leading-snug sm:text-[11.5px]"
+                                style={{ overflowWrap: "break-word", wordBreak: "break-word" }}
+                              >
                                 {effectsForIdeology.map((e, i) => {
-                                  const effectLabel =
-                                    e.effect_kind === "stat_delta" && e.effect_target
-                                      ? STAT_LABELS[e.effect_target as keyof typeof STAT_LABELS] ?? e.effect_target
-                                      : EFFECT_KIND_LABELS[e.effect_kind] ?? e.effect_kind;
+                                  const effectLabel = (() => {
+                                    if (e.effect_kind === "stat_delta" && e.effect_target) {
+                                      return STAT_LABELS[e.effect_target as keyof typeof STAT_LABELS] ?? e.effect_target;
+                                    }
+                                    if (EFFECT_KINDS_WITH_BUDGET_TARGET.has(e.effect_kind) && e.effect_target) {
+                                      const ministry = BUDGET_MINISTRY_LABELS[e.effect_target] ?? e.effect_target;
+                                      return `${getIdeologyEffectsKindLabel(e.effect_kind)} — ${ministry}`;
+                                    }
+                                    return getIdeologyEffectsKindLabel(e.effect_kind);
+                                  })();
                                   return (
                                     <li
                                       key={`${e.effect_kind}-${e.effect_target ?? ""}-${i}`}
                                       style={{ color: isEffectDisplayPositive(e) ? "var(--accent)" : "var(--danger)" }}
                                     >
-                                      {effectLabel} : {formatEffectValue(e.effect_kind, e.value)}
+                                      {effectLabel} : {formatIdeologyEffectsEffectValue(e.effect_kind, e.value)}
                                     </li>
                                   );
                                 })}
@@ -400,7 +424,17 @@ export function IdeologyHexagon({
                 })()}
               </div>
             )}
-            <div className="absolute inset-0 z-10" aria-hidden>
+            <div
+              className="absolute inset-0 z-10 transition-opacity"
+              aria-hidden
+              style={{
+                transitionDuration: `${INFOBOX_OPACITY_TRANSITION_MS}ms`,
+                opacity:
+                  displayedIdeology != null && infoboxFadeIn && !infoboxFadingOut ? 0 : 1,
+                pointerEvents:
+                  displayedIdeology != null && infoboxFadeIn && !infoboxFadingOut ? "none" : "auto",
+              }}
+            >
               {visibleEntries.map((entry, index) => {
                 const { left, top } = getMarkerPosition(entry.point);
                 const isSelected = entry.id === selected?.id;

@@ -20,7 +20,6 @@ import {
 import { DEFAULT_IDEOLOGY_CONFIG, getIdeologyConfig as parseIdeologyConfig, IDEOLOGY_IDS, IDEOLOGY_LABELS, type IdeologyConfig } from "@/lib/ideology";
 import { MOIS_LABELS } from "@/lib/worldDate";
 import {
-  getEffectKindOptionGroups,
   ALL_EFFECT_KIND_IDS,
   EFFECT_KINDS_WITH_COUNTRY_TARGET,
   EFFECT_KIND_LABELS,
@@ -37,9 +36,16 @@ import {
   SUB_TYPE_TARGET_SEP,
   formatSubTypeTargetLabel,
   getBudgetMinistryOptions,
+  getEffectKindOptionGroups,
   getEffectKindValueHelper,
   formatEffectValue,
 } from "@/lib/countryEffects";
+import {
+  formatIdeologyEffectsEffectValue,
+  getIdeologyEffectFormValueHelper,
+  getIdeologyEffectKindOptionGroups,
+  getIdeologyEffectsKindLabel,
+} from "@/lib/ideologyEffectsDisplay";
 import { LAW_DEFINITIONS, type LawDefinition } from "@/lib/laws";
 import { MatriceDiplomatiqueForm } from "@/app/admin/matrice-diplomatique/MatriceDiplomatiqueForm";
 import { InfoTooltip } from "@/components/ui/InfoTooltip";
@@ -531,7 +537,7 @@ export function ReglesForm({
     []
   );
   const ideologyEffectOptionGroups = useMemo(
-    () => getEffectKindOptionGroups(EFFECT_KINDS_FOR_IDEOLOGY_RULE),
+    () => getIdeologyEffectKindOptionGroups(EFFECT_KINDS_FOR_IDEOLOGY_RULE),
     [EFFECT_KINDS_FOR_IDEOLOGY_RULE]
   );
   function getDefaultTargetForKindIdeology(effectKind: string): string | null {
@@ -557,7 +563,7 @@ export function ReglesForm({
     const list = getIdeologyEffectsForIdeology(ideologyId);
     const e = list[localIndex];
     if (!e) return;
-    const helper = getEffectKindValueHelper(e.effect_kind);
+    const helper = getIdeologyEffectFormValueHelper(e.effect_kind);
     setIdeologyEffectFormIdeologyId(ideologyId);
     setIdeologyEffectKind(e.effect_kind);
     setIdeologyEffectTarget(e.effect_target);
@@ -568,7 +574,7 @@ export function ReglesForm({
   function saveIdeologyEffectForm() {
     const valueNum = Number(ideologyEffectValue);
     if (Number.isNaN(valueNum)) return;
-    const helper = getEffectKindValueHelper(ideologyEffectKind);
+    const helper = getIdeologyEffectFormValueHelper(ideologyEffectKind);
     const valueStored = helper.displayToStored(valueNum);
     const needsTarget =
       EFFECT_KINDS_WITH_STAT_TARGET.has(ideologyEffectKind) ||
@@ -589,7 +595,7 @@ export function ReglesForm({
     setIdeologyEffectFormOpen(false);
   }
   function labelForIdeologyEffect(e: IdeologyEffectEntry): string {
-    const kindLabel = EFFECT_KIND_LABELS[e.effect_kind] ?? e.effect_kind;
+    const kindLabel = getIdeologyEffectsKindLabel(e.effect_kind);
     let targetLabel: string | null = null;
     if (e.effect_target) {
       if (EFFECT_KINDS_WITH_STAT_TARGET.has(e.effect_kind))
@@ -602,7 +608,7 @@ export function ReglesForm({
         targetLabel = rosterUnits.find((u) => u.id === e.effect_target)?.name_fr ?? e.effect_target;
       else targetLabel = e.effect_target;
     }
-    const valueStr = formatEffectValue(e.effect_kind, e.value);
+    const valueStr = formatIdeologyEffectsEffectValue(e.effect_kind, e.value);
     return targetLabel ? `${kindLabel} — ${targetLabel} : ${valueStr}` : `${kindLabel} : ${valueStr}`;
   }
 
@@ -2294,19 +2300,39 @@ export function ReglesForm({
                       const list = getIdeologyEffectsForIdeology(ideologyId);
                       const formOpenForThis = ideologyEffectFormOpen && ideologyEffectFormIdeologyId === ideologyId;
                       return (
-                        <div key={ideologyId} className="rounded border p-2 space-y-1" style={{ borderColor: "var(--border-muted)" }}>
+                        <div key={ideologyId} className="rounded border p-2 space-y-2" style={{ borderColor: "var(--border-muted)" }}>
                           <div className="text-xs font-medium text-[var(--foreground-muted)]">{IDEOLOGY_LABELS[ideologyId]}</div>
-                          <ul className="list-disc list-inside text-sm">
-                            {list.map((e, idx) => (
-                              <li key={idx} className="flex items-center justify-between gap-2">
-                                <span>{labelForIdeologyEffect(e)}</span>
-                                <div className="flex gap-2">
-                                  <button type="button" onClick={() => openEditIdeologyEffect(ideologyId, idx)} className="text-xs text-[var(--accent)] hover:underline">Modifier</button>
-                                  <button type="button" onClick={() => removeIdeologyEffect(ideologyId, idx)} className="text-xs text-[var(--danger)] hover:underline">Supprimer</button>
-                                </div>
-                              </li>
-                            ))}
-                          </ul>
+                          {list.length > 0 ? (
+                            <div
+                              className="rounded-md border py-2 pl-2.5 pr-2"
+                              style={{
+                                borderColor: "var(--border-muted)",
+                                borderLeftWidth: 3,
+                                borderLeftColor: "var(--accent)",
+                                background: "var(--background-elevated)",
+                              }}
+                            >
+                              <div className="mb-1.5 text-[9.5px] font-semibold uppercase tracking-wide text-[var(--accent)]">Effets</div>
+                              <ul className="list-none space-y-2 text-[13.5px] leading-snug">
+                                {list.map((e, idx) => (
+                                  <li
+                                    key={idx}
+                                    className="flex flex-col gap-1 border-b border-[var(--border-muted)] pb-2 last:border-b-0 last:pb-0 sm:flex-row sm:items-center sm:justify-between sm:gap-2"
+                                  >
+                                    <span className="min-w-0 break-words">{labelForIdeologyEffect(e)}</span>
+                                    <div className="flex shrink-0 gap-2">
+                                      <button type="button" onClick={() => openEditIdeologyEffect(ideologyId, idx)} className="text-xs text-[var(--accent)] hover:underline">Modifier</button>
+                                      <button type="button" onClick={() => removeIdeologyEffect(ideologyId, idx)} className="text-xs text-[var(--danger)] hover:underline">Supprimer</button>
+                                    </div>
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
+                          ) : (
+                            <div className="rounded-md border border-dashed px-2.5 py-2 text-xs text-[var(--foreground-muted)]" style={{ borderColor: "var(--border-muted)" }}>
+                              Aucun effet configuré pour cette idéologie.
+                            </div>
+                          )}
                           {!formOpenForThis ? (
                             <button type="button" onClick={() => openAddIdeologyEffect(ideologyId)} className="text-sm text-[var(--accent)] hover:underline">Ajouter un effet</button>
                           ) : (
@@ -2362,8 +2388,8 @@ export function ReglesForm({
                                 </div>
                               )}
                               <div>
-                                <label className="mb-0.5 block text-xs text-[var(--foreground-muted)]">{getEffectKindValueHelper(ideologyEffectKind).valueLabel}</label>
-                                <input type="number" step={getEffectKindValueHelper(ideologyEffectKind).valueStep} value={ideologyEffectValue} onChange={(e) => setIdeologyEffectValue(e.target.value)} className="w-32 rounded border py-1.5 px-2 text-sm font-mono" style={{ borderColor: "var(--border)", background: "var(--background)" }} />
+                                <label className="mb-0.5 block text-xs text-[var(--foreground-muted)]">{getIdeologyEffectFormValueHelper(ideologyEffectKind).valueLabel}</label>
+                                <input type="number" step={getIdeologyEffectFormValueHelper(ideologyEffectKind).valueStep} value={ideologyEffectValue} onChange={(e) => setIdeologyEffectValue(e.target.value)} className="w-32 rounded border py-1.5 px-2 text-sm font-mono" style={{ borderColor: "var(--border)", background: "var(--background)" }} />
                               </div>
                               <div className="flex gap-2">
                                 <button type="button" onClick={saveIdeologyEffectForm} className="rounded py-1.5 px-3 text-sm font-medium" style={{ background: "var(--accent)", color: "#0f1419" }}>Enregistrer</button>
