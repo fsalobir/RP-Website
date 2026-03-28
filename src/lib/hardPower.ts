@@ -1,9 +1,11 @@
 /**
  * Calcul du Hard Power par pays et par branche (terre, air, mer, strategique).
- * Hard Power = somme sur les unités de (nombre d'unités × hard_power du niveau débloqué).
+ * Hard Power = somme sur les unités de (nombre d'unités effectif × hard_power du niveau débloqué).
+ * Nombre effectif = aligné fiche militaire si `effectsByCountry` est fourni (extras + % limites).
  */
 
 import type { MilitaryBranch } from "@/types/database";
+import { getEffectiveMilitaryUnitCount, getUnitExtraEffectSum } from "@/lib/countryEffects";
 
 export type HardPowerByBranch = {
   terre: number;
@@ -13,7 +15,22 @@ export type HardPowerByBranch = {
   total: number;
 };
 
-type RosterUnit = { id: string; branch: MilitaryBranch; base_count: number };
+export type HardPowerRosterUnit = {
+  id: string;
+  branch: MilitaryBranch;
+  base_count: number;
+  sub_type?: string | null;
+};
+
+/** Effets résolus (ou tranche compatible) pour recalcul du nombre d’unités. */
+export type HardPowerEffectSlice = {
+  effect_kind: string;
+  effect_target: string | null;
+  value: number;
+  duration_remaining?: number;
+  duration_kind?: string;
+};
+
 type RosterLevel = { unit_id: string; level: number; hard_power: number };
 type CountryUnit = { country_id: string; roster_unit_id: string; current_level: number; extra_count: number };
 
@@ -30,11 +47,13 @@ function unlockedLevelFromPoints(currentLevel: number): number {
  * @param countryMilitaryUnits - Toutes les lignes country_military_units (tous pays)
  * @param rosterUnits - Unités du roster (id, branch, base_count)
  * @param rosterLevels - Niveaux avec hard_power (unit_id, level, hard_power)
+ * @param effectsByCountry - Si défini : pour chaque pays, effets agrégés (lois cible, pays, global, IA, avantages…).
  */
 export function computeHardPowerByCountry(
   countryMilitaryUnits: CountryUnit[],
-  rosterUnits: RosterUnit[],
-  rosterLevels: RosterLevel[]
+  rosterUnits: HardPowerRosterUnit[],
+  rosterLevels: RosterLevel[],
+  effectsByCountry?: Map<string, HardPowerEffectSlice[]>
 ): Map<string, HardPowerByBranch> {
   const unitById = new Map(rosterUnits.map((u) => [u.id, u]));
   const levelsByUnit = new Map<string, RosterLevel[]>();
@@ -56,6 +75,7 @@ export function computeHardPowerByCountry(
 
   for (const [countryId, units] of byCountry) {
     const branchSums: HardPowerByBranch = { ...empty };
+    const effects = effectsByCountry?.get(countryId) ?? null;
 
     for (const cmu of units) {
       const rosterUnit = unitById.get(cmu.roster_unit_id);
@@ -66,7 +86,17 @@ export function computeHardPowerByCountry(
       const unlockedLevel = unlockedLevelFromPoints(cmu.current_level);
       const levelRow = levels.find((l) => l.level === unlockedLevel) ?? null;
       const hardPowerPerUnit = levelRow ? Number(levelRow.hard_power) || 0 : 0;
-      const count = (rosterUnit.base_count ?? 0) + (cmu.extra_count ?? 0);
+      const basePlusExtra = (rosterUnit.base_count ?? 0) + (cmu.extra_count ?? 0);
+      const count =
+        effects != null
+          ? getEffectiveMilitaryUnitCount(
+              effects,
+              cmu.roster_unit_id,
+              rosterUnit.branch,
+              rosterUnit.sub_type ?? null,
+              basePlusExtra + getUnitExtraEffectSum(effects, cmu.roster_unit_id)
+            )
+          : basePlusExtra;
       const contrib = count * hardPowerPerUnit;
 
       const b = rosterUnit.branch;

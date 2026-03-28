@@ -121,7 +121,7 @@ function isRequirementSatisfied(
     const lawRow = ctx.countryLawRows.find((r) => r.law_key === target);
     if (!lawRow) return false;
     const config = ctx.ruleParametersByKey[def.configRuleKey]?.value as { level_thresholds?: Record<string, number> } | undefined;
-    const levelKey = getLawLevelKeyFromScore(lawRow.score, config?.level_thresholds, def.levels);
+    const levelKey = getLawLevelKeyFromScore(lawRow.score, config?.level_thresholds, def.levels, def.lawKey);
     const levelIndex = def.levels.findIndex((l) => l.key === levelKey) + 1; // 1-based
     return levelIndex >= value;
   }

@@ -9,6 +9,29 @@
 
 import type { MilitaryBranch } from "@/types/database";
 import type { RosterRowByBranch } from "@/app/(public)/pays/[slug]/countryTabsTypes";
+import { getEffectiveMilitaryUnitCount, getUnitExtraEffectSum } from "@/lib/countryEffects";
+
+type MilitaryEffectForCount = {
+  effect_kind: string;
+  effect_target: string | null;
+  value: number;
+  duration_remaining?: number;
+  duration_kind?: string;
+};
+
+function effectiveUnitCountForIntel(row: RosterRowByBranch, militaryEffects: MilitaryEffectForCount[] | undefined): number {
+  const extra = Math.max(0, row.countryState?.extra_count ?? 0);
+  const rawBase = row.unit.base_count + extra;
+  if (militaryEffects === undefined) return rawBase;
+  const raw = rawBase + getUnitExtraEffectSum(militaryEffects, row.unit.id);
+  return getEffectiveMilitaryUnitCount(
+    militaryEffects,
+    row.unit.id,
+    row.unit.branch,
+    row.unit.sub_type ?? null,
+    raw
+  );
+}
 
 // ─── PRNG déterministe (Mulberry32) ──────────────────────────────────
 
@@ -104,6 +127,8 @@ export function computeFoggedRoster(
   rosterByBranch: Record<MilitaryBranch, RosterRowByBranch[]>,
   intelLevel: number,
   displaySeed: number,
+  /** Effets résolus du pays cible (même agrégation que l’onglet militaire). Si absent, base + extra saisi uniquement. */
+  militaryEffects?: MilitaryEffectForCount[],
 ): FoggedRoster {
   const intel = Math.max(0, Math.min(100, Math.round(intelLevel)));
 
@@ -122,8 +147,7 @@ export function computeFoggedRoster(
       let maxPoints = 0;
       let maxLevelCount = 0;
       for (const row of rows) {
-        const extra = Math.max(0, row.countryState?.extra_count ?? 0);
-        const count = row.unit.base_count + extra;
+        const count = effectiveUnitCountForIntel(row, militaryEffects);
         const points = Math.max(0, row.countryState?.current_level ?? 0);
         const unlockedLevel = Math.max(0, Math.min(row.unit.level_count, Math.floor(points / 100)));
         const manpower = unlockedLevel > 0
@@ -150,8 +174,7 @@ export function computeFoggedRoster(
   const units: FoggedUnitEstimate[] = [];
   for (const branch of ["terre", "air", "mer", "strategique"] as const) {
     for (const row of rosterByBranch[branch]) {
-      const extra = Math.max(0, row.countryState?.extra_count ?? 0);
-      const count = row.unit.base_count + extra;
+      const count = effectiveUnitCountForIntel(row, militaryEffects);
       const points = Math.max(0, row.countryState?.current_level ?? 0);
       const unlockedLevel = Math.max(0, Math.min(row.unit.level_count, Math.floor(points / 100)));
       const manpower = unlockedLevel > 0

@@ -14,7 +14,7 @@ import {
 } from "@/lib/countryEffects";
 import { BUDGET_MINISTRY_LABELS } from "@/lib/ruleParameters";
 import { formatNumber } from "@/lib/format";
-import { setLawTarget } from "./actions";
+import { setLawScoreImmediate, setLawTarget } from "./actions";
 
 function resolveTargetLabel(
   effectKind: string,
@@ -81,6 +81,7 @@ function LawCard({
   config,
   countryId,
   canEditCountry,
+  isAdmin,
   ruleParametersByKey,
   rosterNameById,
 }: {
@@ -89,6 +90,8 @@ function LawCard({
   config: LawConfig | undefined;
   countryId: string;
   canEditCountry: boolean;
+  /** Admin : clic = application immédiate du niveau (score = cible), outil debug. */
+  isAdmin: boolean;
   ruleParametersByKey: Record<string, { value: unknown }>;
   rosterNameById: Map<string, string>;
 }) {
@@ -108,12 +111,12 @@ function LawCard({
   const dailyStep = config?.daily_step ?? 20;
 
   const currentLevelKey = useMemo(
-    () => getLawLevelKeyFromScore(score, thresholds, def.levels),
-    [score, thresholds, def.levels]
+    () => getLawLevelKeyFromScore(score, thresholds, def.levels, def.lawKey),
+    [score, thresholds, def.levels, def.lawKey]
   );
   const targetLevelKey = useMemo(
-    () => getLawLevelKeyFromScore(targetScore, thresholds, def.levels),
-    [targetScore, thresholds, def.levels]
+    () => getLawLevelKeyFromScore(targetScore, thresholds, def.levels, def.lawKey),
+    [targetScore, thresholds, def.levels, def.lawKey]
   );
 
   useEffect(() => {
@@ -150,7 +153,9 @@ function LawCard({
     setSettingLevel(levelKey);
     setError(null);
     try {
-      const result = await setLawTarget(countryId, def.lawKey, threshold);
+      const result = isAdmin
+        ? await setLawScoreImmediate(countryId, def.lawKey, threshold)
+        : await setLawTarget(countryId, def.lawKey, threshold);
       if (result.error) {
         setError(result.error);
         pendingTarget.current = null;
@@ -277,7 +282,7 @@ function LawCard({
                       Actuel
                     </span>
                   )}
-                  {isTarget && !isCurrent && (
+                  {isTarget && !isCurrent && !isAdmin && (
                     <span
                       className="text-xs px-1.5 py-0.5 rounded text-white/95"
                       style={{ background: "rgba(255,255,255,0.18)", border: "1px solid rgba(255,255,255,0.28)" }}
@@ -345,6 +350,7 @@ export function CountryTabLaws({
   panelClass,
   panelStyle,
   canEditCountry,
+  isAdmin = false,
   countryLawRows,
   ruleParametersByKey,
   rosterUnitsFlat,
@@ -354,6 +360,7 @@ export function CountryTabLaws({
   panelClass: string;
   panelStyle: React.CSSProperties;
   canEditCountry: boolean;
+  isAdmin?: boolean;
   countryLawRows: CountryLawRow[];
   ruleParametersByKey: Record<string, { value: unknown }>;
   rosterUnitsFlat: Array<{ id: string; name_fr: string }>;
@@ -376,7 +383,9 @@ export function CountryTabLaws({
         Lois nationales
       </h2>
       <p className={`mb-6 text-sm ${glassMutedClass}`}>
-        Orientez les politiques nationales en fixant un objectif pour chaque loi. Le score évoluera chaque jour vers la cible choisie.
+        {isAdmin && canEditCountry
+          ? "Mode administrateur : un clic sur un niveau applique immédiatement la loi à ce palier (score et cible identiques). Les joueurs voient encore une transition quotidienne vers une cible."
+          : "Orientez les politiques nationales en fixant un objectif pour chaque loi. Le score évoluera chaque jour vers la cible choisie."}
       </p>
       <div className="space-y-4">
         {LAW_DEFINITIONS.map((def) => {
@@ -390,6 +399,7 @@ export function CountryTabLaws({
               config={config}
               countryId={countryId}
               canEditCountry={canEditCountry}
+              isAdmin={isAdmin}
               ruleParametersByKey={ruleParametersByKey}
               rosterNameById={rosterNameById}
             />

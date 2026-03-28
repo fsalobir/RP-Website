@@ -87,22 +87,56 @@ export function getLawDefinition(lawKey: string): LawDefinition | undefined {
   return LAW_DEFINITIONS.find((d) => d.lawKey === lawKey);
 }
 
+/** Anciennes clés de `mobilisation_config` (avant migration level_1…level_5). */
+const MOBILISATION_LEGACY_THRESHOLD_KEYS: [string, string][] = [
+  ["level_1", "demobilisation"],
+  ["level_2", "reserve_active"],
+  ["level_3", "mobilisation_partielle"],
+  ["level_4", "mobilisation_generale"],
+  ["level_5", "guerre_patriotique"],
+];
+
+function mergeMobilisationLegacyThresholds(thresholds: Record<string, number>): Record<string, number> {
+  const out: Record<string, number> = { ...thresholds };
+  for (const [levelKey, legacyKey] of MOBILISATION_LEGACY_THRESHOLD_KEYS) {
+    if (out[levelKey] === undefined && out[legacyKey] !== undefined) {
+      out[levelKey] = Number(out[legacyKey]);
+    }
+  }
+  return out;
+}
+
 export function getLawLevelKeyFromScore(
   score: number,
   thresholds: Record<string, number> | undefined,
-  levels: LawLevel[]
+  levels: LawLevel[],
+  lawKey?: string
 ): string {
   if (!thresholds) return levels[0]?.key ?? "level_1";
+  const th =
+    lawKey === "mobilisation"
+      ? mergeMobilisationLegacyThresholds(thresholds as Record<string, number>)
+      : thresholds;
   let best = levels[0]?.key ?? "level_1";
   let bestVal = -1;
   for (const lvl of levels) {
-    const t = thresholds[lvl.key] ?? 0;
+    const t = th[lvl.key] ?? 0;
     if (t <= score && t >= bestVal) {
       best = lvl.key;
       bestVal = t;
     }
   }
   return best;
+}
+
+/**
+ * Score utilisé pour résoudre les effets de loi sur la fiche pays (cible législative).
+ * Le joueur fixe `target_score` ; le `score` n’atteint la cible qu’au fil des ticks cron.
+ */
+export function getLawScoreForUiEffects(row: CountryLawRow): number {
+  const t = row.target_score;
+  if (typeof t === "number" && Number.isFinite(t)) return t;
+  return row.score;
 }
 
 export function getLawLevelLabel(lawKey: string, levelKey: string | null | undefined): string {
@@ -142,18 +176,29 @@ export type LawLevelEffect = {
  * Quand ce besoin sera activé, ajouter un paramètre optionnel `countryStats`
  * et appliquer le multiplicateur ici avant de push dans `out`.
  */
+export type ResolveLawEffectsOptions = {
+  /**
+   * `score` : palier selon le score effectif (cron, cohérence serveur).
+   * `target` : palier selon la cible joueur — pour la fiche pays (militaire, budget, etc.).
+   */
+  lawLevelScoreSource?: "score" | "target";
+};
+
 export function resolveAllLawEffectsForCountry(
   countryLawRows: CountryLawRow[],
-  ruleParametersByKey: Record<string, { value: unknown }>
+  ruleParametersByKey: Record<string, { value: unknown }>,
+  options?: ResolveLawEffectsOptions
 ): Array<{ effect_kind: string; effect_target: string | null; value: number }> {
   const out: Array<{ effect_kind: string; effect_target: string | null; value: number }> = [];
+  const src = options?.lawLevelScoreSource ?? "score";
 
   for (const def of LAW_DEFINITIONS) {
     const lawRow = countryLawRows.find((r) => r.law_key === def.lawKey);
     if (!lawRow) continue;
 
     const config = ruleParametersByKey[def.configRuleKey]?.value as LawConfig | undefined;
-    const levelKey = getLawLevelKeyFromScore(lawRow.score, config?.level_thresholds, def.levels);
+    const levelScore = src === "target" ? getLawScoreForUiEffects(lawRow) : lawRow.score;
+    const levelKey = getLawLevelKeyFromScore(levelScore, config?.level_thresholds, def.levels, def.lawKey);
 
     const allEffects = ruleParametersByKey[def.effectsRuleKey]?.value;
     if (!Array.isArray(allEffects)) continue;

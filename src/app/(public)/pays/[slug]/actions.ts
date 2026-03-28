@@ -35,6 +35,37 @@ export async function setLawTarget(countryId: string, lawKey: string, targetScor
   return {};
 }
 
+/** Admin uniquement : applique immédiatement le score et la cible (même valeur). Outil de debug sur la fiche pays. */
+export async function setLawScoreImmediate(countryId: string, lawKey: string, score: number) {
+  if (!ALL_LAW_KEYS.includes(lawKey)) return { error: "Loi inconnue." };
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: "Non connecté." };
+
+  const { data: adminRow } = await supabase.from("admins").select("id").eq("user_id", user.id).single();
+  if (!adminRow) return { error: "Réservé aux administrateurs." };
+
+  const clamped = Math.max(0, Math.min(500, Math.round(score)));
+
+  const { error } = await supabase.from("country_laws").upsert(
+    {
+      country_id: countryId,
+      law_key: lawKey,
+      score: clamped,
+      target_score: clamped,
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: "country_id,law_key" }
+  );
+
+  if (error) return { error: error.message };
+
+  revalidatePath("/pays/[slug]", "page");
+  return {};
+}
+
 /** @deprecated Use setLawTarget with lawKey = 'mobilisation' */
 export async function setMobilisationTarget(countryId: string, targetScore: number) {
   return setLawTarget(countryId, "mobilisation", targetScore);

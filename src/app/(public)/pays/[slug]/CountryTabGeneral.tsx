@@ -25,7 +25,14 @@ import {
   DURATION_DAYS_MAX,
 } from "@/lib/countryEffects";
 import { IDEOLOGY_LABELS, type IdeologyId } from "@/lib/ideology";
-import { LAW_DEFINITIONS, getLawEffectsForLevel, getLawLevelKeyFromScore, type CountryLawRow, type LawConfig } from "@/lib/laws";
+import {
+  LAW_DEFINITIONS,
+  getLawEffectsForLevel,
+  getLawLevelKeyFromScore,
+  getLawScoreForUiEffects,
+  type CountryLawRow,
+  type LawConfig,
+} from "@/lib/laws";
 
 /** Palette étendue pour les camemberts de sphère (pays maître + nombreux pays contrôlés). */
 const SPHERE_PIE_COLORS = [
@@ -374,7 +381,8 @@ export function CountryTabGeneral({
       const row = lawRowsByKey.get(def.lawKey);
       if (!row) return null;
       const config = ruleParametersByKey[def.configRuleKey]?.value as LawConfig | undefined;
-      const currentLevelKey = getLawLevelKeyFromScore(row.score, config?.level_thresholds, def.levels);
+      const uiScore = getLawScoreForUiEffects(row);
+      const currentLevelKey = getLawLevelKeyFromScore(uiScore, config?.level_thresholds, def.levels, def.lawKey);
       const currentLevelLabel = def.levels.find((l) => l.key === currentLevelKey)?.label ?? currentLevelKey;
       const effectsForCurrentLevel = getLawEffectsForLevel(def.lawKey, currentLevelKey, ruleParametersByKey);
       if (effectsForCurrentLevel.length === 0) return null;

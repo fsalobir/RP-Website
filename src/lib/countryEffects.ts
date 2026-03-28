@@ -881,7 +881,7 @@ export const EFFECT_SOURCES: Array<(ctx: EffectResolutionContext) => ResolvedEff
   ideologyEffectsSource,
 ];
 
-/** Agrège les effets de toutes les sources pour un pays. Utiliser cette liste pour getForcedMinPcts, getAllocationCapPercent, getUnitExtraEffectSum, getLimitModifierPercent, expectedNextTick. */
+/** Agrège les effets de toutes les sources pour un pays. Utiliser cette liste pour getForcedMinPcts, getAllocationCapPercent, getUnitExtraEffectSum, getLimitModifierPercent, getEffectiveMilitaryUnitCount, expectedNextTick. */
 export function getEffectsForCountry(context: EffectResolutionContext): ResolvedEffect[] {
   const out: ResolvedEffect[] = [];
   for (const source of EFFECT_SOURCES) {
@@ -940,6 +940,28 @@ export function getUnitExtraEffectSum(
   return sum;
 }
 
+const EXTRA_EFFECT_SOURCE_SORT: Record<NonNullable<ResolvedEffect["source"]>, number> = {
+  law: 0,
+  perk: 1,
+  country: 2,
+  global: 3,
+  ai: 4,
+  ideology: 5,
+};
+
+/** Liste des effets résolus `military_unit_extra` actifs pour une unité (debug admin : détail des sources). */
+export function getUnitExtraContributingEffects(effects: ResolvedEffect[], rosterUnitId: string): ResolvedEffect[] {
+  const list = effects.filter(
+    (e) => e.effect_kind === "military_unit_extra" && e.effect_target === rosterUnitId && isEffectActiveByDuration(e)
+  );
+  return [...list].sort((a, b) => {
+    const sa = a.source != null ? EXTRA_EFFECT_SOURCE_SORT[a.source] ?? 99 : 99;
+    const sb = b.source != null ? EXTRA_EFFECT_SOURCE_SORT[b.source] ?? 99 : 99;
+    if (sa !== sb) return sa - sb;
+    return (a.sourceLabel ?? "").localeCompare(b.sourceLabel ?? "", "fr");
+  });
+}
+
 /** Somme des modificateurs de limite (%) pour une branche (effets military_unit_limit_modifier). */
 export function getLimitModifierPercent(
   effects: Array<{ effect_kind: string; effect_target: string | null; value: number; duration_remaining?: number; duration_kind?: string }>,
@@ -960,14 +982,40 @@ export function getSubTypeLimitModifierPercent(
   branch: string,
   subType: string | null
 ): number {
-  const key = `${branch}${SUB_TYPE_TARGET_SEP}${subType ?? ""}`;
+  const normBranch = branch.trim().toLowerCase();
+  const normSub = (subType ?? "").trim().toLowerCase();
   let sum = 0;
   for (const e of effects) {
-    if (e.effect_kind === "military_unit_limit_modifier_sub_type" && e.effect_target === key && isEffectActiveByDuration(e)) {
+    if (e.effect_kind !== "military_unit_limit_modifier_sub_type" || !e.effect_target) continue;
+    if (!isEffectActiveByDuration(e)) continue;
+    const p = parseSubTypeTarget(e.effect_target);
+    const eb = p.branch.trim().toLowerCase();
+    const es = (p.subType ?? "").trim().toLowerCase();
+    if (eb === normBranch && es === normSub) {
       sum += Number(e.value);
     }
   }
   return sum;
+}
+
+/**
+ * Nombre d’unités effectif affiché (et pour le personnel) : base + extras plats (`extra_count` + `military_unit_extra`),
+ * puis les mêmes modificateurs % que pour les plafonds (branche, sous-type roster, unité roster).
+ * Les pourcentages se composent en multiplicatif : raw × (1+b) × (1+s) × (1+r).
+ */
+export function getEffectiveMilitaryUnitCount(
+  effects: Array<{ effect_kind: string; effect_target: string | null; value: number; duration_remaining?: number; duration_kind?: string }>,
+  rosterUnitId: string,
+  branch: string,
+  subType: string | null,
+  rawCount: number
+): number {
+  const raw = Number(rawCount);
+  if (!Number.isFinite(raw) || raw <= 0) return Math.max(0, Math.round(raw));
+  const b = getLimitModifierPercent(effects, branch) / 100;
+  const s = getSubTypeLimitModifierPercent(effects, branch, subType) / 100;
+  const r = getRosterUnitLimitModifierPercent(effects, rosterUnitId) / 100;
+  return Math.max(0, Math.round(raw * (1 + b) * (1 + s) * (1 + r)));
 }
 
 /** Somme des modificateurs de limite (%) pour une unité roster (effets military_unit_limit_modifier_roster). */

@@ -1,10 +1,19 @@
 "use client";
 
-import { useState } from "react";
+import { Fragment, useState } from "react";
 import type { MilitaryBranch } from "@/types/database";
 import { formatNumber } from "@/lib/format";
 import { Tooltip } from "@/components/ui/Tooltip";
-import { getUnitExtraEffectSum, type ResolvedEffect } from "@/lib/countryEffects";
+import {
+  formatEffectValue,
+  getEffectiveMilitaryUnitCount,
+  getLimitModifierPercent,
+  getRosterUnitLimitModifierPercent,
+  getSubTypeLimitModifierPercent,
+  getUnitExtraContributingEffects,
+  getUnitExtraEffectSum,
+  type ResolvedEffect,
+} from "@/lib/countryEffects";
 import type { RosterRowByBranch } from "./countryTabsTypes";
 import type { FoggedRoster, FoggedBranchEstimate, FoggedUnitEstimate } from "@/lib/intelFog";
 import { adjustTargetCountryIntelForTesting } from "./actions";
@@ -15,6 +24,111 @@ const BRANCH_LABELS: Record<MilitaryBranch, string> = {
   mer: "Mer",
   strategique: "Stratégique",
 };
+
+/** Effectifs (nombre d’unités × manpower du palier débloqué), identique à la colonne « Personnel » du tableau. */
+function rosterRowPersonnel(
+  row: RosterRowByBranch,
+  edit: { current_level: number; extra_count: number },
+  effects: ResolvedEffect[],
+): number {
+  const effectExtraSum = getUnitExtraEffectSum(effects, row.unit.id);
+  const effectiveExtra = edit.extra_count + effectExtraSum;
+  const rawCount = row.unit.base_count + effectiveExtra;
+  const totalCount = getEffectiveMilitaryUnitCount(
+    effects,
+    row.unit.id,
+    row.unit.branch,
+    row.unit.sub_type ?? null,
+    rawCount
+  );
+  const points = Math.max(0, edit.current_level);
+  const unlockedLevel = Math.max(0, Math.min(row.unit.level_count, Math.floor(points / 100)));
+  const manpowerLevel =
+    unlockedLevel > 0 ? row.levels.find((l) => l.level === unlockedLevel)?.manpower ?? 0 : 0;
+  return totalCount * manpowerLevel;
+}
+
+function defaultMilitaryEdit(row: RosterRowByBranch): { current_level: number; extra_count: number } {
+  return {
+    current_level: Math.max(0, row.countryState?.current_level ?? 0),
+    extra_count: Math.max(0, row.countryState?.extra_count ?? 0),
+  };
+}
+
+/** Panneau inline (pas de tooltip : tableaux + overflow). */
+function AdminRosterExtraBreakdown({
+  baseCount,
+  storedExtra,
+  effects,
+  rosterUnitId,
+  branch,
+  subType,
+  rawCount,
+  totalCount,
+  mutedClass,
+  textClass,
+}: {
+  baseCount: number;
+  storedExtra: number;
+  effects: ResolvedEffect[];
+  rosterUnitId: string;
+  branch: string;
+  subType: string | null;
+  rawCount: number;
+  totalCount: number;
+  mutedClass: string;
+  textClass: string;
+}) {
+  const contributing = getUnitExtraContributingEffects(effects, rosterUnitId);
+  const effectSum = getUnitExtraEffectSum(effects, rosterUnitId);
+  const branchPct = getLimitModifierPercent(effects, branch);
+  const subPct = getSubTypeLimitModifierPercent(effects, branch, subType);
+  const rosterPct = getRosterUnitLimitModifierPercent(effects, rosterUnitId);
+  return (
+    <div className={`space-y-2 rounded border border-white/20 bg-black/45 px-2 py-2 text-left text-[10px] backdrop-blur-sm ${textClass}`}>
+      <div className="font-semibold text-[var(--accent)]">Décomposition du total (debug admin)</div>
+      <ul className={`list-none space-y-0.5 ${textClass}`}>
+        <li>Base roster : {formatNumber(baseCount)}</li>
+        <li>Extra enregistré (sauvegarde) : {formatNumber(storedExtra)}</li>
+      </ul>
+      <div className="border-t border-white/15 pt-2">
+        <p className={`mb-1 font-medium ${mutedClass}`}>Effets agrégés (lois, avantages, effets pays, global, IA, idéologie)</p>
+        {contributing.length === 0 ? (
+          <p className={mutedClass}>Aucun effet « extra unité » actif pour cette unité.</p>
+        ) : (
+          <ul className="max-h-40 list-none space-y-1 overflow-y-auto pr-1 font-mono text-[10px]">
+            {contributing.map((e, i) => (
+              <li key={`${e.source ?? "x"}-${e.sourceLabel ?? ""}-${i}`}>
+                <span className={mutedClass}>{e.sourceLabel ?? "Effet"}</span>
+                {" : "}
+                {formatEffectValue("military_unit_extra", Number(e.value))}
+              </li>
+            ))}
+          </ul>
+        )}
+        <p className={`mt-1.5 ${mutedClass}`}>
+          Somme des effets sur l&apos;extra : {formatEffectValue("military_unit_extra", effectSum)}
+        </p>
+        <p className={`mt-1.5 ${mutedClass}`}>
+          Sous-total brut (base + extra + extra effets) : {formatNumber(rawCount)}
+        </p>
+        <p className={`mt-0.5 ${mutedClass}`}>
+          Modificateurs % (limite branche / sous-type / unité) :{" "}
+          {formatEffectValue("military_unit_limit_modifier", branchPct)} /{" "}
+          {formatEffectValue("military_unit_limit_modifier_sub_type", subPct)} /{" "}
+          {formatEffectValue("military_unit_limit_modifier_roster", rosterPct)}
+        </p>
+        <p className={`mt-0.5 ${mutedClass}`}>
+          Effectif après % (arrondi) : {formatNumber(totalCount)}
+        </p>
+      </div>
+      <p className="border-t border-white/15 pt-2 font-semibold">{formatNumber(totalCount)}</p>
+      <p className={`leading-snug ${mutedClass}`}>
+        Brut × (1 + % branche) × (1 + % sous-type) × (1 + % unité), avec le brut = base + extra enregistré + somme des « extra unité ».
+      </p>
+    </div>
+  );
+}
 
 type CountryTabMilitaryProps = {
   countryId: string;
@@ -66,6 +180,8 @@ export function CountryTabMilitary({
   const [intelDeltaInput, setIntelDeltaInput] = useState("0");
   const [intelUpdating, setIntelUpdating] = useState(false);
   const [intelAdjustError, setIntelAdjustError] = useState<string | null>(null);
+  /** Debug admin : détail « nombre » sans tooltip (clic sur le total). */
+  const [adminRosterExtraBreakdownOpen, setAdminRosterExtraBreakdownOpen] = useState<Record<string, boolean>>({});
 
   const handleAdjustIntelForTesting = async () => {
     const parsed = Number(intelDeltaInput);
@@ -183,10 +299,19 @@ export function CountryTabMilitary({
             }));
         })();
 
+        const branchPersonnel = rows.reduce(
+          (sum, row) => sum + rosterRowPersonnel(row, militaryEdit[row.unit.id] ?? defaultMilitaryEdit(row), effects),
+          0,
+        );
+
         const sectionContent = (
           <>
             <h2 className={`mb-3 text-lg font-semibold ${glassTextClass}`}>
               {BRANCH_LABELS[branch]}
+              <span className={`ml-2 text-sm font-normal ${glassMutedClass}`}>
+                {" - Personnel : "}
+                {formatNumber(branchPersonnel)}
+              </span>
               {effectiveLimitByBranch[branch] > 0 && (
                 <span className={`ml-2 text-sm font-normal ${glassMutedClass}`}>
                   (limite effective : {formatNumber(effectiveLimitByBranch[branch])})
@@ -200,6 +325,10 @@ export function CountryTabMilitary({
                 {groups.map(({ subType, label, rows: subRows }) => {
                   const subKey = `${branch}_${subType ?? "__none__"}`;
                   const isOpen = militarySubtypeOpen[subKey] !== false;
+                  const subPersonnel = subRows.reduce(
+                    (sum, row) => sum + rosterRowPersonnel(row, militaryEdit[row.unit.id] ?? defaultMilitaryEdit(row), effects),
+                    0,
+                  );
                   return (
                     <div key={subKey} className="rounded-xl border border-white/25 overflow-hidden" style={{ background: "rgba(255,255,255,0.12)", backdropFilter: "blur(12px)" }}>
                       <button
@@ -215,7 +344,7 @@ export function CountryTabMilitary({
                           ▶
                         </span>
                         <span>{label}</span>
-                        <span className={glassMutedClass}>({subRows.length})</span>
+                        <span className={glassMutedClass}>Personnel : {formatNumber(subPersonnel)}</span>
                       </button>
                       <div
                         className="grid transition-[grid-template-rows] duration-200 ease-out"
@@ -235,29 +364,30 @@ export function CountryTabMilitary({
                               </thead>
                               <tbody>
                                 {subRows.map((row) => {
-                                  const edit = militaryEdit[row.unit.id] ?? {
-                                    current_level: Math.max(0, row.countryState?.current_level ?? 0),
-                                    extra_count: Math.max(0, row.countryState?.extra_count ?? 0),
-                                  };
+                                  const edit = militaryEdit[row.unit.id] ?? defaultMilitaryEdit(row);
                                   const storedExtra = edit.extra_count;
                                   const effectExtraSum = getUnitExtraEffectSum(effects, row.unit.id);
                                   const effectiveExtra = storedExtra + effectExtraSum;
-                                  const totalCount = row.unit.base_count + effectiveExtra;
+                                  const rawCount = row.unit.base_count + effectiveExtra;
+                                  const totalCount = getEffectiveMilitaryUnitCount(
+                                    effects,
+                                    row.unit.id,
+                                    row.unit.branch,
+                                    row.unit.sub_type ?? null,
+                                    rawCount
+                                  );
                                   const points = Math.max(0, edit.current_level);
                                   const unlockedLevel = Math.max(
                                     0,
                                     Math.min(row.unit.level_count, Math.floor(points / 100))
                                   );
-                                  const manpowerLevel =
-                                    unlockedLevel > 0
-                                      ? row.levels.find((l) => l.level === unlockedLevel)?.manpower ?? 0
-                                      : 0;
-                                  const personnel = totalCount * manpowerLevel;
+                                  const personnel = rosterRowPersonnel(row, edit, effects);
                                   const isLocked = points < 100;
                                   const isSaving = militarySavingAll;
 
                                   return (
-                                    <tr key={row.unit.id} className="border-b border-white/25">
+                                    <Fragment key={row.unit.id}>
+                                    <tr className="border-b border-white/25">
                                       <td className="w-12 py-0.5 px-2 align-middle text-center">
                                         <div className="inline-block h-9 w-9 overflow-hidden rounded border border-white/25 bg-white/10">
                                           {row.unit.icon_url ? (
@@ -288,7 +418,23 @@ export function CountryTabMilitary({
                                               }}
                                               disabled={isSaving}
                                             />
-                                            <span className={`text-[10px] ${glassMutedClass}`}>= {totalCount}</span>
+                                            <span className={`text-[10px] ${glassMutedClass}`}>= </span>
+                                            <button
+                                              type="button"
+                                              className={`text-[10px] font-mono underline decoration-dotted decoration-white/50 hover:text-[var(--accent)] ${glassTextClass}`}
+                                              aria-expanded={adminRosterExtraBreakdownOpen[row.unit.id] === true}
+                                              title="Afficher ou masquer le détail des effets (debug admin)"
+                                              onClick={(e) => {
+                                                e.preventDefault();
+                                                e.stopPropagation();
+                                                setAdminRosterExtraBreakdownOpen((prev) => ({
+                                                  ...prev,
+                                                  [row.unit.id]: !prev[row.unit.id],
+                                                }));
+                                              }}
+                                            >
+                                              {formatNumber(totalCount)}
+                                            </button>
                                           </div>
                                         ) : (
                                           <span
@@ -374,6 +520,25 @@ export function CountryTabMilitary({
                                         </div>
                                       </td>
                                     </tr>
+                                    {isAdmin && adminRosterExtraBreakdownOpen[row.unit.id] ? (
+                                      <tr className="border-b border-white/25 bg-black/35">
+                                        <td colSpan={5} className="px-3 py-2 align-top text-left">
+                                          <AdminRosterExtraBreakdown
+                                            baseCount={row.unit.base_count}
+                                            storedExtra={storedExtra}
+                                            effects={effects}
+                                            rosterUnitId={row.unit.id}
+                                            branch={row.unit.branch}
+                                            subType={row.unit.sub_type ?? null}
+                                            rawCount={rawCount}
+                                            totalCount={totalCount}
+                                            mutedClass={glassMutedClass}
+                                            textClass={glassTextClass}
+                                          />
+                                        </td>
+                                      </tr>
+                                    ) : null}
+                                    </Fragment>
                                   );
                                 })}
                               </tbody>

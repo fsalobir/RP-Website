@@ -8,6 +8,7 @@ import {
   getEffectKindValueHelper,
   getForcedMinPcts,
   getInfluenceModifiersFromEffects,
+  getEffectiveMilitaryUnitCount,
   getSubTypeLimitModifierPercent,
   getUnitExtraEffectSum,
   isEffectDisplayPositive,
@@ -100,6 +101,28 @@ describe("countryEffects", () => {
       { effect_kind: "military_unit_limit_modifier_sub_type", effect_target: `terre${SUB_TYPE_TARGET_SEP}artillerie`, value: 999, duration_kind: "days", duration_remaining: 1 },
     ];
     expect(getSubTypeLimitModifierPercent(effects, "terre", "infanterie")).toBe(8);
+  });
+
+  it("getSubTypeLimitModifierPercent : casse roster vs règle (Infanterie / infanterie)", () => {
+    const key = `terre${SUB_TYPE_TARGET_SEP}infanterie`;
+    const effects = [
+      { effect_kind: "military_unit_limit_modifier_sub_type", effect_target: key, value: 75, duration_kind: "days", duration_remaining: 1 },
+    ];
+    expect(getSubTypeLimitModifierPercent(effects, "terre", "Infanterie")).toBe(75);
+  });
+
+  it("getEffectiveMilitaryUnitCount : % branche × % sous-type (ex. mobilisation)", () => {
+    const effects = [
+      { effect_kind: "military_unit_limit_modifier", effect_target: "terre", value: 75, duration_kind: "days", duration_remaining: 1 },
+      {
+        effect_kind: "military_unit_limit_modifier_sub_type",
+        effect_target: `terre${SUB_TYPE_TARGET_SEP}infanterie`,
+        value: 75,
+        duration_kind: "days",
+        duration_remaining: 1,
+      },
+    ];
+    expect(getEffectiveMilitaryUnitCount(effects, "unit-1", "terre", "Infanterie", 10)).toBe(31);
   });
 
   it("getInfluenceModifiersFromEffects multiplies per subtype and ignores inactive", () => {

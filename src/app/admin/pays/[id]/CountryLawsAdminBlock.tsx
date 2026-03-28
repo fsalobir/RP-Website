@@ -24,8 +24,8 @@ function LawScoreRow({
   const [error, setError] = useState<string | null>(null);
 
   const scoreNum = Math.max(0, Math.min(500, Math.round(Number(score) || 0)));
-  const currentLevel = getLawLevelKeyFromScore(scoreNum, levelThresholds, def.levels);
-  const targetLevel = getLawLevelKeyFromScore(initialTargetScore, levelThresholds, def.levels);
+  const currentLevel = getLawLevelKeyFromScore(scoreNum, levelThresholds, def.levels, def.lawKey);
+  const targetLevel = getLawLevelKeyFromScore(initialTargetScore, levelThresholds, def.levels, def.lawKey);
   const currentLabel = def.levels.find((l) => l.key === currentLevel)?.label ?? currentLevel;
   const targetLabel = def.levels.find((l) => l.key === targetLevel)?.label ?? targetLevel;
 

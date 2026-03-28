@@ -23,7 +23,15 @@ import {
   getEffectsForCountry,
   getEffectsForCountryTickRates,
 } from "@/lib/countryEffects";
-import { resolveAllLawEffectsForCountry, getLawEffectsForLevel, getLawLevelKeyFromScore, getLawLevelLabel, LAW_DEFINITIONS, type CountryLawRow } from "@/lib/laws";
+import {
+  resolveAllLawEffectsForCountry,
+  getLawEffectsForLevel,
+  getLawLevelKeyFromScore,
+  getLawLevelLabel,
+  getLawScoreForUiEffects,
+  LAW_DEFINITIONS,
+  type CountryLawRow,
+} from "@/lib/laws";
 import { getTickBreakdown } from "@/lib/tickBreakdown";
 import { saveMilitaryUnit } from "./actions";
 import type { RosterRowByBranch } from "./countryTabsTypes";
@@ -274,7 +282,7 @@ export function CountryTabs({
   }, [rosterByBranch]);
 
   const lawLevelEffects = useMemo(
-    () => resolveAllLawEffectsForCountry(countryLawRows, ruleParametersByKey),
+    () => resolveAllLawEffectsForCountry(countryLawRows, ruleParametersByKey, { lawLevelScoreSource: "target" }),
     [countryLawRows, ruleParametersByKey]
   );
 
@@ -283,7 +291,8 @@ export function CountryTabs({
     if (!mobRow) return null;
     const mobDef = LAW_DEFINITIONS.find((d) => d.lawKey === "mobilisation")!;
     const config = ruleParametersByKey[mobDef.configRuleKey]?.value as { level_thresholds?: Record<string, number> } | undefined;
-    return getLawLevelKeyFromScore(mobRow.score, config?.level_thresholds, mobDef.levels);
+    const uiScore = getLawScoreForUiEffects(mobRow);
+    return getLawLevelKeyFromScore(uiScore, config?.level_thresholds, mobDef.levels, "mobilisation");
   }, [countryLawRows, ruleParametersByKey]);
 
   const stateActionEffectLookups = useMemo(() => {
@@ -325,7 +334,8 @@ export function CountryTabs({
       const lawRow = countryLawRows.find((r) => r.law_key === def.lawKey);
       if (!lawRow) return null;
       const config = ruleParametersByKey[def.configRuleKey]?.value as { level_thresholds?: Record<string, number> } | undefined;
-      const currentLevelKey = getLawLevelKeyFromScore(lawRow.score, config?.level_thresholds, def.levels);
+      const uiScore = getLawScoreForUiEffects(lawRow);
+      const currentLevelKey = getLawLevelKeyFromScore(uiScore, config?.level_thresholds, def.levels, def.lawKey);
       const currentLevelLabel = def.levels.find((l) => l.key === currentLevelKey)?.label ?? currentLevelKey;
       const effects = getLawEffectsForLevel(def.lawKey, currentLevelKey, ruleParametersByKey);
       return {
@@ -505,7 +515,12 @@ export function CountryTabs({
     const branches: MilitaryBranch[] = ["terre", "air", "mer", "strategique"];
     const rosterUnits = rosterByBranch.terre
       .concat(rosterByBranch.air, rosterByBranch.mer, rosterByBranch.strategique)
-      .map((row) => ({ id: row.unit.id, branch: row.unit.branch, base_count: row.unit.base_count ?? 0 }));
+      .map((row) => ({
+        id: row.unit.id,
+        branch: row.unit.branch,
+        base_count: row.unit.base_count ?? 0,
+        sub_type: row.unit.sub_type ?? null,
+      }));
     const rosterLevels = rosterByBranch.terre
       .concat(rosterByBranch.air, rosterByBranch.mer, rosterByBranch.strategique)
       .flatMap((row) =>
@@ -523,10 +538,22 @@ export function CountryTabs({
         };
       });
     if (countryUnits.length === 0) return;
-    const hardPowerMap = computeHardPowerByCountry(countryUnits, rosterUnits, rosterLevels);
+    const effectsSlice = resolvedEffects.map((e) => ({
+      effect_kind: e.effect_kind,
+      effect_target: e.effect_target,
+      value: e.value,
+      duration_remaining: e.duration_remaining,
+      duration_kind: e.duration_kind,
+    }));
+    const hardPowerMap = computeHardPowerByCountry(
+      countryUnits,
+      rosterUnits,
+      rosterLevels,
+      new Map([[country.id, effectsSlice]])
+    );
     const hp = hardPowerMap.get(country.id) ?? null;
     if (hp) setLocalHardPowerByBranch(hp);
-  }, [country.id, militaryEdit, rosterByBranch]);
+  }, [country.id, militaryEdit, rosterByBranch, resolvedEffects]);
 
   useEffect(() => {
     setGeneralName(country.name ?? "");
@@ -1276,6 +1303,7 @@ export function CountryTabs({
           panelClass={panelClass}
           panelStyle={panelStyle}
           canEditCountry={canEditCountry}
+          isAdmin={isAdmin}
           countryLawRows={countryLawRows}
           ruleParametersByKey={ruleParametersByKey}
           rosterUnitsFlat={rosterUnitsFlat}
