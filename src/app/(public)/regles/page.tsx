@@ -264,7 +264,7 @@ export default async function ReglesPage() {
                 detail="Ces variations s’appliquent à tous les pays lors de l’évolution du monde."
               />
               <FactCard
-                title="Bonus aux jets"
+                title="Effet des statistiques sur les jets"
                 className="md:col-span-2"
                 value={
                   <div className="grid gap-2 sm:grid-cols-2">
@@ -298,7 +298,7 @@ export default async function ReglesPage() {
                     </span>
                   </div>
                 }
-                detail="Plus une statistique est favorable, plus elle améliore le résultat du jet concerné."
+                detail="Chaque action choisit les statistiques qui entrent dans son jet. Ces fourchettes définissent seulement l’effet de chacune."
               />
             </div>
           </Section>

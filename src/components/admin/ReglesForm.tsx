@@ -11,7 +11,6 @@ import { AdminParameterTable, AdminSaveBar, AdminSettingsGuide } from "@/compone
 import {
   AiRulePreview,
   BudgetWorldGapPreview,
-  DiceModifierRulePreview,
   IdeologyRulePreview,
   InfluenceRulePreview,
   IntelRulePreview,
@@ -1773,13 +1772,13 @@ export function ReglesForm({
                 <CollapsibleBlock
                   id="rules-dice-modifiers"
                   title="Bonus et malus des statistiques"
-                  infoContent={<TooltipBody text="Chaque score du pays devient un bonus ou un malus ajouté au jet. Les quatre résultats sont additionnés." />}
+                  infoContent={<TooltipBody text="Définit l’effet individuel d’une statistique lorsqu’un type d’action l’utilise dans son jet." />}
                   open={statsOpen}
                   onToggle={() => setStatsOpen((o) => !o)}
                 >
                   <div className="p-3 space-y-4">
                     <p className="text-xs text-[var(--foreground-muted)]">
-                      Indiquez ce que chaque statistique ajoute au jet lorsque le pays est au score minimum puis au score maximum. Les scores intermédiaires sont calculés automatiquement.
+                      Définissez le bonus ou le malus produit par chaque statistique lorsqu’elle est utilisée. Les valeurs intermédiaires sont calculées automatiquement.
                     </p>
                     <AdminParameterTable
                       label="Effets des statistiques sur les jets"
@@ -1818,7 +1817,24 @@ export function ReglesForm({
                         };
                       })}
                     />
-                    <DiceModifierRulePreview ranges={getStatsDiceModifierRanges()} />
+                    <div
+                      className="flex flex-col gap-3 border-t pt-4 sm:flex-row sm:items-center sm:justify-between"
+                      style={{ borderColor: "var(--border-muted)" }}
+                    >
+                      <div className="max-w-[72ch]">
+                        <h4 className="text-sm font-medium text-[var(--foreground)]">Le contexte vient de l’action</h4>
+                        <p className="mt-1 text-xs leading-relaxed text-[var(--foreground-muted)]">
+                          Le type d’action décide quelles statistiques entrent dans le jet. La relation, le rapport de force et les corrections du MJ peuvent ensuite modifier le résultat.
+                        </p>
+                      </div>
+                      <a
+                        href="/admin/actions-etat"
+                        className="inline-flex min-h-11 shrink-0 items-center justify-center rounded-lg border px-4 text-sm font-medium text-[var(--foreground)] transition-colors hover:bg-[var(--background)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
+                        style={{ borderColor: "var(--border)" }}
+                      >
+                        Ouvrir les Actions d’État
+                      </a>
+                    </div>
                   </div>
                 </CollapsibleBlock>
               )}
