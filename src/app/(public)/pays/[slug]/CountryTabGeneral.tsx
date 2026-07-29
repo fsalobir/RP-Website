@@ -2,8 +2,7 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import type { Country } from "@/types/database";
-import type { CountryEffect } from "@/types/database";
+import type { Country, CountryEffect } from "@/types/database";
 import { formatNumber, formatGdp, formatPopulation } from "@/lib/format";
 import {
   getEffectDescription,
@@ -204,6 +203,10 @@ function SpherePieChart({
 
 type CountryTabGeneralProps = {
   country: Country;
+  previousSnapshot?: Pick<Country, "population" | "gdp" | "militarism" | "industry" | "science" | "stability"> | null;
+  worldDate?: { month: number; year: number } | null;
+  ownerMode?: boolean;
+  onNavigate?: (tab: "budget" | "laws" | "state_actions") => void;
   rankPopulation: number;
   rankGdp: number;
   rankInfluence: number;
@@ -292,6 +295,10 @@ type CountryTabGeneralProps = {
 
 export function CountryTabGeneral({
   country,
+  previousSnapshot = null,
+  worldDate = null,
+  ownerMode = false,
+  onNavigate,
   rankPopulation,
   rankGdp,
   rankInfluence,
@@ -359,6 +366,47 @@ export function CountryTabGeneral({
       : null;
   const getCountryName = (id: string) =>
     (id === country.id ? country.name : otherCountriesForRelation.find((c) => c.id === id)?.name) ?? null;
+  const briefingDate = worldDate
+    ? new Intl.DateTimeFormat("fr-FR", { month: "long", year: "numeric", timeZone: "UTC" }).format(
+        new Date(Date.UTC(worldDate.year, worldDate.month - 1, 1))
+      )
+    : null;
+  const percentChange = (before: number | null, after: number | null) =>
+    before != null && after != null && before !== 0 ? ((after - before) / Math.abs(before)) * 100 : null;
+  const strongestStatChange = previousSnapshot
+    ? [
+        { label: "Militarisme", before: previousSnapshot.militarism, after: country.militarism },
+        { label: "Industrie", before: previousSnapshot.industry, after: country.industry },
+        { label: "Science", before: previousSnapshot.science, after: country.science },
+        { label: "Stabilité", before: previousSnapshot.stability, after: country.stability },
+      ]
+        .filter((stat): stat is { label: string; before: number; after: number } => stat.before != null && stat.after != null)
+        .map((stat) => ({ label: stat.label, value: stat.after - stat.before }))
+        .sort((a, b) => Math.abs(b.value) - Math.abs(a.value))[0]
+    : null;
+  const briefingTrends = previousSnapshot
+    ? [
+        { label: "PIB", value: percentChange(previousSnapshot.gdp, country.gdp), suffix: " %" },
+        {
+          label: "Population",
+          value: percentChange(previousSnapshot.population, country.population),
+          suffix: " %",
+        },
+        strongestStatChange && strongestStatChange.value !== 0
+          ? { label: strongestStatChange.label, value: strongestStatChange.value, suffix: "" }
+          : null,
+      ].filter((trend): trend is { label: string; value: number; suffix: string } => trend?.value != null)
+    : [];
+  const briefingAlerts = resolvedEffects
+    .filter((effect) => Math.abs(effect.value) > 1e-9 && !isEffectDisplayPositive(effect))
+    .map((effect) =>
+      getEffectDescription(effect, {
+        rosterUnitName: (id) => rosterUnitsFlat.find((unit) => unit.id === id)?.name_fr ?? null,
+        countryName: getCountryName,
+      })
+    )
+    .filter((description, index, descriptions) => descriptions.indexOf(description) === index)
+    .slice(0, 2);
   const effectKindGroups = getEffectKindOptionGroups();
 
   function getInfluenceIntensity(value: number, maxValue: number): string {
@@ -424,6 +472,93 @@ export function CountryTabGeneral({
         </div>
         <div className="relative z-10 space-y-5 p-4 sm:space-y-6 sm:p-6">
         <h2 className={`text-xl font-semibold sm:text-2xl ${glassTextClass}`}>Situation générale</h2>
+        <section
+          aria-labelledby="country-briefing-title"
+          className={`border-y py-4 sm:py-5 ${glassBorderClass}`}
+          style={briefingSurfaceStyle}
+        >
+          <div className="mb-4 flex items-center gap-3 px-4">
+            <h3 id="country-briefing-title" className={`text-base font-semibold sm:text-lg ${glassTextClass}`}>
+              Briefing{briefingDate ? ` — ${briefingDate}` : ""}
+            </h3>
+            <span className="h-px flex-1 bg-white/20" aria-hidden />
+          </div>
+          <div className={`grid gap-5 px-4 ${ownerMode ? "lg:grid-cols-[1fr_1.2fr_auto]" : "md:grid-cols-2"}`}>
+            <div>
+              <h4 className={`mb-3 text-sm font-semibold ${glassTextClass}`}>Depuis le dernier tour</h4>
+              {briefingTrends.length > 0 ? (
+                <dl className="space-y-2">
+                  {briefingTrends.map((trend) => {
+                    const direction = trend.value > 0 ? "\u2197\uFE0E" : trend.value < 0 ? "\u2198\uFE0E" : "→";
+                    const trendClass =
+                      trend.value > 0
+                        ? "text-[var(--accent)]"
+                        : trend.value < 0
+                          ? "text-[var(--danger)]"
+                          : "text-white/75";
+                    return (
+                      <div key={trend.label} className="flex items-baseline justify-between gap-4 text-sm">
+                        <dt className={glassMutedClass}>{trend.label}</dt>
+                        <dd className={`font-semibold tabular-nums ${trendClass}`}>
+                          <span className="font-sans" aria-hidden>{direction} </span>
+                          {trend.value.toLocaleString("fr-FR", {
+                            signDisplay: "exceptZero",
+                            minimumFractionDigits: 1,
+                            maximumFractionDigits: 1,
+                          })}
+                          {trend.suffix}
+                        </dd>
+                      </div>
+                    );
+                  })}
+                </dl>
+              ) : (
+                <p className={`text-sm ${glassMutedClass}`}>Pas encore de bilan.</p>
+              )}
+            </div>
+
+            <div className="border-t border-white/20 pt-5 md:border-l md:border-t-0 md:pl-5 md:pt-0">
+              <h4 className={`mb-3 text-sm font-semibold ${glassTextClass}`}>À surveiller</h4>
+              {briefingAlerts.length > 0 ? (
+                <ul className="space-y-2">
+                  {briefingAlerts.map((alert) => (
+                    <li key={alert} className={`flex gap-2 text-sm leading-5 ${glassMutedClass}`}>
+                      <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--danger)]" aria-hidden />
+                      <span>{alert}</span>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className={`text-sm ${glassMutedClass}`}>Aucune alerte active.</p>
+              )}
+            </div>
+
+            {ownerMode && onNavigate && (
+              <div className="border-t border-white/20 pt-5 lg:border-l lg:border-t-0 lg:pl-5 lg:pt-0">
+                <h4 className={`mb-3 text-sm font-semibold ${glassTextClass}`}>Décider</h4>
+                <div className="grid grid-cols-2 gap-2 lg:w-44 lg:grid-cols-1">
+                  {[
+                    ["Budget", "budget"],
+                    ["Lois", "laws"],
+                    ["Actions d’État", "state_actions"],
+                  ].map(([label, target]) => (
+                    <button
+                      key={target}
+                      type="button"
+                      onClick={() => onNavigate(target as "budget" | "laws" | "state_actions")}
+                      className="min-h-11 rounded-lg border border-white/25 bg-white/[0.06] px-3 py-2 text-left text-sm font-semibold text-white transition-colors last:col-span-2 hover:border-[var(--accent)] hover:text-[var(--accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] lg:last:col-span-1"
+                    >
+                      <span className="flex items-center justify-between gap-3">
+                        {label}
+                        <span aria-hidden>→</span>
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        </section>
         <div className={`rounded-xl border p-4 ${glassBorderClass}`} style={briefingSurfaceStyle}>
           <h3 className={`mb-4 text-sm font-semibold ${glassTextClass}`}>Indicateurs</h3>
           <dl className="grid gap-4 sm:grid-cols-3">

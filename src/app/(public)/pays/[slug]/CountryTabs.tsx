@@ -105,6 +105,7 @@ export function CountryTabs({
   isPlayerForThisCountry = false,
   assignedPlayerEmail = null,
   updateLogs,
+  previousSnapshot = null,
   ruleParametersByKey,
   worldAverages,
   rosterByBranch,
@@ -164,6 +165,7 @@ export function CountryTabs({
   isPlayerForThisCountry?: boolean;
   assignedPlayerEmail?: string | null;
   updateLogs: CountryUpdateLog[];
+  previousSnapshot?: Pick<Country, "population" | "gdp" | "militarism" | "industry" | "science" | "stability"> | null;
   ruleParametersByKey: Record<string, { value: unknown }>;
   worldAverages: { pop_avg: number; gdp_avg: number; mil_avg: number; ind_avg: number; sci_avg: number; stab_avg: number } | null;
   rosterByBranch: Record<MilitaryBranch, RosterRowByBranch[]>;
@@ -1208,6 +1210,10 @@ export function CountryTabs({
           ruleParametersByKey={ruleParametersByKey}
           otherCountriesForRelation={otherCountriesForRelation}
           resolvedEffects={resolvedEffects}
+          previousSnapshot={previousSnapshot}
+          worldDate={worldDate ?? null}
+          ownerMode={isPlayerForThisCountry}
+          onNavigate={(nextTab) => setTab(nextTab)}
         />
       )}
 

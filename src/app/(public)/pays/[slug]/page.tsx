@@ -160,10 +160,17 @@ export default async function CountryPage({
   const backHref = isAdmin ? "/admin/pays" : "/";
 
   const supabase = await createClient();
-  const [updateLogsRes, assignedPlayerRes, countriesListRes, ideologyState] = await Promise.all([
+  const [updateLogsRes, previousSnapshotRes, assignedPlayerRes, countriesListRes, ideologyState] = await Promise.all([
     isAdmin
       ? supabase.from("country_update_logs").select("*").eq("country_id", country.id).order("run_at", { ascending: false }).limit(10)
       : Promise.resolve({ data: [] as CountryUpdateLog[] }),
+    supabase
+      .from("country_history")
+      .select("population, gdp, militarism, industry, science, stability")
+      .eq("country_id", country.id)
+      .order("date", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
     supabase.from("country_players").select("email, name").eq("country_id", country.id).maybeSingle(),
     supabase.from("countries").select("id, name").order("name"),
     fetchWorldIdeologyState(createServiceRoleClient()),
@@ -697,6 +704,7 @@ export default async function CountryPage({
         isPlayerForThisCountry={isPlayerForThisCountry}
         assignedPlayerEmail={assignedPlayerEmail}
         updateLogs={updateLogs}
+        previousSnapshot={previousSnapshotRes.data}
         ruleParametersByKey={ruleParametersByKey}
         worldAverages={worldAverages}
         rosterByBranch={foggedRoster ? { terre: [], air: [], mer: [], strategique: [] } : rosterByBranch}
