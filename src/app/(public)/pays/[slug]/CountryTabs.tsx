@@ -938,7 +938,7 @@ export function CountryTabs({
           )}
         </div>
         {canEditCountry && !generalEditMode && (
-          <>
+          <div className="flex w-full gap-2 sm:w-auto">
             <button
               type="button"
               onClick={() => {
@@ -950,20 +950,20 @@ export function CountryTabs({
                 setGeneralError(null);
                 setGeneralEditMode(true);
               }}
-              className="inline-flex min-h-11 shrink-0 items-center justify-center rounded-lg border border-white/25 px-4 text-sm text-white/90 transition-colors hover:bg-white/15 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
+              className="inline-flex min-h-11 flex-1 items-center justify-center rounded-lg border border-white/25 px-4 text-sm text-white/90 transition-colors hover:bg-white/15 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] sm:flex-none"
               style={{ background: "rgba(255,255,255,0.08)" }}
             >
-              Éditer
+              Modifier
             </button>
             {isAdmin && (
               <Link
                 href={`/admin/pays/${country.id}`}
-                className="inline-flex min-h-11 shrink-0 items-center justify-center rounded-lg border border-[var(--accent)] bg-[var(--accent)] px-4 text-sm font-medium text-[#0f1419] hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
+                className="inline-flex min-h-11 flex-1 items-center justify-center rounded-lg border border-[var(--accent)] bg-[var(--accent)] px-4 text-sm font-medium text-[#0f1419] hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white sm:flex-none"
               >
-                [Admin] Editer
+                Réglages complets
               </Link>
             )}
-          </>
+          </div>
         )}
       </div>
 
@@ -1108,7 +1108,7 @@ export function CountryTabs({
             aria-pressed={tab === "etat_major"}
             onClick={() => setTab("etat_major")}
           >
-            État Major
+            État-major
           </button>
         )}
         <button
@@ -1159,7 +1159,7 @@ export function CountryTabs({
             aria-pressed={tab === "debug"}
             onClick={() => setTab("debug")}
           >
-            Debug
+            Diagnostic
           </button>
         )}
       </nav>

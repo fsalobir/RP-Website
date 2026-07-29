@@ -2,7 +2,7 @@
 
 import type { Country } from "@/types/database";
 import type { CountryUpdateLog } from "@/types/database";
-import { formatNumber, formatGdp, formatPopulation } from "@/lib/format";
+import { formatGdp, formatPopulation } from "@/lib/format";
 import { Tooltip } from "@/components/ui/Tooltip";
 import { getExpectedNextTick } from "@/lib/expectedNextTick";
 import { getEffectDescription, type ResolvedEffect } from "@/lib/countryEffects";
@@ -44,6 +44,23 @@ type CountryTabBudgetProps = {
   effectsForTick?: ResolvedEffect[];
 };
 
+function DetailsChevron() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      className="h-5 w-5 shrink-0 transition-transform group-open:rotate-180"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+    >
+      <path d="m6 9 6 6 6-6" />
+    </svg>
+  );
+}
+
 export function CountryTabBudget({
   country,
   panelClass,
@@ -63,7 +80,6 @@ export function CountryTabBudget({
   budgetSaving,
   canEditCountry,
   isAdmin,
-  budget,
   onSaveBudget,
   effects,
   rosterUnitsFlat,
@@ -95,19 +111,14 @@ export function CountryTabBudget({
         <h2 className="mb-4 text-lg font-semibold text-[var(--foreground)]">
           Budget d'état
         </h2>
-        <div className="mb-4 space-y-3 text-sm text-[var(--foreground-muted)]">
+        <div className="mb-4 space-y-3 text-sm text-white/80">
           <p>
-            Le budget d'état est une <strong className="text-[var(--foreground)]">fraction du PIB</strong> du pays (valeur annuelle).
-            Les montants affichés ci-dessous sont en <strong className="text-[var(--foreground)]">budget mensuel</strong> (1 mois IRP = 1 jour IRL).
-            Répartissez ce budget entre les ministères ; la somme des pourcentages doit être égale à 100 % pour ne rien perdre.
-            Les valeurs assignées, ainsi que le budget d'état, existent surtout pour <strong className="text-[var(--foreground)]">l'immersion</strong> et donner une idée des échelles de budget que le pays peut se permettre.
-          </p>
-          <p>
-            Vous pouvez donner une priorité d'évolution à votre nation au travers de votre budget.
+            Choisissez la part du PIB consacrée à l’État, puis répartissez ce budget entre les ministères.
+            Ce sont ces pourcentages qui orientent l’évolution du pays.
           </p>
           <ul className="list-inside list-disc space-y-1 pl-1">
-            <li>Si un département ne reçoit pas de financement ou pas suffisamment, l'effet national peut être négatif.</li>
-            <li>La somme doit atteindre le plafond d'allocation (100 % normal ; effets Allocation de Budget Maximum peuvent le modifier).</li>
+            <li>Un ministère sous-financé peut pénaliser le pays.</li>
+            <li>Tout budget non réparti est perdu : visez le maximum autorisé.</li>
           </ul>
           {allocationCap !== 100 && (
             <p className="text-sm text-[var(--foreground)]">
@@ -119,7 +130,7 @@ export function CountryTabBudget({
         <div className="mb-4 flex flex-wrap items-center gap-4">
           <div className="flex items-center gap-2">
             <label htmlFor="budget-fraction" className="text-sm font-medium text-[var(--foreground)]">
-              Fraction du PIB :
+              Part du PIB consacrée à l’État :
             </label>
             {canEditCountry ? (
               <>
@@ -143,9 +154,9 @@ export function CountryTabBudget({
             )}
           </div>
           <div className="text-sm">
-            <span className="text-[var(--foreground-muted)]">Budget mensuel : </span>
+            <span className="text-[var(--foreground-muted)]">Budget mensuel disponible : </span>
             <span className="font-semibold text-[var(--foreground)]">
-              {totalBudgetMonthlyBn >= 0.01 ? `${totalBudgetMonthlyBn.toLocaleString("fr-FR", { minimumFractionDigits: 0, maximumFractionDigits: 2 })} Bn $ / Mois` : "—"}
+              {totalBudgetMonthlyBn >= 0.01 ? `${formatGdp(totalBudgetMonthly)} $ par mois` : "—"}
             </span>
           </div>
           {!isAdmin && canEditCountry && (
@@ -242,7 +253,7 @@ export function CountryTabBudget({
                       )}
                     </div>
                     <div className="text-left font-mono text-sm text-[var(--foreground)] sm:text-right">
-                      {amountMonthlyBn >= 0.01 ? `${amountMonthlyBn.toFixed(2)} Bn $ / Mois` : "—"}
+                      {amountMonthlyBn >= 0.01 ? `${formatGdp((totalBudgetMonthly * value) / 100)} $ par mois` : "—"}
                     </div>
                   </div>
                 );
@@ -320,13 +331,15 @@ export function CountryTabBudget({
           effectsForTick ?? effects,
         );
         return (
-          <section className={panelClass} style={panelStyle}>
-            <h2 className="mb-2 text-lg font-semibold text-[var(--foreground-muted)]">
-              Debug — Valeurs attendues à la prochaine mise à jour
-            </h2>
-            <p className="mb-4 text-sm text-[var(--foreground-muted)]">
-              Si le joueur conserve ces allocations, le cron calculera approximativement les valeurs ci-dessous (moyennes mondiales et règles actuelles). À comparer avec le résultat effectif après le passage du cron.
-            </p>
+          <details className={`${panelClass} group`} style={panelStyle}>
+            <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 font-semibold text-[var(--foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] [&::-webkit-details-marker]:hidden">
+              <span>Prévision détaillée de la prochaine mise à jour</span>
+              <DetailsChevron />
+            </summary>
+            <div className="mt-4 border-t border-white/20 pt-4">
+              <p className="mb-4 text-sm text-[var(--foreground-muted)]">
+                Estimation si les allocations actuelles sont enregistrées. Le résultat réel peut légèrement varier.
+              </p>
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
               <div>
                 <div className="mb-1 text-xs font-semibold uppercase text-[var(--foreground-muted)]">Actuel</div>
@@ -351,7 +364,7 @@ export function CountryTabBudget({
                 </ul>
               </div>
               <div>
-                <div className="mb-1 text-xs font-semibold uppercase text-[var(--accent)]">Attendu (1 tick)</div>
+                <div className="mb-1 text-xs font-semibold uppercase text-[var(--accent)]">Prochaine mise à jour</div>
                 <ul className="space-y-0.5 font-mono text-sm text-[var(--foreground)]">
                   <li>Population : {formatPopulation(expected.population)}</li>
                   <li>PIB : {formatGdp(expected.gdp)}</li>
@@ -362,7 +375,7 @@ export function CountryTabBudget({
                 </ul>
               </div>
               <div className="lg:col-span-2">
-                <div className="mb-1 text-xs font-semibold uppercase text-[var(--foreground-muted)]">Évolutions attendues (1 tick)</div>
+                <div className="mb-1 text-xs font-semibold uppercase text-[var(--foreground-muted)]">Évolutions attendues</div>
                 {(() => {
                   const fmt = (v: number) => (v >= 0 ? `+${Number(v).toFixed(4)}` : Number(v).toFixed(4));
                   const rows: { label: string; base: number; final: number; sources: Record<string, number>; effectDelta?: number }[] = [
@@ -423,17 +436,20 @@ export function CountryTabBudget({
                 )}
               </div>
             </div>
-          </section>
+            </div>
+          </details>
         );
       })()}
 
       {isAdmin && updateLogs.length > 0 && (
-        <section className={panelClass} style={panelStyle}>
-          <h2 className="mb-4 text-lg font-semibold text-[var(--foreground-muted)]">
-            Debug — Dernières mises à jour cron
-          </h2>
+        <details className={`${panelClass} group`} style={panelStyle}>
+          <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 font-semibold text-[var(--foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] [&::-webkit-details-marker]:hidden">
+            <span>Historique technique des mises à jour</span>
+            <DetailsChevron />
+          </summary>
+          <div className="mt-4 border-t border-white/20 pt-4">
           <p className="mb-4 text-sm text-[var(--foreground-muted)]">
-            Variables d'entrée et résultats avant/après pour chaque passage du cron.
+            Données brutes réservées au diagnostic. Elles n’influencent pas les réglages ci-dessus.
           </p>
           <p className="mb-4 text-xs text-[var(--foreground-muted)]">
             <strong>Stats / Stabilité :</strong> <code className="rounded bg-black/20 px-1">budget_*</code> = somme des (pct_ministère/100 × bonus) depuis les règles globales. La formule est <strong>avant + delta_effets + budget</strong> (pas de multiplicateur) ; la magnitude vient des règles. Bornes : stabilité -3..3, mil/ind/sci 0..10.
@@ -566,7 +582,8 @@ export function CountryTabBudget({
               );
             })}
           </ul>
-        </section>
+          </div>
+        </details>
       )}
     </div>
   );

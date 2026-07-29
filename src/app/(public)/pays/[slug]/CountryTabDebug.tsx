@@ -17,14 +17,15 @@ type CountryTabDebugProps = {
 };
 
 function formatRate(value: number): string {
-  const pct = value * 100;
+  const pct = Number((value * 100).toFixed(2));
   const sign = pct >= 0 ? "+" : "";
-  return `${sign}${pct.toFixed(2)} %`;
+  return `${sign}${formatNumber(pct)} %`;
 }
 
 function formatDelta(value: number): string {
+  const rounded = Number(value.toFixed(3));
   const sign = value >= 0 ? "+" : "";
-  return `${sign}${value.toFixed(3)}`;
+  return `${sign}${formatNumber(rounded)}`;
 }
 
 function ContributionLine({ c, asPoints = false }: { c: TickBreakdownContribution; asPoints?: boolean }) {
@@ -52,7 +53,7 @@ function StatContributionLine({ c }: { c: TickBreakdownContribution }) {
   const content = (
     <>
       <span className="text-[var(--foreground)]">{formatDelta(c.value)}</span>
-      <span className="text-[var(--foreground-muted)]"> point(s) — {c.label}</span>
+      <span className="text-[var(--foreground-muted)]"> points — {c.label}</span>
     </>
   );
   if (c.tooltip) {
@@ -123,7 +124,7 @@ function StatSection({
   return (
     <section className="rounded-lg border p-4" style={{ borderColor: "var(--border)", background: "var(--background-panel)" }}>
       <h3 className="mb-2 text-sm font-semibold uppercase text-[var(--foreground-muted)]">{title}</h3>
-      <div className="mb-2 text-base font-bold text-[var(--foreground)]">{currentValue.toFixed(2)}</div>
+      <div className="mb-2 text-base font-bold text-[var(--foreground)]">{formatNumber(Number(currentValue.toFixed(2)))}</div>
       <ul className="mb-2 list-none space-y-0.5">
         {cat.contributions.length === 0 ? (
           <li className="text-sm text-[var(--foreground-muted)]">Aucune contribution</li>
@@ -134,18 +135,18 @@ function StatSection({
         )}
       </ul>
       <div className="border-t pt-2 text-sm" style={{ borderColor: "var(--border)" }}>
-        <span className="text-[var(--foreground-muted)]">Somme des variations (Δ) = </span>
+        <span className="text-[var(--foreground-muted)]">Variation totale = </span>
         <span className="font-medium" style={{ color: deltaColor }}>
-          {formatDelta(delta)} point(s)
+          {formatDelta(delta)} points
         </span>
       </div>
       <div className="mt-1 text-sm" style={{ borderColor: "var(--border)" }}>
-        <span className="text-[var(--foreground-muted)]">{currentValue.toFixed(2)}</span>
+        <span className="text-[var(--foreground-muted)]">{formatNumber(Number(currentValue.toFixed(2)))}</span>
         <span className="mx-1 text-[var(--foreground-muted)]">+</span>
         <span style={{ color: deltaColor }}>{formatDelta(delta)}</span>
         <span className="mx-1 text-[var(--foreground-muted)]">=</span>
-        <span className="font-medium text-[var(--foreground)]">{cat.expectedValue.toFixed(2)}</span>
-        <span className="ml-1.5 text-xs text-[var(--foreground-muted)]">(valeur attendue au passage de jour)</span>
+        <span className="font-medium text-[var(--foreground)]">{formatNumber(Number(cat.expectedValue.toFixed(2)))}</span>
+        <span className="ml-1.5 text-xs text-[var(--foreground-muted)]">(après la prochaine mise à jour)</span>
       </div>
     </section>
   );
@@ -175,17 +176,22 @@ export function CountryTabDebug({
     <div className="space-y-6">
       <section className={panelClass} style={panelStyle}>
         <h2 className="mb-2 text-lg font-semibold text-[var(--foreground-muted)]">
-          Debug — Vue d’ensemble des effets au prochain passage de jour
+          Diagnostic de la prochaine mise à jour
         </h2>
         <p className="mb-4 text-sm text-[var(--foreground-muted)]">
-          Tous les facteurs (croissance globale, effets actifs, lois, budget) qui s’appliquent à ce pays. Les totaux et valeurs attendues sont alignés sur le calcul du cron SQL.
+          Vérifiez ce qui fera évoluer ce pays : règles mondiales, effets actifs, lois et budget.
+          Les valeurs ci-dessous sont des estimations.
         </p>
 
-        <section className="mb-4 rounded-lg border p-4" style={{ borderColor: "var(--border)", background: "var(--background-panel)" }}>
-          <h3 className="mb-2 text-sm font-semibold uppercase text-[var(--foreground-muted)]">Parité des sources</h3>
+        <details className="group mb-4 rounded-lg border p-4" style={{ borderColor: "var(--border)", background: "var(--background-panel)" }}>
+          <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 text-sm font-semibold text-[var(--foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] [&::-webkit-details-marker]:hidden">
+            <span>Sources techniques du calcul</span>
+            <span className="flex h-10 w-10 items-center justify-center text-xl transition-transform group-open:rotate-180" aria-hidden>⌄</span>
+          </summary>
+          <div className="mt-3 border-t pt-3" style={{ borderColor: "var(--border)" }}>
           <div className="grid gap-3 sm:grid-cols-2">
             <div>
-              <p className="mb-1 text-xs font-semibold text-[var(--accent)]">Inclus dans le calcul du tick</p>
+              <p className="mb-1 text-xs font-semibold text-[var(--accent)]">Pris en compte</p>
               <ul className="list-inside list-disc text-sm text-[var(--foreground-muted)]">
                 <li>
                   Règles globales MJ — `global_growth_effects` (admin « Global [Appliqué à tous les pays] ») : croissance PIB/pop (base et par stat), et `stat_delta` globaux sur les stats société.
@@ -210,7 +216,8 @@ export function CountryTabDebug({
               </ul>
             </div>
           </div>
-        </section>
+          </div>
+        </details>
 
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           <RateSection

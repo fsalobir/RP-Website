@@ -21,6 +21,7 @@ import {
 } from "@/lib/actionKeys";
 import { normalizeAdminEffectsAdded, formatAdminEffectLabel } from "@/lib/countryEffects";
 import { InfoTooltip } from "@/components/ui/InfoTooltip";
+import { matchesSearchText } from "@/lib/searchText";
 
 /** Descriptions courtes pour l'infobulle de chaque type d'action. */
 const ACTION_TOOLTIPS: Record<string, string> = {
@@ -49,6 +50,10 @@ const ACTION_CATEGORIES: { id: string; label: string; keys: string[] }[] = [
 ];
 
 const REQUESTS_PER_PAGE = 10;
+
+function formatActionCount(count: number): string {
+  return `${formatNumber(count)} action${count === 1 ? "" : "s"}`;
+}
 
 type ActionType = { id: string; key: string; label_fr: string; cost: number; params_schema: Record<string, unknown> | null };
 type RequestRow = {
@@ -144,17 +149,14 @@ export function CountryTabStateActions({
   }, [types]);
 
   const filteredHistory = useMemo(() => {
-    const q = historySearch.trim().toLowerCase();
-    if (!q) return requests;
     return requests.filter((r) => {
-      const typeLabel = (r.state_action_types?.label_fr ?? "").toLowerCase();
+      const typeLabel = r.state_action_types?.label_fr ?? "";
       const targetName = r.payload?.target_country_id
-        ? (countriesForTarget.find((c) => c.id === r.payload?.target_country_id)?.name ?? "").toLowerCase()
+        ? countriesForTarget.find((c) => c.id === r.payload?.target_country_id)?.name ?? ""
         : "";
-      const message = (typeof r.payload?.message === "string" ? r.payload.message : "").toLowerCase();
-      const zone = (typeof r.payload?.zone === "string" ? r.payload.zone : "").toLowerCase();
-      const status = r.status.toLowerCase();
-      return typeLabel.includes(q) || targetName.includes(q) || message.includes(q) || zone.includes(q) || status.includes(q);
+      const message = typeof r.payload?.message === "string" ? r.payload.message : "";
+      const zone = typeof r.payload?.zone === "string" ? r.payload.zone : "";
+      return matchesSearchText(historySearch, [typeLabel, targetName, message, zone, r.status]);
     });
   }, [requests, historySearch, countriesForTarget]);
 
@@ -168,7 +170,7 @@ export function CountryTabStateActions({
   async function handleConfirm() {
     if (!modalType) return;
     if (modalType.cost > balance) {
-      setError(`Solde insuffisant (${balance} action(s), coût ${modalType.cost}).`);
+      setError(`Solde insuffisant. Disponible : ${formatActionCount(balance)} · Coût : ${formatActionCount(modalType.cost)}.`);
       return;
     }
     setSubmitting(true);
@@ -216,7 +218,7 @@ export function CountryTabStateActions({
           Actions d'État
         </h2>
         <p className="mb-4 text-sm text-[var(--foreground-muted)]">
-          Solde actuel : <strong className="font-mono text-[var(--accent)]">{balance}</strong> action(s).
+          Solde actuel : <strong className="font-mono text-[var(--accent)]">{formatActionCount(balance)}</strong>.
         </p>
         {error && (
           <p className="mb-4 rounded border border-red-500/50 bg-red-500/10 px-3 py-2 text-sm text-red-400">
@@ -236,8 +238,10 @@ export function CountryTabStateActions({
                 <button
                   type="button"
                   onClick={() => setCategoriesOpen((prev) => ({ ...prev, [id]: !prev[id] }))}
-                  className="flex w-full items-center justify-between gap-2 px-5 py-4 text-left transition-colors hover:opacity-90"
+                  className="flex min-h-11 w-full items-center justify-between gap-2 px-5 py-4 text-left transition-colors hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--accent)]"
                   style={{ background: "var(--background-elevated)" }}
+                  aria-expanded={isOpen}
+                  aria-controls={`state-action-category-${id}`}
                 >
                   <span className="text-base font-semibold text-[var(--foreground)]">
                     {label}
@@ -253,11 +257,14 @@ export function CountryTabStateActions({
                   </span>
                 </button>
                 <div
+                  id={`state-action-category-${id}`}
                   className="grid"
                   style={{
                     gridTemplateRows: isOpen ? "1fr" : "0fr",
                     transition: "grid-template-rows 0.25s ease-out",
                   }}
+                  inert={!isOpen}
+                  aria-hidden={!isOpen}
                 >
                   <div className="min-h-0 overflow-hidden">
                     <div className="border-t py-1" style={{ borderColor: "var(--border-muted)" }}>
@@ -275,7 +282,7 @@ export function CountryTabStateActions({
                               side="top"
                             />
                             <span className="text-sm text-[var(--foreground-muted)]">
-                              — coût : {t.cost} action(s)
+                              — coût : {formatActionCount(t.cost)}
                             </span>
                           </div>
                           <button
@@ -287,9 +294,9 @@ export function CountryTabStateActions({
                               setMessage("");
                             }}
                             disabled={balance < t.cost}
-                            className="w-full shrink-0 rounded bg-[var(--accent)] px-3 py-1.5 text-sm text-white hover:bg-[var(--accent-hover)] disabled:opacity-50 sm:w-auto"
+                            className="min-h-11 w-full shrink-0 rounded bg-[var(--accent)] px-3 py-1.5 text-sm text-white hover:bg-[var(--accent-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] disabled:opacity-50 sm:w-auto"
                           >
-                            Lancer
+                            Préparer
                           </button>
                           </li>
                         ))}
@@ -335,7 +342,7 @@ export function CountryTabStateActions({
                         onChange={(e) => setRefusalMessage(e.target.value.slice(0, 200))}
                         placeholder="Message optionnel (transmis à l'émetteur)"
                         rows={2}
-                        className="w-full min-w-0 rounded border bg-[var(--background)] px-2 py-1 text-sm"
+                        className="min-h-11 w-full min-w-0 rounded border bg-[var(--background)] px-2 py-1 text-sm"
                         style={{ borderColor: "var(--border)" }}
                       />
                       <div className="flex flex-wrap gap-2">
@@ -354,14 +361,14 @@ export function CountryTabStateActions({
                             }
                           }}
                           disabled={submitting}
-                          className="rounded bg-red-600 px-3 py-1.5 text-sm text-white hover:bg-red-700 disabled:opacity-50"
+                          className="min-h-11 rounded bg-red-600 px-3 py-1.5 text-sm text-white hover:bg-red-700 disabled:opacity-50"
                         >
                           Confirmer le refus
                         </button>
                         <button
                           type="button"
                           onClick={() => { setRefusingId(null); setRefusalMessage(""); }}
-                          className="rounded border px-3 py-1.5 text-sm"
+                          className="min-h-11 rounded border px-3 py-1.5 text-sm"
                           style={{ borderColor: "var(--border)" }}
                         >
                           Annuler
@@ -381,14 +388,14 @@ export function CountryTabStateActions({
                           else router.refresh();
                         }}
                         disabled={submitting}
-                        className="rounded bg-emerald-600 px-3 py-1.5 text-sm text-white hover:bg-emerald-700 disabled:opacity-50"
+                        className="min-h-11 rounded bg-emerald-600 px-3 py-1.5 text-sm text-white hover:bg-emerald-700 disabled:opacity-50"
                       >
                         Accepter
                       </button>
                       <button
                         type="button"
                         onClick={() => setRefusingId(r.id)}
-                        className="rounded border border-red-500/50 px-3 py-1.5 text-sm text-red-500 hover:bg-red-500/10"
+                        className="min-h-11 rounded border border-red-500/50 px-3 py-1.5 text-sm text-red-500 hover:bg-red-500/10"
                       >
                         Refuser
                       </button>
@@ -421,10 +428,13 @@ export function CountryTabStateActions({
               setHistoryPage(1);
             }}
             placeholder="Type, cible, message, statut…"
-            className="w-full max-w-md rounded border bg-[var(--background)] px-3 py-2 text-sm"
+            className="min-h-11 w-full max-w-md rounded border bg-[var(--background)] px-3 py-2 text-sm"
             style={{ borderColor: "var(--border)" }}
           />
         </div>
+        <p className="mb-2 text-xs text-[var(--foreground-muted)] sm:hidden">
+          Faites glisser le tableau pour voir toutes les colonnes.
+        </p>
         <div className="overflow-x-auto">
           <table className="min-w-[680px] w-full text-sm">
             <thead>
@@ -448,7 +458,17 @@ export function CountryTabStateActions({
                   <Fragment key={r.id}>
                     <tr
                       onClick={() => setExpandedId(isExpanded ? null : r.id)}
-                      className="cursor-pointer transition-colors hover:bg-[var(--background)]"
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter" || event.key === " ") {
+                          event.preventDefault();
+                          setExpandedId(isExpanded ? null : r.id);
+                        }
+                      }}
+                      tabIndex={0}
+                      role="button"
+                      aria-expanded={isExpanded}
+                      aria-label={`${isExpanded ? "Masquer" : "Afficher"} le détail de ${r.state_action_types?.label_fr ?? "la demande"}`}
+                      className="cursor-pointer transition-colors hover:bg-[var(--background)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--accent)]"
                       style={{
                         borderColor: "var(--border)",
                         background: isExpanded ? "var(--background-elevated)" : undefined,
@@ -500,7 +520,7 @@ export function CountryTabStateActions({
                 type="button"
                 onClick={() => setHistoryPage((p) => Math.max(1, p - 1))}
                 disabled={historyEffectivePage === 1}
-                className="rounded border px-3 py-1.5 text-sm disabled:opacity-50"
+                className="min-h-11 rounded border px-3 py-1.5 text-sm disabled:opacity-50"
                 style={{ borderColor: "var(--border)" }}
               >
                 Précédent
@@ -509,7 +529,7 @@ export function CountryTabStateActions({
                 type="button"
                 onClick={() => setHistoryPage((p) => Math.min(historyTotalPages, p + 1))}
                 disabled={historyEffectivePage === historyTotalPages}
-                className="rounded border px-3 py-1.5 text-sm disabled:opacity-50"
+                className="min-h-11 rounded border px-3 py-1.5 text-sm disabled:opacity-50"
                 style={{ borderColor: "var(--border)" }}
               >
                 Suivant
@@ -1072,7 +1092,7 @@ function PriseInfluenceModalContent({
           aria-label="Pays cible"
           value={targetCountryId}
           onChange={(e) => onTargetChange(e.target.value)}
-          className="w-full rounded border bg-[var(--background)] px-3 py-2 text-sm"
+          className="min-h-11 w-full rounded border bg-[var(--background)] px-3 py-2 text-sm"
           style={{ borderColor: "var(--border)" }}
         >
           <option value="">— Choisir —</option>
@@ -1088,13 +1108,13 @@ function PriseInfluenceModalContent({
         </p>
       )}
 
-      <p className="mb-4 text-xs text-[var(--foreground-muted)]">Coût : {cost} action(s).</p>
+      <p className="mb-4 text-xs text-[var(--foreground-muted)]">Coût : {formatActionCount(cost)}.</p>
 
       <div className="flex flex-wrap justify-end gap-2">
         <button
           type="button"
           onClick={onCancel}
-          className="rounded border px-4 py-2 text-sm"
+          className="min-h-11 rounded border px-4 py-2 text-sm"
           style={{ borderColor: "var(--border)" }}
         >
           Annuler
@@ -1103,7 +1123,7 @@ function PriseInfluenceModalContent({
           type="button"
           onClick={onConfirm}
           disabled={submitting}
-          className="rounded bg-[var(--accent)] px-4 py-2 text-sm text-white hover:bg-[var(--accent-hover)] disabled:opacity-50"
+          className="min-h-11 rounded bg-[var(--accent)] px-4 py-2 text-sm text-white hover:bg-[var(--accent-hover)] disabled:opacity-50"
         >
           {submitting ? "Envoi…" : "Confirmer"}
         </button>
@@ -1209,7 +1229,7 @@ function DiplomatiqueModalCommon({
           aria-label="Pays cible"
           value={targetCountryId}
           onChange={(e) => onTargetChange(e.target.value)}
-          className="w-full rounded border bg-[var(--background)] px-3 py-2 text-sm"
+          className="min-h-11 w-full rounded border bg-[var(--background)] px-3 py-2 text-sm"
           style={{ borderColor: "var(--border)" }}
         >
           <option value="">— Choisir —</option>
@@ -1225,13 +1245,13 @@ function DiplomatiqueModalCommon({
         </p>
       )}
 
-      <p className="mb-4 text-xs text-[var(--foreground-muted)]">Coût : {cost} action(s).</p>
+      <p className="mb-4 text-xs text-[var(--foreground-muted)]">Coût : {formatActionCount(cost)}.</p>
 
       <div className="flex flex-wrap justify-end gap-2">
         <button
           type="button"
           onClick={onCancel}
-          className="rounded border px-4 py-2 text-sm"
+          className="min-h-11 rounded border px-4 py-2 text-sm"
           style={{ borderColor: "var(--border)" }}
         >
           Annuler
@@ -1240,7 +1260,7 @@ function DiplomatiqueModalCommon({
           type="button"
           onClick={onConfirm}
           disabled={submitting}
-          className="rounded bg-[var(--accent)] px-4 py-2 text-sm text-white hover:bg-[var(--accent-hover)] disabled:opacity-50"
+          className="min-h-11 rounded bg-[var(--accent)] px-4 py-2 text-sm text-white hover:bg-[var(--accent-hover)] disabled:opacity-50"
         >
           {submitting ? "Envoi…" : "Confirmer"}
         </button>
@@ -1360,7 +1380,7 @@ function BilateralAgreementModalContent({
           aria-label="Pays cible"
           value={targetCountryId}
           onChange={(e) => onTargetChange(e.target.value)}
-          className="w-full rounded border bg-[var(--background)] px-3 py-2 text-sm"
+          className="min-h-11 w-full rounded border bg-[var(--background)] px-3 py-2 text-sm"
           style={{ borderColor: "var(--border)" }}
         >
           <option value="">— Choisir —</option>
@@ -1376,13 +1396,13 @@ function BilateralAgreementModalContent({
         </p>
       )}
 
-      <p className="mb-4 text-xs text-[var(--foreground-muted)]">Coût : {cost} action(s).</p>
+      <p className="mb-4 text-xs text-[var(--foreground-muted)]">Coût : {formatActionCount(cost)}.</p>
 
       <div className="flex flex-wrap justify-end gap-2">
-        <button type="button" onClick={onCancel} className="rounded border px-4 py-2 text-sm" style={{ borderColor: "var(--border)" }}>
+        <button type="button" onClick={onCancel} className="min-h-11 rounded border px-4 py-2 text-sm" style={{ borderColor: "var(--border)" }}>
           Annuler
         </button>
-        <button type="button" onClick={onConfirm} disabled={submitting} className="rounded bg-[var(--accent)] px-4 py-2 text-sm text-white hover:bg-[var(--accent-hover)] disabled:opacity-50">
+        <button type="button" onClick={onConfirm} disabled={submitting} className="min-h-11 rounded bg-[var(--accent)] px-4 py-2 text-sm text-white hover:bg-[var(--accent-hover)] disabled:opacity-50">
           {submitting ? "Envoi…" : "Confirmer"}
         </button>
       </div>
@@ -1483,7 +1503,7 @@ function CovertOpModalContent({
           aria-label="Pays cible"
           value={targetCountryId}
           onChange={(e) => onTargetChange(e.target.value)}
-          className="w-full rounded border bg-[var(--background)] px-3 py-2 text-sm"
+          className="min-h-11 w-full rounded border bg-[var(--background)] px-3 py-2 text-sm"
           style={{ borderColor: "var(--border)" }}
         >
           <option value="">— Choisir —</option>
@@ -1499,13 +1519,13 @@ function CovertOpModalContent({
         </p>
       )}
 
-      <p className="mb-4 text-xs text-[var(--foreground-muted)]">Coût : {cost} action(s).</p>
+      <p className="mb-4 text-xs text-[var(--foreground-muted)]">Coût : {formatActionCount(cost)}.</p>
 
       <div className="flex flex-wrap justify-end gap-2">
-        <button type="button" onClick={onCancel} className="rounded border px-4 py-2 text-sm" style={{ borderColor: "var(--border)" }}>
+        <button type="button" onClick={onCancel} className="min-h-11 rounded border px-4 py-2 text-sm" style={{ borderColor: "var(--border)" }}>
           Annuler
         </button>
-        <button type="button" onClick={onConfirm} disabled={submitting} className="rounded bg-[var(--accent)] px-4 py-2 text-sm text-white hover:bg-[var(--accent-hover)] disabled:opacity-50">
+        <button type="button" onClick={onConfirm} disabled={submitting} className="min-h-11 rounded bg-[var(--accent)] px-4 py-2 text-sm text-white hover:bg-[var(--accent-hover)] disabled:opacity-50">
           {submitting ? "Envoi…" : "Confirmer"}
         </button>
       </div>
@@ -1577,7 +1597,7 @@ function DemandeUpModalContent({
           onChange={(e) => onMessageChange(e.target.value)}
           placeholder="Précisez ce que vous souhaitez (type d'unité, tech, effectifs, zone, etc.)…"
           rows={4}
-          className="w-full rounded border bg-[var(--background)] px-3 py-2 text-sm"
+          className="min-h-11 w-full rounded border bg-[var(--background)] px-3 py-2 text-sm"
           style={{ borderColor: "var(--border)" }}
         />
         <p className="mt-1 text-xs text-[var(--foreground-muted)]">Si vide, « (Demande libre) » sera envoyé.</p>
@@ -1589,13 +1609,13 @@ function DemandeUpModalContent({
         </p>
       )}
 
-      <p className="mb-4 text-xs text-[var(--foreground-muted)]">Coût : {cost} action(s).</p>
+      <p className="mb-4 text-xs text-[var(--foreground-muted)]">Coût : {formatActionCount(cost)}.</p>
 
       <div className="flex flex-wrap justify-end gap-2">
-        <button type="button" onClick={onCancel} className="rounded border px-4 py-2 text-sm" style={{ borderColor: "var(--border)" }}>
+        <button type="button" onClick={onCancel} className="min-h-11 rounded border px-4 py-2 text-sm" style={{ borderColor: "var(--border)" }}>
           Annuler
         </button>
-        <button type="button" onClick={onConfirm} disabled={submitting} className="rounded bg-[var(--accent)] px-4 py-2 text-sm text-white hover:bg-[var(--accent-hover)] disabled:opacity-50">
+        <button type="button" onClick={onConfirm} disabled={submitting} className="min-h-11 rounded bg-[var(--accent)] px-4 py-2 text-sm text-white hover:bg-[var(--accent-hover)] disabled:opacity-50">
           {submitting ? "Envoi…" : "Confirmer"}
         </button>
       </div>
@@ -1676,7 +1696,7 @@ function InternalActionModalContent({
           rows={3}
           placeholder={messagePlaceholder}
           maxLength={500}
-          className="w-full rounded border bg-[var(--background)] px-3 py-2 text-sm"
+          className="min-h-11 w-full rounded border bg-[var(--background)] px-3 py-2 text-sm"
           style={{ borderColor: "var(--border)" }}
         />
         <p className="mt-1 text-xs text-[var(--foreground-muted)]">
@@ -1690,13 +1710,13 @@ function InternalActionModalContent({
         </p>
       )}
 
-      <p className="mb-4 text-xs text-[var(--foreground-muted)]">Coût : {cost} action(s).</p>
+      <p className="mb-4 text-xs text-[var(--foreground-muted)]">Coût : {formatActionCount(cost)}.</p>
 
       <div className="flex flex-wrap justify-end gap-2">
-        <button type="button" onClick={onCancel} className="rounded border px-4 py-2 text-sm" style={{ borderColor: "var(--border)" }}>
+        <button type="button" onClick={onCancel} className="min-h-11 rounded border px-4 py-2 text-sm" style={{ borderColor: "var(--border)" }}>
           Annuler
         </button>
-        <button type="button" onClick={onConfirm} disabled={submitting} className="rounded bg-[var(--accent)] px-4 py-2 text-sm text-white hover:bg-[var(--accent-hover)] disabled:opacity-50">
+        <button type="button" onClick={onConfirm} disabled={submitting} className="min-h-11 rounded bg-[var(--accent)] px-4 py-2 text-sm text-white hover:bg-[var(--accent-hover)] disabled:opacity-50">
           {submitting ? "Envoi…" : "Confirmer"}
         </button>
       </div>
@@ -1739,7 +1759,7 @@ function GenericActionModalContent({
         {title}
       </h3>
       <p className="mb-4 text-sm text-[var(--foreground-muted)]">
-        Coût : {cost} action(s). Confirmez les paramètres ci-dessous.
+        Coût : {formatActionCount(cost)}. Confirmez les paramètres ci-dessous.
       </p>
       {requiresTarget && (
         <div className="mb-4">
@@ -1748,7 +1768,7 @@ function GenericActionModalContent({
             aria-label="Pays cible"
             value={targetCountryId}
             onChange={(e) => onTargetChange(e.target.value)}
-            className="w-full rounded border bg-[var(--background)] px-3 py-2 text-sm"
+            className="min-h-11 w-full rounded border bg-[var(--background)] px-3 py-2 text-sm"
             style={{ borderColor: "var(--border)" }}
           >
             <option value="">— Choisir —</option>
@@ -1768,7 +1788,7 @@ function GenericActionModalContent({
             rows={3}
             placeholder="Décrivez votre demande…"
             maxLength={500}
-            className="w-full rounded border bg-[var(--background)] px-3 py-2 text-sm"
+            className="min-h-11 w-full rounded border bg-[var(--background)] px-3 py-2 text-sm"
             style={{ borderColor: "var(--border)" }}
           />
           <p className="mt-1 text-xs text-[var(--foreground-muted)]">{message.length}/500 caractères</p>
@@ -1780,10 +1800,10 @@ function GenericActionModalContent({
         </p>
       )}
       <div className="flex flex-wrap justify-end gap-2">
-        <button type="button" onClick={onCancel} className="rounded border px-4 py-2 text-sm" style={{ borderColor: "var(--border)" }}>
+        <button type="button" onClick={onCancel} className="min-h-11 rounded border px-4 py-2 text-sm" style={{ borderColor: "var(--border)" }}>
           Annuler
         </button>
-        <button type="button" onClick={onConfirm} disabled={submitting} className="rounded bg-[var(--accent)] px-4 py-2 text-sm text-white hover:bg-[var(--accent-hover)] disabled:opacity-50">
+        <button type="button" onClick={onConfirm} disabled={submitting} className="min-h-11 rounded bg-[var(--accent)] px-4 py-2 text-sm text-white hover:bg-[var(--accent-hover)] disabled:opacity-50">
           {submitting ? "Envoi…" : "Confirmer"}
         </button>
       </div>
@@ -1830,7 +1850,7 @@ function RequestDetailView({
         <button
           type="button"
           onClick={onClose}
-          className="rounded border px-2 py-1 text-xs"
+          className="min-h-11 rounded border px-3 py-2 text-sm"
           style={{ borderColor: "var(--border)" }}
         >
           Fermer
