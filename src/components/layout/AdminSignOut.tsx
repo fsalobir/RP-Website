@@ -17,7 +17,7 @@ export function AdminSignOut() {
     <button
       type="button"
       onClick={handleSignOut}
-      className="text-sm text-[var(--foreground-muted)] hover:text-[var(--danger)] transition-colors whitespace-nowrap cursor-pointer"
+      className="inline-flex min-h-11 shrink-0 cursor-pointer items-center rounded px-2 text-sm whitespace-nowrap text-[var(--foreground-muted)] transition-colors hover:text-[var(--danger)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
     >
       <span aria-hidden className="mr-1.5">🚪</span>Déconnexion
     </button>

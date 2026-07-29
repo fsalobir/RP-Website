@@ -658,8 +658,7 @@ export default async function CountryPage({
 
   return (
     <div className="relative min-h-screen">
-      {/* Arrière-plan ancré sous le menu (h-14) et en haut de l'image pour garder le motif visible */}
-      <div className="fixed left-0 right-0 bottom-0 top-14 overflow-hidden" aria-hidden>
+      <div className="fixed inset-0 overflow-hidden" aria-hidden>
         <div
           className="absolute inset-0 bg-cover bg-no-repeat scale-105"
           style={{
@@ -670,18 +669,14 @@ export default async function CountryPage({
         />
         <div className="absolute inset-0 bg-[var(--background-panel)]/75" />
       </div>
-      <div className="relative z-10 mx-auto max-w-6xl px-4 py-10">
-        <div
-          className="mb-6 inline-block rounded-xl border border-white/25 px-4 py-2"
+      <div className="relative z-10 mx-auto max-w-6xl px-4 py-4 sm:py-8 lg:py-10">
+        <Link
+          href={backHref}
+          className="mb-4 inline-flex min-h-11 items-center rounded-xl border border-white/25 px-4 text-sm text-white/90 transition-colors hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] sm:mb-6"
           style={{ background: "rgba(255,255,255,0.12)", backdropFilter: "blur(12px)" }}
         >
-          <Link
-            href={backHref}
-            className="text-sm text-white/90 hover:text-white transition-colors"
-          >
-            ← Retour aux nations
-          </Link>
-        </div>
+          ← Retour aux nations
+        </Link>
 
         <CountryTabs
         country={country}
