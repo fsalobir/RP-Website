@@ -47,6 +47,7 @@ function clampInt(n: number, min: number, max: number) {
 }
 
 const ROSTER_LEVEL_MAX = ROSTER_CSV_MAX_LEVELS;
+const ROSTER_BRANCHES: MilitaryBranch[] = [...ROSTER_DISPLAY_BRANCH_ORDER];
 
 function makeNewUnit(): UnitRow {
   return {
@@ -378,10 +379,9 @@ export function RosterEditor({
     }
   }
 
-  const branches: MilitaryBranch[] = [...ROSTER_DISPLAY_BRANCH_ORDER];
   const unitsByBranch = useMemo(() => {
     const m = new Map<MilitaryBranch, UnitRow[]>();
-    for (const b of branches) m.set(b, []);
+    for (const b of ROSTER_BRANCHES) m.set(b, []);
     for (const u of units) m.get(u.branch)!.push(u);
     for (const arr of m.values()) {
       arr.sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0) || a.name_fr.localeCompare(b.name_fr));
@@ -451,16 +451,16 @@ export function RosterEditor({
         </div>
 
         {error && (
-          <p className="mt-4 text-sm text-[var(--danger)]">
+          <p role="alert" className="mt-4 text-sm text-[var(--danger)]">
             {error}
           </p>
         )}
 
         {csvImportReport && (
-          <p className="mt-4 text-sm text-[var(--accent)]">{csvImportReport}</p>
+          <p role="status" className="mt-4 text-sm text-[var(--accent)]">{csvImportReport}</p>
         )}
         {csvImportErrors.length > 0 && (
-          <ul className="mt-4 list-inside list-disc space-y-1 text-sm text-[var(--danger)]">
+          <ul role="alert" className="mt-4 list-inside list-disc space-y-1 text-sm text-[var(--danger)]">
             {csvImportErrors.map((line, i) => (
               <li key={i}>{line}</li>
             ))}
@@ -468,7 +468,7 @@ export function RosterEditor({
         )}
       </section>
 
-      {branches.map((branch) => {
+      {ROSTER_BRANCHES.map((branch) => {
         const list = unitsByBranch.get(branch) ?? [];
         return (
           <section key={branch} className={panelClass} style={panelStyle}>
@@ -519,10 +519,10 @@ export function RosterEditor({
                             )}
                           </div>
                           <div className="min-w-0">
-                            <div className="truncate text-sm font-semibold text-[var(--foreground)]">
+                            <div className="break-words text-sm font-semibold text-[var(--foreground)] [overflow-wrap:anywhere]">
                               {u.name_fr || "Nouvelle unité"}
                             </div>
-                            <div className="truncate text-xs text-[var(--foreground-muted)]">
+                            <div className="break-words text-xs text-[var(--foreground-muted)] [overflow-wrap:anywhere]">
                               {BRANCH_LABELS[u.branch]}
                               {u.sub_type ? ` • ${u.sub_type}` : ""}
                             </div>
@@ -532,19 +532,19 @@ export function RosterEditor({
                       </button>
 
                       <div
-                        className="overflow-hidden transition-all duration-200 ease-out"
+                        className="grid transition-[grid-template-rows,opacity] duration-200 ease-out"
                         style={{
-                          maxHeight: expanded ? 2000 : 0,
+                          gridTemplateRows: expanded ? "1fr" : "0fr",
                           opacity: expanded ? 1 : 0,
                         }}
                       >
-                        <div className="border-t px-3 py-3 text-xs sm:text-sm" style={{ borderColor: "var(--border-muted)" }}>
+                        <div className="min-h-0 overflow-hidden border-t px-3 py-3 text-xs sm:text-sm" style={{ borderColor: "var(--border-muted)" }}>
                           {/* Ligne 1 : Icône + Nom */}
                           <div className="grid gap-3 sm:grid-cols-[auto,minmax(0,1fr)] items-center mb-3">
                             <div>
-                              <div className="text-[10px] font-semibold uppercase text-[var(--foreground-muted)]">
+                              <label htmlFor={`roster-${u.id}-icon`} className="text-[10px] font-semibold uppercase text-[var(--foreground-muted)]">
                                 Icône
-                              </div>
+                              </label>
                               <div className="mt-1 flex items-center gap-2">
                                 <div
                                   className="h-10 w-10 overflow-hidden rounded border bg-[var(--background-elevated)] shrink-0"
@@ -557,6 +557,7 @@ export function RosterEditor({
                                 </div>
                                 <div className="min-w-0">
                                   <input
+                                    id={`roster-${u.id}-icon`}
                                     type="file"
                                     accept="image/jpeg,image/png,image/gif,image/webp"
                                     className="block w-full text-[10px] text-[var(--foreground-muted)] file:mr-2 file:rounded file:border-0 file:bg-[var(--accent)] file:px-2 file:py-1 file:text-[#0f1419] file:text-xs file:font-medium"
@@ -591,10 +592,11 @@ export function RosterEditor({
                               </div>
                             </div>
                             <div>
-                              <label className="text-[10px] font-semibold uppercase text-[var(--foreground-muted)]">
+                              <label htmlFor={`roster-${u.id}-name`} className="text-[10px] font-semibold uppercase text-[var(--foreground-muted)]">
                                 Nom
                               </label>
                               <input
+                                id={`roster-${u.id}-name`}
                                 className={`${inputClass} mt-1`}
                                 style={inputStyle}
                                 value={u.name_fr}
@@ -608,17 +610,18 @@ export function RosterEditor({
                           {/* Ligne 2 : Type + Sous-type */}
                           <div className="grid gap-3 sm:grid-cols-2 mb-3">
                             <div>
-                              <label className="text-[10px] font-semibold uppercase text-[var(--foreground-muted)]">
+                              <label htmlFor={`roster-${u.id}-branch`} className="text-[10px] font-semibold uppercase text-[var(--foreground-muted)]">
                                 Type
                               </label>
                               <select
+                                id={`roster-${u.id}-branch`}
                                 className={`${inputClass} mt-1`}
                                 style={inputStyle}
                                 value={u.branch}
                                 onChange={(e) => updateUnit(u.id, { branch: e.target.value as MilitaryBranch })}
                                 disabled={isSaving}
                               >
-                                {branches.map((b) => (
+                                {ROSTER_BRANCHES.map((b) => (
                                   <option key={b} value={b}>
                                     {BRANCH_LABELS[b]}
                                   </option>
@@ -626,10 +629,11 @@ export function RosterEditor({
                               </select>
                             </div>
                             <div>
-                              <label className="text-[10px] font-semibold uppercase text-[var(--foreground-muted)]">
+                              <label htmlFor={`roster-${u.id}-subtype`} className="text-[10px] font-semibold uppercase text-[var(--foreground-muted)]">
                                 Sous-type (optionnel)
                               </label>
                               <input
+                                id={`roster-${u.id}-subtype`}
                                 className={`${inputClass} mt-1`}
                                 style={inputStyle}
                                 value={u.sub_type ?? ""}
@@ -651,10 +655,11 @@ export function RosterEditor({
                           {/* Ligne 3 : Base + Tri + Niveaux */}
                           <div className="grid gap-3 sm:grid-cols-3 mb-3">
                             <div>
-                              <label className="text-[10px] font-semibold uppercase text-[var(--foreground-muted)]">
+                              <label htmlFor={`roster-${u.id}-base`} className="text-[10px] font-semibold uppercase text-[var(--foreground-muted)]">
                                 Base
                               </label>
                               <input
+                                id={`roster-${u.id}-base`}
                                 type="number"
                                 min={0}
                                 className={`${inputClass} mt-1 font-mono w-24`}
@@ -665,10 +670,11 @@ export function RosterEditor({
                               />
                             </div>
                             <div>
-                              <label className="text-[10px] font-semibold uppercase text-[var(--foreground-muted)]">
+                              <label htmlFor={`roster-${u.id}-order`} className="text-[10px] font-semibold uppercase text-[var(--foreground-muted)]">
                                 Tri
                               </label>
                               <input
+                                id={`roster-${u.id}-order`}
                                 type="number"
                                 className={`${inputClass} mt-1 font-mono w-20`}
                                 style={inputStyle}
@@ -678,10 +684,11 @@ export function RosterEditor({
                               />
                             </div>
                             <div>
-                              <label className="text-[10px] font-semibold uppercase text-[var(--foreground-muted)]">
+                              <label htmlFor={`roster-${u.id}-levels`} className="text-[10px] font-semibold uppercase text-[var(--foreground-muted)]">
                                 Niveaux
                               </label>
                               <input
+                                id={`roster-${u.id}-levels`}
                                 type="number"
                                 min={1}
                                 max={ROSTER_LEVEL_MAX}
@@ -721,10 +728,11 @@ export function RosterEditor({
                                 const sciReq = Number((row as { science_required?: number })?.science_required ?? 0);
                                 return (
                                   <div key={lvl}>
-                                    <label className="mb-0.5 block text-[10px] text-[var(--foreground-muted)]">
+                                    <label htmlFor={`roster-${u.id}-manpower-${lvl}`} className="mb-0.5 block text-[10px] text-[var(--foreground-muted)]">
                                       Niv. {lvl}
                                     </label>
                                     <input
+                                      id={`roster-${u.id}-manpower-${lvl}`}
                                       type="number"
                                       min={0}
                                       className={`${inputClass} font-mono w-24`}
@@ -754,10 +762,11 @@ export function RosterEditor({
                                 const sciReq = Number((row as { science_required?: number })?.science_required ?? 0);
                                 return (
                                   <div key={`hp-${lvl}`}>
-                                    <label className="mb-0.5 block text-[10px] text-[var(--foreground-muted)]">
+                                    <label htmlFor={`roster-${u.id}-power-${lvl}`} className="mb-0.5 block text-[10px] text-[var(--foreground-muted)]">
                                       Niv. {lvl}
                                     </label>
                                     <input
+                                      id={`roster-${u.id}-power-${lvl}`}
                                       type="number"
                                       min={0}
                                       className={`${inputClass} font-mono w-24`}
@@ -787,10 +796,11 @@ export function RosterEditor({
                                 const sciReq = Number((row as { science_required?: number })?.science_required ?? 0);
                                 return (
                                   <div key={`mob-${lvl}`}>
-                                    <label className="mb-0.5 block text-[10px] text-[var(--foreground-muted)]">
+                                    <label htmlFor={`roster-${u.id}-mobilisation-${lvl}`} className="mb-0.5 block text-[10px] text-[var(--foreground-muted)]">
                                       Niv. {lvl}
                                     </label>
                                     <input
+                                      id={`roster-${u.id}-mobilisation-${lvl}`}
                                       type="number"
                                       min={0}
                                       className={`${inputClass} font-mono w-24`}
@@ -820,10 +830,11 @@ export function RosterEditor({
                                 const sciReq = Number((row as { science_required?: number })?.science_required ?? 0);
                                 return (
                                   <div key={`sci-${lvl}`}>
-                                    <label className="mb-0.5 block text-[10px] text-[var(--foreground-muted)]">
+                                    <label htmlFor={`roster-${u.id}-science-${lvl}`} className="mb-0.5 block text-[10px] text-[var(--foreground-muted)]">
                                       Niv. {lvl}
                                     </label>
                                     <input
+                                      id={`roster-${u.id}-science-${lvl}`}
                                       type="number"
                                       min={0}
                                       step={0.1}

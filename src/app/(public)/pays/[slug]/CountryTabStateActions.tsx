@@ -330,6 +330,7 @@ export function CountryTabStateActions({
                   {refusingId === r.id ? (
                     <div className="flex w-full flex-col gap-2 sm:min-w-80">
                       <textarea
+                        aria-label="Message de refus"
                         value={refusalMessage}
                         onChange={(e) => setRefusalMessage(e.target.value.slice(0, 200))}
                         placeholder="Message optionnel (transmis à l'émetteur)"
@@ -1068,6 +1069,7 @@ function PriseInfluenceModalContent({
       <div className="mb-4">
         <label className="mb-1 block text-sm text-[var(--foreground-muted)]">Pays cible</label>
         <select
+          aria-label="Pays cible"
           value={targetCountryId}
           onChange={(e) => onTargetChange(e.target.value)}
           className="w-full rounded border bg-[var(--background)] px-3 py-2 text-sm"
@@ -1204,6 +1206,7 @@ function DiplomatiqueModalCommon({
       <div className="mb-4">
         <label className="mb-1 block text-sm text-[var(--foreground-muted)]">Pays cible</label>
         <select
+          aria-label="Pays cible"
           value={targetCountryId}
           onChange={(e) => onTargetChange(e.target.value)}
           className="w-full rounded border bg-[var(--background)] px-3 py-2 text-sm"
@@ -1354,6 +1357,7 @@ function BilateralAgreementModalContent({
       <div className="mb-4">
         <label className="mb-1 block text-sm text-[var(--foreground-muted)]">Pays cible</label>
         <select
+          aria-label="Pays cible"
           value={targetCountryId}
           onChange={(e) => onTargetChange(e.target.value)}
           className="w-full rounded border bg-[var(--background)] px-3 py-2 text-sm"
@@ -1476,6 +1480,7 @@ function CovertOpModalContent({
       <div className="mb-4">
         <label className="mb-1 block text-sm text-[var(--foreground-muted)]">Pays cible</label>
         <select
+          aria-label="Pays cible"
           value={targetCountryId}
           onChange={(e) => onTargetChange(e.target.value)}
           className="w-full rounded border bg-[var(--background)] px-3 py-2 text-sm"
@@ -1567,6 +1572,7 @@ function DemandeUpModalContent({
       <div className="mb-4">
         <label className="mb-1 block text-sm text-[var(--foreground-muted)]">Message pour le MJ (optionnel)</label>
         <textarea
+          aria-label="Message pour le maître du jeu"
           value={message}
           onChange={(e) => onMessageChange(e.target.value)}
           placeholder="Précisez ce que vous souhaitez (type d'unité, tech, effectifs, zone, etc.)…"
@@ -1664,6 +1670,7 @@ function InternalActionModalContent({
       <div className="mb-4">
         <label className="mb-1 block text-sm text-[var(--foreground-muted)]">{messageLabel}</label>
         <textarea
+          aria-label={messageLabel}
           value={message}
           onChange={(e) => onMessageChange(e.target.value)}
           rows={3}
@@ -1738,6 +1745,7 @@ function GenericActionModalContent({
         <div className="mb-4">
           <label className="mb-1 block text-sm text-[var(--foreground-muted)]">Pays cible</label>
           <select
+            aria-label="Pays cible"
             value={targetCountryId}
             onChange={(e) => onTargetChange(e.target.value)}
             className="w-full rounded border bg-[var(--background)] px-3 py-2 text-sm"
@@ -1754,6 +1762,7 @@ function GenericActionModalContent({
         <div className="mb-4">
           <label className="mb-1 block text-sm text-[var(--foreground-muted)]">Message (stat, unité, tech, etc.)</label>
           <textarea
+            aria-label="Message de la demande"
             value={message}
             onChange={(e) => onMessageChange(e.target.value)}
             rows={3}

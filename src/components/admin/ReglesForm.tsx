@@ -48,6 +48,7 @@ import {
 } from "@/lib/ideologyEffectsDisplay";
 import { LAW_DEFINITIONS, type LawDefinition } from "@/lib/laws";
 import { MatriceDiplomatiqueForm } from "@/app/admin/matrice-diplomatique/MatriceDiplomatiqueForm";
+import { DisclosureChevron } from "@/components/ui/DisclosureChevron";
 import { InfoTooltip } from "@/components/ui/InfoTooltip";
 
 function RecalculerVoisinagesButton() {
@@ -264,6 +265,7 @@ function CollapsibleBlock({
       <button
         type="button"
         onClick={onToggle}
+        aria-expanded={open}
         className={`flex w-full items-center justify-between gap-2 text-left transition-colors hover:opacity-90 ${isSection ? "px-5 py-4" : "px-4 py-2.5"}`}
         style={{ background: isSection ? "var(--background-elevated)" : "var(--background-elevated)" }}
       >
@@ -273,15 +275,7 @@ function CollapsibleBlock({
           {title}
           {infoContent ? <InfoTooltip side="bottom" warning={infoWarning} content={infoContent} /> : null}
         </span>
-        <span
-          className="block shrink-0 transition-transform duration-300 ease-out"
-          style={{ transform: open ? "rotate(180deg)" : "rotate(0deg)" }}
-          aria-hidden
-        >
-          <svg width={isSection ? 20 : 16} height={isSection ? 20 : 16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <path d="M6 9l6 6 6-6" />
-          </svg>
-        </span>
+        <DisclosureChevron open={open} />
       </button>
       <div
         className="grid"
@@ -1213,6 +1207,7 @@ export function ReglesForm({
                         <FormLabel label="Type d'effet" tooltip={genericEffectTypeTooltip} />
                       </label>
                       <select
+                        aria-label="Type d’effet global"
                         value={globalEffectKind}
                         onChange={(ev) => {
                           const k = ev.target.value;
@@ -1237,6 +1232,7 @@ export function ReglesForm({
                           <FormLabel label="Stat" tooltip={genericStatTooltip} />
                         </label>
                         <select
+                          aria-label="Statistique ciblée par l’effet global"
                           value={globalEffectTarget ?? STAT_KEYS[0]}
                           onChange={(ev) => setGlobalEffectTarget(ev.target.value || null)}
                           className={inputClass}
@@ -1254,6 +1250,7 @@ export function ReglesForm({
                           <FormLabel label="Ministère" tooltip={genericBudgetTooltip} />
                         </label>
                         <select
+                          aria-label="Ministère ciblé par l’effet global"
                           value={globalEffectTarget ?? getBudgetMinistryOptions()[0]?.key ?? ""}
                           onChange={(ev) => setGlobalEffectTarget(ev.target.value || null)}
                           className={inputClass}
@@ -1271,6 +1268,7 @@ export function ReglesForm({
                           <FormLabel label="Branche" tooltip={genericBranchTooltip} />
                         </label>
                         <select
+                          aria-label="Branche ciblée par l’effet global"
                           value={globalEffectTarget ?? MILITARY_BRANCH_EFFECT_IDS[0]}
                           onChange={(ev) => setGlobalEffectTarget(ev.target.value || null)}
                           className={inputClass}
@@ -1288,6 +1286,7 @@ export function ReglesForm({
                           <FormLabel label="Unité" tooltip={genericUnitTooltip} />
                         </label>
                         <select
+                          aria-label="Unité ciblée par l’effet global"
                           value={globalEffectTarget ?? rosterUnits[0]?.id ?? ""}
                           onChange={(ev) => setGlobalEffectTarget(ev.target.value || null)}
                           className={inputClass}
@@ -1305,6 +1304,7 @@ export function ReglesForm({
                           <FormLabel label="Sous-branche/type" tooltip="Branche et sous-type militaire ciblé." />
                         </label>
                         <select
+                          aria-label="Sous-branche ciblée par l’effet global"
                           value={globalEffectTarget ?? subTypeOptions[0]?.value ?? ""}
                           onChange={(ev) => setGlobalEffectTarget(ev.target.value || null)}
                           className={inputClass}
@@ -1321,6 +1321,7 @@ export function ReglesForm({
                         <FormLabel label={getEffectKindValueHelper(globalEffectKind).valueLabel} tooltip={genericEffectValueTooltip} />
                       </label>
                       <input
+                        aria-label={getEffectKindValueHelper(globalEffectKind).valueLabel}
                         type="number"
                         step={getEffectKindValueHelper(globalEffectKind).valueStep}
                         value={globalEffectValue}
@@ -1374,13 +1375,13 @@ export function ReglesForm({
                                 <label className="text-xs text-[var(--foreground-muted)]">
                                   <FormLabel label="Min" tooltip="Valeur la plus défavorable que cette stat peut donner à un jet quand le pays est très faible sur ce domaine." />
                                 </label>
-                                <input type="number" value={ranges.min} onChange={(e) => updateStatsDiceModifierRanges(statKey, "min", Number(e.target.value) ?? -10)} className={inputClassNarrow} style={inputStyle} />
+                                <input aria-label={`Minimum pour ${STAT_LABELS[statKey]}`} type="number" value={ranges.min} onChange={(e) => updateStatsDiceModifierRanges(statKey, "min", Number(e.target.value) ?? -10)} className={inputClassNarrow} style={inputStyle} />
                               </div>
                               <div className="flex flex-col gap-0.5">
                                 <label className="text-xs text-[var(--foreground-muted)]">
                                   <FormLabel label="Max" tooltip="Valeur la plus favorable que cette stat peut donner à un jet quand le pays excelle sur ce domaine." />
                                 </label>
-                                <input type="number" value={ranges.max} onChange={(e) => updateStatsDiceModifierRanges(statKey, "max", Number(e.target.value) ?? 20)} className={inputClassNarrow} style={inputStyle} />
+                                <input aria-label={`Maximum pour ${STAT_LABELS[statKey]}`} type="number" value={ranges.max} onChange={(e) => updateStatsDiceModifierRanges(statKey, "max", Number(e.target.value) ?? 20)} className={inputClassNarrow} style={inputStyle} />
                               </div>
                             </div>
                           </div>
@@ -1421,6 +1422,7 @@ export function ReglesForm({
                           <FormLabel label="Mois" tooltip="Choisit le mois affiché comme date actuelle de l'univers." />
                         </label>
                         <select
+                          aria-label="Mois du monde"
                           value={typeof worldDateRule.value === "object" && worldDateRule.value !== null && "month" in worldDateRule.value ? Number((worldDateRule.value as { month?: number }).month) : 1}
                           onChange={(e) => {
                             const month = Number(e.target.value);
@@ -1440,6 +1442,7 @@ export function ReglesForm({
                           <FormLabel label="Année" tooltip="Choisit l'année affichée comme date actuelle de l'univers." />
                         </label>
                         <input
+                          aria-label="Année du monde"
                           type="number"
                           min={1}
                           max={9999}
@@ -1458,6 +1461,7 @@ export function ReglesForm({
                           <FormLabel label="Temporalité (mois par mise à jour cron)" tooltip="Détermine de combien de mois la date du monde avance à chaque mise à jour quotidienne. À 0, la date reste figée." />
                         </label>
                         <input
+                          aria-label="Temporalité en mois par mise à jour"
                           type="number"
                           min={0}
                           max={12}
@@ -1514,6 +1518,7 @@ export function ReglesForm({
                           <FormLabel label="% min" tooltip="Seuil minimal de financement à atteindre pour que ce ministère commence à produire correctement ses effets positifs." />
                         </label>
                         <input
+                          aria-label={`Financement minimal pour ${BUDGET_MINISTRY_LABELS[key] ?? key}`}
                           type="number"
                           min={0}
                           max={100}
@@ -1529,6 +1534,7 @@ export function ReglesForm({
                           <FormLabel label="Gravité %" tooltip="Accentue les effets de ce ministère pour les pays en retard sur la moyenne mondiale. Plus la valeur est haute, plus le rattrapage est marqué." />
                         </label>
                         <input
+                          aria-label={`Gravité pour ${BUDGET_MINISTRY_LABELS[key] ?? key}`}
                           type="number"
                           min={0}
                           max={100}
@@ -1571,6 +1577,7 @@ export function ReglesForm({
                                   <FormLabel label="Type" tooltip="Choisit quel domaine ce ministère influence : population, PIB ou l'une des stats du pays." />
                                 </label>
                                 <select
+                                  aria-label={`Type de l’effet ${idx + 1} pour ${BUDGET_MINISTRY_LABELS[key] ?? key}`}
                                   value={effect.effect_type}
                                   onChange={(e) => {
                                     const v = e.target.value as BudgetMinistryEffectDef["effect_type"];
@@ -1595,6 +1602,7 @@ export function ReglesForm({
                                   <FormLabel label="Bonus" tooltip="Effet positif maximal produit à chaque passage du monde quand le ministère est correctement financé." />
                                 </label>
                                 <input
+                                  aria-label={`Bonus de l’effet ${idx + 1} pour ${BUDGET_MINISTRY_LABELS[key] ?? key}`}
                                   type="number"
                                   min={0}
                                   step={0.001}
@@ -1609,6 +1617,7 @@ export function ReglesForm({
                                   <FormLabel label="Malus" tooltip="Effet négatif appliqué quand le ministère tombe sous son seuil minimal de financement." />
                                 </label>
                                 <input
+                                  aria-label={`Malus de l’effet ${idx + 1} pour ${BUDGET_MINISTRY_LABELS[key] ?? key}`}
                                   type="number"
                                   max={0}
                                   step={0.001}
@@ -1637,6 +1646,7 @@ export function ReglesForm({
                                       <FormLabel label="Portée" tooltip="Cibles dont la relation avec le pays sera modifiée chaque jour (si la valeur actuelle est dans la plage ci-dessous)." />
                                     </label>
                                     <select
+                                      aria-label={`Portée relationnelle de l’effet ${idx + 1}`}
                                       value={(effect.relation_scope as BilateralRelationScope) ?? "world"}
                                       onChange={(e) =>
                                         updateBudgetEffectAt(r, idx, { relation_scope: e.target.value as BilateralRelationScope })
@@ -1656,6 +1666,7 @@ export function ReglesForm({
                                       <FormLabel label="Rel. min" tooltip="Niveau de relation (-100 à 100) en dessous duquel l'effet ne s'applique pas." />
                                     </label>
                                     <input
+                                      aria-label={`Relation minimale de l’effet ${idx + 1}`}
                                       type="number"
                                       min={-100}
                                       max={100}
@@ -1673,6 +1684,7 @@ export function ReglesForm({
                                       <FormLabel label="Rel. max" tooltip="Niveau de relation au-dessus duquel l'effet ne s'applique pas." />
                                     </label>
                                     <input
+                                      aria-label={`Relation maximale de l’effet ${idx + 1}`}
                                       type="number"
                                       min={-100}
                                       max={100}
@@ -1717,6 +1729,7 @@ export function ReglesForm({
                     <FormLabel label="Ministère" tooltip="Choisit quel ministère vous souhaitez tester dans le simulateur." />
                   </label>
                   <select
+                    aria-label="Ministère à simuler"
                     value={simulatorMinistry}
                     onChange={(e) => setSimulatorMinistry(e.target.value)}
                     className={inputClass}
@@ -1732,6 +1745,7 @@ export function ReglesForm({
                     <FormLabel label="Valeur de base du pays" tooltip="Valeur actuelle estimée du pays sur le domaine testé, avant application du ministère." />
                   </label>
                   <input
+                    aria-label="Valeur de base du pays simulé"
                     type="number"
                     step={0.01}
                     value={simulatorBase}
@@ -1745,6 +1759,7 @@ export function ReglesForm({
                     <FormLabel label="Moyenne mondiale" tooltip="Référence utilisée pour mesurer si le pays est en avance ou en retard, notamment pour les effets de gravité." />
                   </label>
                   <input
+                    aria-label="Moyenne mondiale simulée"
                     type="number"
                     step={0.01}
                     value={simulatorWorldAvg}
@@ -1760,6 +1775,7 @@ export function ReglesForm({
                 </label>
                 <div className="flex items-center gap-2">
                   <input
+                    aria-label="Allocation budgétaire simulée"
                     type="range"
                     min={0}
                     max={100}
@@ -1901,6 +1917,7 @@ export function ReglesForm({
                               <FormLabel label={level.label} tooltip={`Score minimal pour le palier « ${level.label} ».`} />
                             </label>
                             <input
+                              aria-label={`Seuil du palier ${level.label}`}
                               type="number"
                               min={0}
                               max={500}
@@ -1935,6 +1952,7 @@ export function ReglesForm({
                               return (
                                 <li key={idx} className="flex flex-wrap items-center gap-2 text-sm">
                                   <select
+                                    aria-label={`Type de l’effet ${idx + 1} du palier ${level.label}`}
                                     value={e.effect_kind}
                                     onChange={(ev) => updateLawEffect(def, idx, { effect_kind: ev.target.value })}
                                     className="rounded border bg-[var(--background)] px-1.5 py-1 text-[var(--foreground)] text-xs"
@@ -1950,6 +1968,7 @@ export function ReglesForm({
                                   </select>
                                   {needsStatTarget && (
                                     <select
+                                      aria-label={`Statistique ciblée par l’effet ${idx + 1}`}
                                       value={e.effect_target ?? STAT_KEYS[0]}
                                       onChange={(ev) => updateLawEffect(def, idx, { effect_target: ev.target.value || null })}
                                       className="rounded border bg-[var(--background)] px-1.5 py-1 text-[var(--foreground)]"
@@ -1962,6 +1981,7 @@ export function ReglesForm({
                                   )}
                                   {needsBudgetTarget && (
                                     <select
+                                      aria-label={`Ministère ciblé par l’effet ${idx + 1}`}
                                       value={e.effect_target ?? getBudgetMinistryOptions()[0]?.key ?? ""}
                                       onChange={(ev) => updateLawEffect(def, idx, { effect_target: ev.target.value || null })}
                                       className="rounded border bg-[var(--background)] px-1.5 py-1 text-[var(--foreground)]"
@@ -1974,6 +1994,7 @@ export function ReglesForm({
                                   )}
                                   {needsBranchTarget && (
                                     <select
+                                      aria-label={`Branche ciblée par l’effet ${idx + 1}`}
                                       value={e.effect_target ?? MILITARY_BRANCH_EFFECT_IDS[0]}
                                       onChange={(ev) => updateLawEffect(def, idx, { effect_target: ev.target.value || null })}
                                       className="rounded border bg-[var(--background)] px-1.5 py-1 text-[var(--foreground)]"
@@ -1986,6 +2007,7 @@ export function ReglesForm({
                                   )}
                                   {needsRosterTarget && (
                                     <select
+                                      aria-label={`Unité ciblée par l’effet ${idx + 1}`}
                                       value={e.effect_target ?? rosterUnits[0]?.id ?? ""}
                                       onChange={(ev) => updateLawEffect(def, idx, { effect_target: ev.target.value || null })}
                                       className="rounded border bg-[var(--background)] px-1.5 py-1 text-[var(--foreground)]"
@@ -1998,6 +2020,7 @@ export function ReglesForm({
                                   )}
                                   {needsSubTypeTarget && (
                                     <select
+                                      aria-label={`Sous-branche ciblée par l’effet ${idx + 1}`}
                                       value={e.effect_target ?? subTypeOptions[0]?.value ?? ""}
                                       onChange={(ev) => updateLawEffect(def, idx, { effect_target: ev.target.value || null })}
                                       className="rounded border bg-[var(--background)] px-1.5 py-1 text-[var(--foreground)]"
@@ -2084,19 +2107,19 @@ export function ReglesForm({
                         <label className="text-xs text-[var(--foreground-muted)]">
                           <FormLabel label="Mult. PIB" tooltip="Règle l'importance du PIB dans le calcul de l'influence. Plus la valeur est haute, plus la richesse pèse lourd." />
                         </label>
-                        <input type="number" step="any" value={getInfluenceConfig().mult_gdp ?? 1e-9} onChange={(e) => updateInfluenceConfig({ mult_gdp: Number(e.target.value) || 0 })} className="rounded border py-1.5 px-2 text-sm w-28 font-mono" style={{ borderColor: "var(--border)", background: "var(--background)" }} />
+                        <input aria-label="Multiplicateur du PIB" type="number" step="any" value={getInfluenceConfig().mult_gdp ?? 1e-9} onChange={(e) => updateInfluenceConfig({ mult_gdp: Number(e.target.value) || 0 })} className="rounded border py-1.5 px-2 text-sm w-28 font-mono" style={{ borderColor: "var(--border)", background: "var(--background)" }} />
                       </div>
                       <div className="flex flex-col gap-0.5">
                         <label className="text-xs text-[var(--foreground-muted)]">
                           <FormLabel label="Mult. Population" tooltip="Règle l'importance de la population dans le calcul de l'influence." />
                         </label>
-                        <input type="number" step="any" value={getInfluenceConfig().mult_population ?? 1e-7} onChange={(e) => updateInfluenceConfig({ mult_population: Number(e.target.value) || 0 })} className="rounded border py-1.5 px-2 text-sm w-28 font-mono" style={{ borderColor: "var(--border)", background: "var(--background)" }} />
+                        <input aria-label="Multiplicateur de la population" type="number" step="any" value={getInfluenceConfig().mult_population ?? 1e-7} onChange={(e) => updateInfluenceConfig({ mult_population: Number(e.target.value) || 0 })} className="rounded border py-1.5 px-2 text-sm w-28 font-mono" style={{ borderColor: "var(--border)", background: "var(--background)" }} />
                       </div>
                       <div className="flex flex-col gap-0.5">
                         <label className="text-xs text-[var(--foreground-muted)]">
                           <FormLabel label="Mult. Hard Power" tooltip="Règle l'importance de la puissance militaire dans le calcul de l'influence." />
                         </label>
-                        <input type="number" step="any" value={getInfluenceConfig().mult_military ?? 0.01} onChange={(e) => updateInfluenceConfig({ mult_military: Number(e.target.value) || 0 })} className="rounded border py-1.5 px-2 text-sm w-28 font-mono" style={{ borderColor: "var(--border)", background: "var(--background)" }} />
+                        <input aria-label="Multiplicateur du Hard Power" type="number" step="any" value={getInfluenceConfig().mult_military ?? 0.01} onChange={(e) => updateInfluenceConfig({ mult_military: Number(e.target.value) || 0 })} className="rounded border py-1.5 px-2 text-sm w-28 font-mono" style={{ borderColor: "var(--border)", background: "var(--background)" }} />
                       </div>
                     </div>
                     <div className="flex flex-wrap gap-x-6 gap-y-3">
@@ -2104,13 +2127,13 @@ export function ReglesForm({
                         <label className="text-xs text-[var(--foreground-muted)]">
                           <FormLabel label="Stabilité : modif. à min (-3)" tooltip="Définit à quel point une stabilité très mauvaise réduit l'influence internationale du pays." />
                         </label>
-                        <input type="number" step="any" value={getInfluenceConfig().stability_modifier_min ?? 0} onChange={(e) => updateInfluenceConfig({ stability_modifier_min: Number(e.target.value) ?? 0 })} className="rounded border py-1.5 px-2 text-sm w-24 font-mono" style={{ borderColor: "var(--border)", background: "var(--background)" }} />
+                        <input aria-label="Modificateur minimal de stabilité" type="number" step="any" value={getInfluenceConfig().stability_modifier_min ?? 0} onChange={(e) => updateInfluenceConfig({ stability_modifier_min: Number(e.target.value) ?? 0 })} className="rounded border py-1.5 px-2 text-sm w-24 font-mono" style={{ borderColor: "var(--border)", background: "var(--background)" }} />
                       </div>
                       <div className="flex flex-col gap-0.5">
                         <label className="text-xs text-[var(--foreground-muted)]">
                           <FormLabel label="Stabilité : modif. à max (+3)" tooltip="Définit à quel point une stabilité excellente renforce l'influence internationale du pays." />
                         </label>
-                        <input type="number" step="any" value={getInfluenceConfig().stability_modifier_max ?? 1} onChange={(e) => updateInfluenceConfig({ stability_modifier_max: Number(e.target.value) ?? 1 })} className="rounded border py-1.5 px-2 text-sm w-24 font-mono" style={{ borderColor: "var(--border)", background: "var(--background)" }} />
+                        <input aria-label="Modificateur maximal de stabilité" type="number" step="any" value={getInfluenceConfig().stability_modifier_max ?? 1} onChange={(e) => updateInfluenceConfig({ stability_modifier_max: Number(e.target.value) ?? 1 })} className="rounded border py-1.5 px-2 text-sm w-24 font-mono" style={{ borderColor: "var(--border)", background: "var(--background)" }} />
                       </div>
                     </div>
                     <div className="flex flex-wrap gap-x-6 gap-y-3">
@@ -2118,19 +2141,19 @@ export function ReglesForm({
                         <label className="text-xs text-[var(--foreground-muted)]">
                           <FormLabel label="Gravité PIB %" tooltip="Accentue l'effet du PIB pour les pays éloignés de la moyenne mondiale." />
                         </label>
-                        <input type="number" min={0} max={100} value={getInfluenceConfig().gravity_pct_gdp ?? 50} onChange={(e) => updateInfluenceConfig({ gravity_pct_gdp: Math.max(0, Math.min(100, Number(e.target.value) || 0)) })} className="rounded border py-1.5 px-2 text-sm w-16 font-mono" style={{ borderColor: "var(--border)", background: "var(--background)" }} />
+                        <input aria-label="Gravité du PIB" type="number" min={0} max={100} value={getInfluenceConfig().gravity_pct_gdp ?? 50} onChange={(e) => updateInfluenceConfig({ gravity_pct_gdp: Math.max(0, Math.min(100, Number(e.target.value) || 0)) })} className="rounded border py-1.5 px-2 text-sm w-16 font-mono" style={{ borderColor: "var(--border)", background: "var(--background)" }} />
                       </div>
                       <div className="flex flex-col gap-0.5">
                         <label className="text-xs text-[var(--foreground-muted)]">
                           <FormLabel label="Gravité Population %" tooltip="Accentue l'effet de la population pour les pays éloignés de la moyenne mondiale." />
                         </label>
-                        <input type="number" min={0} max={100} value={getInfluenceConfig().gravity_pct_population ?? 50} onChange={(e) => updateInfluenceConfig({ gravity_pct_population: Math.max(0, Math.min(100, Number(e.target.value) || 0)) })} className="rounded border py-1.5 px-2 text-sm w-16 font-mono" style={{ borderColor: "var(--border)", background: "var(--background)" }} />
+                        <input aria-label="Gravité de la population" type="number" min={0} max={100} value={getInfluenceConfig().gravity_pct_population ?? 50} onChange={(e) => updateInfluenceConfig({ gravity_pct_population: Math.max(0, Math.min(100, Number(e.target.value) || 0)) })} className="rounded border py-1.5 px-2 text-sm w-16 font-mono" style={{ borderColor: "var(--border)", background: "var(--background)" }} />
                       </div>
                       <div className="flex flex-col gap-0.5">
                         <label className="text-xs text-[var(--foreground-muted)]">
                           <FormLabel label="Gravité Hard Power %" tooltip="Accentue l'effet de la puissance militaire pour les pays éloignés de la moyenne mondiale." />
                         </label>
-                        <input type="number" min={0} max={100} value={getInfluenceConfig().gravity_pct_military ?? 50} onChange={(e) => updateInfluenceConfig({ gravity_pct_military: Math.max(0, Math.min(100, Number(e.target.value) || 0)) })} className="rounded border py-1.5 px-2 text-sm w-16 font-mono" style={{ borderColor: "var(--border)", background: "var(--background)" }} />
+                        <input aria-label="Gravité du Hard Power" type="number" min={0} max={100} value={getInfluenceConfig().gravity_pct_military ?? 50} onChange={(e) => updateInfluenceConfig({ gravity_pct_military: Math.max(0, Math.min(100, Number(e.target.value) || 0)) })} className="rounded border py-1.5 px-2 text-sm w-16 font-mono" style={{ borderColor: "var(--border)", background: "var(--background)" }} />
                       </div>
                     </div>
                   </div>
@@ -2161,19 +2184,19 @@ export function ReglesForm({
                         <label className="text-xs text-[var(--foreground-muted)]">
                           <FormLabel label="Contesté %" tooltip="Part d'influence transmise quand le contrôle du pays reste disputé." />
                         </label>
-                        <input type="number" min={0} max={100} value={getSphereInfluencePct().contested ?? 50} onChange={(e) => updateSphereInfluencePct({ contested: Math.max(0, Math.min(100, Number(e.target.value) || 0)) })} className="rounded border py-1.5 px-2 text-sm w-20 font-mono" style={{ borderColor: "var(--border)", background: "var(--background)" }} />
+                        <input aria-label="Seuil d’influence contesté" type="number" min={0} max={100} value={getSphereInfluencePct().contested ?? 50} onChange={(e) => updateSphereInfluencePct({ contested: Math.max(0, Math.min(100, Number(e.target.value) || 0)) })} className="rounded border py-1.5 px-2 text-sm w-20 font-mono" style={{ borderColor: "var(--border)", background: "var(--background)" }} />
                       </div>
                       <div className="flex flex-col gap-0.5">
                         <label className="text-xs text-[var(--foreground-muted)]">
                           <FormLabel label="Occupé %" tooltip="Part d'influence transmise quand le pays est occupé mais pas encore annexé." />
                         </label>
-                        <input type="number" min={0} max={100} value={getSphereInfluencePct().occupied ?? 80} onChange={(e) => updateSphereInfluencePct({ occupied: Math.max(0, Math.min(100, Number(e.target.value) || 0)) })} className="rounded border py-1.5 px-2 text-sm w-20 font-mono" style={{ borderColor: "var(--border)", background: "var(--background)" }} />
+                        <input aria-label="Seuil d’influence occupé" type="number" min={0} max={100} value={getSphereInfluencePct().occupied ?? 80} onChange={(e) => updateSphereInfluencePct({ occupied: Math.max(0, Math.min(100, Number(e.target.value) || 0)) })} className="rounded border py-1.5 px-2 text-sm w-20 font-mono" style={{ borderColor: "var(--border)", background: "var(--background)" }} />
                       </div>
                       <div className="flex flex-col gap-0.5">
                         <label className="text-xs text-[var(--foreground-muted)]">
                           <FormLabel label="Annexé %" tooltip="Part d'influence transmise quand le pays est considéré comme entièrement annexé." />
                         </label>
-                        <input type="number" min={0} max={100} value={getSphereInfluencePct().annexed ?? 100} onChange={(e) => updateSphereInfluencePct({ annexed: Math.max(0, Math.min(100, Number(e.target.value) || 0)) })} className="rounded border py-1.5 px-2 text-sm w-20 font-mono" style={{ borderColor: "var(--border)", background: "var(--background)" }} />
+                        <input aria-label="Seuil d’influence annexé" type="number" min={0} max={100} value={getSphereInfluencePct().annexed ?? 100} onChange={(e) => updateSphereInfluencePct({ annexed: Math.max(0, Math.min(100, Number(e.target.value) || 0)) })} className="rounded border py-1.5 px-2 text-sm w-20 font-mono" style={{ borderColor: "var(--border)", background: "var(--background)" }} />
                       </div>
                     </div>
                   </div>
@@ -2202,6 +2225,7 @@ export function ReglesForm({
                       <FormLabel label="Lissage quotidien" tooltip="Règle la vitesse du changement idéologique. Une faible valeur crée de l'inertie, une forte valeur accélère les bascules." />
                     </label>
                     <input
+                      aria-label="Lissage idéologique quotidien"
                       type="number"
                       step="0.01"
                       value={getIdeologyConfigValue().daily_step}
@@ -2215,6 +2239,7 @@ export function ReglesForm({
                       <FormLabel label="Poids voisins" tooltip="Mesure à quel point l'idéologie des pays voisins tire un pays dans une direction." />
                     </label>
                     <input
+                      aria-label="Poids idéologique des voisins"
                       type="number"
                       step="0.01"
                       value={getIdeologyConfigValue().neighbor_pull_weight}
@@ -2228,6 +2253,7 @@ export function ReglesForm({
                       <FormLabel label="Poids effets" tooltip="Mesure à quel point les effets idéologiques ajoutés par l'administration comptent dans la dérive." />
                     </label>
                     <input
+                      aria-label="Poids des effets idéologiques"
                       type="number"
                       step="0.01"
                       value={getIdeologyConfigValue().effect_pull_weight}
@@ -2243,6 +2269,7 @@ export function ReglesForm({
                       <FormLabel label="Poids relation" tooltip="Augmente ou réduit l'influence idéologique d'un voisin selon que la relation bilatérale est bonne ou mauvaise." />
                     </label>
                     <input
+                      aria-label="Poids idéologique des relations"
                       type="number"
                       step="0.01"
                       value={getIdeologyConfigValue().relation_pull_weight}
@@ -2256,6 +2283,7 @@ export function ReglesForm({
                       <FormLabel label="Poids influence" tooltip="Donne davantage de poids idéologique aux voisins les plus influents sur la scène internationale." />
                     </label>
                     <input
+                      aria-label="Poids idéologique de l’influence"
                       type="number"
                       step="0.01"
                       value={getIdeologyConfigValue().influence_pull_weight}
@@ -2269,6 +2297,7 @@ export function ReglesForm({
                       <FormLabel label="Poids contrôle" tooltip="Renforce l'empreinte idéologique d'un voisin quand il contrôle ou annexe une part du pays concerné." />
                     </label>
                     <input
+                      aria-label="Poids idéologique du contrôle"
                       type="number"
                       step="0.01"
                       value={getIdeologyConfigValue().control_pull_weight}
@@ -2282,6 +2311,7 @@ export function ReglesForm({
                       <FormLabel label="Force des impulsions" tooltip="Amplifie les chocs idéologiques brusques par rapport aux influences lentes et progressives." />
                     </label>
                     <input
+                      aria-label="Force des impulsions idéologiques"
                       type="number"
                       step="0.1"
                       value={getIdeologyConfigValue().snap_strength}
@@ -2307,13 +2337,11 @@ export function ReglesForm({
                               className="rounded-md border py-2 pl-2.5 pr-2"
                               style={{
                                 borderColor: "var(--border-muted)",
-                                borderLeftWidth: 3,
-                                borderLeftColor: "var(--accent)",
                                 background: "var(--background-elevated)",
                               }}
                             >
-                              <div className="mb-1.5 text-[9.5px] font-semibold uppercase tracking-wide text-[var(--accent)]">Effets</div>
-                              <ul className="list-none space-y-2 text-[13.5px] leading-snug">
+                              <div className="mb-1.5 text-xs font-semibold text-[var(--accent)]">Effets</div>
+                              <ul className="list-none space-y-2 text-sm leading-relaxed">
                                 {list.map((e, idx) => (
                                   <li
                                     key={idx}
@@ -2339,7 +2367,7 @@ export function ReglesForm({
                             <div className="rounded border p-3 space-y-2 mt-2" style={{ borderColor: "var(--border-muted)" }}>
                               <div>
                                 <label className="mb-0.5 block text-xs text-[var(--foreground-muted)]">Type d'effet</label>
-                                <select value={ideologyEffectKind} onChange={(ev) => { const k = ev.target.value; setIdeologyEffectKind(k); setIdeologyEffectTarget(getDefaultTargetForKindIdeology(k)); }} className="w-full rounded border py-1.5 px-2 text-sm" style={{ borderColor: "var(--border)", background: "var(--background)" }}>
+                                <select aria-label="Type d’effet idéologique" value={ideologyEffectKind} onChange={(ev) => { const k = ev.target.value; setIdeologyEffectKind(k); setIdeologyEffectTarget(getDefaultTargetForKindIdeology(k)); }} className="w-full rounded border py-1.5 px-2 text-sm" style={{ borderColor: "var(--border)", background: "var(--background)" }}>
                                   {ideologyEffectOptionGroups.map((group) => (
                                     <optgroup key={group.label} label={group.label}>
                                       {group.options.map((opt) => (<option key={opt.id} value={opt.id}>{opt.label}</option>))}
@@ -2350,7 +2378,7 @@ export function ReglesForm({
                               {EFFECT_KINDS_WITH_STAT_TARGET.has(ideologyEffectKind) && (
                                 <div>
                                   <label className="mb-0.5 block text-xs text-[var(--foreground-muted)]">Stat</label>
-                                  <select value={ideologyEffectTarget ?? STAT_KEYS[0]} onChange={(ev) => setIdeologyEffectTarget(ev.target.value || null)} className="w-full rounded border py-1.5 px-2 text-sm" style={{ borderColor: "var(--border)", background: "var(--background)" }}>
+                                  <select aria-label="Statistique ciblée par l’effet idéologique" value={ideologyEffectTarget ?? STAT_KEYS[0]} onChange={(ev) => setIdeologyEffectTarget(ev.target.value || null)} className="w-full rounded border py-1.5 px-2 text-sm" style={{ borderColor: "var(--border)", background: "var(--background)" }}>
                                     {STAT_KEYS.map((k) => (<option key={k} value={k}>{STAT_LABELS[k]}</option>))}
                                   </select>
                                 </div>
@@ -2358,7 +2386,7 @@ export function ReglesForm({
                               {EFFECT_KINDS_WITH_BUDGET_TARGET.has(ideologyEffectKind) && (
                                 <div>
                                   <label className="mb-0.5 block text-xs text-[var(--foreground-muted)]">Ministère</label>
-                                  <select value={ideologyEffectTarget ?? getBudgetMinistryOptions()[0]?.key ?? ""} onChange={(ev) => setIdeologyEffectTarget(ev.target.value || null)} className="w-full rounded border py-1.5 px-2 text-sm" style={{ borderColor: "var(--border)", background: "var(--background)" }}>
+                                  <select aria-label="Ministère ciblé par l’effet idéologique" value={ideologyEffectTarget ?? getBudgetMinistryOptions()[0]?.key ?? ""} onChange={(ev) => setIdeologyEffectTarget(ev.target.value || null)} className="w-full rounded border py-1.5 px-2 text-sm" style={{ borderColor: "var(--border)", background: "var(--background)" }}>
                                     {getBudgetMinistryOptions().map(({ key, label }) => (<option key={key} value={key}>{label}</option>))}
                                   </select>
                                 </div>
@@ -2366,7 +2394,7 @@ export function ReglesForm({
                               {EFFECT_KINDS_WITH_BRANCH_TARGET.has(ideologyEffectKind) && (
                                 <div>
                                   <label className="mb-0.5 block text-xs text-[var(--foreground-muted)]">Branche</label>
-                                  <select value={ideologyEffectTarget ?? MILITARY_BRANCH_EFFECT_IDS[0]} onChange={(ev) => setIdeologyEffectTarget(ev.target.value || null)} className="w-full rounded border py-1.5 px-2 text-sm" style={{ borderColor: "var(--border)", background: "var(--background)" }}>
+                                  <select aria-label="Branche ciblée par l’effet idéologique" value={ideologyEffectTarget ?? MILITARY_BRANCH_EFFECT_IDS[0]} onChange={(ev) => setIdeologyEffectTarget(ev.target.value || null)} className="w-full rounded border py-1.5 px-2 text-sm" style={{ borderColor: "var(--border)", background: "var(--background)" }}>
                                     {MILITARY_BRANCH_EFFECT_IDS.map((b) => (<option key={b} value={b}>{MILITARY_BRANCH_EFFECT_LABELS[b]}</option>))}
                                   </select>
                                 </div>
@@ -2374,7 +2402,7 @@ export function ReglesForm({
                               {EFFECT_KINDS_WITH_ROSTER_UNIT_TARGET.has(ideologyEffectKind) && (
                                 <div>
                                   <label className="mb-0.5 block text-xs text-[var(--foreground-muted)]">Unité</label>
-                                  <select value={ideologyEffectTarget ?? rosterUnits[0]?.id ?? ""} onChange={(ev) => setIdeologyEffectTarget(ev.target.value || null)} className="w-full rounded border py-1.5 px-2 text-sm" style={{ borderColor: "var(--border)", background: "var(--background)" }}>
+                                  <select aria-label="Unité ciblée par l’effet idéologique" value={ideologyEffectTarget ?? rosterUnits[0]?.id ?? ""} onChange={(ev) => setIdeologyEffectTarget(ev.target.value || null)} className="w-full rounded border py-1.5 px-2 text-sm" style={{ borderColor: "var(--border)", background: "var(--background)" }}>
                                     {rosterUnits.map((u) => (<option key={u.id} value={u.id}>{u.name_fr}</option>))}
                                   </select>
                                 </div>
@@ -2382,16 +2410,16 @@ export function ReglesForm({
                               {EFFECT_KINDS_WITH_SUB_TYPE_TARGET.has(ideologyEffectKind) && (
                                 <div>
                                   <label className="mb-0.5 block text-xs text-[var(--foreground-muted)]">Sous-branche/type</label>
-                                  <select value={ideologyEffectTarget ?? subTypeOptions[0]?.value ?? ""} onChange={(ev) => setIdeologyEffectTarget(ev.target.value || null)} className="w-full rounded border py-1.5 px-2 text-sm" style={{ borderColor: "var(--border)", background: "var(--background)" }}>
+                                  <select aria-label="Sous-branche ciblée par l’effet idéologique" value={ideologyEffectTarget ?? subTypeOptions[0]?.value ?? ""} onChange={(ev) => setIdeologyEffectTarget(ev.target.value || null)} className="w-full rounded border py-1.5 px-2 text-sm" style={{ borderColor: "var(--border)", background: "var(--background)" }}>
                                     {subTypeOptions.map((opt) => (<option key={opt.value} value={opt.value}>{opt.label}</option>))}
                                   </select>
                                 </div>
                               )}
                               <div>
                                 <label className="mb-0.5 block text-xs text-[var(--foreground-muted)]">{getIdeologyEffectFormValueHelper(ideologyEffectKind).valueLabel}</label>
-                                <input type="number" step={getIdeologyEffectFormValueHelper(ideologyEffectKind).valueStep} value={ideologyEffectValue} onChange={(e) => setIdeologyEffectValue(e.target.value)} className="w-32 rounded border py-1.5 px-2 text-sm font-mono" style={{ borderColor: "var(--border)", background: "var(--background)" }} />
+                                <input aria-label={getIdeologyEffectFormValueHelper(ideologyEffectKind).valueLabel} type="number" step={getIdeologyEffectFormValueHelper(ideologyEffectKind).valueStep} value={ideologyEffectValue} onChange={(e) => setIdeologyEffectValue(e.target.value)} className="w-32 rounded border py-1.5 px-2 text-sm font-mono" style={{ borderColor: "var(--border)", background: "var(--background)" }} />
                               </div>
-                              <div className="flex gap-2">
+                              <div className="flex flex-wrap gap-2">
                                 <button type="button" onClick={saveIdeologyEffectForm} className="rounded py-1.5 px-3 text-sm font-medium" style={{ background: "var(--accent)", color: "#0f1419" }}>Enregistrer</button>
                                 <button type="button" onClick={() => setIdeologyEffectFormOpen(false)} className="rounded border py-1.5 px-3 text-sm" style={{ borderColor: "var(--border)" }}>Annuler</button>
                               </div>
@@ -2444,6 +2472,7 @@ export function ReglesForm({
                           <FormLabel label="Intervalle (heures)" tooltip="Délai minimum entre deux passages du cron qui génère les events IA." />
                         </label>
                         <input
+                          aria-label="Intervalle des événements IA en heures"
                           type="number"
                           min={0.01}
                           max={168}
@@ -2459,6 +2488,7 @@ export function ReglesForm({
                           <FormLabel label="Actions IA majeures par passage" tooltip="Nombre d'actions que le système peut créer pour les grandes IA à chaque passage." />
                         </label>
                         <input
+                          aria-label="Nombre d’actions IA majeures par passage"
                           type="number"
                           min={0}
                           value={getAiEventsConfig().count_major_per_run ?? 0}
@@ -2472,6 +2502,7 @@ export function ReglesForm({
                           <FormLabel label="Actions IA mineures par passage" tooltip="Nombre d'actions que le système peut créer pour les petites IA à chaque passage." />
                         </label>
                         <input
+                          aria-label="Nombre d’actions IA mineures par passage"
                           type="number"
                           min={0}
                           value={getAiEventsConfig().count_minor_per_run ?? 0}
@@ -2485,6 +2516,7 @@ export function ReglesForm({
                           <FormLabel label="Amplitude temps (minutes)" tooltip="Décale légèrement l'heure exacte des actions IA autour de l'heure théorique pour éviter un déclenchement trop mécanique." />
                         </label>
                         <input
+                          aria-label="Amplitude temporelle des événements IA"
                           type="number"
                           min={0}
                           value={getAiEventsConfig().trigger_amplitude_minutes ?? 0}
@@ -2641,7 +2673,7 @@ export function ReglesForm({
                           <label className="mb-0.5 block text-xs text-[var(--foreground-muted)]">
                             <FormLabel label="Type d'effet" tooltip={genericEffectTypeTooltip} />
                           </label>
-                          <select value={aiMajorEffectKind} onChange={(ev) => { const k = ev.target.value; setAiMajorEffectKind(k); setAiMajorEffectTarget(getDefaultTargetForKindGlobal(k)); }} className={inputClass} style={inputStyle}>
+                          <select aria-label="Type d’effet pour une IA majeure" value={aiMajorEffectKind} onChange={(ev) => { const k = ev.target.value; setAiMajorEffectKind(k); setAiMajorEffectTarget(getDefaultTargetForKindGlobal(k)); }} className={inputClass} style={inputStyle}>
                             {getEffectKindOptionGroups().map((group) => (
                               <optgroup key={group.label} label={group.label}>
                                 {group.options.map((opt) => (<option key={opt.id} value={opt.id}>{opt.label}</option>))}
@@ -2649,12 +2681,12 @@ export function ReglesForm({
                             ))}
                           </select>
                         </div>
-                        {EFFECT_KINDS_WITH_STAT_TARGET.has(aiMajorEffectKind) && (<div><label className="mb-0.5 block text-xs text-[var(--foreground-muted)]"><FormLabel label="Stat" tooltip={genericStatTooltip} /></label><select value={aiMajorEffectTarget ?? STAT_KEYS[0]} onChange={(ev) => setAiMajorEffectTarget(ev.target.value || null)} className={inputClass} style={inputStyle}>{STAT_KEYS.map((k) => (<option key={k} value={k}>{STAT_LABELS[k]}</option>))}</select></div>)}
-                        {EFFECT_KINDS_WITH_BUDGET_TARGET.has(aiMajorEffectKind) && (<div><label className="mb-0.5 block text-xs text-[var(--foreground-muted)]"><FormLabel label="Ministère" tooltip={genericBudgetTooltip} /></label><select value={aiMajorEffectTarget ?? getBudgetMinistryOptions()[0]?.key ?? ""} onChange={(ev) => setAiMajorEffectTarget(ev.target.value || null)} className={inputClass} style={inputStyle}>{getBudgetMinistryOptions().map(({ key, label }) => (<option key={key} value={key}>{label}</option>))}</select></div>)}
-                        {EFFECT_KINDS_WITH_BRANCH_TARGET.has(aiMajorEffectKind) && (<div><label className="mb-0.5 block text-xs text-[var(--foreground-muted)]"><FormLabel label="Branche" tooltip={genericBranchTooltip} /></label><select value={aiMajorEffectTarget ?? MILITARY_BRANCH_EFFECT_IDS[0]} onChange={(ev) => setAiMajorEffectTarget(ev.target.value || null)} className={inputClass} style={inputStyle}>{MILITARY_BRANCH_EFFECT_IDS.map((b) => (<option key={b} value={b}>{MILITARY_BRANCH_EFFECT_LABELS[b]}</option>))}</select></div>)}
-                        {EFFECT_KINDS_WITH_ROSTER_UNIT_TARGET.has(aiMajorEffectKind) && (<div><label className="mb-0.5 block text-xs text-[var(--foreground-muted)]"><FormLabel label="Unité" tooltip={genericUnitTooltip} /></label><select value={aiMajorEffectTarget ?? rosterUnits[0]?.id ?? ""} onChange={(ev) => setAiMajorEffectTarget(ev.target.value || null)} className={inputClass} style={inputStyle}>{rosterUnits.map((u) => (<option key={u.id} value={u.id}>{u.name_fr}</option>))}</select></div>)}
-                        {EFFECT_KINDS_WITH_SUB_TYPE_TARGET.has(aiMajorEffectKind) && (<div><label className="mb-0.5 block text-xs text-[var(--foreground-muted)]"><FormLabel label="Sous-branche/type" tooltip="Branche et sous-type militaire." /></label><select value={aiMajorEffectTarget ?? subTypeOptions[0]?.value ?? ""} onChange={(ev) => setAiMajorEffectTarget(ev.target.value || null)} className={inputClass} style={inputStyle}>{subTypeOptions.map((opt) => (<option key={opt.value} value={opt.value}>{opt.label}</option>))}</select></div>)}
-                        <div><label className="mb-0.5 block text-xs text-[var(--foreground-muted)]"><FormLabel label={getEffectKindValueHelper(aiMajorEffectKind).valueLabel} tooltip={genericEffectValueTooltip} /></label><input type="number" step={getEffectKindValueHelper(aiMajorEffectKind).valueStep} value={aiMajorEffectValue} onChange={(e) => setAiMajorEffectValue(e.target.value)} className={inputClassNarrow} style={inputStyle} /></div>
+                        {EFFECT_KINDS_WITH_STAT_TARGET.has(aiMajorEffectKind) && (<div><label className="mb-0.5 block text-xs text-[var(--foreground-muted)]"><FormLabel label="Stat" tooltip={genericStatTooltip} /></label><select aria-label="Statistique ciblée pour une IA majeure" value={aiMajorEffectTarget ?? STAT_KEYS[0]} onChange={(ev) => setAiMajorEffectTarget(ev.target.value || null)} className={inputClass} style={inputStyle}>{STAT_KEYS.map((k) => (<option key={k} value={k}>{STAT_LABELS[k]}</option>))}</select></div>)}
+                        {EFFECT_KINDS_WITH_BUDGET_TARGET.has(aiMajorEffectKind) && (<div><label className="mb-0.5 block text-xs text-[var(--foreground-muted)]"><FormLabel label="Ministère" tooltip={genericBudgetTooltip} /></label><select aria-label="Ministère ciblé pour une IA majeure" value={aiMajorEffectTarget ?? getBudgetMinistryOptions()[0]?.key ?? ""} onChange={(ev) => setAiMajorEffectTarget(ev.target.value || null)} className={inputClass} style={inputStyle}>{getBudgetMinistryOptions().map(({ key, label }) => (<option key={key} value={key}>{label}</option>))}</select></div>)}
+                        {EFFECT_KINDS_WITH_BRANCH_TARGET.has(aiMajorEffectKind) && (<div><label className="mb-0.5 block text-xs text-[var(--foreground-muted)]"><FormLabel label="Branche" tooltip={genericBranchTooltip} /></label><select aria-label="Branche ciblée pour une IA majeure" value={aiMajorEffectTarget ?? MILITARY_BRANCH_EFFECT_IDS[0]} onChange={(ev) => setAiMajorEffectTarget(ev.target.value || null)} className={inputClass} style={inputStyle}>{MILITARY_BRANCH_EFFECT_IDS.map((b) => (<option key={b} value={b}>{MILITARY_BRANCH_EFFECT_LABELS[b]}</option>))}</select></div>)}
+                        {EFFECT_KINDS_WITH_ROSTER_UNIT_TARGET.has(aiMajorEffectKind) && (<div><label className="mb-0.5 block text-xs text-[var(--foreground-muted)]"><FormLabel label="Unité" tooltip={genericUnitTooltip} /></label><select aria-label="Unité ciblée pour une IA majeure" value={aiMajorEffectTarget ?? rosterUnits[0]?.id ?? ""} onChange={(ev) => setAiMajorEffectTarget(ev.target.value || null)} className={inputClass} style={inputStyle}>{rosterUnits.map((u) => (<option key={u.id} value={u.id}>{u.name_fr}</option>))}</select></div>)}
+                        {EFFECT_KINDS_WITH_SUB_TYPE_TARGET.has(aiMajorEffectKind) && (<div><label className="mb-0.5 block text-xs text-[var(--foreground-muted)]"><FormLabel label="Sous-branche/type" tooltip="Branche et sous-type militaire." /></label><select aria-label="Sous-branche ciblée pour une IA majeure" value={aiMajorEffectTarget ?? subTypeOptions[0]?.value ?? ""} onChange={(ev) => setAiMajorEffectTarget(ev.target.value || null)} className={inputClass} style={inputStyle}>{subTypeOptions.map((opt) => (<option key={opt.value} value={opt.value}>{opt.label}</option>))}</select></div>)}
+                        <div><label className="mb-0.5 block text-xs text-[var(--foreground-muted)]"><FormLabel label={getEffectKindValueHelper(aiMajorEffectKind).valueLabel} tooltip={genericEffectValueTooltip} /></label><input aria-label={getEffectKindValueHelper(aiMajorEffectKind).valueLabel} type="number" step={getEffectKindValueHelper(aiMajorEffectKind).valueStep} value={aiMajorEffectValue} onChange={(e) => setAiMajorEffectValue(e.target.value)} className={inputClassNarrow} style={inputStyle} /></div>
                         <div className="flex gap-2"><button type="button" onClick={() => saveAiEffectForm("major")} className="rounded py-1.5 px-3 text-sm font-medium" style={{ background: "var(--accent)", color: "#0f1419" }}>Enregistrer</button><button type="button" onClick={() => setAiMajorFormOpen(false)} className="rounded border py-1.5 px-3 text-sm" style={{ borderColor: "var(--border)" }}>Annuler</button></div>
                       </div>
                     )}
@@ -2686,7 +2718,7 @@ export function ReglesForm({
                           <label className="mb-0.5 block text-xs text-[var(--foreground-muted)]">
                             <FormLabel label="Type d'effet" tooltip={genericEffectTypeTooltip} />
                           </label>
-                          <select value={aiMinorEffectKind} onChange={(ev) => { const k = ev.target.value; setAiMinorEffectKind(k); setAiMinorEffectTarget(getDefaultTargetForKindGlobal(k)); }} className={inputClass} style={inputStyle}>
+                          <select aria-label="Type d’effet pour une IA mineure" value={aiMinorEffectKind} onChange={(ev) => { const k = ev.target.value; setAiMinorEffectKind(k); setAiMinorEffectTarget(getDefaultTargetForKindGlobal(k)); }} className={inputClass} style={inputStyle}>
                             {getEffectKindOptionGroups().map((group) => (
                               <optgroup key={group.label} label={group.label}>
                                 {group.options.map((opt) => (<option key={opt.id} value={opt.id}>{opt.label}</option>))}
@@ -2694,12 +2726,12 @@ export function ReglesForm({
                             ))}
                           </select>
                         </div>
-                        {EFFECT_KINDS_WITH_STAT_TARGET.has(aiMinorEffectKind) && (<div><label className="mb-0.5 block text-xs text-[var(--foreground-muted)]"><FormLabel label="Stat" tooltip={genericStatTooltip} /></label><select value={aiMinorEffectTarget ?? STAT_KEYS[0]} onChange={(ev) => setAiMinorEffectTarget(ev.target.value || null)} className={inputClass} style={inputStyle}>{STAT_KEYS.map((k) => (<option key={k} value={k}>{STAT_LABELS[k]}</option>))}</select></div>)}
-                        {EFFECT_KINDS_WITH_BUDGET_TARGET.has(aiMinorEffectKind) && (<div><label className="mb-0.5 block text-xs text-[var(--foreground-muted)]"><FormLabel label="Ministère" tooltip={genericBudgetTooltip} /></label><select value={aiMinorEffectTarget ?? getBudgetMinistryOptions()[0]?.key ?? ""} onChange={(ev) => setAiMinorEffectTarget(ev.target.value || null)} className={inputClass} style={inputStyle}>{getBudgetMinistryOptions().map(({ key, label }) => (<option key={key} value={key}>{label}</option>))}</select></div>)}
-                        {EFFECT_KINDS_WITH_BRANCH_TARGET.has(aiMinorEffectKind) && (<div><label className="mb-0.5 block text-xs text-[var(--foreground-muted)]"><FormLabel label="Branche" tooltip={genericBranchTooltip} /></label><select value={aiMinorEffectTarget ?? MILITARY_BRANCH_EFFECT_IDS[0]} onChange={(ev) => setAiMinorEffectTarget(ev.target.value || null)} className={inputClass} style={inputStyle}>{MILITARY_BRANCH_EFFECT_IDS.map((b) => (<option key={b} value={b}>{MILITARY_BRANCH_EFFECT_LABELS[b]}</option>))}</select></div>)}
-                        {EFFECT_KINDS_WITH_ROSTER_UNIT_TARGET.has(aiMinorEffectKind) && (<div><label className="mb-0.5 block text-xs text-[var(--foreground-muted)]"><FormLabel label="Unité" tooltip={genericUnitTooltip} /></label><select value={aiMinorEffectTarget ?? rosterUnits[0]?.id ?? ""} onChange={(ev) => setAiMinorEffectTarget(ev.target.value || null)} className={inputClass} style={inputStyle}>{rosterUnits.map((u) => (<option key={u.id} value={u.id}>{u.name_fr}</option>))}</select></div>)}
-                        {EFFECT_KINDS_WITH_SUB_TYPE_TARGET.has(aiMinorEffectKind) && (<div><label className="mb-0.5 block text-xs text-[var(--foreground-muted)]"><FormLabel label="Sous-branche/type" tooltip="Branche et sous-type militaire." /></label><select value={aiMinorEffectTarget ?? subTypeOptions[0]?.value ?? ""} onChange={(ev) => setAiMinorEffectTarget(ev.target.value || null)} className={inputClass} style={inputStyle}>{subTypeOptions.map((opt) => (<option key={opt.value} value={opt.value}>{opt.label}</option>))}</select></div>)}
-                        <div><label className="mb-0.5 block text-xs text-[var(--foreground-muted)]"><FormLabel label={getEffectKindValueHelper(aiMinorEffectKind).valueLabel} tooltip={genericEffectValueTooltip} /></label><input type="number" step={getEffectKindValueHelper(aiMinorEffectKind).valueStep} value={aiMinorEffectValue} onChange={(e) => setAiMinorEffectValue(e.target.value)} className={inputClassNarrow} style={inputStyle} /></div>
+                        {EFFECT_KINDS_WITH_STAT_TARGET.has(aiMinorEffectKind) && (<div><label className="mb-0.5 block text-xs text-[var(--foreground-muted)]"><FormLabel label="Stat" tooltip={genericStatTooltip} /></label><select aria-label="Statistique ciblée pour une IA mineure" value={aiMinorEffectTarget ?? STAT_KEYS[0]} onChange={(ev) => setAiMinorEffectTarget(ev.target.value || null)} className={inputClass} style={inputStyle}>{STAT_KEYS.map((k) => (<option key={k} value={k}>{STAT_LABELS[k]}</option>))}</select></div>)}
+                        {EFFECT_KINDS_WITH_BUDGET_TARGET.has(aiMinorEffectKind) && (<div><label className="mb-0.5 block text-xs text-[var(--foreground-muted)]"><FormLabel label="Ministère" tooltip={genericBudgetTooltip} /></label><select aria-label="Ministère ciblé pour une IA mineure" value={aiMinorEffectTarget ?? getBudgetMinistryOptions()[0]?.key ?? ""} onChange={(ev) => setAiMinorEffectTarget(ev.target.value || null)} className={inputClass} style={inputStyle}>{getBudgetMinistryOptions().map(({ key, label }) => (<option key={key} value={key}>{label}</option>))}</select></div>)}
+                        {EFFECT_KINDS_WITH_BRANCH_TARGET.has(aiMinorEffectKind) && (<div><label className="mb-0.5 block text-xs text-[var(--foreground-muted)]"><FormLabel label="Branche" tooltip={genericBranchTooltip} /></label><select aria-label="Branche ciblée pour une IA mineure" value={aiMinorEffectTarget ?? MILITARY_BRANCH_EFFECT_IDS[0]} onChange={(ev) => setAiMinorEffectTarget(ev.target.value || null)} className={inputClass} style={inputStyle}>{MILITARY_BRANCH_EFFECT_IDS.map((b) => (<option key={b} value={b}>{MILITARY_BRANCH_EFFECT_LABELS[b]}</option>))}</select></div>)}
+                        {EFFECT_KINDS_WITH_ROSTER_UNIT_TARGET.has(aiMinorEffectKind) && (<div><label className="mb-0.5 block text-xs text-[var(--foreground-muted)]"><FormLabel label="Unité" tooltip={genericUnitTooltip} /></label><select aria-label="Unité ciblée pour une IA mineure" value={aiMinorEffectTarget ?? rosterUnits[0]?.id ?? ""} onChange={(ev) => setAiMinorEffectTarget(ev.target.value || null)} className={inputClass} style={inputStyle}>{rosterUnits.map((u) => (<option key={u.id} value={u.id}>{u.name_fr}</option>))}</select></div>)}
+                        {EFFECT_KINDS_WITH_SUB_TYPE_TARGET.has(aiMinorEffectKind) && (<div><label className="mb-0.5 block text-xs text-[var(--foreground-muted)]"><FormLabel label="Sous-branche/type" tooltip="Branche et sous-type militaire." /></label><select aria-label="Sous-branche ciblée pour une IA mineure" value={aiMinorEffectTarget ?? subTypeOptions[0]?.value ?? ""} onChange={(ev) => setAiMinorEffectTarget(ev.target.value || null)} className={inputClass} style={inputStyle}>{subTypeOptions.map((opt) => (<option key={opt.value} value={opt.value}>{opt.label}</option>))}</select></div>)}
+                        <div><label className="mb-0.5 block text-xs text-[var(--foreground-muted)]"><FormLabel label={getEffectKindValueHelper(aiMinorEffectKind).valueLabel} tooltip={genericEffectValueTooltip} /></label><input aria-label={getEffectKindValueHelper(aiMinorEffectKind).valueLabel} type="number" step={getEffectKindValueHelper(aiMinorEffectKind).valueStep} value={aiMinorEffectValue} onChange={(e) => setAiMinorEffectValue(e.target.value)} className={inputClassNarrow} style={inputStyle} /></div>
                         <div className="flex gap-2"><button type="button" onClick={() => saveAiEffectForm("minor")} className="rounded py-1.5 px-3 text-sm font-medium" style={{ background: "var(--accent)", color: "#0f1419" }}>Enregistrer</button><button type="button" onClick={() => setAiMinorFormOpen(false)} className="rounded border py-1.5 px-3 text-sm" style={{ borderColor: "var(--border)" }}>Annuler</button></div>
                       </div>
                     )}
@@ -2725,6 +2757,7 @@ export function ReglesForm({
                       <FormLabel label="Mode de decay" tooltip="Flat : décrémente un nombre fixe par jour. Pct : décrémente un pourcentage du niveau actuel. Both : applique d'abord le flat, puis le pourcentage sur le résultat." />
                     </label>
                     <select
+                      aria-label="Mode de baisse de l’intelligence"
                       value={getIntelConfig().decay_mode ?? "flat"}
                       onChange={(e) => updateIntelConfig({ decay_mode: e.target.value as "flat" | "pct" | "both" })}
                       className="w-full rounded border py-1.5 px-2 text-sm"
@@ -2740,6 +2773,7 @@ export function ReglesForm({
                       <FormLabel label="Gain espionnage (base)" tooltip="Delta de référence ajouté au niveau d'intel quand le MJ accepte une action d'espionnage. Le gain réel est proportionnel au jet d'impact." />
                     </label>
                     <input
+                      aria-label="Gain d’intelligence de base"
                       type="number"
                       min={0}
                       max={100}
@@ -2756,6 +2790,7 @@ export function ReglesForm({
                       <FormLabel label="Decay flat / jour" tooltip="Nombre de points d'intel retirés chaque jour (utilisé si le mode est Flat ou Both)." />
                     </label>
                     <input
+                      aria-label="Baisse fixe de l’intelligence par jour"
                       type="number"
                       min={0}
                       step={0.5}
@@ -2770,6 +2805,7 @@ export function ReglesForm({
                       <FormLabel label="Decay pct / jour (%)" tooltip="Pourcentage du niveau actuel retiré chaque jour (utilisé si le mode est Pct ou Both)." />
                     </label>
                     <input
+                      aria-label="Baisse en pourcentage de l’intelligence par jour"
                       type="number"
                       min={0}
                       max={100}

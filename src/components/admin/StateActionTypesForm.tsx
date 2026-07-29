@@ -9,8 +9,9 @@ import {
   getStateActionMinRelationRequired,
   isMilitaryStateActionKey,
 } from "@/lib/actionKeys";
+import { DisclosureChevron } from "@/components/ui/DisclosureChevron";
 
-const panelClass = "rounded-lg border p-6";
+const panelClass = "rounded-xl border p-4 sm:p-6";
 const panelStyle = { background: "var(--background-panel)", borderColor: "var(--border)" };
 
 const STAT_BONUS_KEYS = [
@@ -293,7 +294,7 @@ function StatBonusCheckboxes({
   };
   return (
     <div className="flex flex-col gap-0.5">
-      <label className="block text-xs text-[var(--foreground-muted)]">{label}</label>
+      <p className="text-xs text-[var(--foreground-muted)]">{label}</p>
       <div className="flex flex-wrap gap-2">
         {STAT_BONUS_KEYS.map(({ key, label: l }) => (
           <label key={key} className="flex cursor-pointer items-center gap-1 text-sm">
@@ -338,13 +339,7 @@ function TypeRow({
         className="flex w-full items-center gap-3 py-2 px-3 text-left hover:bg-[var(--background)] transition-colors"
         style={{ background: expanded ? "var(--background)" : "transparent" }}
       >
-        <span
-          className="shrink-0 text-[var(--foreground-muted)] transition-transform duration-200"
-          style={{ transform: expanded ? "rotate(90deg)" : "rotate(0deg)" }}
-          aria-hidden
-        >
-          ▸
-        </span>
+        <DisclosureChevron open={expanded} direction="right" className="text-[var(--foreground-muted)]" />
         <span className="flex-1 text-sm font-medium text-[var(--foreground)]">{type.label_fr}</span>
         <span className="text-xs text-[var(--foreground-muted)]">Coût : {edit.cost}</span>
       </button>
@@ -355,8 +350,9 @@ function TypeRow({
         <div className="min-h-0 overflow-hidden">
           <div className="flex flex-wrap items-end gap-3 gap-y-2 border-t py-3 px-3 text-sm" style={{ borderColor: "var(--border)" }}>
         <div className="w-20">
-          <label className="mb-0.5 block text-xs text-[var(--foreground-muted)]">Coût</label>
+          <label htmlFor={`action-${type.id}-cost`} className="mb-0.5 block text-xs text-[var(--foreground-muted)]">Coût</label>
           <input
+            id={`action-${type.id}-cost`}
             type="number"
             min={0}
             value={edit.cost}
@@ -367,10 +363,11 @@ function TypeRow({
         </div>
         {(isDiplo || isPriseInfluence || isMilitary) && (
           <div className="w-32">
-            <label className="mb-0.5 block text-xs text-[var(--foreground-muted)]" title={isPriseInfluence ? "Pourcentage maximum d'impact." : "Valeur max de variation de relation par action ; le jet d'impact (0–100) applique ce pourcentage."}>
+            <label htmlFor={`action-${type.id}-impact`} className="mb-0.5 block text-xs text-[var(--foreground-muted)]" title={isPriseInfluence ? "Pourcentage maximum d'impact." : "Valeur max de variation de relation par action ; le jet d'impact (0–100) applique ce pourcentage."}>
               Impact max {isPriseInfluence ? "(%)" : ""}
             </label>
             <input
+              id={`action-${type.id}-impact`}
               type="number"
               min={0}
               max={100}
@@ -383,10 +380,11 @@ function TypeRow({
         )}
         {isMilitary && (
           <div className="w-36">
-            <label className="mb-0.5 block text-xs text-[var(--foreground-muted)]" title="Relation bilatérale maximale requise pour autoriser l'action (ex. -75 = hostilité extrême).">
+            <label htmlFor={`action-${type.id}-relation`} className="mb-0.5 block text-xs text-[var(--foreground-muted)]" title="Relation bilatérale maximale requise pour autoriser l'action (ex. -75 = hostilité extrême).">
               Relation max requise
             </label>
             <input
+              id={`action-${type.id}-relation`}
               type="number"
               min={-100}
               max={100}
@@ -429,10 +427,11 @@ function TypeRow({
         {isPriseInfluence && (
           <>
           <div className="w-28">
-            <label className="mb-0.5 block text-xs text-[var(--foreground-muted)]" title="Si 20 : relation -100 → -20 au jet, relation 0 → 0, relation +100 → +20.">
+            <label htmlFor={`action-${type.id}-relations-amplitude`} className="mb-0.5 block text-xs text-[var(--foreground-muted)]" title="Si 20 : relation -100 → -20 au jet, relation 0 → 0, relation +100 → +20.">
               Amplitude relations
             </label>
             <input
+              id={`action-${type.id}-relations-amplitude`}
               type="number"
               min={0}
               value={edit.amplitudeRelations}
@@ -442,10 +441,11 @@ function TypeRow({
             />
           </div>
           <div className="w-28">
-            <label className="mb-0.5 block text-xs text-[var(--foreground-muted)]" title="Rang d'influence du pays émetteur (0–100 %) : si 15, top influence → +15 au jet, plus faible → 0.">
+            <label htmlFor={`action-${type.id}-influence-amplitude`} className="mb-0.5 block text-xs text-[var(--foreground-muted)]" title="Rang d'influence du pays émetteur (0–100 %) : si 15, top influence → +15 au jet, plus faible → 0.">
               Amplitude influence
             </label>
             <input
+              id={`action-${type.id}-influence-amplitude`}
               type="number"
               min={0}
               value={edit.amplitudeInfluence}
@@ -460,8 +460,9 @@ function TypeRow({
             </p>
             <div className="flex flex-wrap gap-3">
               <div className="w-28">
-                <label className="mb-0.5 block text-xs text-[var(--foreground-muted)]">Ratio équilibre</label>
+                <label htmlFor={`action-${type.id}-balance-ratio`} className="mb-0.5 block text-xs text-[var(--foreground-muted)]">Ratio équilibre</label>
                 <input
+                  id={`action-${type.id}-balance-ratio`}
                   type="number"
                   step={0.1}
                   min={0}
@@ -479,8 +480,9 @@ function TypeRow({
                 />
               </div>
               <div className="w-20">
-                <label className="mb-0.5 block text-xs text-[var(--foreground-muted)]">Malus max %</label>
+                <label htmlFor={`action-${type.id}-max-penalty`} className="mb-0.5 block text-xs text-[var(--foreground-muted)]">Malus max %</label>
                 <input
+                  id={`action-${type.id}-max-penalty`}
                   type="number"
                   min={0}
                   value={edit.equilibreDesForces.malusMax}
@@ -497,8 +499,9 @@ function TypeRow({
                 />
               </div>
               <div className="w-20">
-                <label className="mb-0.5 block text-xs text-[var(--foreground-muted)]">Bonus max %</label>
+                <label htmlFor={`action-${type.id}-max-bonus`} className="mb-0.5 block text-xs text-[var(--foreground-muted)]">Bonus max %</label>
                 <input
+                  id={`action-${type.id}-max-bonus`}
                   type="number"
                   min={0}
                   value={edit.equilibreDesForces.bonusMax}
@@ -515,8 +518,9 @@ function TypeRow({
                 />
               </div>
               <div className="w-24">
-                <label className="mb-0.5 block text-xs text-[var(--foreground-muted)]">Ratio min</label>
+                <label htmlFor={`action-${type.id}-min-ratio`} className="mb-0.5 block text-xs text-[var(--foreground-muted)]">Ratio min</label>
                 <input
+                  id={`action-${type.id}-min-ratio`}
                   type="number"
                   step={0.1}
                   min={0}
@@ -534,8 +538,9 @@ function TypeRow({
                 />
               </div>
               <div className="w-24">
-                <label className="mb-0.5 block text-xs text-[var(--foreground-muted)]">Ratio max</label>
+                <label htmlFor={`action-${type.id}-max-ratio`} className="mb-0.5 block text-xs text-[var(--foreground-muted)]">Ratio max</label>
                 <input
+                  id={`action-${type.id}-max-ratio`}
                   type="number"
                   step={0.1}
                   min={0}

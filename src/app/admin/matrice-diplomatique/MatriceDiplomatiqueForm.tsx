@@ -79,24 +79,25 @@ export function MatriceDiplomatiqueForm({
 
   return (
     <div className="space-y-8">
-      <section className="rounded-lg border p-6" style={{ borderColor: "var(--border)", background: "var(--background-panel)" }}>
+      <section className="rounded-xl border p-4 sm:p-6" style={{ borderColor: "var(--border)", background: "var(--background-panel)" }}>
         <h2 className="mb-4 inline-flex items-center gap-2 text-lg font-semibold text-[var(--foreground)]">
           <span>Modifier une relation</span>
           <InfoTooltip content={<TooltipBody text="Valeur de la relation entre deux pays. Utilisée par les events IA et l'idéologie." />} side="bottom" />
         </h2>
-        <div className="flex flex-wrap items-end gap-4">
-          <div className="flex flex-col gap-1">
-            <label className="inline-flex items-center gap-1.5 text-sm text-[var(--foreground-muted)]">
-              <span>Pays A</span>
+        <div className="grid grid-cols-1 items-end gap-4 sm:grid-cols-2 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(14rem,1fr)_auto]">
+          <div className="flex min-w-0 flex-col gap-1">
+            <div className="inline-flex items-center gap-1.5 text-sm text-[var(--foreground-muted)]">
+              <label htmlFor="relation-country-a">Pays A</label>
               <InfoTooltip content={<TooltipBody text="Premier pays de la relation bilatérale à modifier." />} />
-            </label>
+            </div>
             <select
+              id="relation-country-a"
               value={countryA}
               onChange={(e) => {
                 setCountryA(e.target.value);
                 if (e.target.value === countryB) setCountryB("");
               }}
-              className="rounded border bg-[var(--background)] px-3 py-2 text-[var(--foreground)]"
+              className="w-full min-w-0 rounded border bg-[var(--background)] px-3 py-2 text-[var(--foreground)]"
               style={{ borderColor: "var(--border)" }}
             >
               <option value="">— Choisir —</option>
@@ -107,18 +108,19 @@ export function MatriceDiplomatiqueForm({
               ))}
             </select>
           </div>
-          <div className="flex flex-col gap-1">
-            <label className="inline-flex items-center gap-1.5 text-sm text-[var(--foreground-muted)]">
-              <span>Pays B</span>
+          <div className="flex min-w-0 flex-col gap-1">
+            <div className="inline-flex items-center gap-1.5 text-sm text-[var(--foreground-muted)]">
+              <label htmlFor="relation-country-b">Pays B</label>
               <InfoTooltip content={<TooltipBody text="Second pays de la paire (doit être différent du premier)." />} />
-            </label>
+            </div>
             <select
+              id="relation-country-b"
               value={countryB}
               onChange={(e) => {
                 setCountryB(e.target.value);
                 if (e.target.value === countryA) setCountryA("");
               }}
-              className="rounded border bg-[var(--background)] px-3 py-2 text-[var(--foreground)]"
+              className="w-full min-w-0 rounded border bg-[var(--background)] px-3 py-2 text-[var(--foreground)]"
               style={{ borderColor: "var(--border)" }}
             >
               <option value="">— Choisir —</option>
@@ -129,27 +131,29 @@ export function MatriceDiplomatiqueForm({
               ))}
             </select>
           </div>
-          <div className="flex flex-col gap-1">
-            <label className="inline-flex items-center gap-1.5 text-sm text-[var(--foreground-muted)]">
-              <span>Relation ({RELATION_MIN} à {RELATION_MAX})</span>
+          <div className="flex min-w-0 flex-col gap-1">
+            <div className="inline-flex items-center gap-1.5 text-sm text-[var(--foreground-muted)]">
+              <label htmlFor="relation-range">Relation ({RELATION_MIN} à {RELATION_MAX})</label>
               <InfoTooltip content={<TooltipBody text="Qualité du lien : négatif = hostilité, positif = proximité. Utilisé par les events IA et l'idéologie." />} />
-            </label>
-            <div className="flex items-center gap-3">
+            </div>
+            <div className="flex min-w-0 items-center gap-3">
               <input
+                id="relation-range"
                 type="range"
                 min={RELATION_MIN}
                 max={RELATION_MAX}
                 value={value}
                 onChange={(e) => setValue(Number(e.target.value))}
-                className="w-40"
+                className="min-w-0 flex-1"
               />
               <input
+                aria-label="Valeur numérique de la relation"
                 type="number"
                 min={RELATION_MIN}
                 max={RELATION_MAX}
                 value={value}
                 onChange={(e) => setValue(Number(e.target.value))}
-                className="w-16 rounded border bg-[var(--background)] px-2 py-1 text-center text-[var(--foreground)]"
+                className="w-20 rounded border bg-[var(--background)] px-2 py-2 text-center text-[var(--foreground)]"
                 style={{ borderColor: "var(--border)" }}
               />
             </div>
@@ -158,7 +162,7 @@ export function MatriceDiplomatiqueForm({
             type="button"
             onClick={handleSave}
             disabled={isPending || !countryA || !countryB || countryA === countryB}
-            className="rounded px-4 py-2 text-sm font-medium text-white opacity-90 hover:opacity-100 disabled:opacity-50"
+            className="w-full rounded px-4 py-2 text-sm font-medium text-white opacity-90 hover:opacity-100 disabled:opacity-50"
             style={{ background: "var(--accent)" }}
           >
             Enregistrer
@@ -171,7 +175,7 @@ export function MatriceDiplomatiqueForm({
         )}
       </section>
 
-      <section className="flex flex-wrap gap-3">
+      <section className="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
         <button
           type="button"
           onClick={handleResetAll}
@@ -194,6 +198,7 @@ export function MatriceDiplomatiqueForm({
 
       {message && (
         <p
+          role={message.type === "error" ? "alert" : "status"}
           className="text-sm"
           style={{ color: message.type === "error" ? "var(--danger)" : "var(--accent)" }}
         >

@@ -39,6 +39,23 @@ body {
   overflow-x: clip;
 }
 
+.admin-shell :where(button, input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]), select, textarea, summary) {
+  min-height: 2.75rem;
+}
+
+.admin-shell button {
+  min-width: 2.75rem;
+}
+
+.admin-shell label:has(> input[type="checkbox"], > input[type="radio"]) {
+  min-height: 2.75rem;
+}
+
+.admin-shell :where(a, button, input, select, textarea, summary):focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
 /* Au-dessus du menu public (sticky z-50) : les modales en createPortal ciblent ce nœud (sibling du shell). */
 #fon-modal-root {
   position: relative;

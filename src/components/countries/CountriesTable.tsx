@@ -337,6 +337,7 @@ export function CountriesTable({
                   </td>
                   <td className="p-3">
                     <select
+                      aria-label={`Continent de ${c.name}`}
                       value={c.continent_id ?? ""}
                       onChange={(e) => {
                         const v = e.target.value;
@@ -368,6 +369,7 @@ export function CountriesTable({
                         </span>
                       ) : (
                         <select
+                          aria-label={`Statut IA de ${c.name}`}
                           value={c.ai_status ?? ""}
                           onChange={(e) => {
                             const v = e.target.value;
@@ -597,6 +599,7 @@ export function CountriesTable({
                     </span>
                   ) : (
                     <select
+                      aria-label={`Statut IA de ${c.name}`}
                       value={c.ai_status ?? ""}
                       onChange={(e) => {
                         const v = e.target.value;

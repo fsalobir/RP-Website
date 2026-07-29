@@ -126,10 +126,10 @@ export function CountryForm({
     setSaving(false);
   }
 
-  const panelClass = "rounded-lg border p-6";
+  const panelClass = "rounded-lg border p-4 sm:p-6";
   const panelStyle = { background: "var(--background-panel)", borderColor: "var(--border)" };
   const inputClass =
-    "w-full rounded border bg-[var(--background)] px-3 py-2 text-[var(--foreground)] focus:border-[var(--accent)] focus:outline-none focus:ring-1 focus:ring-[var(--accent)]";
+    "min-h-11 w-full rounded border bg-[var(--background)] px-3 py-2 text-[var(--foreground)] focus:border-[var(--accent)] focus:outline-none focus:ring-2 focus:ring-[var(--accent)]";
   const inputStyle = { borderColor: "var(--border)" };
 
   return (
@@ -138,8 +138,9 @@ export function CountryForm({
         <h2 className="mb-4 text-lg font-semibold text-[var(--foreground)]">Généralités</h2>
         <div className="grid gap-4 sm:grid-cols-2">
           <div>
-            <label className="mb-1 block text-sm text-[var(--foreground-muted)]">Nom</label>
+            <label htmlFor="country-name" className="mb-1 block text-sm text-[var(--foreground-muted)]">Nom</label>
             <input
+              id="country-name"
               type="text"
               value={form.name}
               onChange={(e) => update("name", e.target.value)}
@@ -149,8 +150,9 @@ export function CountryForm({
             />
           </div>
           <div>
-            <label className="mb-1 block text-sm text-[var(--foreground-muted)]">Slug (URL)</label>
+            <label htmlFor="country-slug" className="mb-1 block text-sm text-[var(--foreground-muted)]">Slug (URL)</label>
             <input
+              id="country-slug"
               type="text"
               value={form.slug}
               onChange={(e) => update("slug", e.target.value)}
@@ -159,8 +161,9 @@ export function CountryForm({
             />
           </div>
           <div>
-            <label className="mb-1 block text-sm text-[var(--foreground-muted)]">Régime</label>
+            <label htmlFor="country-regime" className="mb-1 block text-sm text-[var(--foreground-muted)]">Régime</label>
             <input
+              id="country-regime"
               type="text"
               value={form.regime}
               onChange={(e) => update("regime", e.target.value)}
@@ -171,8 +174,9 @@ export function CountryForm({
           </div>
           {continents.length > 0 && (
             <div>
-              <label className="mb-1 block text-sm text-[var(--foreground-muted)]">Continent</label>
+              <label htmlFor="country-continent" className="mb-1 block text-sm text-[var(--foreground-muted)]">Continent</label>
               <select
+                id="country-continent"
                 value={form.continent_id}
                 onChange={(e) => update("continent_id", e.target.value)}
                 className={inputClass}
@@ -197,7 +201,7 @@ export function CountryForm({
               />
               <label
                 htmlFor="admin-country-flag-upload"
-                className="inline-block cursor-pointer rounded border border-[var(--border)] bg-[var(--accent)] px-3 py-1.5 text-sm font-medium text-[#0f1419] hover:opacity-90"
+                className="inline-flex min-h-11 cursor-pointer items-center rounded border border-[var(--border)] bg-[var(--accent)] px-3 py-1.5 text-sm font-medium text-[#0f1419] hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
               >
                 Upload
               </label>
@@ -228,10 +232,11 @@ export function CountryForm({
         <div className="grid gap-4 sm:grid-cols-4">
           {(["militarism", "industry", "science"] as const).map((key) => (
             <div key={key}>
-              <label className="mb-1 block text-sm text-[var(--foreground-muted)]">
+              <label htmlFor={`country-${key}`} className="mb-1 block text-sm text-[var(--foreground-muted)]">
                 {key === "militarism" ? "Militarisme" : key === "industry" ? "Industrie" : "Science"} (0–10)
               </label>
               <input
+                id={`country-${key}`}
                 type="number"
                 min={0}
                 max={10}
@@ -244,8 +249,9 @@ export function CountryForm({
             </div>
           ))}
           <div>
-            <label className="mb-1 block text-sm text-[var(--foreground-muted)]">Stabilité (-3 à 3)</label>
+            <label htmlFor="country-stability" className="mb-1 block text-sm text-[var(--foreground-muted)]">Stabilité (-3 à 3)</label>
             <input
+              id="country-stability"
               type="number"
               min={-3}
               max={3}
@@ -263,8 +269,9 @@ export function CountryForm({
         <h2 className="mb-4 text-lg font-semibold text-[var(--foreground)]">Macros</h2>
         <div className="grid gap-4 sm:grid-cols-2">
           <div>
-            <label className="mb-1 block text-sm text-[var(--foreground-muted)]">Population</label>
+            <label htmlFor="country-population" className="mb-1 block text-sm text-[var(--foreground-muted)]">Population</label>
             <input
+              id="country-population"
               type="number"
               min={0}
               value={form.population}
@@ -274,8 +281,9 @@ export function CountryForm({
             />
           </div>
           <div>
-            <label className="mb-1 block text-sm text-[var(--foreground-muted)]">PIB</label>
+            <label htmlFor="country-gdp" className="mb-1 block text-sm text-[var(--foreground-muted)]">PIB</label>
             <input
+              id="country-gdp"
               type="number"
               min={0}
               step={0.01}
@@ -288,19 +296,19 @@ export function CountryForm({
         </div>
       </section>
 
-      {error && <p className="text-[var(--danger)]">{error}</p>}
-      <div className="flex gap-4">
+      {error && <p className="text-[var(--danger)]" role="alert">{error}</p>}
+      <div className="flex flex-wrap gap-4">
         <button
           type="submit"
           disabled={saving}
-          className="btn-primary rounded py-2 px-4 disabled:opacity-50"
+          className="btn-primary inline-flex min-h-11 items-center rounded py-2 px-4 disabled:opacity-50"
           style={{ background: "var(--accent)", color: "#0f1419", fontWeight: 600 }}
         >
           {saving ? "Enregistrement…" : "Enregistrer"}
         </button>
         <Link
           href="/admin/pays"
-          className="rounded border py-2 px-4 text-[var(--foreground-muted)] hover:bg-[var(--background-elevated)]"
+          className="inline-flex min-h-11 items-center rounded border py-2 px-4 text-[var(--foreground-muted)] hover:bg-[var(--background-elevated)]"
           style={{ borderColor: "var(--border)" }}
         >
           Annuler

@@ -55,8 +55,8 @@ export function AvantagesManager({
   perks: initialPerks,
   rosterUnits,
 }: AvantagesManagerProps) {
-  const [categories, setCategories] = useState(initialCategories);
-  const [perks, setPerks] = useState(initialPerks);
+  const [categories] = useState(initialCategories);
+  const [perks] = useState(initialPerks);
   const [categoryFormOpen, setCategoryFormOpen] = useState(false);
   const [editingCategoryId, setEditingCategoryId] = useState<string | null>(null);
   const [categoryName, setCategoryName] = useState("");
@@ -340,10 +340,11 @@ export function AvantagesManager({
           </button>
         ) : (
           <div className="mt-3 rounded border p-4 space-y-3" style={{ borderColor: "var(--border-muted)" }}>
-            {categoryError && <p className="text-sm text-[var(--danger)]">{categoryError}</p>}
+            {categoryError && <p role="alert" className="text-sm text-[var(--danger)]">{categoryError}</p>}
             <div>
-              <label className="mb-1 block text-xs text-[var(--foreground-muted)]">Nom</label>
+              <label htmlFor="perk-category-name" className="mb-1 block text-xs text-[var(--foreground-muted)]">Nom</label>
               <input
+                id="perk-category-name"
                 type="text"
                 value={categoryName}
                 onChange={(e) => setCategoryName(e.target.value)}
@@ -352,8 +353,9 @@ export function AvantagesManager({
               />
             </div>
             <div>
-              <label className="mb-1 block text-xs text-[var(--foreground-muted)]">Ordre</label>
+              <label htmlFor="perk-category-order" className="mb-1 block text-xs text-[var(--foreground-muted)]">Ordre</label>
               <input
+                id="perk-category-order"
                 type="number"
                 value={categorySortOrder}
                 onChange={(e) => setCategorySortOrder(Number(e.target.value) || 0)}
@@ -361,7 +363,7 @@ export function AvantagesManager({
                 style={inputStyle}
               />
             </div>
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-2">
               <button
                 type="button"
                 onClick={saveCategory}
@@ -438,11 +440,12 @@ export function AvantagesManager({
           </button>
         ) : (
           <div className="mt-3 rounded border p-4 space-y-4" style={{ borderColor: "var(--border-muted)" }}>
-            {perkError && <p className="text-sm text-[var(--danger)]">{perkError}</p>}
+            {perkError && <p role="alert" className="text-sm text-[var(--danger)]">{perkError}</p>}
             <div className="grid gap-3 sm:grid-cols-2">
               <div>
-                <label className="mb-1 block text-xs text-[var(--foreground-muted)]">Titre</label>
+                <label htmlFor="perk-title" className="mb-1 block text-xs text-[var(--foreground-muted)]">Titre</label>
                 <input
+                  id="perk-title"
                   type="text"
                   value={perkName}
                   onChange={(e) => setPerkName(e.target.value)}
@@ -451,8 +454,9 @@ export function AvantagesManager({
                 />
               </div>
               <div>
-                <label className="mb-1 block text-xs text-[var(--foreground-muted)]">Catégorie</label>
+                <label htmlFor="perk-category" className="mb-1 block text-xs text-[var(--foreground-muted)]">Catégorie</label>
                 <select
+                  id="perk-category"
                   value={perkCategoryId}
                   onChange={(e) => setPerkCategoryId(e.target.value)}
                   className={inputClass}
@@ -466,8 +470,9 @@ export function AvantagesManager({
               </div>
             </div>
             <div>
-              <label className="mb-1 block text-xs text-[var(--foreground-muted)]">Description (fluff)</label>
+              <label htmlFor="perk-description" className="mb-1 block text-xs text-[var(--foreground-muted)]">Description (fluff)</label>
               <textarea
+                id="perk-description"
                 value={perkDescription}
                 onChange={(e) => setPerkDescription(e.target.value)}
                 rows={2}
@@ -476,10 +481,12 @@ export function AvantagesManager({
               />
             </div>
             <div className="space-y-2">
-              <label className="mb-1 block text-xs text-[var(--foreground-muted)]">Icône</label>
+              <p className="text-xs text-[var(--foreground-muted)]">Icône</p>
               <div className="flex flex-wrap items-end gap-3">
-                <div>
+                <div className="min-w-0">
+                  <label htmlFor="perk-icon-file" className="sr-only">Fichier de l’icône</label>
                   <input
+                    id="perk-icon-file"
                     type="file"
                     accept="image/*"
                     onChange={(e) => {
@@ -495,8 +502,9 @@ export function AvantagesManager({
                   </p>
                 </div>
                 <div className="min-w-[12rem] flex-1">
-                  <span className="mb-0.5 block text-xs text-[var(--foreground-muted)]">ou URL</span>
+                  <label htmlFor="perk-icon-url" className="mb-0.5 block text-xs text-[var(--foreground-muted)]">ou URL</label>
                   <input
+                    id="perk-icon-url"
                     type="text"
                     value={perkIconUrl}
                     onChange={(e) => { setPerkIconUrl(e.target.value); setPerkIconFile(null); }}
@@ -506,8 +514,9 @@ export function AvantagesManager({
                   />
                 </div>
                 <div>
-                  <label className="mb-0.5 block text-xs text-[var(--foreground-muted)]">Taille (px)</label>
+                  <label htmlFor="perk-icon-size" className="mb-0.5 block text-xs text-[var(--foreground-muted)]">Taille (px)</label>
                   <input
+                    id="perk-icon-size"
                     type="number"
                     min={16}
                     max={256}
@@ -536,8 +545,9 @@ export function AvantagesManager({
             </div>
             <div className="grid gap-3 sm:grid-cols-2">
               <div>
-                <label className="mb-1 block text-xs text-[var(--foreground-muted)]">Ordre</label>
+                <label htmlFor="perk-order" className="mb-1 block text-xs text-[var(--foreground-muted)]">Ordre</label>
                 <input
+                  id="perk-order"
                   type="number"
                   value={perkSortOrder}
                   onChange={(e) => setPerkSortOrder(Number(e.target.value) || 0)}
@@ -603,10 +613,11 @@ export function AvantagesManager({
                   + Ajouter un requis
                 </button>
               ) : (
-                <div className="mt-2 flex flex-wrap items-end gap-2 rounded border p-2" style={{ borderColor: "var(--border-muted)" }}>
+                <div className="mt-2 grid grid-cols-1 items-end gap-2 rounded border p-3 sm:flex sm:flex-wrap" style={{ borderColor: "var(--border-muted)" }}>
                   <div>
-                    <label className="mb-0.5 block text-xs text-[var(--foreground-muted)]">Type</label>
+                    <label htmlFor="perk-requirement-kind" className="mb-0.5 block text-xs text-[var(--foreground-muted)]">Type</label>
                     <select
+                      id="perk-requirement-kind"
                       value={requirementKind}
                       onChange={(e) => {
                         setRequirementKind(e.target.value);
@@ -623,8 +634,9 @@ export function AvantagesManager({
                   </div>
                   {metaForRequirementKind.needsTarget && requirementTargetOptions.length > 0 && (
                     <div>
-                      <label className="mb-0.5 block text-xs text-[var(--foreground-muted)]">{metaForRequirementKind.targetLabel ?? "Cible"}</label>
+                      <label htmlFor="perk-requirement-target" className="mb-0.5 block text-xs text-[var(--foreground-muted)]">{metaForRequirementKind.targetLabel ?? "Cible"}</label>
                       <select
+                        id="perk-requirement-target"
                         value={requirementTarget}
                         onChange={(e) => setRequirementTarget(e.target.value)}
                         className={inputClass}
@@ -637,8 +649,9 @@ export function AvantagesManager({
                     </div>
                   )}
                   <div>
-                    <label className="mb-0.5 block text-xs text-[var(--foreground-muted)]">{getRequirementValueHelper(requirementKind).valueLabel}</label>
+                    <label htmlFor="perk-requirement-value" className="mb-0.5 block text-xs text-[var(--foreground-muted)]">{getRequirementValueHelper(requirementKind).valueLabel}</label>
                     <input
+                      id="perk-requirement-value"
                       type="number"
                       step={getRequirementValueHelper(requirementKind).valueStep}
                       value={requirementValue}
@@ -722,8 +735,9 @@ export function AvantagesManager({
               ) : (
                 <div className="mt-2 rounded border p-3 space-y-2" style={{ borderColor: "var(--border-muted)" }}>
                   <div>
-                    <label className="mb-0.5 block text-xs text-[var(--foreground-muted)]">Type d&apos;effet</label>
+                    <label htmlFor="perk-effect-kind" className="mb-0.5 block text-xs text-[var(--foreground-muted)]">Type d&apos;effet</label>
                     <select
+                      id="perk-effect-kind"
                       value={effectKind}
                       onChange={(e) => {
                         const k = e.target.value;
@@ -744,8 +758,9 @@ export function AvantagesManager({
                   </div>
                   {EFFECT_KINDS_WITH_STAT_TARGET.has(effectKind) && (
                     <div>
-                      <label className="mb-0.5 block text-xs text-[var(--foreground-muted)]">Stat</label>
+                      <label htmlFor="perk-effect-stat" className="mb-0.5 block text-xs text-[var(--foreground-muted)]">Stat</label>
                       <select
+                        id="perk-effect-stat"
                         value={currentEffectTarget ?? STAT_KEYS[0]}
                         onChange={(e) => setEffectTarget(e.target.value || null)}
                         className={inputClass}
@@ -759,8 +774,9 @@ export function AvantagesManager({
                   )}
                   {EFFECT_KINDS_WITH_BUDGET_TARGET.has(effectKind) && (
                     <div>
-                      <label className="mb-0.5 block text-xs text-[var(--foreground-muted)]">Ministère</label>
+                      <label htmlFor="perk-effect-ministry" className="mb-0.5 block text-xs text-[var(--foreground-muted)]">Ministère</label>
                       <select
+                        id="perk-effect-ministry"
                         value={currentEffectTarget ?? getBudgetMinistryOptions()[0]?.key ?? ""}
                         onChange={(e) => setEffectTarget(e.target.value || null)}
                         className={inputClass}
@@ -774,8 +790,9 @@ export function AvantagesManager({
                   )}
                   {EFFECT_KINDS_WITH_BRANCH_TARGET.has(effectKind) && (
                     <div>
-                      <label className="mb-0.5 block text-xs text-[var(--foreground-muted)]">Branche</label>
+                      <label htmlFor="perk-effect-branch" className="mb-0.5 block text-xs text-[var(--foreground-muted)]">Branche</label>
                       <select
+                        id="perk-effect-branch"
                         value={currentEffectTarget ?? MILITARY_BRANCH_EFFECT_IDS[0]}
                         onChange={(e) => setEffectTarget(e.target.value || null)}
                         className={inputClass}
@@ -789,8 +806,9 @@ export function AvantagesManager({
                   )}
                   {EFFECT_KINDS_WITH_ROSTER_UNIT_TARGET.has(effectKind) && (
                     <div>
-                      <label className="mb-0.5 block text-xs text-[var(--foreground-muted)]">Unité</label>
+                      <label htmlFor="perk-effect-unit" className="mb-0.5 block text-xs text-[var(--foreground-muted)]">Unité</label>
                       <select
+                        id="perk-effect-unit"
                         value={currentEffectTarget ?? rosterUnits[0]?.id ?? ""}
                         onChange={(e) => setEffectTarget(e.target.value || null)}
                         className={inputClass}
@@ -804,8 +822,9 @@ export function AvantagesManager({
                   )}
                   {EFFECT_KINDS_WITH_SUB_TYPE_TARGET.has(effectKind) && (
                     <div>
-                      <label className="mb-0.5 block text-xs text-[var(--foreground-muted)]">Sous-branche/type</label>
+                      <label htmlFor="perk-effect-subtype" className="mb-0.5 block text-xs text-[var(--foreground-muted)]">Sous-branche/type</label>
                       <select
+                        id="perk-effect-subtype"
                         value={currentEffectTarget ?? subTypeOptions[0]?.value ?? ""}
                         onChange={(e) => setEffectTarget(e.target.value || null)}
                         className={inputClass}
@@ -818,10 +837,11 @@ export function AvantagesManager({
                     </div>
                   )}
                   <div>
-                    <label className="mb-0.5 block text-xs text-[var(--foreground-muted)]">
+                    <label htmlFor="perk-effect-value" className="mb-0.5 block text-xs text-[var(--foreground-muted)]">
                       {getEffectKindValueHelper(effectKind).valueLabel}
                     </label>
                     <input
+                      id="perk-effect-value"
                       type="number"
                       step={getEffectKindValueHelper(effectKind).valueStep}
                       value={effectValue}
@@ -830,7 +850,7 @@ export function AvantagesManager({
                       style={{ ...inputStyle, maxWidth: "12rem" }}
                     />
                   </div>
-                  <div className="flex gap-2">
+                  <div className="flex flex-wrap gap-2">
                     <button
                       type="button"
                       onClick={addEffect}
@@ -855,7 +875,7 @@ export function AvantagesManager({
               )}
             </div>
 
-            <div className="flex gap-2 pt-2">
+            <div className="flex flex-wrap gap-2 pt-2">
               <button
                 type="button"
                 onClick={savePerk}

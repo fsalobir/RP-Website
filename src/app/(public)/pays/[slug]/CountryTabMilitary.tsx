@@ -405,6 +405,7 @@ export function CountryTabMilitary({
                                           <div className="flex flex-wrap items-center justify-center gap-0.5">
                                             <span className={`text-[10px] ${glassMutedClass}`}>{row.unit.base_count}+</span>
                                             <input
+                                              aria-label={`Effectif supplémentaire pour ${row.unit.name_fr}`}
                                               type="number"
                                               min={0}
                                               className="w-9 rounded border border-white/25 bg-white/10 px-0.5 py-0.5 text-[10px] font-mono text-white"
@@ -449,6 +450,7 @@ export function CountryTabMilitary({
                                           {isAdmin ? (
                                             <div className="flex items-center gap-1 flex-wrap justify-center">
                                               <input
+                                                aria-label={`Progression de ${row.unit.name_fr} en points`}
                                                 type="number"
                                                 min={0}
                                                 max={row.unit.level_count * 100}

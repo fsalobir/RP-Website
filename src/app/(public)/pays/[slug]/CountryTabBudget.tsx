@@ -118,9 +118,9 @@ export function CountryTabBudget({
         </div>
         <div className="mb-4 flex flex-wrap items-center gap-4">
           <div className="flex items-center gap-2">
-            <span className="text-sm font-medium text-[var(--foreground)]">
+            <label htmlFor="budget-fraction" className="text-sm font-medium text-[var(--foreground)]">
               Fraction du PIB :
-            </span>
+            </label>
             {canEditCountry ? (
               <>
                 <input
@@ -161,7 +161,7 @@ export function CountryTabBudget({
           Répartition par ministère
         </h2>
         {budgetError && (
-          <p className="mb-4 text-sm text-[var(--danger)]">{budgetError}</p>
+          <p role="alert" className="mb-4 text-sm text-[var(--danger)]">{budgetError}</p>
         )}
         <div className="space-y-4">
           {[1, 2, 3].map((groupNum) => (
@@ -204,6 +204,7 @@ export function CountryTabBudget({
                               />
                             )}
                             <input
+                              aria-label={`Allocation du ministère ${label}`}
                               type="range"
                               min={0}
                               max={100}
@@ -215,6 +216,7 @@ export function CountryTabBudget({
                           </div>
                           <div className="flex w-[92px] shrink-0 items-center justify-end gap-1">
                             <input
+                              aria-label={`Pourcentage du ministère ${label}`}
                               type="number"
                               min={forcedMin}
                               max={100}

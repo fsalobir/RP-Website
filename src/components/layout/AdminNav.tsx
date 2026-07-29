@@ -2,8 +2,7 @@ import Link from "next/link";
 import { AdminSignOut } from "./AdminSignOut";
 
 const navLinkClass =
-  "text-sm text-[var(--foreground-muted)] hover:text-[var(--foreground)] transition-colors whitespace-nowrap";
-const separatorClass = "h-5 w-px bg-[var(--border)]" as const;
+  "inline-flex min-h-11 shrink-0 items-center rounded px-2 text-sm text-[var(--foreground-muted)] transition-colors hover:text-[var(--foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] whitespace-nowrap";
 
 export function AdminNav() {
   return (
@@ -11,14 +10,17 @@ export function AdminNav() {
       className="sticky top-0 z-50 border-b bg-[var(--background-elevated)]"
       style={{ borderColor: "var(--border)" }}
     >
-      <div className="mx-auto flex h-14 max-w-6xl items-center justify-between px-4">
+      <div className="mx-auto flex max-w-6xl min-w-0 flex-col px-4 sm:h-14 sm:flex-row sm:items-center sm:justify-between">
         <Link
           href="/admin"
-          className="text-lg font-semibold text-[var(--foreground)] hover:text-[var(--accent)] transition-colors"
+          className="inline-flex min-h-12 items-center text-lg font-semibold text-[var(--foreground)] transition-colors hover:text-[var(--accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] sm:min-h-11"
         >
           Tableau de bord
         </Link>
-        <nav className="flex items-center gap-5">
+        <nav
+          aria-label="Navigation d’administration"
+          className="-mx-4 flex w-[calc(100%+2rem)] min-w-0 items-center gap-1 overflow-x-auto overscroll-x-contain border-t border-[var(--border)] px-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:mx-0 sm:w-auto sm:overflow-visible sm:border-0 sm:px-0"
+        >
           <Link href="/" className={navLinkClass}>
             <span aria-hidden className="mr-1.5">👁️</span>Accès Joueur
           </Link>
@@ -30,9 +32,6 @@ export function AdminNav() {
           </Link>
           <Link href="/admin/wiki" className={navLinkClass}>
             <span aria-hidden className="mr-1.5">📖</span>Wiki
-          </Link>
-          <Link href="/admin" className={navLinkClass}>
-            <span aria-hidden className="mr-1.5">🏠</span>Accueil
           </Link>
           <AdminSignOut />
         </nav>

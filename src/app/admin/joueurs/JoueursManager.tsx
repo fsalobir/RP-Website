@@ -35,7 +35,7 @@ export function JoueursManager({
   return (
     <div className="space-y-8">
       <section
-        className="rounded-lg border p-6"
+        className="rounded-xl border p-4 sm:p-6"
         style={{ borderColor: "var(--border)", background: "var(--background-panel)" }}
       >
         <h2 className="mb-4 text-lg font-semibold text-[var(--foreground)]">
@@ -53,45 +53,52 @@ export function JoueursManager({
             setCreateSuccess(result.existingAssigned ? "Compte existant assigné au pays." : true);
             router.refresh();
           }}
-          className="flex flex-wrap items-end gap-4"
+          className="grid grid-cols-1 items-end gap-4 sm:grid-cols-2 xl:grid-cols-5"
         >
-          <div>
-            <label className="mb-1 block text-sm text-[var(--foreground-muted)]">Nom</label>
+          <div className="min-w-0">
+            <label htmlFor="new-player-name" className="mb-1 block text-sm text-[var(--foreground-muted)]">Nom</label>
             <input
+              id="new-player-name"
               type="text"
               name="name"
+              autoComplete="name"
               placeholder="ex. kapkio"
-              className="rounded border bg-[var(--background)] px-3 py-1.5 text-sm text-[var(--foreground)]"
+              className="w-full rounded border bg-[var(--background)] px-3 py-2 text-sm text-[var(--foreground)]"
               style={{ borderColor: "var(--border)" }}
             />
           </div>
-          <div>
-            <label className="mb-1 block text-sm text-[var(--foreground-muted)]">Email</label>
+          <div className="min-w-0">
+            <label htmlFor="new-player-email" className="mb-1 block text-sm text-[var(--foreground-muted)]">Email</label>
             <input
+              id="new-player-email"
               type="email"
               name="email"
+              autoComplete="email"
               required
-              className="rounded border bg-[var(--background)] px-3 py-1.5 text-sm text-[var(--foreground)]"
+              className="w-full rounded border bg-[var(--background)] px-3 py-2 text-sm text-[var(--foreground)]"
               style={{ borderColor: "var(--border)" }}
             />
           </div>
-          <div>
-            <label className="mb-1 block text-sm text-[var(--foreground-muted)]">Mot de passe</label>
+          <div className="min-w-0">
+            <label htmlFor="new-player-password" className="mb-1 block text-sm text-[var(--foreground-muted)]">Mot de passe</label>
             <input
+              id="new-player-password"
               type="password"
               name="password"
+              autoComplete="new-password"
               required
               minLength={6}
-              className="rounded border bg-[var(--background)] px-3 py-1.5 text-sm text-[var(--foreground)]"
+              className="w-full rounded border bg-[var(--background)] px-3 py-2 text-sm text-[var(--foreground)]"
               style={{ borderColor: "var(--border)" }}
             />
           </div>
-          <div>
-            <label className="mb-1 block text-sm text-[var(--foreground-muted)]">Pays</label>
+          <div className="min-w-0">
+            <label htmlFor="new-player-country" className="mb-1 block text-sm text-[var(--foreground-muted)]">Pays</label>
             <select
+              id="new-player-country"
               name="country_id"
               required
-              className="rounded border bg-[var(--background)] px-3 py-1.5 text-sm text-[var(--foreground)]"
+              className="w-full rounded border bg-[var(--background)] px-3 py-2 text-sm text-[var(--foreground)]"
               style={{ borderColor: "var(--border)" }}
             >
               <option value="">— Choisir —</option>
@@ -102,29 +109,29 @@ export function JoueursManager({
           </div>
           <button
             type="submit"
-            className="rounded py-2 px-4 text-sm font-medium"
+            className="w-full rounded px-4 py-2 text-sm font-medium"
             style={{ background: "var(--accent)", color: "#0f1419" }}
           >
             Créer le joueur
           </button>
         </form>
-        {createError && <p className="mt-2 text-sm text-[var(--danger)]">{createError}</p>}
+        {createError && <p role="alert" className="mt-2 text-sm text-[var(--danger)]">{createError}</p>}
         {createSuccess && (
-          <p className="mt-2 text-sm text-[var(--accent)]">
+          <p role="status" className="mt-2 text-sm text-[var(--accent)]">
             {typeof createSuccess === "string" ? createSuccess : "Joueur créé."}
           </p>
         )}
       </section>
 
       <section
-        className="rounded-lg border p-6"
+        className="rounded-xl border p-4 sm:p-6"
         style={{ borderColor: "var(--border)", background: "var(--background-panel)" }}
       >
         <h2 className="mb-4 text-lg font-semibold text-[var(--foreground)]">
           Joueurs assignés
         </h2>
         {(assignError || nameError || addActionsError) && (
-          <p className="mb-2 text-sm text-[var(--danger)]">{assignError || nameError || addActionsError}</p>
+          <p role="alert" className="mb-2 text-sm text-[var(--danger)]">{assignError || nameError || addActionsError}</p>
         )}
         {players.length === 0 ? (
           <p className="text-[var(--foreground-muted)]">Aucun joueur.</p>
@@ -133,12 +140,12 @@ export function JoueursManager({
             {players.map((p) => (
               <li
                 key={p.user_id}
-                className="flex flex-wrap items-center gap-4 rounded border py-2 px-3"
+                className="flex flex-col items-stretch gap-3 rounded-lg border p-3 sm:flex-row sm:flex-wrap sm:items-center"
                 style={{ borderColor: "var(--border-muted)" }}
               >
                 {editingNameId === p.user_id ? (
                   <form
-                    className="flex items-center gap-2"
+                    className="flex flex-wrap items-center gap-2"
                     action={async (formData) => {
                       setNameError(null);
                       const result = await updatePlayerName(p.user_id, (formData.get("name") as string) || null);
@@ -147,12 +154,17 @@ export function JoueursManager({
                       else router.refresh();
                     }}
                   >
+                    <label htmlFor={`player-name-${p.user_id}`} className="sr-only">
+                      Nom du joueur
+                    </label>
                     <input
+                      id={`player-name-${p.user_id}`}
                       type="text"
                       name="name"
+                      autoComplete="name"
                       defaultValue={p.name ?? ""}
                       placeholder="Nom"
-                      className="w-32 rounded border bg-[var(--background)] px-2 py-1 text-sm text-[var(--foreground)]"
+                      className="min-w-0 flex-1 rounded border bg-[var(--background)] px-3 py-2 text-sm text-[var(--foreground)] sm:w-40 sm:flex-none"
                       style={{ borderColor: "var(--border)" }}
                     />
                     <button type="submit" className="text-sm text-[var(--accent)] hover:underline">OK</button>
@@ -167,11 +179,11 @@ export function JoueursManager({
                     {p.name ? p.name : <span className="text-[var(--foreground-muted)]">(sans nom)</span>}
                   </button>
                 )}
-                <span className="text-[var(--foreground-muted)]">—</span>
-                <span className="text-sm text-[var(--foreground-muted)]">{p.email}</span>
-                <span className="text-[var(--foreground-muted)]">→</span>
+                <span className="hidden text-[var(--foreground-muted)] sm:inline">—</span>
+                <span className="break-words text-sm text-[var(--foreground-muted)] [overflow-wrap:anywhere]">{p.email}</span>
+                <span className="hidden text-[var(--foreground-muted)] sm:inline">→</span>
                 <form
-                  className="flex items-center gap-2"
+                  className="flex min-w-0 items-center gap-2"
                   action={async (formData) => {
                     setAssignError(null);
                     setAssigningId(p.user_id);
@@ -186,9 +198,10 @@ export function JoueursManager({
                 >
                   <select
                     name="country_id"
+                    aria-label={`Pays assigné à ${p.name || p.email}`}
                     defaultValue={p.country_id}
                     disabled={!!assigningId}
-                    className="rounded border bg-[var(--background)] px-2 py-1 text-sm text-[var(--foreground)]"
+                    className="min-w-0 flex-1 rounded border bg-[var(--background)] px-3 py-2 text-sm text-[var(--foreground)] sm:flex-none"
                     style={{ borderColor: "var(--border)" }}
                     onChange={(e) => e.currentTarget.form?.requestSubmit()}
                   >
@@ -219,7 +232,7 @@ export function JoueursManager({
                     await deletePlayer(p.user_id);
                     router.refresh();
                   }}
-                  className="ml-auto"
+                  className="sm:ml-auto"
                 >
                   <button
                     type="submit"

@@ -188,7 +188,7 @@ export function DemandesList({ requests, rosterUnitIds, rosterUnits = [], target
 
       return tokens.every((token) => haystack.includes(token));
     });
-  }, [requests, searchQuery, sortedRequests, targetCountriesById]);
+  }, [searchQuery, sortedRequests, targetCountriesById]);
 
   const totalPages = Math.max(1, Math.ceil(filteredRequests.length / REQUESTS_PER_PAGE));
 
@@ -242,8 +242,9 @@ export function DemandesList({ requests, rosterUnitIds, rosterUnits = [], target
             </p>
           </div>
           <div className="w-full max-w-xl">
-            <label className="mb-1 block text-sm text-[var(--foreground-muted)]">Recherche dynamique</label>
+            <label htmlFor="request-search" className="mb-1 block text-sm text-[var(--foreground-muted)]">Recherche dynamique</label>
             <input
+              id="request-search"
               type="text"
               value={searchQuery}
               onChange={(e) => {
@@ -261,7 +262,7 @@ export function DemandesList({ requests, rosterUnitIds, rosterUnits = [], target
           <span>Page {effectivePage} / {totalPages}</span>
         </div>
         {error && (
-          <p className="mb-4 rounded border border-red-500/50 bg-red-500/10 px-3 py-2 text-sm text-red-400">
+          <p role="alert" className="mb-4 rounded border border-red-500/50 bg-red-500/10 px-3 py-2 text-sm text-red-400">
             {error}
           </p>
         )}
@@ -285,7 +286,13 @@ export function DemandesList({ requests, rosterUnitIds, rosterUnits = [], target
                   <tr
                     key={r.id}
                     onClick={() => setSelectedId(selectedId === r.id ? null : r.id)}
-                    className="cursor-pointer transition-colors hover:bg-[var(--background)]"
+                    onKeyDown={(event) => {
+                      if (event.key !== "Enter" && event.key !== " ") return;
+                      event.preventDefault();
+                      setSelectedId(selectedId === r.id ? null : r.id);
+                    }}
+                    tabIndex={0}
+                    className="cursor-pointer transition-colors hover:bg-[var(--background)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--accent)] focus-visible:outline-offset-[-2px]"
                     style={{
                       borderColor: "var(--border)",
                       background: isSelected ? "var(--background-elevated)" : undefined,
@@ -779,8 +786,9 @@ function RequestDetail({
             </p>
           )}
           <div className="mb-3 flex flex-wrap items-center gap-2">
-            <label className="text-xs text-[var(--foreground-muted)]">Modificateur ponctuel</label>
+            <label htmlFor={`request-${request.id}-modifier`} className="text-xs text-[var(--foreground-muted)]">Modificateur ponctuel</label>
             <input
+              id={`request-${request.id}-modifier`}
               type="text"
               inputMode="numeric"
               value={adminModifierStr}
@@ -792,8 +800,9 @@ function RequestDetail({
               className="w-20 rounded border bg-[var(--background)] px-2 py-1 text-sm"
               style={{ borderColor: "var(--border)" }}
             />
-            <label className="text-xs text-[var(--foreground-muted)]">Libellé</label>
+            <label htmlFor={`request-${request.id}-modifier-label`} className="text-xs text-[var(--foreground-muted)]">Libellé</label>
             <input
+              id={`request-${request.id}-modifier-label`}
               type="text"
               value={adminModifierLabel}
               onChange={(e) => setAdminModifierLabel(e.target.value.slice(0, 50))}
@@ -994,6 +1003,7 @@ function RequestDetail({
                 Rembourser les actions d&apos;État
               </label>
               <input
+                aria-label="Message explicatif du refus"
                 type="text"
                 placeholder="Message explicatif (refus)"
                 value={refusalMsg}
@@ -1087,6 +1097,7 @@ function EffectFormInline({
     <div className="space-y-2 rounded border p-4" style={{ borderColor: "var(--border)" }}>
       <div className="flex flex-wrap gap-2">
         <input
+          aria-label="Nom de l’effet"
           type="text"
           placeholder="Nom de l'effet"
           value={effect.name}
@@ -1096,6 +1107,7 @@ function EffectFormInline({
           style={{ borderColor: "var(--border)" }}
         />
         <select
+          aria-label="Type d’effet"
           value={effect.effect_kind}
           onChange={(e) => {
             const newKind = e.target.value;
@@ -1121,6 +1133,7 @@ function EffectFormInline({
         </select>
         {needsStatTarget && (
           <select
+            aria-label="Statistique ciblée"
             value={effect.effect_target ?? ""}
             onChange={(e) => onChange({ ...effect, effect_target: e.target.value || null })}
             className="rounded border bg-[var(--background)] px-3 py-1.5 text-sm"
@@ -1133,6 +1146,7 @@ function EffectFormInline({
         )}
         {needsBudgetTarget && (
           <select
+            aria-label="Ministère ciblé"
             value={effect.effect_target ?? ""}
             onChange={(e) => onChange({ ...effect, effect_target: e.target.value || null })}
             className="rounded border bg-[var(--background)] px-3 py-1.5 text-sm"
@@ -1145,6 +1159,7 @@ function EffectFormInline({
         )}
         {needsBranchTarget && (
           <select
+            aria-label="Branche militaire ciblée"
             value={effect.effect_target ?? ""}
             onChange={(e) => onChange({ ...effect, effect_target: e.target.value || null })}
             className="rounded border bg-[var(--background)] px-3 py-1.5 text-sm"
@@ -1157,6 +1172,7 @@ function EffectFormInline({
         )}
         {needsRosterTarget && (
           <select
+            aria-label="Unité ciblée"
             value={effect.effect_target ?? ""}
             onChange={(e) => onChange({ ...effect, effect_target: e.target.value || null })}
             className="rounded border bg-[var(--background)] px-3 py-1.5 text-sm"
@@ -1169,6 +1185,7 @@ function EffectFormInline({
         )}
         {needsSubTypeTarget && (
           <select
+            aria-label="Sous-branche militaire ciblée"
             value={effect.effect_target ?? ""}
             onChange={(e) => onChange({ ...effect, effect_target: e.target.value || null })}
             className="rounded border bg-[var(--background)] px-3 py-1.5 text-sm min-w-[10rem]"
@@ -1182,6 +1199,7 @@ function EffectFormInline({
         )}
         {needsCountryTarget && (
           <select
+            aria-label="Pays ciblé par la relation"
             value={effect.effect_target ?? ""}
             onChange={(e) => onChange({ ...effect, effect_target: e.target.value || null })}
             className="rounded border bg-[var(--background)] px-3 py-1.5 text-sm min-w-[12rem]"
@@ -1195,6 +1213,7 @@ function EffectFormInline({
           </select>
         )}
         <input
+          aria-label={helper.valueLabel}
           type="number"
           step={helper.valueStep}
           value={displayValue}
@@ -1209,6 +1228,7 @@ function EffectFormInline({
         {!isUpForm && (
           <>
             <select
+              aria-label="Durée de l’effet"
               value={effect.duration_kind === "updates" ? "days" : effect.duration_kind}
               onChange={(e) =>
                 onChange({
@@ -1225,6 +1245,7 @@ function EffectFormInline({
             </select>
             {effect.duration_kind !== "permanent" && (
               <input
+                aria-label="Nombre de jours"
                 type="number"
                 min={1}
                 max={DURATION_DAYS_MAX}

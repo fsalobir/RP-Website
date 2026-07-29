@@ -511,6 +511,7 @@ function EtatMajorSection({
           </>
         ) : (
           <select
+            aria-label="Unité militaire sélectionnée"
             value={selectedId ?? ""}
             onChange={(e) => onSelect(e.target.value)}
             disabled={!canEdit}

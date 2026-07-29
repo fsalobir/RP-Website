@@ -115,7 +115,7 @@ export function BotDiscordForm({
   return (
     <div className="space-y-8">
       <section
-        className="rounded-lg border p-6"
+        className="rounded-xl border p-4 sm:p-6"
         style={{ borderColor: "var(--border)", background: "var(--background-panel)" }}
       >
         <h2 className="mb-2 text-lg font-semibold text-[var(--foreground)]">Configuration générale</h2>
@@ -133,33 +133,35 @@ export function BotDiscordForm({
       </section>
 
       <section
-        className="rounded-lg border p-6"
+        className="rounded-xl border p-4 sm:p-6"
         style={{ borderColor: "var(--border)", background: "var(--background-panel)" }}
       >
         <h2 className="mb-4 text-lg font-semibold text-[var(--foreground)]">Canaux par continent</h2>
         <p className="mb-4 text-sm text-[var(--foreground-muted)]">
           Pour chaque continent, indiquez l’ID du canal Discord « national » et « international ». Les pays du continent sont routés selon la destination choisie par type de dispatch.
         </p>
-        {channelError && <p className="mb-2 text-sm text-[var(--danger)]">{channelError}</p>}
+        {channelError && <p role="alert" className="mb-2 text-sm text-[var(--danger)]">{channelError}</p>}
         <div className="space-y-4">
           {continents.map((c) => (
             <div
               key={c.id}
-              className="flex flex-wrap items-end gap-4 rounded border p-4"
+              className="grid grid-cols-1 items-end gap-4 rounded-lg border p-4 md:grid-cols-[7rem_minmax(0,1fr)_minmax(0,1fr)]"
               style={{ borderColor: "var(--border-muted)" }}
             >
               <span className="w-28 text-sm font-medium text-[var(--foreground)]">{c.label_fr}</span>
-              <div>
-                <label className="mb-1 block text-xs text-[var(--foreground-muted)]">ID canal national</label>
+              <div className="min-w-0">
+                <label htmlFor={`discord-national-${c.id}`} className="mb-1 block text-xs text-[var(--foreground-muted)]">ID canal national</label>
                 <input
+                  id={`discord-national-${c.id}`}
                   type="text"
                   value={effectiveChannelValues[`${c.id}:national`] ?? ""}
                   onChange={(e) =>
                     setChannelValues((prev) => ({ ...prev, [`${c.id}:national`]: e.target.value }))
                   }
                   placeholder="1234567890123456789"
-                  className="rounded border bg-[var(--background)] px-2 py-1.5 text-sm text-[var(--foreground)]"
-                  style={{ borderColor: "var(--border)", minWidth: "220px" }}
+                  inputMode="numeric"
+                  className="w-full min-w-0 rounded border bg-[var(--background)] px-3 py-2 text-sm text-[var(--foreground)]"
+                  style={{ borderColor: "var(--border)" }}
                   onBlur={async () => {
                     setChannelError(null);
                     const err = await saveRegionChannel({
@@ -172,17 +174,19 @@ export function BotDiscordForm({
                   }}
                 />
               </div>
-              <div>
-                <label className="mb-1 block text-xs text-[var(--foreground-muted)]">ID canal international</label>
+              <div className="min-w-0">
+                <label htmlFor={`discord-international-${c.id}`} className="mb-1 block text-xs text-[var(--foreground-muted)]">ID canal international</label>
                 <input
+                  id={`discord-international-${c.id}`}
                   type="text"
                   value={effectiveChannelValues[`${c.id}:international`] ?? ""}
                   onChange={(e) =>
                     setChannelValues((prev) => ({ ...prev, [`${c.id}:international`]: e.target.value }))
                   }
                   placeholder="1234567890123456789"
-                  className="rounded border bg-[var(--background)] px-2 py-1.5 text-sm text-[var(--foreground)]"
-                  style={{ borderColor: "var(--border)", minWidth: "220px" }}
+                  inputMode="numeric"
+                  className="w-full min-w-0 rounded border bg-[var(--background)] px-3 py-2 text-sm text-[var(--foreground)]"
+                  style={{ borderColor: "var(--border)" }}
                   onBlur={async () => {
                     setChannelError(null);
                     const err = await saveRegionChannel({
@@ -201,7 +205,7 @@ export function BotDiscordForm({
       </section>
 
       <section
-        className="rounded-lg border p-6"
+        className="rounded-xl border p-4 sm:p-6"
         style={{ borderColor: "var(--border)", background: "var(--background-panel)" }}
       >
         <h2 className="mb-4 text-lg font-semibold text-[var(--foreground)]">Types de dispatch</h2>
@@ -230,6 +234,7 @@ export function BotDiscordForm({
                       {accepted.label_fr}
                     </label>
                     <select
+                      aria-label={`Destination Discord pour ${accepted.label_fr}`}
                       value={accepted.destination}
                       onChange={async (e) => {
                         const dest = e.target.value as "national" | "international";
@@ -251,14 +256,14 @@ export function BotDiscordForm({
       </section>
 
       <section
-        className="rounded-lg border p-6"
+        className="rounded-xl border p-4 sm:p-6"
         style={{ borderColor: "var(--border)", background: "var(--background-panel)" }}
       >
         <h2 className="mb-4 text-lg font-semibold text-[var(--foreground)]">Templates</h2>
         <p className="mb-4 text-sm text-[var(--foreground-muted)]">
           Formules de texte (placeholders : {"{country_name}"}, {"{action_label}"}, {"{refusal_message}"}, {"{date}"}) et couleurs. Plusieurs templates par type = tirage aléatoire. Images : liste d’URLs (une au hasard).
         </p>
-        {templateError && <p className="mb-2 text-sm text-[var(--danger)]">{templateError}</p>}
+        {templateError && <p role="alert" className="mb-2 text-sm text-[var(--danger)]">{templateError}</p>}
         {dispatchTypes
           .filter((d) => d.state_action_type_id != null && d.outcome === "accepted")
           .map((type) => ({
@@ -295,17 +300,17 @@ export function BotDiscordForm({
                       onCancel={() => setEditingTemplateId(null)}
                     />
                   ) : (
-                    <div className="flex items-start justify-between gap-2">
-                      <div>
+                    <div className="flex flex-col items-stretch gap-3 sm:flex-row sm:items-start sm:justify-between">
+                      <div className="min-w-0">
                         <p className="text-sm font-medium text-[var(--foreground)]">{tpl.label_fr}</p>
-                        <p className="mt-1 truncate text-xs text-[var(--foreground-muted)]">{tpl.body_template}</p>
+                        <p className="mt-1 whitespace-pre-wrap break-words text-xs text-[var(--foreground-muted)] [overflow-wrap:anywhere]">{tpl.body_template}</p>
                         {tpl.embed_color && (
                           <span className="mt-1 inline-block text-xs text-[var(--foreground-muted)]">
                             Couleur : {tpl.embed_color}
                           </span>
                         )}
                       </div>
-                      <div className="flex gap-2">
+                      <div className="flex flex-wrap gap-2">
                         <button
                           type="button"
                           onClick={async () => {
@@ -562,8 +567,9 @@ function TemplateEditForm({
   return (
     <div className="space-y-3">
       <div>
-        <label className="mb-1 block text-xs text-[var(--foreground-muted)]">Libellé</label>
+        <label htmlFor={`template-${template.id}-label`} className="mb-1 block text-xs text-[var(--foreground-muted)]">Libellé</label>
         <input
+          id={`template-${template.id}-label`}
           type="text"
           value={labelFr}
           onChange={(e) => setLabelFr(e.target.value)}
@@ -572,8 +578,9 @@ function TemplateEditForm({
         />
       </div>
       <div>
-        <label className="mb-1 block text-xs text-[var(--foreground-muted)]">Texte (placeholders)</label>
+        <label htmlFor={`template-${template.id}-body`} className="mb-1 block text-xs text-[var(--foreground-muted)]">Texte (placeholders)</label>
         <textarea
+          id={`template-${template.id}-body`}
           value={bodyTemplate}
           onChange={(e) => setBodyTemplate(e.target.value)}
           rows={3}
@@ -582,8 +589,9 @@ function TemplateEditForm({
         />
       </div>
       <div>
-        <label className="mb-1 block text-xs text-[var(--foreground-muted)]">Couleur embed (hex, ex. 2e7d32)</label>
+        <label htmlFor={`template-${template.id}-color`} className="mb-1 block text-xs text-[var(--foreground-muted)]">Couleur embed (hex, ex. 2e7d32)</label>
         <input
+          id={`template-${template.id}-color`}
           type="text"
           value={embedColor}
           onChange={(e) => setEmbedColor(e.target.value)}
@@ -593,8 +601,9 @@ function TemplateEditForm({
         />
       </div>
       <div>
-        <label className="mb-1 block text-xs text-[var(--foreground-muted)]">URLs d’images (une par ligne, une choisie au hasard)</label>
+        <label htmlFor={`template-${template.id}-images`} className="mb-1 block text-xs text-[var(--foreground-muted)]">URLs d’images (une par ligne, une choisie au hasard)</label>
         <textarea
+          id={`template-${template.id}-images`}
           value={imageUrlsText}
           onChange={(e) => setImageUrlsText(e.target.value)}
           rows={2}

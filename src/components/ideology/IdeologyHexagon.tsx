@@ -411,19 +411,17 @@ export function IdeologyHexagon({
                           )}
                           {effectsForIdeology.length > 0 && (
                             <div
-                              className="mt-2 w-full rounded-md border py-1.5 pl-2 pr-1.5 text-left"
+                              className="mt-2 w-full rounded-md border p-2 text-left"
                               style={{
                                 borderColor: "rgba(255,255,255,0.2)",
-                                borderLeftWidth: 3,
-                                borderLeftColor: "var(--accent)",
                                 background: "rgba(0,0,0,0.32)",
                               }}
                             >
-                              <div className="mb-1 border-b border-white/12 pb-1 text-center text-[9.5px] font-semibold leading-tight text-[var(--accent)] sm:text-[10.5px]">
+                              <div className="mb-1 border-b border-white/12 pb-1 text-center text-[11px] font-semibold leading-tight text-[var(--accent)] sm:text-xs">
                                 Effets maximums
                               </div>
                               <ul
-                                className="list-none space-y-1 pl-0 text-[9.5px] font-medium leading-snug sm:text-[11.5px]"
+                                className="list-none space-y-1 pl-0 text-[11px] font-medium leading-relaxed sm:text-xs"
                                 style={{ overflowWrap: "break-word", wordBreak: "break-word" }}
                               >
                                 {effectsForIdeology.map((e, i) => {
@@ -475,7 +473,7 @@ export function IdeologyHexagon({
                     key={entry.id}
                     type="button"
                     onClick={() => setSelectedId(entry.id)}
-                    className="absolute flex h-8 w-8 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-md transition-transform hover:scale-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
+                    className="absolute flex h-11 w-11 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-md transition-transform hover:scale-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
                     aria-label={`Sélectionner ${entry.name}`}
                     aria-pressed={isSelected}
                     style={{
@@ -576,7 +574,7 @@ export function IdeologyHexagon({
                       {selected.neighborContributors.map((neighbor) => (
                         <div
                           key={`${selected.id}-${neighbor.countryId}`}
-                          className="flex items-center justify-between gap-3 rounded border px-2 py-2"
+                          className="flex flex-col items-stretch gap-2 rounded border px-2 py-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3"
                           style={{ borderColor: "var(--border-muted)", background: "var(--background-elevated)" }}
                         >
                           <div className="flex min-w-0 items-center gap-2">
@@ -592,11 +590,11 @@ export function IdeologyHexagon({
                             ) : (
                               <div className="h-4 w-6 rounded border" style={{ borderColor: "var(--border)" }} />
                             )}
-                            <Link href={`/pays/${neighbor.slug}`} className="truncate text-sm text-[var(--accent)] hover:underline">
+                            <Link href={`/pays/${neighbor.slug}`} className="break-words text-sm text-[var(--accent)] hover:underline [overflow-wrap:anywhere]">
                               {neighbor.name}
                             </Link>
                           </div>
-                          <div className="text-right text-xs text-[var(--foreground-muted)]">
+                          <div className="text-xs text-[var(--foreground-muted)] sm:text-right">
                             <div className="text-[var(--foreground)]">
                               Influence {getInfluenceIntensity(neighbor.value, strongestNeighborInfluence)} vers le {IDEOLOGY_LABELS[neighbor.ideology]}
                             </div>

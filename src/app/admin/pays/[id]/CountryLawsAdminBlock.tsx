@@ -46,8 +46,9 @@ function LawScoreRow({
       <h3 className="mb-2 text-sm font-semibold text-[var(--foreground)]">{def.title_fr}</h3>
       <div className="flex flex-wrap items-end gap-3">
         <div>
-          <label className="mb-1 block text-xs text-[var(--foreground-muted)]">Score (0–500)</label>
+          <label htmlFor={`law-score-${def.lawKey}`} className="mb-1 block text-xs text-[var(--foreground-muted)]">Score (0–500)</label>
           <input
+            id={`law-score-${def.lawKey}`}
             type="number"
             min={0}
             max={500}
@@ -73,7 +74,7 @@ function LawScoreRow({
           {saving ? "…" : "Enregistrer"}
         </button>
       </div>
-      {error && <p className="mt-1 text-xs text-[var(--danger)]">{error}</p>}
+      {error && <p className="mt-1 text-xs text-[var(--danger)]" role="alert">{error}</p>}
     </div>
   );
 }
@@ -89,7 +90,7 @@ export function CountryLawsAdminBlock({
 }) {
   return (
     <div
-      className="rounded-lg border p-6"
+      className="rounded-lg border p-4 sm:p-6"
       style={{ background: "var(--background-panel)", borderColor: "var(--border)" }}
     >
       <h2 className="mb-4 text-lg font-semibold text-[var(--foreground)]">

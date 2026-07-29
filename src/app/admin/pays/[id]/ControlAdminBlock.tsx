@@ -107,7 +107,7 @@ export function ControlAdminBlock({
   const inputStyle = { borderColor: "var(--border)" };
 
   return (
-    <div className="rounded-lg border p-6" style={panelStyle}>
+    <div className="rounded-lg border p-4 sm:p-6" style={panelStyle}>
       <h2 className="mb-2 text-lg font-semibold text-[var(--foreground)]">
         Contrôle
       </h2>
@@ -131,11 +131,12 @@ export function ControlAdminBlock({
                   max={100}
                   value={editSharePct}
                   onChange={(e) => setEditSharePct(e.target.value)}
+                  aria-label={`Part contrôlée par ${row.controller_name}, en pourcentage`}
                   className="w-16 rounded border bg-[var(--background)] px-1.5 py-0.5 text-sm font-mono"
                   style={inputStyle}
                 />
                 <span className="text-sm text-[var(--foreground-muted)]">%</span>
-                <label className="flex items-center gap-1.5 text-sm">
+                <label className="flex min-h-11 items-center gap-1.5 text-sm">
                   <input
                     type="checkbox"
                     checked={editIsAnnexed}
@@ -188,8 +189,9 @@ export function ControlAdminBlock({
       {availableCountries.length > 0 && (
         <div className="flex flex-wrap items-end gap-3 rounded border p-3" style={{ borderColor: "var(--border-muted)" }}>
           <div>
-            <label className="mb-0.5 block text-xs text-[var(--foreground-muted)]">Ajouter un contrôleur</label>
+            <label htmlFor="new-controller" className="mb-0.5 block text-xs text-[var(--foreground-muted)]">Ajouter un contrôleur</label>
             <select
+              id="new-controller"
               value={newControllerId}
               onChange={(e) => setNewControllerId(e.target.value)}
               className="rounded border bg-[var(--background)] px-2 py-1.5 text-sm text-[var(--foreground)] min-w-[180px]"
@@ -202,8 +204,9 @@ export function ControlAdminBlock({
             </select>
           </div>
           <div>
-            <label className="mb-0.5 block text-xs text-[var(--foreground-muted)]">Part %</label>
+            <label htmlFor="new-controller-share" className="mb-0.5 block text-xs text-[var(--foreground-muted)]">Part %</label>
             <input
+              id="new-controller-share"
               type="number"
               min={0}
               max={100}
@@ -213,7 +216,7 @@ export function ControlAdminBlock({
               style={inputStyle}
             />
           </div>
-          <label className="flex items-center gap-1.5 text-sm text-[var(--foreground-muted)]">
+          <label className="flex min-h-11 items-center gap-1.5 text-sm text-[var(--foreground-muted)]">
             <input
               type="checkbox"
               checked={newIsAnnexed}
@@ -233,7 +236,7 @@ export function ControlAdminBlock({
         </div>
       )}
 
-      {error && <p className="mt-3 text-sm text-[var(--danger)]">{error}</p>}
+      {error && <p className="mt-3 text-sm text-[var(--danger)]" role="alert">{error}</p>}
     </div>
   );
 }

@@ -986,11 +986,12 @@ export function CountryTabs({
             <h2 id="general-edit-modal-title" className="mb-4 text-lg font-semibold text-[var(--foreground)]">
               Changer informations nationales
             </h2>
-            {generalError && <p className="mb-2 text-sm text-[var(--danger)]">{generalError}</p>}
+            {generalError && <p role="alert" className="mb-2 text-sm text-[var(--danger)]">{generalError}</p>}
             <div className="grid gap-3 sm:grid-cols-2">
               <div>
-                <label className="mb-1 block text-xs text-[var(--foreground-muted)]">Nom du pays</label>
+                <label htmlFor="country-general-name" className="mb-1 block text-xs text-[var(--foreground-muted)]">Nom du pays</label>
                 <input
+                  id="country-general-name"
                   type="text"
                   value={generalName}
                   onChange={(e) => setGeneralName(e.target.value)}
@@ -999,8 +1000,9 @@ export function CountryTabs({
                 />
               </div>
               <div>
-                <label className="mb-1 block text-xs text-[var(--foreground-muted)]">Régime</label>
+                <label htmlFor="country-general-regime" className="mb-1 block text-xs text-[var(--foreground-muted)]">Régime</label>
                 <input
+                  id="country-general-regime"
                   type="text"
                   value={generalRegime}
                   onChange={(e) => setGeneralRegime(e.target.value)}

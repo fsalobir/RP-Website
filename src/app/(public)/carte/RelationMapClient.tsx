@@ -251,7 +251,7 @@ export function RelationMapClient({
                     className="block h-2.5 w-2.5 sm:h-4 sm:w-4 shrink-0 rounded-sm border border-[rgba(255,255,255,0.4)]"
                     style={{ background: empire.color }}
                   />
-                  <span className="font-medium truncate">{empire.name}</span>
+                  <span className="break-words font-medium [overflow-wrap:anywhere]">{empire.name}</span>
                 </div>
               ))}
               <div className="flex items-center gap-1 sm:gap-2 text-[10px] sm:text-xs text-[var(--foreground-muted)]">

@@ -36,7 +36,7 @@ export default function AdminConnexionPage() {
   return (
     <div className="flex min-h-[80vh] items-center justify-center px-4">
       <div
-        className="w-full max-w-md rounded-lg border p-8"
+        className="w-full max-w-md rounded-xl border p-5 sm:p-8"
         style={{
           background: "var(--background-panel)",
           borderColor: "var(--border)",
@@ -59,7 +59,8 @@ export default function AdminConnexionPage() {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
-              className="w-full rounded border bg-[var(--background)] px-3 py-2 text-[var(--foreground)] placeholder:text-[var(--foreground-muted)] focus:border-[var(--accent)] focus:outline-none focus:ring-1 focus:ring-[var(--accent)]"
+              autoComplete="email"
+              className="min-h-11 w-full rounded border bg-[var(--background)] px-3 py-2 text-[var(--foreground)] placeholder:text-[var(--foreground-muted)] focus:border-[var(--accent)] focus:outline-none focus:ring-2 focus:ring-[var(--accent)]"
               style={{ borderColor: "var(--border)" }}
               placeholder="admin@exemple.net"
             />
@@ -74,17 +75,18 @@ export default function AdminConnexionPage() {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
-              className="w-full rounded border bg-[var(--background)] px-3 py-2 text-[var(--foreground)] placeholder:text-[var(--foreground-muted)] focus:border-[var(--accent)] focus:outline-none focus:ring-1 focus:ring-[var(--accent)]"
+              autoComplete="current-password"
+              className="min-h-11 w-full rounded border bg-[var(--background)] px-3 py-2 text-[var(--foreground)] placeholder:text-[var(--foreground-muted)] focus:border-[var(--accent)] focus:outline-none focus:ring-2 focus:ring-[var(--accent)]"
               style={{ borderColor: "var(--border)" }}
             />
           </div>
           {error && (
-            <p className="text-sm text-[var(--danger)]">{error}</p>
+            <p className="text-sm text-[var(--danger)]" role="alert">{error}</p>
           )}
           <button
             type="submit"
             disabled={loading}
-            className="w-full btn-primary py-2.5 disabled:opacity-50"
+            className="min-h-11 w-full btn-primary py-2.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--background-panel)] disabled:opacity-50"
             style={{
               background: "var(--accent)",
               color: "#0f1419",
@@ -97,12 +99,12 @@ export default function AdminConnexionPage() {
         </form>
         <p className="mt-6 text-center text-sm text-[var(--foreground-muted)]">
           Pas encore de compte ?{" "}
-          <Link href="/admin/inscription" className="text-[var(--accent)] hover:underline">
+          <Link href="/admin/inscription" className="inline-flex min-h-11 items-center text-[var(--accent)] hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]">
             S’inscrire
           </Link>
         </p>
         <p className="mt-2 text-center">
-          <Link href="/" className="text-sm text-[var(--foreground-muted)] hover:text-[var(--foreground)]">
+          <Link href="/" className="inline-flex min-h-11 items-center text-sm text-[var(--foreground-muted)] hover:text-[var(--foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]">
             ← Retour au site
           </Link>
         </p>

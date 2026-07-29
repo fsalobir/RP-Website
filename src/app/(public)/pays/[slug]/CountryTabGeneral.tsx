@@ -870,10 +870,11 @@ export function CountryTabGeneral({
               </button>
             ) : (
               <div className="space-y-3">
-                {effectError && <p className="text-sm text-[var(--danger)]">{effectError}</p>}
+                {effectError && <p role="alert" className="text-sm text-[var(--danger)]">{effectError}</p>}
                 <div>
-                  <label className="mb-1 block text-sm text-[var(--foreground-muted)]">Nom</label>
+                  <label htmlFor="country-effect-name" className="mb-1 block text-sm text-[var(--foreground-muted)]">Nom</label>
                   <input
+                    id="country-effect-name"
                     type="text"
                     value={effectName}
                     onChange={(e) => setEffectName(e.target.value)}
@@ -882,8 +883,9 @@ export function CountryTabGeneral({
                   />
                 </div>
                 <div>
-                  <label className="mb-1 block text-sm text-[var(--foreground-muted)]">Type d&apos;effet</label>
+                  <label htmlFor="country-effect-kind" className="mb-1 block text-sm text-[var(--foreground-muted)]">Type d&apos;effet</label>
                   <select
+                    id="country-effect-kind"
                     value={effectKind}
                     onChange={(e) => {
                       const k = e.target.value;
@@ -904,8 +906,9 @@ export function CountryTabGeneral({
                 </div>
                 {EFFECT_KINDS_WITH_STAT_TARGET.has(effectKind) && (
                   <div>
-                    <label className="mb-1 block text-sm text-[var(--foreground-muted)]">Stat</label>
+                    <label htmlFor="country-effect-stat" className="mb-1 block text-sm text-[var(--foreground-muted)]">Stat</label>
                     <select
+                      id="country-effect-stat"
                       value={effectTarget ?? ""}
                       onChange={(e) => setEffectTarget(e.target.value || null)}
                       className="min-h-11 w-full rounded border bg-[var(--background)] px-3 py-2 text-sm text-[var(--foreground)] sm:w-auto"
@@ -919,8 +922,9 @@ export function CountryTabGeneral({
                 )}
                 {EFFECT_KINDS_WITH_BUDGET_TARGET.has(effectKind) && (
                   <div>
-                    <label className="mb-1 block text-sm text-[var(--foreground-muted)]">Ministère</label>
+                    <label htmlFor="country-effect-ministry" className="mb-1 block text-sm text-[var(--foreground-muted)]">Ministère</label>
                     <select
+                      id="country-effect-ministry"
                       value={effectTarget ?? ""}
                       onChange={(e) => setEffectTarget(e.target.value || null)}
                       className="min-h-11 w-full rounded border bg-[var(--background)] px-3 py-2 text-sm text-[var(--foreground)] sm:w-auto"
@@ -934,8 +938,9 @@ export function CountryTabGeneral({
                 )}
                 {EFFECT_KINDS_WITH_BRANCH_TARGET.has(effectKind) && (
                   <div>
-                    <label className="mb-1 block text-sm text-[var(--foreground-muted)]">Branche</label>
+                    <label htmlFor="country-effect-branch" className="mb-1 block text-sm text-[var(--foreground-muted)]">Branche</label>
                     <select
+                      id="country-effect-branch"
                       value={effectTarget ?? "terre"}
                       onChange={(e) => setEffectTarget(e.target.value || null)}
                       className="min-h-11 w-full rounded border bg-[var(--background)] px-3 py-2 text-sm text-[var(--foreground)] sm:w-auto"
@@ -949,8 +954,9 @@ export function CountryTabGeneral({
                 )}
                 {EFFECT_KINDS_WITH_ROSTER_UNIT_TARGET.has(effectKind) && (
                   <div>
-                    <label className="mb-1 block text-sm text-[var(--foreground-muted)]">Unité</label>
+                    <label htmlFor="country-effect-unit" className="mb-1 block text-sm text-[var(--foreground-muted)]">Unité</label>
                     <select
+                      id="country-effect-unit"
                       value={effectTarget ?? ""}
                       onChange={(e) => setEffectTarget(e.target.value || null)}
                       className="min-h-11 w-full rounded border bg-[var(--background)] px-3 py-2 text-sm text-[var(--foreground)] sm:w-auto"
@@ -964,8 +970,9 @@ export function CountryTabGeneral({
                 )}
                 {EFFECT_KINDS_WITH_COUNTRY_TARGET.has(effectKind) && (
                   <div>
-                    <label className="mb-1 block text-sm text-[var(--foreground-muted)]">Pays cible (relation bilatérale)</label>
+                    <label htmlFor="country-effect-target-country" className="mb-1 block text-sm text-[var(--foreground-muted)]">Pays cible (relation bilatérale)</label>
                     <select
+                      id="country-effect-target-country"
                       value={effectTarget ?? ""}
                       onChange={(e) => setEffectTarget(e.target.value || null)}
                       className="min-h-11 w-full min-w-0 rounded border bg-[var(--background)] px-3 py-2 text-sm text-[var(--foreground)] sm:w-auto sm:min-w-[12rem]"
@@ -985,11 +992,12 @@ export function CountryTabGeneral({
                   </p>
                 )}
                 <div>
-                  <label className="mb-1 block text-sm text-[var(--foreground-muted)]">
+                  <label htmlFor="country-effect-value" className="mb-1 block text-sm text-[var(--foreground-muted)]">
                     {getEffectKindValueHelper(effectKind).valueLabel}
                     {effectKind === "budget_ministry_min_pct" ? " (dépense forcée, valeur positive uniquement)" : ""}
                   </label>
                   <input
+                    id="country-effect-value"
                     type="number"
                     step={effectKind === "budget_allocation_cap" ? 1 : getEffectKindValueHelper(effectKind).valueStep}
                     min={effectKind === "budget_ministry_min_pct" ? 0 : undefined}
@@ -1001,8 +1009,9 @@ export function CountryTabGeneral({
                 </div>
                 <div className="flex flex-wrap items-center gap-4">
                   <div>
-                    <label className="mb-1 block text-sm text-[var(--foreground-muted)]">Durée</label>
+                    <label htmlFor="country-effect-duration" className="mb-1 block text-sm text-[var(--foreground-muted)]">Durée</label>
                     <select
+                      id="country-effect-duration"
                       value={effectDurationKind}
                       onChange={(e) => setEffectDurationKind(e.target.value as "days" | "permanent")}
                       className="min-h-11 w-full rounded border bg-[var(--background)] px-3 py-2 text-sm text-[var(--foreground)] sm:w-auto"
@@ -1014,8 +1023,9 @@ export function CountryTabGeneral({
                   </div>
                   {effectDurationKind !== "permanent" && (
                   <div>
-                    <label className="mb-1 block text-sm text-[var(--foreground-muted)]">Nombre (max {DURATION_DAYS_MAX} jours)</label>
+                    <label htmlFor="country-effect-duration-days" className="mb-1 block text-sm text-[var(--foreground-muted)]">Nombre (max {DURATION_DAYS_MAX} jours)</label>
                     <input
+                      id="country-effect-duration-days"
                       type="number"
                       min={1}
                       max={DURATION_DAYS_MAX}

@@ -383,7 +383,10 @@ export function EventIaList({
               </button>
               <button
                 type="button"
-                onClick={() => setShowCreateModal(true)}
+                onClick={() => {
+                  setError(null);
+                  setShowCreateModal(true);
+                }}
                 className="rounded border px-3 py-1.5 text-sm font-medium hover:bg-[var(--background)]"
                 style={{ borderColor: "var(--border)" }}
               >
@@ -401,8 +404,9 @@ export function EventIaList({
             </div>
           </div>
           <div className="w-full max-w-xl">
-            <label className="mb-1 block text-sm text-[var(--foreground-muted)]">Recherche dynamique</label>
+            <label htmlFor="ai-event-search" className="mb-1 block text-sm text-[var(--foreground-muted)]">Recherche dynamique</label>
             <input
+              id="ai-event-search"
               type="text"
               value={searchQuery}
               onChange={(e) => {
@@ -420,7 +424,7 @@ export function EventIaList({
           <span>Page {effectivePage} / {totalPages}</span>
         </div>
         {error && (
-          <p className="mb-4 rounded border border-red-500/50 bg-red-500/10 px-3 py-2 text-sm text-red-400">
+          <p role="alert" className="mb-4 rounded border border-red-500/50 bg-red-500/10 px-3 py-2 text-sm text-red-400">
             {error}
           </p>
         )}
@@ -446,7 +450,13 @@ export function EventIaList({
                   <tr
                     key={r.id}
                     onClick={() => setSelectedId(selectedId === r.id ? null : r.id)}
-                    className="cursor-pointer transition-colors hover:bg-[var(--background)]"
+                    onKeyDown={(event) => {
+                      if (event.key !== "Enter" && event.key !== " ") return;
+                      event.preventDefault();
+                      setSelectedId(selectedId === r.id ? null : r.id);
+                    }}
+                    tabIndex={0}
+                    className="cursor-pointer transition-colors hover:bg-[var(--background)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--accent)] focus-visible:outline-offset-[-2px]"
                     style={{
                       borderColor: "var(--border)",
                       background: isSelected ? "var(--background-elevated)" : undefined,
@@ -551,7 +561,7 @@ export function EventIaList({
           aria-labelledby="create-event-title"
         >
           <div
-            className="max-w-md rounded-lg border p-6 shadow-xl"
+            className="max-h-[calc(100dvh-2rem)] w-full max-w-md overflow-y-auto rounded-xl border p-5 shadow-xl sm:p-6"
             style={{ background: "var(--background-panel)", borderColor: "var(--border)" }}
             onClick={(e) => e.stopPropagation()}
           >
@@ -560,8 +570,9 @@ export function EventIaList({
             </h3>
             <div className="space-y-4">
               <div>
-                <label className="mb-1 block text-xs text-[var(--foreground-muted)]">Type d&apos;action</label>
+                <label htmlFor="create-event-type" className="mb-1 block text-xs text-[var(--foreground-muted)]">Type d&apos;action</label>
                 <select
+                  id="create-event-type"
                   value={createTypeId}
                   onChange={(e) => setCreateTypeId(e.target.value)}
                   className="w-full rounded border px-2 py-1.5 text-sm"
@@ -575,8 +586,9 @@ export function EventIaList({
                 </select>
               </div>
               <div>
-                <label className="mb-1 block text-xs text-[var(--foreground-muted)]">Pays émetteur (IA)</label>
+                <label htmlFor="create-event-emitter" className="mb-1 block text-xs text-[var(--foreground-muted)]">Pays émetteur (IA)</label>
                 <select
+                  id="create-event-emitter"
                   value={createEmitterId}
                   onChange={(e) => setCreateEmitterId(e.target.value)}
                   className="w-full rounded border px-2 py-1.5 text-sm"
@@ -590,8 +602,9 @@ export function EventIaList({
                 </select>
               </div>
               <div>
-                <label className="mb-1 block text-xs text-[var(--foreground-muted)]">Pays cible</label>
+                <label htmlFor="create-event-target" className="mb-1 block text-xs text-[var(--foreground-muted)]">Pays cible</label>
                 <select
+                  id="create-event-target"
                   value={createTargetId}
                   onChange={(e) => setCreateTargetId(e.target.value)}
                   className="w-full rounded border px-2 py-1.5 text-sm"
@@ -606,8 +619,13 @@ export function EventIaList({
                     ))}
                 </select>
               </div>
+              {error && (
+                <p role="alert" className="rounded border border-red-500/50 bg-red-500/10 px-3 py-2 text-sm text-red-400">
+                  {error}
+                </p>
+              )}
             </div>
-            <div className="mt-6 flex justify-end gap-2">
+            <div className="mt-6 grid grid-cols-2 gap-2">
               <button
                 type="button"
                 onClick={() => !createLoading && setShowCreateModal(false)}
@@ -854,8 +872,9 @@ function EventDetail({
         <div className="mt-4 border-t pt-4" style={{ borderColor: "var(--border)" }}>
           <h3 className="mb-2 text-sm font-medium text-[var(--foreground)]">Jets de dés</h3>
           <div className="mb-3 flex flex-wrap items-center gap-2">
-            <label className="text-xs text-[var(--foreground-muted)]">Modificateur ponctuel</label>
+            <label htmlFor={`ai-event-${event.id}-modifier`} className="text-xs text-[var(--foreground-muted)]">Modificateur ponctuel</label>
             <input
+              id={`ai-event-${event.id}-modifier`}
               type="text"
               inputMode="numeric"
               value={adminModifierStr}
@@ -867,8 +886,9 @@ function EventDetail({
               className="w-20 rounded border bg-[var(--background)] px-2 py-1 text-sm"
               style={{ borderColor: "var(--border)" }}
             />
-            <label className="text-xs text-[var(--foreground-muted)]">Libellé</label>
+            <label htmlFor={`ai-event-${event.id}-modifier-label`} className="text-xs text-[var(--foreground-muted)]">Libellé</label>
             <input
+              id={`ai-event-${event.id}-modifier-label`}
               type="text"
               value={adminModifierLabel}
               onChange={(e) => setAdminModifierLabel(e.target.value.slice(0, 50))}
@@ -1019,6 +1039,7 @@ function EventDetail({
               </label>
               <input
                 type="text"
+                aria-label="Message de refus"
                 placeholder="Message de refus (recommandé)"
                 value={refusalMsg}
                 onChange={(e) => setRefusalMsg(e.target.value.slice(0, 500))}
