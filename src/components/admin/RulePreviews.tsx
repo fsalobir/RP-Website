@@ -408,6 +408,7 @@ export function SphereRulePreview({
 }: {
   values: { contested?: number; occupied?: number; annexed?: number };
 }) {
+  const exampleInfluence = 1_000;
   const rows = [
     { key: "contested", label: "Contesté", detail: "Contrôle partagé", value: values.contested ?? 50 },
     { key: "occupied", label: "Occupé", detail: "Contrôle total sans annexion", value: values.occupied ?? 80 },
@@ -415,22 +416,34 @@ export function SphereRulePreview({
   ];
   return (
     <PreviewFrame
-      title="Part d’influence récupérée"
-      description="Exemple avec un pays contrôlé qui produit 100 points d’influence. La barre montre ce qui remonte vers le pays dominant."
+      title="Répartition de 1 000 points d’influence"
+      description="Le vert est transféré au pays contrôleur. Le reste demeure dans le pays contrôlé."
     >
       <div className="space-y-4">
-        {rows.map((row) => (
-          <div key={row.key} className="grid gap-2 sm:grid-cols-[10rem_minmax(0,1fr)_5rem] sm:items-center">
-            <div>
-              <p className="text-sm font-medium text-[var(--foreground)]">{row.label}</p>
-              <p className="text-xs text-[var(--foreground-muted)]">{row.detail}</p>
+        {rows.map((row) => {
+          const transferredPct = Math.max(0, Math.min(100, row.value));
+          const transferred = Math.round(exampleInfluence * transferredPct / 100);
+          const retained = exampleInfluence - transferred;
+          return (
+            <div key={row.key} className="grid gap-2 sm:grid-cols-[10rem_minmax(0,1fr)_12rem] sm:items-center">
+              <div>
+                <p className="text-sm font-medium text-[var(--foreground)]">{row.label}</p>
+                <p className="text-xs text-[var(--foreground-muted)]">{row.detail} · {transferredPct} % transférés</p>
+              </div>
+              <div
+                role="img"
+                aria-label={`${row.label} : ${formatNumber(transferred)} points transférés au contrôleur et ${formatNumber(retained)} conservés par le pays contrôlé`}
+                className="h-7 overflow-hidden rounded-md bg-[var(--background)]"
+              >
+                <div className="h-full bg-[var(--accent)]" style={{ width: `${transferredPct}%` }} />
+              </div>
+              <div className="text-sm sm:text-right">
+                <p className="font-semibold text-[var(--foreground)]">{formatNumber(transferred)} transférés</p>
+                <p className="text-xs text-[var(--foreground-muted)]">{formatNumber(retained)} conservés</p>
+              </div>
             </div>
-            <div className="h-7 overflow-hidden rounded-md bg-[var(--background)]">
-              <div className="h-full bg-[var(--accent)]" style={{ width: `${Math.max(0, Math.min(100, row.value))}%` }} />
-            </div>
-            <p className="text-sm font-semibold text-[var(--foreground)] sm:text-right">{row.value} points</p>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </PreviewFrame>
   );

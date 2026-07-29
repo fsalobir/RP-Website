@@ -2699,7 +2699,7 @@ export function ReglesForm({
                   title="Sphère"
                   infoContent={
                     <TooltipBody
-                      text={<strong>Règle la part d&apos;influence récupérée par un pays dominant sur un pays qu&apos;il contrôle.</strong>}
+                      text={<strong>Règle la part d&apos;influence transférée du pays contrôlé vers le pays contrôleur.</strong>}
                       points={[
                         "Contesté : emprise incomplète ou disputée.",
                         "Occupé : contrôle fort, sans intégration totale.",
@@ -2712,26 +2712,26 @@ export function ReglesForm({
                 >
                   <div className="p-3 space-y-3">
                     <p className="text-xs text-[var(--foreground-muted)]">
-                      Pour chaque statut de contrôle, le % de l&apos;influence du pays sous emprise qui est attribué à l&apos;overlord.
+                      Pour chaque statut, choisissez la part de l&apos;influence du pays contrôlé transférée au pays contrôleur.
                     </p>
                     <div className="flex flex-wrap gap-x-6 gap-y-3">
                       <div className="flex flex-col gap-0.5">
                         <label className="text-xs text-[var(--foreground-muted)]">
-                          <FormLabel label="Contesté %" tooltip="Part d'influence transmise quand le contrôle du pays reste disputé." />
+                          <FormLabel label="Contesté : part transférée (%)" tooltip="Part d'influence transmise quand le contrôle du pays reste disputé." />
                         </label>
-                        <input aria-label="Seuil d’influence contesté" type="number" min={0} max={100} value={getSphereInfluencePct().contested ?? 50} onChange={(e) => updateSphereInfluencePct({ contested: Math.max(0, Math.min(100, Number(e.target.value) || 0)) })} className="rounded border py-1.5 px-2 text-sm w-20 font-mono" style={{ borderColor: "var(--border)", background: "var(--background)" }} />
+                        <input aria-label="Part d’influence transférée si le contrôle est contesté" type="number" min={0} max={100} value={getSphereInfluencePct().contested ?? 50} onChange={(e) => updateSphereInfluencePct({ contested: Math.max(0, Math.min(100, Number(e.target.value) || 0)) })} className="rounded border py-1.5 px-2 text-sm w-20 font-mono" style={{ borderColor: "var(--border)", background: "var(--background)" }} />
                       </div>
                       <div className="flex flex-col gap-0.5">
                         <label className="text-xs text-[var(--foreground-muted)]">
-                          <FormLabel label="Occupé %" tooltip="Part d'influence transmise quand le pays est occupé mais pas encore annexé." />
+                          <FormLabel label="Occupé : part transférée (%)" tooltip="Part d'influence transmise quand le pays est occupé mais pas encore annexé." />
                         </label>
-                        <input aria-label="Seuil d’influence occupé" type="number" min={0} max={100} value={getSphereInfluencePct().occupied ?? 80} onChange={(e) => updateSphereInfluencePct({ occupied: Math.max(0, Math.min(100, Number(e.target.value) || 0)) })} className="rounded border py-1.5 px-2 text-sm w-20 font-mono" style={{ borderColor: "var(--border)", background: "var(--background)" }} />
+                        <input aria-label="Part d’influence transférée si le pays est occupé" type="number" min={0} max={100} value={getSphereInfluencePct().occupied ?? 80} onChange={(e) => updateSphereInfluencePct({ occupied: Math.max(0, Math.min(100, Number(e.target.value) || 0)) })} className="rounded border py-1.5 px-2 text-sm w-20 font-mono" style={{ borderColor: "var(--border)", background: "var(--background)" }} />
                       </div>
                       <div className="flex flex-col gap-0.5">
                         <label className="text-xs text-[var(--foreground-muted)]">
-                          <FormLabel label="Annexé %" tooltip="Part d'influence transmise quand le pays est considéré comme entièrement annexé." />
+                          <FormLabel label="Annexé : part transférée (%)" tooltip="Part d'influence transmise quand le pays est considéré comme entièrement annexé." />
                         </label>
-                        <input aria-label="Seuil d’influence annexé" type="number" min={0} max={100} value={getSphereInfluencePct().annexed ?? 100} onChange={(e) => updateSphereInfluencePct({ annexed: Math.max(0, Math.min(100, Number(e.target.value) || 0)) })} className="rounded border py-1.5 px-2 text-sm w-20 font-mono" style={{ borderColor: "var(--border)", background: "var(--background)" }} />
+                        <input aria-label="Part d’influence transférée si le pays est annexé" type="number" min={0} max={100} value={getSphereInfluencePct().annexed ?? 100} onChange={(e) => updateSphereInfluencePct({ annexed: Math.max(0, Math.min(100, Number(e.target.value) || 0)) })} className="rounded border py-1.5 px-2 text-sm w-20 font-mono" style={{ borderColor: "var(--border)", background: "var(--background)" }} />
                       </div>
                     </div>
                     <SphereRulePreview values={getSphereInfluencePct()} />
