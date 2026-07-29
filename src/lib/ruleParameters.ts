@@ -4,6 +4,11 @@
  */
 
 export const RULE_KEY_LABELS: Record<string, string> = {
+  ai_events_config: "Événements des IA",
+  ai_events_cron_last_check: "Dernière vérification des événements IA",
+  ai_events_last_run: "Dernière génération des événements IA",
+  ai_major_effects: "Effets des IA majeures",
+  ai_minor_effects: "Effets des IA mineures",
   global_growth_effects: "Global (appliqué à tous les pays)",
   budget_etat: "Ministère d'État",
   budget_education: "Ministère de l'Éducation",
@@ -21,6 +26,31 @@ export const RULE_KEY_LABELS: Record<string, string> = {
   cron_paused: "Jeu en pause (cron désactivé)",
   ideology_config: "Configuration idéologique",
   ideology_effects: "Effets par idéologie (hexagone)",
+  influence_config: "Calcul de l’influence",
+  intel_config: "Renseignement militaire",
+  gdp_growth_base_rate: "Croissance de base du PIB",
+  gdp_growth_per_industry: "Croissance du PIB liée à l’industrie",
+  gdp_growth_per_militarism: "Croissance du PIB liée au militarisme",
+  gdp_growth_per_science: "Croissance du PIB liée à la science",
+  gdp_growth_per_stability: "Croissance du PIB liée à la stabilité",
+  population_growth_base_rate: "Croissance de base de la population",
+  population_growth_per_industry: "Croissance démographique liée à l’industrie",
+  population_growth_per_militarism: "Croissance démographique liée au militarisme",
+  population_growth_per_science: "Croissance démographique liée à la science",
+  population_growth_per_stability: "Croissance démographique liée à la stabilité",
+  law_air_industry_config: "Industrie aéronautique — progression",
+  law_air_industry_level_effects: "Industrie aéronautique — effets par palier",
+  law_auto_industry_config: "Industrie automobile — progression",
+  law_auto_industry_level_effects: "Industrie automobile — effets par palier",
+  law_naval_industry_config: "Industrie navale — progression",
+  law_naval_industry_level_effects: "Industrie navale — effets par palier",
+  law_research_config: "Recherche — progression",
+  law_research_level_effects: "Recherche — effets par palier",
+  mobilisation_config: "Mobilisation — progression",
+  mobilisation_level_effects: "Mobilisation — effets par palier",
+  process_due_edge_secret: "Secret du traitement différé",
+  sphere_influence_pct: "Influence transmise par les sphères",
+  stats_dice_modifier_ranges: "Effet des statistiques sur les jets",
 };
 
 export type RuleSection = {

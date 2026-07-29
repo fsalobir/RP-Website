@@ -13,6 +13,13 @@ import {
 
 type GlobalGrowthEntry = { effect_kind: string; effect_target: string | null; value: number };
 
+const HIDDEN_PUBLIC_RULE_KEYS = new Set([
+  "ai_events_config",
+  "ai_events_cron_last_check",
+  "ai_events_last_run",
+  "process_due_edge_secret",
+]);
+
 function formatGlobalGrowthEntry(e: GlobalGrowthEntry): string {
   const kindLabel = EFFECT_KIND_LABELS[e.effect_kind] ?? e.effect_kind;
   let targetLabel: string | null = null;
@@ -44,13 +51,15 @@ export default async function ReglesPage() {
     );
   }
 
+  const visibleRules = rules?.filter((rule) => !HIDDEN_PUBLIC_RULE_KEYS.has(rule.key));
+
   return (
     <div className="mx-auto max-w-6xl px-4 py-10">
       <h1 className="mb-2 text-2xl font-bold text-[var(--foreground)]">
         Règles de simulation
       </h1>
       <p className="mb-8 text-[var(--foreground-muted)]">
-        Paramètres utilisés par le moteur de simulation (cron) pour l’évolution des indicateurs.
+        Paramètres qui régissent l’évolution du monde.
       </p>
 
       <section className="mb-10 rounded-lg border p-6" style={{ borderColor: "var(--border)", background: "var(--background-panel)" }}>
@@ -60,7 +69,7 @@ export default async function ReglesPage() {
         </p>
       </section>
 
-      {!rules?.length ? (
+      {!visibleRules?.length ? (
         <div
           className="rounded-lg border p-8 text-center"
           style={{
@@ -72,14 +81,14 @@ export default async function ReglesPage() {
         </div>
       ) : (
         <div
-          className="rounded-lg border overflow-hidden"
+          className="overflow-hidden rounded-lg border"
           style={{
             background: "var(--background-panel)",
             borderColor: "var(--border)",
           }}
         >
           <table className="w-full text-left text-sm">
-            <thead>
+            <thead className="hidden md:table-header-group">
               <tr
                 className="border-b"
                 style={{ borderColor: "var(--border)" }}
@@ -96,7 +105,7 @@ export default async function ReglesPage() {
               </tr>
             </thead>
             <tbody>
-              {rules.map((r) => {
+              {visibleRules.map((r) => {
                 const isGlobalGrowth = r.key === "global_growth_effects" && Array.isArray(r.value);
                 const isWorldDate = r.key === "world_date" && typeof r.value === "object" && r.value !== null && "month" in r.value && "year" in r.value;
                 const isWorldDateAdvance = r.key === "world_date_advance_months";
@@ -111,21 +120,29 @@ export default async function ReglesPage() {
                 ) : isWorldDateAdvance ? (
                   <span>{typeof r.value === "number" ? r.value : Number(r.value) ?? "—"} mois</span>
                 ) : (
-                  <span className="font-mono">
+                  <span className="font-mono [overflow-wrap:anywhere]">
                     {typeof r.value === "object"
-                      ? JSON.stringify(r.value)
+                      ? JSON.stringify(r.value, null, 2)
                       : String(r.value)}
                   </span>
                 );
                 return (
                   <tr
                     key={r.key}
-                    className="border-b"
+                    className="block border-b p-4 md:table-row md:p-0"
                     style={{ borderColor: "var(--border-muted)" }}
                   >
-                    <td className="p-4 text-[var(--foreground)]">{getRuleLabel(r.key)}</td>
-                    <td className="stat-value p-4">{valueCell}</td>
-                    <td className="p-4 text-[var(--foreground-muted)]">
+                    <td className="block pb-3 font-semibold text-[var(--foreground)] md:table-cell md:p-4 md:font-normal">
+                      {getRuleLabel(r.key)}
+                    </td>
+                    <td className="stat-value block min-w-0 pb-3 md:table-cell md:p-4">
+                      <span className="mb-1 block text-xs font-medium text-[var(--foreground-muted)] md:hidden">Valeur</span>
+                      <div className="max-h-48 max-w-full overflow-auto whitespace-pre-wrap break-words [overflow-wrap:anywhere]">
+                        {valueCell}
+                      </div>
+                    </td>
+                    <td className="block text-[var(--foreground-muted)] md:table-cell md:p-4">
+                      <span className="mb-1 block text-xs font-medium md:hidden">Description</span>
                       {r.description ?? "—"}
                     </td>
                   </tr>

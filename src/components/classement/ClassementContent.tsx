@@ -139,12 +139,11 @@ export function ClassementContent({ rows }: { rows: Row[] }) {
   const rankedHPAir = useRanked(rows, "hard_power_air");
   const rankedHPMer = useRanked(rows, "hard_power_mer");
   const rankedHPStrategique = useRanked(rows, "hard_power_strategique");
-  const rankedHPTotal = useRanked(rows, "hard_power_total");
   const rankedPopulation = useRanked(rows, "population");
   const rankedGdp = useRanked(rows, "gdp");
 
   const tabButtonClass = (active: boolean) =>
-    `rounded-xl px-4 py-2.5 text-sm font-semibold transition-colors ${
+    `min-h-11 rounded-xl px-4 py-2.5 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70 ${
       active ? "bg-white/25 text-white shadow-inner" : "text-white/90 hover:bg-white/15 hover:text-white"
     }`;
 
@@ -155,6 +154,7 @@ export function ClassementContent({ rows }: { rows: Row[] }) {
           type="button"
           className={tabButtonClass(mainTab === "global")}
           onClick={() => setMainTab("global")}
+          aria-pressed={mainTab === "global"}
         >
           Classement
         </button>
@@ -162,6 +162,7 @@ export function ClassementContent({ rows }: { rows: Row[] }) {
           type="button"
           className={tabButtonClass(mainTab === "militaire")}
           onClick={() => setMainTab("militaire")}
+          aria-pressed={mainTab === "militaire"}
         >
           Militaire
         </button>
@@ -169,8 +170,9 @@ export function ClassementContent({ rows }: { rows: Row[] }) {
           type="button"
           className={tabButtonClass(mainTab === "economique")}
           onClick={() => setMainTab("economique")}
+          aria-pressed={mainTab === "economique"}
         >
-          Economique
+          Économique
         </button>
         <span className="ml-2 inline-flex items-center" onClick={(e) => e.stopPropagation()}>
           <InfoTooltipWithWikiLink
@@ -191,7 +193,7 @@ export function ClassementContent({ rows }: { rows: Row[] }) {
               {top3.length === 0 ? (
                 <p className={`col-span-3 ${glassMutedClass}`}>Aucun pays en base.</p>
               ) : (
-                top3.map(({ row, rank, prev_rank }) => (
+                top3.map(({ row, rank }) => (
                   <Link
                     key={row.country.id}
                     href={`/pays/${row.country.slug}`}
@@ -209,7 +211,7 @@ export function ClassementContent({ rows }: { rows: Row[] }) {
                       <span className="font-medium text-white">{row.country.name}</span>
                       {row.influence != null && !Number.isNaN(row.influence) && (
                         <p className={`text-xs ${glassMutedClass}`}>
-                          Influence totale : {Number(row.influence).toLocaleString("fr-FR", { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
+                          Influence totale : {formatNumber(row.influence)}
                         </p>
                       )}
                     </div>
@@ -245,7 +247,7 @@ export function ClassementContent({ rows }: { rows: Row[] }) {
                         <span className="font-medium text-white">{row.country.name}</span>
                         {row.influence != null && !Number.isNaN(row.influence) && (
                           <p className={`text-xs ${glassMutedClass}`}>
-                            Influence totale : {Number(row.influence).toLocaleString("fr-FR", { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
+                            Influence totale : {formatNumber(row.influence)}
                           </p>
                         )}
                       </div>
@@ -272,7 +274,7 @@ export function ClassementContent({ rows }: { rows: Row[] }) {
                           <span className="font-medium text-white">{row.country.name}</span>
                           {row.influence != null && !Number.isNaN(row.influence) && (
                             <p className={`text-xs ${glassMutedClass}`}>
-                              Influence totale : {Number(row.influence).toLocaleString("fr-FR", { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
+                              Influence totale : {formatNumber(row.influence)}
                             </p>
                           )}
                         </div>
@@ -319,7 +321,7 @@ export function ClassementContent({ rows }: { rows: Row[] }) {
                       <td className="p-3">
                         <Link
                           href={`/pays/${row.country.slug}`}
-                          className="flex items-center gap-2 text-white hover:text-white/95"
+                          className="flex min-h-11 items-center gap-2 text-white hover:text-white/95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70"
                         >
                           {row.country.flag_url ? (
                             <Image loader={flagLoader} unoptimized src={row.country.flag_url} alt="" width={24} height={16} className="h-4 w-6 rounded object-cover" />
@@ -330,7 +332,7 @@ export function ClassementContent({ rows }: { rows: Row[] }) {
                         </Link>
                       </td>
                       <td className={`p-3 font-mono ${glassMutedClass}`}>
-                        {row.influence != null && !Number.isNaN(row.influence) ? Number(row.influence).toLocaleString("fr-FR", { minimumFractionDigits: 0, maximumFractionDigits: 2 }) : "—"}
+                        {formatNumber(row.influence)}
                       </td>
                     </tr>
                   ))}
@@ -355,7 +357,8 @@ export function ClassementContent({ rows }: { rows: Row[] }) {
                 key={key}
                 type="button"
                 onClick={() => setMilitaireSub(key)}
-                className={`rounded-xl px-3 py-1.5 text-sm font-medium transition-colors ${
+                aria-pressed={militaireSub === key}
+                className={`min-h-11 rounded-xl px-3 py-1.5 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70 ${
                   militaireSub === key ? "bg-white/25 text-white" : "text-white/85 hover:bg-white/15 hover:text-white"
                 }`}
               >
@@ -378,7 +381,7 @@ export function ClassementContent({ rows }: { rows: Row[] }) {
                   <td className={`p-3 font-mono ${glassMutedClass}`}>{rank}</td>
                   <EvolutionCell rank={rank} prev_rank={prev_rank} glass />
                   <td className="p-3">
-                    <Link href={`/pays/${row.country.slug}`} className="flex items-center gap-2 text-white hover:text-white/95">
+                    <Link href={`/pays/${row.country.slug}`} className="flex min-h-11 items-center gap-2 text-white hover:text-white/95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70">
                       {row.country.flag_url ? (
                         <Image loader={flagLoader} unoptimized src={row.country.flag_url} alt="" width={24} height={16} className="h-4 w-6 rounded object-cover" />
                       ) : (
@@ -389,8 +392,8 @@ export function ClassementContent({ rows }: { rows: Row[] }) {
                   </td>
                   <td className={`p-3 font-mono ${glassMutedClass}`}>
                     {militaireSub === "militarism"
-                      ? (row.country.militarism != null ? Number(row.country.militarism).toFixed(2) : "—")
-                      : (militaireSub === "terre" ? (row.hard_power_terre ?? 0) : militaireSub === "air" ? (row.hard_power_air ?? 0) : militaireSub === "mer" ? (row.hard_power_mer ?? 0) : (row.hard_power_strategique ?? 0)).toLocaleString("fr-FR")}
+                      ? formatNumber(row.country.militarism)
+                      : formatNumber(militaireSub === "terre" ? (row.hard_power_terre ?? 0) : militaireSub === "air" ? (row.hard_power_air ?? 0) : militaireSub === "mer" ? (row.hard_power_mer ?? 0) : (row.hard_power_strategique ?? 0))}
                   </td>
                 </tr>
               ))}
@@ -410,7 +413,8 @@ export function ClassementContent({ rows }: { rows: Row[] }) {
                 key={cat}
                 type="button"
                 onClick={() => setEconomiqueSub(cat)}
-                className={`rounded-xl px-3 py-1.5 text-sm font-medium transition-colors ${
+                aria-pressed={economiqueSub === cat}
+                className={`min-h-11 rounded-xl px-3 py-1.5 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70 ${
                   economiqueSub === cat ? "bg-white/25 text-white" : "text-white/85 hover:bg-white/15 hover:text-white"
                 }`}
               >
@@ -440,7 +444,7 @@ export function ClassementContent({ rows }: { rows: Row[] }) {
                       <td className={`p-3 font-mono ${glassMutedClass}`}>{rank}</td>
                       <EvolutionCell rank={rank} prev_rank={prev_rank} glass />
                       <td className="p-3">
-                        <Link href={`/pays/${row.country.slug}`} className="flex items-center gap-2 text-white hover:text-white/95">
+                        <Link href={`/pays/${row.country.slug}`} className="flex min-h-11 items-center gap-2 text-white hover:text-white/95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70">
                           {row.country.flag_url ? (
                             <Image loader={flagLoader} unoptimized src={row.country.flag_url} alt="" width={24} height={16} className="h-4 w-6 rounded object-cover" />
                           ) : (
@@ -474,7 +478,7 @@ export function ClassementContent({ rows }: { rows: Row[] }) {
                     <td className={`p-3 font-mono ${glassMutedClass}`}>{rank}</td>
                     <EvolutionCell rank={rank} prev_rank={prev_rank} glass />
                     <td className="p-3">
-                      <Link href={`/pays/${row.country.slug}`} className="flex items-center gap-2 text-white hover:text-white/95">
+                      <Link href={`/pays/${row.country.slug}`} className="flex min-h-11 items-center gap-2 text-white hover:text-white/95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70">
                         {row.country.flag_url ? (
                           <Image loader={flagLoader} unoptimized src={row.country.flag_url} alt="" width={24} height={16} className="h-4 w-6 rounded object-cover" />
                         ) : (

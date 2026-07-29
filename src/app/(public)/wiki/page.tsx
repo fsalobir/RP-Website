@@ -13,7 +13,7 @@ export default async function WikiPage() {
       {/* Arrière-plan fixe (aligné accueil / classement / fiche pays) */}
       <div
         className="fixed inset-0 overflow-hidden pointer-events-none"
-        style={{ left: "50%", marginLeft: "-50vw", width: "100vw", zIndex: 0 }}
+        style={{ zIndex: 0 }}
         aria-hidden
       >
         <div

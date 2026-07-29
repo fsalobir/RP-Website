@@ -16,7 +16,7 @@ import type { WikiPageRow, WikiTreeNode } from "@/lib/wiki/types";
 
 const glassPanelClass = "rounded-2xl border border-white/25 bg-white/15 shadow-xl backdrop-blur-xl";
 const glassInputClass =
-  "w-full rounded-xl border border-white/25 bg-white/10 px-3 py-2 text-sm text-white placeholder:text-white/60 focus:border-white/50 focus:outline-none focus:ring-2 focus:ring-white/30";
+  "min-h-11 w-full rounded-xl border border-white/25 bg-white/10 px-3 py-2 text-sm text-white placeholder:text-white/60 focus:border-white/50 focus:outline-none focus:ring-2 focus:ring-white/30";
 
 function resolveSlugFromHash(hash: string, pages: WikiPageRow[], tree: WikiTreeNode[]): string {
   if (!pages.length) return "";

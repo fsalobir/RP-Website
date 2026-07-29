@@ -6,6 +6,7 @@ import { computeInfluenceForAll, applyInfluenceModifiers } from "@/lib/influence
 import { getInfluenceModifiersByCountry } from "@/lib/countryEffects";
 import { getEffectiveSpherePct, type SphereInfluencePct } from "@/lib/ideology";
 import type { MilitaryBranch } from "@/types/database";
+import { PublicPageHeader } from "@/components/ui/PublicPageHeader";
 
 export const revalidate = 3600;
 
@@ -211,7 +212,7 @@ export default async function ClassementPage() {
       {/* Arrière-plan fixe (parallaxe) : taille viewport, reste visible au scroll */}
       <div
         className="fixed inset-0 overflow-hidden pointer-events-none"
-        style={{ left: "50%", marginLeft: "-50vw", width: "100vw", zIndex: 0 }}
+        style={{ zIndex: 0 }}
         aria-hidden
       >
         <div
@@ -224,6 +225,7 @@ export default async function ClassementPage() {
         <div className="absolute inset-0 bg-black/40" />
       </div>
       <div className="relative z-10 max-w-6xl mx-auto" style={{ isolation: "isolate" }}>
+        <PublicPageHeader title="Rapport de puissance" icon="ranking" />
         <ClassementContent rows={rows} />
       </div>
     </div>

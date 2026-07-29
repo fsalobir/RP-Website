@@ -9,6 +9,7 @@ import {
 } from "@/lib/mapRegions";
 import { buildWorldGeoJSONWithRegionIds } from "@/lib/buildWorldGeoJSON";
 import { RelationMapClient, type SphereData } from "./RelationMapClient";
+import { PublicPageHeader } from "@/components/ui/PublicPageHeader";
 
 const SPHERE_EMPIRE_COLORS = [
   "#f97316",
@@ -188,8 +189,8 @@ export default async function CartePage() {
     <div className="relative w-full px-4 py-10">
       {/* Arrière-plan pleine largeur écran */}
       <div
-        className="absolute top-0 bottom-0 overflow-hidden"
-        style={{ left: "50%", marginLeft: "-50vw", width: "100vw" }}
+        className="fixed inset-0 overflow-hidden pointer-events-none"
+        style={{ zIndex: 0 }}
         aria-hidden
       >
         <div
@@ -202,6 +203,7 @@ export default async function CartePage() {
         <div className="absolute inset-0 bg-black/40" />
       </div>
       <div className="relative z-10 max-w-6xl mx-auto">
+        <PublicPageHeader title="Carte diplomatique" icon="map" />
         <RelationMapClient
           geoJson={geoJson}
           regionRelationMap={regionRelationMapSerialized}

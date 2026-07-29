@@ -1,6 +1,7 @@
 import { createAnonClientForCache } from "@/lib/supabase/server";
 import { IdeologyHexagon } from "@/components/ideology/IdeologyHexagon";
 import { fetchWorldIdeologyState } from "@/lib/ideologyServer";
+import { PublicPageHeader } from "@/components/ui/PublicPageHeader";
 
 // Page publique : rendue sans cookies (compatible ISR / cache / export).
 export const revalidate = 60;
@@ -56,7 +57,7 @@ export default async function IdeologiePage() {
       {/* Fond fixe */}
       <div
         className="fixed inset-0 overflow-hidden pointer-events-none"
-        style={{ left: "50%", marginLeft: "-50vw", width: "100vw", zIndex: 0 }}
+        style={{ zIndex: 0 }}
         aria-hidden
       >
         <div
@@ -71,6 +72,7 @@ export default async function IdeologiePage() {
       </div>
 
       <div className="relative z-10 mx-auto max-w-7xl px-4 py-10" style={{ isolation: "isolate" }}>
+        <PublicPageHeader title="Échiquier idéologique" icon="ideology" />
         <IdeologyHexagon entries={entries} ideologyEffectsConfig={ideologyEffectsConfig} />
       </div>
     </div>

@@ -166,6 +166,7 @@ export const WikiImage = Node.create({
     if (h != null) dim.height = String(Math.round(h));
 
     const withoutSrc = mergeAttributes(this.options.HTMLAttributes, rest, dim, {
+      alt: typeof node.attrs.alt === "string" ? node.attrs.alt : "",
       class: `${base} ${alignClass}`.trim(),
       "data-align": align === "none" ? undefined : align,
     }) as Record<string, string | undefined>;

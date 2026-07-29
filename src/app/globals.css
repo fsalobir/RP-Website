@@ -36,6 +36,7 @@ body {
   color: var(--foreground);
   font-family: var(--font-sans), system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
+  overflow-x: clip;
 }
 
 /* Au-dessus du menu public (sticky z-50) : les modales en createPortal ciblent ce nœud (sibling du shell). */

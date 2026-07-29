@@ -162,9 +162,9 @@ function HexagonSvg() {
   );
 }
 
-const INFOBOX_FADEOUT_MS = 2500;
+const INFOBOX_FADEOUT_MS = 180;
 /** Durée du fondu infobulle / drapeaux (ms), alignée sur la classe Tailwind du panneau. */
-const INFOBOX_OPACITY_TRANSITION_MS = 2000;
+const INFOBOX_OPACITY_TRANSITION_MS = 160;
 
 export type IdeologyEffectEntry = { ideology_id: string; effect_kind: string; effect_target: string | null; value: number };
 
@@ -184,8 +184,12 @@ export function IdeologyHexagon({
   const [showPlayers, setShowPlayers] = useState(true);
   const [showAiMajor, setShowAiMajor] = useState(true);
   const [showAiMinor, setShowAiMinor] = useState(true);
-  const [assignmentFilter, setAssignmentFilter] = useState<"all" | "assigned_only">("all");
-  const [selectedId, setSelectedId] = useState<string | null>(entries[0]?.id ?? null);
+  const [assignmentFilter, setAssignmentFilter] = useState<"all" | "assigned_only">("assigned_only");
+  const [selectedId, setSelectedId] = useState<string | null>(
+    entries.find((entry) => entry.isPlayer || entry.ai_status === "major" || entry.ai_status === "minor")?.id
+      ?? entries[0]?.id
+      ?? null
+  );
   const [hoveredIdeology, setHoveredIdeology] = useState<IdeologyId | null>(null);
   const [displayedIdeology, setDisplayedIdeology] = useState<IdeologyId | null>(null);
   const [infoboxFadingOut, setInfoboxFadingOut] = useState(false);
@@ -216,6 +220,7 @@ export function IdeologyHexagon({
   }, []);
 
   const handleIdeologyLeave = useCallback(() => {
+    if (infoboxLeaveTimeoutRef.current) clearTimeout(infoboxLeaveTimeoutRef.current);
     setHoveredIdeology(null);
     setInfoboxFadingOut(true);
     setInfoboxFadeIn(false);
@@ -261,7 +266,8 @@ export function IdeologyHexagon({
           <button
             type="button"
             onClick={() => setAssignmentFilter("all")}
-            className={`rounded border px-3 py-1.5 text-sm font-medium transition-colors ${assignmentFilter === "all"
+            aria-pressed={assignmentFilter === "all"}
+            className={`min-h-11 rounded border px-3 py-1.5 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70 ${assignmentFilter === "all"
               ? "border-[var(--accent)] bg-[var(--accent)]/10 text-[var(--accent)]"
               : "border-white/25 text-white/90 hover:border-white/40 hover:text-white"}`}
             style={assignmentFilter !== "all" ? glassSubStyle : undefined}
@@ -271,24 +277,25 @@ export function IdeologyHexagon({
           <button
             type="button"
             onClick={() => setAssignmentFilter("assigned_only")}
-            className={`rounded border px-3 py-1.5 text-sm font-medium transition-colors ${assignmentFilter === "assigned_only"
+            aria-pressed={assignmentFilter === "assigned_only"}
+            className={`min-h-11 rounded border px-3 py-1.5 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70 ${assignmentFilter === "assigned_only"
               ? "border-[var(--accent)] bg-[var(--accent)]/10 text-[var(--accent)]"
               : "border-white/25 text-white/90 hover:border-white/40 hover:text-white"}`}
             style={assignmentFilter !== "assigned_only" ? glassSubStyle : undefined}
           >
             Assignés uniquement
           </button>
-          <span className="mx-2 text-white/30">|</span>
-          <label className={`flex items-center gap-2 text-sm ${glassTextClass}`}>
-            <input type="checkbox" checked={showPlayers} onChange={(e) => setShowPlayers(e.target.checked)} />
+          <span className="mx-2 hidden text-white/30 sm:inline" aria-hidden>|</span>
+          <label className={`flex min-h-11 cursor-pointer items-center gap-2 text-sm ${glassTextClass}`}>
+            <input className="h-5 w-5 accent-[var(--accent)]" type="checkbox" checked={showPlayers} onChange={(e) => setShowPlayers(e.target.checked)} />
             Joueurs
           </label>
-          <label className={`flex items-center gap-2 text-sm ${glassTextClass}`}>
-            <input type="checkbox" checked={showAiMajor} onChange={(e) => setShowAiMajor(e.target.checked)} />
+          <label className={`flex min-h-11 cursor-pointer items-center gap-2 text-sm ${glassTextClass}`}>
+            <input className="h-5 w-5 accent-[var(--accent)]" type="checkbox" checked={showAiMajor} onChange={(e) => setShowAiMajor(e.target.checked)} />
             IA majeures
           </label>
-          <label className={`flex items-center gap-2 text-sm ${glassTextClass}`}>
-            <input type="checkbox" checked={showAiMinor} onChange={(e) => setShowAiMinor(e.target.checked)} />
+          <label className={`flex min-h-11 cursor-pointer items-center gap-2 text-sm ${glassTextClass}`}>
+            <input className="h-5 w-5 accent-[var(--accent)]" type="checkbox" checked={showAiMinor} onChange={(e) => setShowAiMinor(e.target.checked)} />
             IA mineures
           </label>
           <span className={`text-sm ${glassMutedClass}`}>
@@ -297,10 +304,10 @@ export function IdeologyHexagon({
         </div>
       </div>
 
-      <div className="mx-auto w-[85%] max-w-[85%]">
+      <div className="mx-auto w-full max-w-full lg:w-[85%] lg:max-w-[85%]">
         <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_272px]">
           <div
-            className={`${glassPanelClass} p-4`}
+            className={`${glassPanelClass} min-w-0 p-4`}
             style={glassPanelStyle}
           >
             <div className="relative mx-auto aspect-square max-w-[35.7rem]">
@@ -317,22 +324,29 @@ export function IdeologyHexagon({
                 return (
                   <div
                     key={id}
-                    className="absolute w-24 -translate-x-1/2 -translate-y-1/2 pointer-events-auto sm:w-28"
-                    style={{ left: `${left}%`, top: `${top}%` }}
+                    className="pointer-events-auto absolute w-20 -translate-x-1/2 -translate-y-1/2"
+                    style={{
+                      left: `clamp(2.5rem, ${left}%, calc(100% - 2.5rem))`,
+                      top: `${top}%`,
+                    }}
                   >
-                    <div
-                      className="rounded border px-1.5 py-1 text-center text-[10px] font-medium leading-tight transition-colors sm:text-xs"
+                    <button
+                      type="button"
+                      className="min-h-11 w-full rounded border px-1.5 py-1 text-center text-[10px] font-medium leading-tight transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/80 sm:text-xs"
                       style={{
                         borderColor: isHovered ? "var(--accent)" : "rgba(255,255,255,0.25)",
                         background: isHovered ? "rgba(255,255,255,0.12)" : "rgba(255,255,255,0.08)",
                         backdropFilter: "blur(12px)",
                         color: "rgba(255,255,255,0.92)",
                       }}
-                      onMouseEnter={() => handleIdeologyEnter(id)}
-                      onMouseLeave={handleIdeologyLeave}
+                      onClick={() => {
+                        if (displayedIdeology === id) handleIdeologyLeave();
+                        else handleIdeologyEnter(id);
+                      }}
+                      aria-label={`Voir ${IDEOLOGY_LABELS[id]}`}
                     >
                       {IDEOLOGY_LABELS[id]}
-                    </div>
+                    </button>
                   </div>
                 );
               })}
@@ -352,6 +366,24 @@ export function IdeologyHexagon({
                   overflow: "hidden",
                 }}
               >
+                <button
+                  type="button"
+                  onClick={handleIdeologyLeave}
+                  className="absolute left-1/2 top-[16%] z-10 flex h-10 w-10 -translate-x-1/2 items-center justify-center rounded-full border border-white/30 bg-black/65 text-white transition-colors hover:bg-black/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
+                  aria-label="Fermer le détail de l’idéologie"
+                >
+                  <svg
+                    viewBox="0 0 24 24"
+                    className="h-5 w-5"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    aria-hidden
+                  >
+                    <path d="m6 6 12 12M18 6 6 18" />
+                  </svg>
+                </button>
                 {(() => {
                   const id = displayedIdeology;
                   const headerImage = IDEOLOGY_INFOBOX_HEADER_IMAGE[id];
@@ -443,7 +475,9 @@ export function IdeologyHexagon({
                     key={entry.id}
                     type="button"
                     onClick={() => setSelectedId(entry.id)}
-                    className="absolute -translate-x-1/2 -translate-y-1/2 transition-transform hover:scale-110"
+                    className="absolute flex h-8 w-8 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-md transition-transform hover:scale-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
+                    aria-label={`Sélectionner ${entry.name}`}
+                    aria-pressed={isSelected}
                     style={{
                       left,
                       top,
@@ -478,7 +512,7 @@ export function IdeologyHexagon({
         </div>
 
           <div
-            className={`${glassPanelClass} p-4`}
+            className={`${glassPanelClass} min-w-0 p-4`}
             style={glassPanelStyle}
           >
             {selected ? (
