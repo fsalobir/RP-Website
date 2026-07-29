@@ -32,6 +32,7 @@ import {
   type BilateralRelationScope,
 } from "@/lib/ruleParameters";
 import { DEFAULT_IDEOLOGY_CONFIG, getIdeologyConfig as parseIdeologyConfig, IDEOLOGY_IDS, IDEOLOGY_LABELS, type IdeologyConfig } from "@/lib/ideology";
+import { STATE_ACTION_STAT_RANGES } from "@/lib/stateActionModifiers";
 import { MOIS_LABELS } from "@/lib/worldDate";
 import {
   ALL_EFFECT_KIND_IDS,
@@ -1698,31 +1699,37 @@ export function ReglesForm({
               {statsDiceModifierRangesRule && (
                 <CollapsibleBlock
                   id="rules-dice-modifiers"
-                  title="Statistiques"
-                  infoContent={<TooltipBody text="Bonus ou malus aux jets de dés selon les statistiques du pays, pour les demandes des joueurs et les événements automatiques." />}
+                  title="Bonus et malus des statistiques"
+                  infoContent={<TooltipBody text="Chaque score du pays devient un bonus ou un malus ajouté au jet. Les quatre résultats sont additionnés." />}
                   open={statsOpen}
                   onToggle={() => setStatsOpen((o) => !o)}
                 >
                   <div className="p-3 space-y-4">
                     <p className="text-xs text-[var(--foreground-muted)]">
-                      Modificateur min/max pour les jets de dés (ex. -10 à +20). Ces bornes sont utilisées pour calculer le bonus ou malus proportionnel à la valeur de chaque stat du pays.
+                      Indiquez ce que chaque statistique ajoute au jet lorsque le pays est au score minimum puis au score maximum. Les scores intermédiaires sont calculés automatiquement.
                     </p>
                     <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
                       {STAT_KEYS.map((statKey) => {
                         const ranges = getStatsDiceModifierRanges()[statKey] ?? { min: -10, max: 20 };
+                        const statRange = STATE_ACTION_STAT_RANGES[statKey];
                         return (
                           <div key={statKey} className="rounded border p-3" style={{ borderColor: "var(--border-muted)" }}>
-                            <div className="text-sm font-medium text-[var(--foreground)] mb-2">{STAT_LABELS[statKey]}</div>
+                            <div className="mb-2">
+                              <div className="text-sm font-medium text-[var(--foreground)]">{STAT_LABELS[statKey]}</div>
+                              <div className="text-xs text-[var(--foreground-muted)]">
+                                Score du pays : {statRange.min} à {statRange.max}
+                              </div>
+                            </div>
                             <div className="flex flex-wrap gap-2">
                               <div className="flex flex-col gap-0.5">
                                 <label className="text-xs text-[var(--foreground-muted)]">
-                                  <FormLabel label="Min" tooltip="Valeur la plus défavorable que cette stat peut donner à un jet quand le pays est très faible sur ce domaine." />
+                                  <FormLabel label={`Effet au score ${statRange.min}`} tooltip={`Effet ajouté au jet quand ${STAT_LABELS[statKey].toLowerCase()} vaut ${statRange.min}.`} />
                                 </label>
                                 <input aria-label={`Minimum pour ${STAT_LABELS[statKey]}`} type="number" value={ranges.min} onChange={(e) => updateStatsDiceModifierRanges(statKey, "min", Number(e.target.value) ?? -10)} className={inputClassNarrow} style={inputStyle} />
                               </div>
                               <div className="flex flex-col gap-0.5">
                                 <label className="text-xs text-[var(--foreground-muted)]">
-                                  <FormLabel label="Max" tooltip="Valeur la plus favorable que cette stat peut donner à un jet quand le pays excelle sur ce domaine." />
+                                  <FormLabel label={`Effet au score ${statRange.max}`} tooltip={`Effet ajouté au jet quand ${STAT_LABELS[statKey].toLowerCase()} vaut ${statRange.max}.`} />
                                 </label>
                                 <input aria-label={`Maximum pour ${STAT_LABELS[statKey]}`} type="number" value={ranges.max} onChange={(e) => updateStatsDiceModifierRanges(statKey, "max", Number(e.target.value) ?? 20)} className={inputClassNarrow} style={inputStyle} />
                               </div>

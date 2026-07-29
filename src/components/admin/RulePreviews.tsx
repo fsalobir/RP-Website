@@ -1,6 +1,6 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { computeInfluenceForAll, type InfluenceConfig } from "@/lib/influence";
 import type { HardPowerByBranch } from "@/lib/hardPower";
 import {
@@ -178,52 +178,135 @@ export function DiceModifierRulePreview({
 }: {
   ranges: Record<string, { min: number; max: number }>;
 }) {
-  const maximumAbsolute = Math.max(
-    1,
-    ...Object.values(ranges).flatMap((range) => [Math.abs(range.min), Math.abs(range.max)])
-  );
+  const [stats, setStats] = useState<Record<string, number>>({
+    militarism: 5,
+    industry: 5,
+    science: 5,
+    stability: 0,
+  });
+  const [roll, setRoll] = useState(50);
+  const breakdown = computeStatModifierBreakdown(ranges, stats);
+  const rawTotal = roll + breakdown.total;
+  const total = Math.max(1, Math.min(100, rawTotal));
+  const success = total >= 50;
+  const signed = (value: number) => `${value > 0 ? "+" : ""}${value}`;
 
   return (
     <PreviewFrame
-      title="Courbe des bonus et malus"
-      description="Chaque ligne montre ce qu’ajoute une seule statistique au jet. Les bonus de plusieurs statistiques actives s’additionnent."
+      title="Essayez avec un pays"
+      description="Déplacez ses scores et le jet brut. L’exemple se recalcule immédiatement, sans enregistrer."
     >
-      <div className="space-y-4">
-        {Object.entries(STAT_LABELS).map(([key, label]) => {
-          const statRange = STATE_ACTION_STAT_RANGES[key];
-          const ruleRange = ranges[key] ?? { min: 0, max: 0 };
-          const middleValue = (statRange.min + statRange.max) / 2;
-          const samples = [statRange.min, middleValue, statRange.max].map((value) =>
-            computeStatModifierBreakdown({ [key]: ruleRange }, { [key]: value }).byStat[key]
-          );
-          const y = (value: number) => 35 - (value / maximumAbsolute) * 25;
-          const points = `10,${y(samples[0])} 150,${y(samples[1])} 290,${y(samples[2])}`;
-          return (
-            <div key={key} className="grid gap-2 sm:grid-cols-[8rem_minmax(0,1fr)] sm:items-center">
-              <p className="text-sm font-medium text-[var(--foreground)]">{label}</p>
-              <div>
-                <svg
-                  viewBox="0 0 300 70"
-                  role="img"
-                  aria-label={`${label} : ${samples[0]} avec une valeur faible, ${samples[1]} au milieu, ${samples[2]} avec une valeur forte`}
-                  className="h-16 w-full overflow-visible"
-                  preserveAspectRatio="none"
-                >
-                  <line x1="0" y1="35" x2="300" y2="35" stroke="var(--border-muted)" strokeWidth="1" />
-                  <polyline points={points} fill="none" stroke="var(--accent)" strokeWidth="3" vectorEffect="non-scaling-stroke" />
-                  {[10, 150, 290].map((x, index) => (
-                    <circle key={x} cx={x} cy={y(samples[index])} r="5" fill="var(--background-panel)" stroke="var(--accent)" strokeWidth="3" vectorEffect="non-scaling-stroke" />
-                  ))}
-                </svg>
-                <div className="grid grid-cols-3 gap-2 text-xs text-[var(--foreground-muted)]">
-                  <span>Faible : <strong className="text-[var(--foreground)]">{samples[0] > 0 ? "+" : ""}{samples[0]}</strong></span>
-                  <span className="text-center">Moyenne : <strong className="text-[var(--foreground)]">{samples[1] > 0 ? "+" : ""}{samples[1]}</strong></span>
-                  <span className="text-right">Forte : <strong className="text-[var(--foreground)]">{samples[2] > 0 ? "+" : ""}{samples[2]}</strong></span>
-                </div>
-              </div>
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(18rem,0.72fr)]">
+        <div className="grid gap-x-6 gap-y-5 sm:grid-cols-2">
+          {Object.entries(STAT_LABELS).map(([key, label]) => {
+            const statRange = STATE_ACTION_STAT_RANGES[key];
+            const value = stats[key] ?? statRange.min;
+            const modifier = breakdown.byStat[key] ?? 0;
+            return (
+              <label key={key} className="block">
+                <span className="flex items-baseline justify-between gap-3 text-sm">
+                  <strong className="font-medium text-[var(--foreground)]">{label}</strong>
+                  <span className="text-[var(--foreground-muted)]">
+                    Score <strong className="text-[var(--foreground)]">{compact(value)}</strong>
+                  </span>
+                </span>
+                <input
+                  type="range"
+                  min={statRange.min}
+                  max={statRange.max}
+                  step="0.1"
+                  value={value}
+                  onChange={(event) =>
+                    setStats((current) => ({ ...current, [key]: Number(event.target.value) }))
+                  }
+                  aria-label={`Score de ${label}`}
+                  className="mt-2 w-full accent-[var(--accent)]"
+                />
+                <span className="mt-1 flex justify-between gap-3 text-xs text-[var(--foreground-muted)]">
+                  <span>{statRange.min}</span>
+                  <span>
+                    Ajoute <strong className="text-[var(--foreground)]">{signed(modifier)}</strong> au jet
+                  </span>
+                  <span>{statRange.max}</span>
+                </span>
+              </label>
+            );
+          })}
+        </div>
+
+        <div
+          className="rounded-xl border p-4"
+          style={{ borderColor: "var(--border)", background: "var(--background)" }}
+          aria-live="polite"
+        >
+          <label className="block">
+            <span className="flex items-baseline justify-between gap-3 text-sm">
+              <strong className="font-medium text-[var(--foreground)]">Jet brut</strong>
+              <strong className="text-[var(--foreground)]">{roll}/100</strong>
+            </span>
+            <input
+              type="range"
+              min="1"
+              max="100"
+              value={roll}
+              onChange={(event) => setRoll(Number(event.target.value))}
+              aria-label="Jet brut de l’exemple"
+              className="mt-2 w-full accent-[var(--accent)]"
+            />
+          </label>
+
+          <dl className="mt-4 space-y-2 border-t pt-4 text-sm" style={{ borderColor: "var(--border-muted)" }}>
+            <div className="flex justify-between gap-3">
+              <dt className="text-[var(--foreground-muted)]">Statistiques</dt>
+              <dd className="font-medium text-[var(--foreground)]">{signed(breakdown.total)}</dd>
             </div>
-          );
-        })}
+            <div className="flex justify-between gap-3">
+              <dt className="text-[var(--foreground-muted)]">Calcul</dt>
+              <dd className="font-medium text-[var(--foreground)]">
+                {roll} {breakdown.total >= 0 ? "+" : "−"} {Math.abs(breakdown.total)} = {rawTotal}
+              </dd>
+            </div>
+          </dl>
+
+          <div className="relative mt-4 h-3 rounded-full bg-[var(--background-panel)]">
+            <span
+              className="absolute inset-y-[-0.25rem] left-1/2 border-l border-dashed"
+              style={{ borderColor: "var(--foreground-muted)" }}
+              aria-hidden="true"
+            />
+            <span
+              className="block h-full rounded-full"
+              style={{
+                width: `${total}%`,
+                background: success ? "var(--accent)" : "var(--danger)",
+              }}
+              aria-hidden="true"
+            />
+          </div>
+          <div className="mt-1 flex justify-between text-[0.7rem] text-[var(--foreground-muted)]">
+            <span>1</span>
+            <span>50 : réussite</span>
+            <span>100</span>
+          </div>
+
+          <div className="mt-4 flex items-end justify-between gap-4">
+            <div>
+              <p className="text-xs text-[var(--foreground-muted)]">Résultat final</p>
+              <p className="text-2xl font-semibold text-[var(--foreground)]">{total}/100</p>
+            </div>
+            <p
+              className="text-sm font-semibold"
+              style={{ color: success ? "var(--accent)" : "var(--danger)" }}
+            >
+              {success ? "Réussite" : "Échec"}
+            </p>
+          </div>
+          {rawTotal !== total && (
+            <p className="mt-2 text-xs text-[var(--foreground-muted)]">
+              Le jeu limite toujours le résultat entre 1 et 100.
+            </p>
+          )}
+        </div>
       </div>
     </PreviewFrame>
   );
