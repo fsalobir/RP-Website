@@ -10,9 +10,19 @@ import {
   isMilitaryStateActionKey,
 } from "@/lib/actionKeys";
 import { DisclosureChevron } from "@/components/ui/DisclosureChevron";
+import { InfoTooltip } from "@/components/ui/InfoTooltip";
 
 const panelClass = "rounded-xl border p-4 sm:p-6";
 const panelStyle = { background: "var(--background-panel)", borderColor: "var(--border)" };
+
+function HelpLabel({ label, help }: { label: string; help: string }) {
+  return (
+    <span className="inline-flex items-center gap-1.5">
+      {label}
+      <InfoTooltip content={help} />
+    </span>
+  );
+}
 
 const STAT_BONUS_KEYS = [
   { key: "militarism", label: "Militarisme" },
@@ -238,7 +248,7 @@ export function StateActionTypesForm({ types }: Props) {
               Types d'actions d'État
             </h2>
             <p className="mt-1 text-sm text-[var(--foreground-muted)]">
-              Coût en « actions » et paramètres par type.
+              Ouvrez une action pour régler son coût et ce qui influence son résultat.
             </p>
           </div>
           <button
@@ -344,13 +354,17 @@ function TypeRow({
         <span className="text-xs text-[var(--foreground-muted)]">Coût : {edit.cost}</span>
       </button>
       <div
+        aria-hidden={!expanded}
+        inert={!expanded}
         className="grid transition-[grid-template-rows] duration-200 ease-out"
         style={{ gridTemplateRows: expanded ? "1fr" : "0fr" }}
       >
         <div className="min-h-0 overflow-hidden">
           <div className="flex flex-wrap items-end gap-3 gap-y-2 border-t py-3 px-3 text-sm" style={{ borderColor: "var(--border)" }}>
         <div className="w-20">
-          <label htmlFor={`action-${type.id}-cost`} className="mb-0.5 block text-xs text-[var(--foreground-muted)]">Coût</label>
+          <label htmlFor={`action-${type.id}-cost`} className="mb-0.5 block text-xs text-[var(--foreground-muted)]">
+            <HelpLabel label="Coût en actions" help="Nombre de points d’action consommés lorsque le joueur envoie cette demande." />
+          </label>
           <input
             id={`action-${type.id}-cost`}
             type="number"
@@ -363,8 +377,11 @@ function TypeRow({
         </div>
         {(isDiplo || isPriseInfluence || isMilitary) && (
           <div className="w-32">
-            <label htmlFor={`action-${type.id}-impact`} className="mb-0.5 block text-xs text-[var(--foreground-muted)]" title={isPriseInfluence ? "Pourcentage maximum d'impact." : "Valeur max de variation de relation par action ; le jet d'impact (0–100) applique ce pourcentage."}>
-              Impact max {isPriseInfluence ? "(%)" : ""}
+            <label htmlFor={`action-${type.id}-impact`} className="mb-0.5 block text-xs text-[var(--foreground-muted)]">
+              <HelpLabel
+                label={`Impact maximal${isPriseInfluence ? " (%)" : ""}`}
+                help={isPriseInfluence ? "Part maximale d’influence pouvant être gagnée." : "Variation maximale possible. Le jet d’impact détermine la part réellement appliquée."}
+              />
             </label>
             <input
               id={`action-${type.id}-impact`}
@@ -380,8 +397,8 @@ function TypeRow({
         )}
         {isMilitary && (
           <div className="w-36">
-            <label htmlFor={`action-${type.id}-relation`} className="mb-0.5 block text-xs text-[var(--foreground-muted)]" title="Relation bilatérale maximale requise pour autoriser l'action (ex. -75 = hostilité extrême).">
-              Relation max requise
+            <label htmlFor={`action-${type.id}-relation`} className="mb-0.5 block text-xs text-[var(--foreground-muted)]">
+              <HelpLabel label="Relation maximale autorisée" help="L’action est disponible seulement si la relation entre les deux pays ne dépasse pas cette valeur. Exemple : −75 exige une forte hostilité." />
             </label>
             <input
               id={`action-${type.id}-relation`}
@@ -398,7 +415,7 @@ function TypeRow({
         {isDiplo && (
           <div className="flex flex-col gap-0.5 border-l pl-3" style={{ borderColor: "var(--border)" }}>
             <StatBonusCheckboxes
-              label="Bonus stats"
+              label="Statistiques prises en compte"
               statBonus={edit.statBonus}
               edit={edit}
               onEditChange={onEditChange}
@@ -409,14 +426,14 @@ function TypeRow({
         {isDemandeUp && (
           <div className="flex flex-wrap gap-4 border-l pl-3" style={{ borderColor: "var(--border)" }}>
             <StatBonusCheckboxes
-              label="Up nombre"
+              label="Amélioration du nombre"
               statBonus={edit.statBonusUpNombre}
               edit={edit}
               onEditChange={onEditChange}
               field="statBonusUpNombre"
             />
             <StatBonusCheckboxes
-              label="Up tech"
+              label="Amélioration technologique"
               statBonus={edit.statBonusUpTech}
               edit={edit}
               onEditChange={onEditChange}
@@ -427,8 +444,8 @@ function TypeRow({
         {isPriseInfluence && (
           <>
           <div className="w-28">
-            <label htmlFor={`action-${type.id}-relations-amplitude`} className="mb-0.5 block text-xs text-[var(--foreground-muted)]" title="Si 20 : relation -100 → -20 au jet, relation 0 → 0, relation +100 → +20.">
-              Amplitude relations
+            <label htmlFor={`action-${type.id}-relations-amplitude`} className="mb-0.5 block text-xs text-[var(--foreground-muted)]">
+              <HelpLabel label="Poids de la relation" help="Effet de la relation actuelle sur le jet. Avec 20 : une relation à −100 donne −20, et une relation à +100 donne +20." />
             </label>
             <input
               id={`action-${type.id}-relations-amplitude`}
@@ -441,8 +458,8 @@ function TypeRow({
             />
           </div>
           <div className="w-28">
-            <label htmlFor={`action-${type.id}-influence-amplitude`} className="mb-0.5 block text-xs text-[var(--foreground-muted)]" title="Rang d'influence du pays émetteur (0–100 %) : si 15, top influence → +15 au jet, plus faible → 0.">
-              Amplitude influence
+            <label htmlFor={`action-${type.id}-influence-amplitude`} className="mb-0.5 block text-xs text-[var(--foreground-muted)]">
+              <HelpLabel label="Poids de l’influence" help="Bonus accordé selon le rang international du pays. Avec 15, le pays le plus influent reçoit +15 au jet." />
             </label>
             <input
               id={`action-${type.id}-influence-amplitude`}
@@ -455,12 +472,12 @@ function TypeRow({
             />
           </div>
           <div className="flex flex-col gap-1.5 border-l pl-3" style={{ borderColor: "var(--border)" }}>
-            <p className="text-xs font-medium text-[var(--foreground-muted)]" title="Ratio = influence émetteur / cible. Équilibre = ni malus ni bonus ; min/max = bornes.">
-              Équilibre des forces
+            <p className="text-xs font-medium text-[var(--foreground-muted)]">
+              <HelpLabel label="Équilibre des forces" help="Compare l’influence du pays émetteur à celle de sa cible. Un rapport neutre ne donne ni bonus ni malus." />
             </p>
             <div className="flex flex-wrap gap-3">
               <div className="w-28">
-                <label htmlFor={`action-${type.id}-balance-ratio`} className="mb-0.5 block text-xs text-[var(--foreground-muted)]">Ratio équilibre</label>
+                <label htmlFor={`action-${type.id}-balance-ratio`} className="mb-0.5 block text-xs text-[var(--foreground-muted)]">Rapport neutre</label>
                 <input
                   id={`action-${type.id}-balance-ratio`}
                   type="number"
@@ -480,7 +497,7 @@ function TypeRow({
                 />
               </div>
               <div className="w-20">
-                <label htmlFor={`action-${type.id}-max-penalty`} className="mb-0.5 block text-xs text-[var(--foreground-muted)]">Malus max %</label>
+                <label htmlFor={`action-${type.id}-max-penalty`} className="mb-0.5 block text-xs text-[var(--foreground-muted)]">Malus maximal (%)</label>
                 <input
                   id={`action-${type.id}-max-penalty`}
                   type="number"
@@ -499,7 +516,7 @@ function TypeRow({
                 />
               </div>
               <div className="w-20">
-                <label htmlFor={`action-${type.id}-max-bonus`} className="mb-0.5 block text-xs text-[var(--foreground-muted)]">Bonus max %</label>
+                <label htmlFor={`action-${type.id}-max-bonus`} className="mb-0.5 block text-xs text-[var(--foreground-muted)]">Bonus maximal (%)</label>
                 <input
                   id={`action-${type.id}-max-bonus`}
                   type="number"
@@ -518,7 +535,7 @@ function TypeRow({
                 />
               </div>
               <div className="w-24">
-                <label htmlFor={`action-${type.id}-min-ratio`} className="mb-0.5 block text-xs text-[var(--foreground-muted)]">Ratio min</label>
+                <label htmlFor={`action-${type.id}-min-ratio`} className="mb-0.5 block text-xs text-[var(--foreground-muted)]">Rapport minimal</label>
                 <input
                   id={`action-${type.id}-min-ratio`}
                   type="number"
@@ -538,7 +555,7 @@ function TypeRow({
                 />
               </div>
               <div className="w-24">
-                <label htmlFor={`action-${type.id}-max-ratio`} className="mb-0.5 block text-xs text-[var(--foreground-muted)]">Ratio max</label>
+                <label htmlFor={`action-${type.id}-max-ratio`} className="mb-0.5 block text-xs text-[var(--foreground-muted)]">Rapport maximal</label>
                 <input
                   id={`action-${type.id}-max-ratio`}
                   type="number"

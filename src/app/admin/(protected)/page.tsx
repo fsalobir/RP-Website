@@ -1,5 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
-import Link from "next/link";
+import { AdminDashboardClient } from "@/components/admin/AdminDashboardClient";
 
 export default async function AdminDashboardPage() {
   const supabase = await createClient();
@@ -10,188 +10,23 @@ export default async function AdminDashboardPage() {
     supabase.from("country_players").select("user_id", { count: "exact", head: true }),
     supabase.from("perks").select("id", { count: "exact", head: true }),
   ]);
-  const countriesCount = countriesRes.count ?? 0;
-  const rulesCount = rulesRes.count ?? 0;
-  const rosterCount = rosterRes.count ?? 0;
-  const playersCount = playersRes.count ?? 0;
-  const perksCount = perksRes.count ?? 0;
-
   return (
     <div className="mx-auto max-w-6xl px-4 py-10">
       <h1 className="mb-2 text-2xl font-bold text-[var(--foreground)]">
         Tableau de bord
       </h1>
-      <p className="mb-8 text-[var(--foreground-muted)]">
-        Vue d’ensemble et accès rapide aux données.
+      <p className="mb-8 max-w-2xl text-[var(--foreground-muted)]">
+        Retrouvez une page par son nom ou par la tâche que vous voulez accomplir.
       </p>
-
-      <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-        <Link
-          href="/admin/pays"
-          className="rounded-lg border p-6 transition-colors hover:border-[var(--accent-muted)]"
-          style={{
-            background: "var(--background-panel)",
-            borderColor: "var(--border)",
-          }}
-        >
-          <h2 className="text-lg font-semibold text-[var(--foreground)]">
-            Pays
-          </h2>
-          <p className="mt-1 text-2xl font-mono font-semibold tabular-nums text-[var(--accent)]">
-            {countriesCount}
-          </p>
-          <p className="mt-2 text-sm text-[var(--foreground-muted)]">
-            Gérer les nations et leurs indicateurs
-          </p>
-        </Link>
-        <Link
-          href="/admin/roster"
-          className="rounded-lg border p-6 transition-colors hover:border-[var(--accent-muted)]"
-          style={{
-            background: "var(--background-panel)",
-            borderColor: "var(--border)",
-          }}
-        >
-          <h2 className="text-lg font-semibold text-[var(--foreground)]">
-            Roster
-          </h2>
-          <p className="mt-1 text-2xl font-mono font-semibold tabular-nums text-[var(--accent)]">
-            {rosterCount}
-          </p>
-          <p className="mt-2 text-sm text-[var(--foreground-muted)]">
-            Unités militaires (templates)
-          </p>
-        </Link>
-        <Link
-          href="/admin/actions-etat"
-          className="rounded-lg border p-6 transition-colors hover:border-[var(--accent-muted)]"
-          style={{
-            background: "var(--background-panel)",
-            borderColor: "var(--border)",
-          }}
-        >
-          <h2 className="text-lg font-semibold text-[var(--foreground)]">
-            Actions d'État
-          </h2>
-          <p className="mt-2 text-sm text-[var(--foreground-muted)]">
-            Types d'actions, coûts et paramètres (Insulte diplomatique, Prise d'influence, Demande d'up)
-          </p>
-        </Link>
-        <Link
-          href="/admin/demandes"
-          className="rounded-lg border p-6 transition-colors hover:border-[var(--accent-muted)]"
-          style={{
-            background: "var(--background-panel)",
-            borderColor: "var(--border)",
-          }}
-        >
-          <h2 className="text-lg font-semibold text-[var(--foreground)]">
-            Demandes
-          </h2>
-          <p className="mt-2 text-sm text-[var(--foreground-muted)]">
-            Tickets des joueurs (actions d'État en attente, à accepter ou refuser)
-          </p>
-        </Link>
-        <Link
-          href="/admin/event-ia"
-          className="rounded-lg border p-6 transition-colors hover:border-[var(--accent-muted)]"
-          style={{
-            background: "var(--background-panel)",
-            borderColor: "var(--border)",
-          }}
-        >
-          <h2 className="text-lg font-semibold text-[var(--foreground)]">
-            Event IA
-          </h2>
-          <p className="mt-2 text-sm text-[var(--foreground-muted)]">
-            Événements IA en attente, à valider ou à générer
-          </p>
-        </Link>
-        <Link
-          href="/admin/regles"
-          className="rounded-lg border p-6 transition-colors hover:border-[var(--accent-muted)]"
-          style={{
-            background: "var(--background-panel)",
-            borderColor: "var(--border)",
-          }}
-        >
-          <h2 className="text-lg font-semibold text-[var(--foreground)]">
-            Règles
-          </h2>
-          <p className="mt-1 text-2xl font-mono font-semibold tabular-nums text-[var(--accent)]">
-            {rulesCount}
-          </p>
-          <p className="mt-2 text-sm text-[var(--foreground-muted)]">
-            Paramètres de simulation (cron)
-          </p>
-        </Link>
-        <Link
-          href="/admin/avantages"
-          className="rounded-lg border p-6 transition-colors hover:border-[var(--accent-muted)]"
-          style={{
-            background: "var(--background-panel)",
-            borderColor: "var(--border)",
-          }}
-        >
-          <h2 className="text-lg font-semibold text-[var(--foreground)]">
-            Avantages
-          </h2>
-          <p className="mt-1 text-2xl font-mono font-semibold tabular-nums text-[var(--accent)]">
-            {perksCount}
-          </p>
-          <p className="mt-2 text-sm text-[var(--foreground-muted)]">
-            Catégories et avantages (bonus conditionnés par les stats)
-          </p>
-        </Link>
-        <Link
-          href="/admin/joueurs"
-          className="rounded-lg border p-6 transition-colors hover:border-[var(--accent-muted)]"
-          style={{
-            background: "var(--background-panel)",
-            borderColor: "var(--border)",
-          }}
-        >
-          <h2 className="text-lg font-semibold text-[var(--foreground)]">
-            Gestion Joueurs
-          </h2>
-          <p className="mt-1 text-2xl font-mono font-semibold tabular-nums text-[var(--accent)]">
-            {playersCount}
-          </p>
-          <p className="mt-2 text-sm text-[var(--foreground-muted)]">
-            Créer des comptes joueurs et les assigner à un pays
-          </p>
-        </Link>
-        <Link
-          href="/admin/bot-discord"
-          className="rounded-lg border p-6 transition-colors hover:border-[var(--accent-muted)]"
-          style={{
-            background: "var(--background-panel)",
-            borderColor: "var(--border)",
-          }}
-        >
-          <h2 className="text-lg font-semibold text-[var(--foreground)]">
-            Bot Discord
-          </h2>
-          <p className="mt-2 text-sm text-[var(--foreground-muted)]">
-            Types de dispatch, routage des canaux et templates de messages
-          </p>
-        </Link>
-        <Link
-          href="/"
-          className="rounded-lg border p-6 transition-colors hover:border-[var(--accent-muted)]"
-          style={{
-            background: "var(--background-panel)",
-            borderColor: "var(--border)",
-          }}
-        >
-          <h2 className="text-lg font-semibold text-[var(--foreground)]">
-            Voir le site
-          </h2>
-          <p className="mt-2 text-sm text-[var(--foreground-muted)]">
-            Ouvrir le site public
-          </p>
-        </Link>
-      </div>
+      <AdminDashboardClient
+        counts={{
+          countries: countriesRes.count ?? 0,
+          rules: rulesRes.count ?? 0,
+          roster: rosterRes.count ?? 0,
+          players: playersRes.count ?? 0,
+          perks: perksRes.count ?? 0,
+        }}
+      />
     </div>
   );
 }

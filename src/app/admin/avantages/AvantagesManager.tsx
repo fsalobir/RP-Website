@@ -470,7 +470,7 @@ export function AvantagesManager({
               </div>
             </div>
             <div>
-              <label htmlFor="perk-description" className="mb-1 block text-xs text-[var(--foreground-muted)]">Description (fluff)</label>
+              <label htmlFor="perk-description" className="mb-1 block text-xs text-[var(--foreground-muted)]">Description visible par les joueurs</label>
               <textarea
                 id="perk-description"
                 value={perkDescription}
@@ -558,7 +558,7 @@ export function AvantagesManager({
             </div>
 
             <div>
-              <p className="mb-2 text-sm font-medium text-[var(--foreground)]">Requis (dynamiques)</p>
+              <p className="mb-2 text-sm font-medium text-[var(--foreground)]">Conditions de déblocage</p>
               <ul className="space-y-2">
                 {perkRequirements.map((r, idx) => (
                   <li
@@ -671,7 +671,7 @@ export function AvantagesManager({
             </div>
 
             <div>
-              <p className="mb-2 text-sm font-medium text-[var(--foreground)]">Effets (logique dynamique)</p>
+              <p className="mb-2 text-sm font-medium text-[var(--foreground)]">Effets appliqués</p>
               <ul className="space-y-2">
                 {perkEffects.map((e, idx) => (
                   <li

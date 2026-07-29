@@ -120,7 +120,7 @@ export function BotDiscordForm({
       >
         <h2 className="mb-2 text-lg font-semibold text-[var(--foreground)]">Configuration générale</h2>
         <p className="mb-2 text-sm text-[var(--foreground-muted)]">
-          Token Discord : {tokenConfigured ? "configuré" : "non configuré (ajoutez DISCORD_BOT_TOKEN sur Vercel)"}
+          Connexion à Discord : {tokenConfigured ? "prête" : "à configurer sur Vercel (DISCORD_BOT_TOKEN)"}
         </p>
         <a
           href="https://discord.com/developers/applications"
@@ -138,7 +138,7 @@ export function BotDiscordForm({
       >
         <h2 className="mb-4 text-lg font-semibold text-[var(--foreground)]">Canaux par continent</h2>
         <p className="mb-4 text-sm text-[var(--foreground-muted)]">
-          Pour chaque continent, indiquez l’ID du canal Discord « national » et « international ». Les pays du continent sont routés selon la destination choisie par type de dispatch.
+          Pour chaque continent, indiquez les salons utilisés pour les nouvelles nationales et internationales. L’identifiant se copie depuis Discord avec le mode développeur.
         </p>
         {channelError && <p role="alert" className="mb-2 text-sm text-[var(--danger)]">{channelError}</p>}
         <div className="space-y-4">
@@ -208,9 +208,9 @@ export function BotDiscordForm({
         className="rounded-xl border p-4 sm:p-6"
         style={{ borderColor: "var(--border)", background: "var(--background-panel)" }}
       >
-        <h2 className="mb-4 text-lg font-semibold text-[var(--foreground)]">Types de dispatch</h2>
+        <h2 className="mb-4 text-lg font-semibold text-[var(--foreground)]">Événements publiés</h2>
         <p className="mb-4 text-sm text-[var(--foreground-muted)]">
-          Un type par action d’État (acceptée). Activez ou désactivez l’envoi et choisissez la destination : National ou International.
+          Activez les actions à publier, puis choisissez leur salon : national ou international.
         </p>
         <ul className="space-y-3">
           {dispatchByStateAction.map(({ stateAction, accepted }) =>
@@ -258,9 +258,9 @@ export function BotDiscordForm({
         className="rounded-xl border p-4 sm:p-6"
         style={{ borderColor: "var(--border)", background: "var(--background-panel)" }}
       >
-        <h2 className="mb-4 text-lg font-semibold text-[var(--foreground)]">Templates</h2>
+        <h2 className="mb-4 text-lg font-semibold text-[var(--foreground)]">Modèles de messages</h2>
         <p className="mb-4 text-sm text-[var(--foreground-muted)]">
-          Formules de texte (placeholders : {"{country_name}"}, {"{action_label}"}, {"{refusal_message}"}, {"{date}"}) et couleurs. Plusieurs templates par type = tirage aléatoire. Images : liste d’URLs (une au hasard).
+          Les éléments entre accolades sont remplacés automatiquement. Si plusieurs modèles existent pour une action, l’un d’eux est choisi au hasard.
         </p>
         {templateError && <p role="alert" className="mb-2 text-sm text-[var(--danger)]">{templateError}</p>}
         {dispatchTypes
@@ -577,7 +577,7 @@ function TemplateEditForm({
         />
       </div>
       <div>
-        <label htmlFor={`template-${template.id}-body`} className="mb-1 block text-xs text-[var(--foreground-muted)]">Texte (placeholders)</label>
+        <label htmlFor={`template-${template.id}-body`} className="mb-1 block text-xs text-[var(--foreground-muted)]">Texte du message</label>
         <textarea
           id={`template-${template.id}-body`}
           value={bodyTemplate}
@@ -588,7 +588,7 @@ function TemplateEditForm({
         />
       </div>
       <div>
-        <label htmlFor={`template-${template.id}-color`} className="mb-1 block text-xs text-[var(--foreground-muted)]">Couleur embed (hex, ex. 2e7d32)</label>
+        <label htmlFor={`template-${template.id}-color`} className="mb-1 block text-xs text-[var(--foreground-muted)]">Couleur du message (code hexadécimal, ex. 2e7d32)</label>
         <input
           id={`template-${template.id}-color`}
           type="text"

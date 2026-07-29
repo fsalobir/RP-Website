@@ -277,32 +277,36 @@ export function EventIaList({
             <div
               className="rounded border py-2 px-3 text-sm"
               style={{ borderColor: "var(--border-muted)", background: "var(--background-elevated)" }}
-              title="Pour modifier : Admin Règles > Events IA"
+              title="Pour modifier : Administration > Règles de simulation > Pays gérés par l’IA"
             >
-              <span className="font-medium text-[var(--foreground-muted)]">Diagnostic cron : </span>
+              <span className="font-medium text-[var(--foreground-muted)]">Automatisation : </span>
               <span className="text-[var(--foreground)]">
-                Dernier run : {aiEventsLastRun ? new Date(aiEventsLastRun).toLocaleString("fr-FR") : "jamais"}
+                Dernière génération : {aiEventsLastRun ? new Date(aiEventsLastRun).toLocaleString("fr-FR") : "jamais"}
                 {" · "}
-                Par run : {typeof aiEventsConfig?.count_major_per_run === "number" ? aiEventsConfig.count_major_per_run : 0} majeurs, {typeof aiEventsConfig?.count_minor_per_run === "number" ? aiEventsConfig.count_minor_per_run : 0} mineurs
+                Par passage : {typeof aiEventsConfig?.count_major_per_run === "number" ? aiEventsConfig.count_major_per_run : 0} majeurs, {typeof aiEventsConfig?.count_minor_per_run === "number" ? aiEventsConfig.count_minor_per_run : 0} mineurs
                 {" · "}
                 Actions autorisées : {Array.isArray(aiEventsConfig?.allowed_action_type_keys_major) ? aiEventsConfig.allowed_action_type_keys_major.length : 0} majeures, {Array.isArray(aiEventsConfig?.allowed_action_type_keys_minor) ? aiEventsConfig.allowed_action_type_keys_minor.length : 0} mineures
               </span>
               {(typeof aiEventsConfig?.count_major_per_run !== "number" || aiEventsConfig?.count_major_per_run === 0) &&
                 (typeof aiEventsConfig?.count_minor_per_run !== "number" || aiEventsConfig?.count_minor_per_run === 0) && (
                   <span className="mt-1 block text-[var(--danger)]">
-                    Aucun event généré : activez au moins un quota (majeurs ou mineurs) dans Règles &gt; Events IA.
+                    Aucun événement ne peut être créé : choisissez au moins un quota dans Règles de simulation &gt; Pays gérés par l’IA.
                   </span>
                 )}
-              <p className="mt-2 text-xs text-[var(--foreground-muted)]">
-                Le cron <strong>automatique</strong> est exécuté par Supabase (pg_cron), pas par cette app. Si la date « Dernier run » ne se met pas à jour toute seule, vérifier dans le projet Supabase : Extensions → activer <code>pg_cron</code> ; SQL Editor → voir <code>supabase/CRON.md</code> pour les requêtes (jobs <code>ai-events-generation</code> et <code>cron.job_run_details</code>).
-              </p>
-              {cronDiagnosticError && (
-                <p className="mt-2 text-xs text-[var(--danger)]">
-                  Diagnostic pg_cron : {cronDiagnosticError}
+              <details className="mt-3 text-xs text-[var(--foreground-muted)]">
+                <summary className="min-h-11 cursor-pointer py-3 font-medium text-[var(--foreground)]">
+                  Voir le diagnostic technique
+                </summary>
+                <p className="mb-2">
+                  La génération automatique est exécutée par Supabase. Si la date ci-dessus ne se met plus à jour, vérifiez la tâche planifiée décrite dans <code>supabase/CRON.md</code>.
                 </p>
-              )}
-              {cronDiagnostic && !cronDiagnosticError && (
-                <div className="mt-3 rounded border py-2 px-3 text-xs" style={{ borderColor: "var(--border)", background: "var(--background)" }}>
+                {cronDiagnosticError && (
+                  <p className="mb-2 text-[var(--danger)]">
+                    Diagnostic de la tâche planifiée : {cronDiagnosticError}
+                  </p>
+                )}
+                {cronDiagnostic && !cronDiagnosticError && (
+                  <div className="rounded border py-2 px-3" style={{ borderColor: "var(--border)", background: "var(--background)" }}>
                   <span className="font-medium text-[var(--foreground-muted)]">Diagnostic pg_cron : </span>
                   <span className="text-[var(--foreground)]">
                     {cronDiagnostic.pg_cron_enabled === false ? (
@@ -349,8 +353,9 @@ export function EventIaList({
                       </span>
                     </div>
                   )}
-                </div>
-              )}
+                  </div>
+                )}
+              </details>
             </div>
           )}
           <div className="flex flex-col gap-3 xl:flex-row xl:items-end xl:justify-between">
@@ -379,7 +384,7 @@ export function EventIaList({
                 className="rounded border px-3 py-1.5 text-sm font-medium hover:bg-[var(--background)] disabled:opacity-50"
                 style={{ borderColor: "var(--border)" }}
               >
-                {processDueLoading ? "Traitement…" : "Traiter les events IA dus"}
+                {processDueLoading ? "Traitement…" : "Traiter les événements arrivés à échéance"}
               </button>
               <button
                 type="button"
@@ -390,7 +395,7 @@ export function EventIaList({
                 className="rounded border px-3 py-1.5 text-sm font-medium hover:bg-[var(--background)]"
                 style={{ borderColor: "var(--border)" }}
               >
-                Générer un event IA
+                Créer un événement
               </button>
               <button
                 type="button"
@@ -404,7 +409,7 @@ export function EventIaList({
             </div>
           </div>
           <div className="w-full max-w-xl">
-            <label htmlFor="ai-event-search" className="mb-1 block text-sm text-[var(--foreground-muted)]">Recherche dynamique</label>
+            <label htmlFor="ai-event-search" className="mb-1 block text-sm text-[var(--foreground-muted)]">Rechercher un événement</label>
             <input
               id="ai-event-search"
               type="text"
@@ -511,7 +516,7 @@ export function EventIaList({
                         : "—"}
                     </td>
                     <td className="border-b p-2 text-[var(--foreground-muted)]">
-                      {r.source === "cron" ? "Cron" : r.source === "manual" ? "Manuel" : "—"}
+                      {r.source === "cron" ? "Automatique" : r.source === "manual" ? "Manuel" : "—"}
                     </td>
                   </tr>
                 );

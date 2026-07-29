@@ -15,7 +15,7 @@ export default async function AdminActionsEtatPage() {
         Actions d'État
       </h1>
       <p className="mb-8 text-[var(--foreground-muted)]">
-        Définir les coûts (en actions) et les paramètres pour chaque type d'action d'État.
+        Réglez le coût de chaque action et les facteurs qui influencent son résultat.
       </p>
       <StateActionTypesForm types={(types ?? []) as StateActionType[]} />
     </div>

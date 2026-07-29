@@ -83,9 +83,9 @@ export default async function AdminEventIaPage() {
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-10">
-      <h1 className="mb-2 text-2xl font-bold text-[var(--foreground)]">Event IA</h1>
+      <h1 className="mb-2 text-2xl font-bold text-[var(--foreground)]">Événements IA</h1>
       <p className="mb-8 text-[var(--foreground-muted)]">
-        Événements IA (actions d&apos;État générées par le cron ou créés manuellement). Cliquez sur une ligne pour voir le détail, accepter ou refuser.
+        Actions d&apos;État proposées automatiquement pour les pays sans joueur. Ouvrez une ligne pour l’examiner, l’accepter ou la refuser.
       </p>
       <EventIaList
         events={events}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
 type TooltipProps = {
@@ -30,6 +30,7 @@ export function Tooltip({
   interactive = false,
 }: TooltipProps) {
   const [open, setOpen] = useState(false);
+  const tooltipId = useId();
   const [closing, setClosing] = useState(false);
   const wrapperRef = useRef<HTMLSpanElement>(null);
   const tooltipRef = useRef<HTMLSpanElement>(null);
@@ -175,8 +176,17 @@ export function Tooltip({
     <span
       ref={wrapperRef}
       className="inline-flex cursor-help"
+      role="button"
+      tabIndex={0}
+      aria-expanded={open}
+      aria-describedby={open ? tooltipId : undefined}
       onMouseEnter={openTooltip}
       onMouseLeave={handleTriggerLeave}
+      onFocus={openTooltip}
+      onBlur={requestClose}
+      onKeyDown={(event) => {
+        if (event.key === "Escape") requestClose();
+      }}
       onClick={(e) => {
         e.preventDefault();
         e.stopPropagation();
@@ -196,6 +206,7 @@ export function Tooltip({
       {open && typeof document !== "undefined"
         ? createPortal(
             <span
+              id={tooltipId}
               ref={tooltipRef}
               role="tooltip"
               onMouseEnter={handleTooltipContentEnter}

@@ -50,6 +50,7 @@ import { LAW_DEFINITIONS, type LawDefinition } from "@/lib/laws";
 import { MatriceDiplomatiqueForm } from "@/app/admin/matrice-diplomatique/MatriceDiplomatiqueForm";
 import { DisclosureChevron } from "@/components/ui/DisclosureChevron";
 import { InfoTooltip } from "@/components/ui/InfoTooltip";
+import { matchesSearchText } from "@/lib/searchText";
 
 function RecalculerVoisinagesButton() {
   const [loading, setLoading] = useState(false);
@@ -237,6 +238,7 @@ function FormLabel({
 }
 
 function CollapsibleBlock({
+  id,
   title,
   infoContent,
   infoWarning,
@@ -245,6 +247,7 @@ function CollapsibleBlock({
   children,
   variant = "default",
 }: {
+  id?: string;
   title: string;
   infoContent?: React.ReactNode;
   infoWarning?: boolean;
@@ -256,7 +259,8 @@ function CollapsibleBlock({
   const isSection = variant === "section";
   return (
     <div
-      className={isSection ? "rounded-lg border-2" : "border-b"}
+      id={id}
+      className={`${isSection ? "rounded-lg border-2" : "border-b"} scroll-mt-36`}
       style={{
         borderColor: isSection ? "var(--border)" : "var(--border-muted)",
         background: isSection ? "var(--background-panel)" : undefined,
@@ -278,6 +282,8 @@ function CollapsibleBlock({
         <DisclosureChevron open={open} />
       </button>
       <div
+        aria-hidden={!open}
+        inert={!open}
         className="grid"
         style={{
           gridTemplateRows: open ? "1fr" : "0fr",
@@ -379,6 +385,129 @@ export function ReglesForm({
   const [aiMinorEffectValue, setAiMinorEffectValue] = useState<string>("");
   const [intelOpen, setIntelOpen] = useState(false);
   const [etatMajorOpen, setEtatMajorOpen] = useState(false);
+  const [ruleSearch, setRuleSearch] = useState("");
+
+  const ruleSearchResults = [
+    {
+      label: "Effets quotidiens communs",
+      description: "Croissance, statistiques et autres effets appliqués à tous les pays.",
+      keywords: "global population pib croissance",
+      targetId: "rules-global-effects",
+      open: () => {
+        setEffetsGlobauxOpen(true);
+        setGlobalGrowthOpen(true);
+      },
+    },
+    {
+      label: "Bonus et malus aux jets",
+      description: "Influence des statistiques d’un pays sur ses jets de dés.",
+      keywords: "statistiques demandes actions événements ia",
+      targetId: "rules-dice-modifiers",
+      open: () => {
+        setEffetsGlobauxOpen(true);
+        setStatsOpen(true);
+      },
+    },
+    {
+      label: "Date du monde",
+      description: "Date affichée, pause et nombre de mois avancés chaque jour.",
+      keywords: "temps calendrier année mois mise à jour",
+      targetId: "rules-world-date",
+      open: () => {
+        setEffetsGlobauxOpen(true);
+        setWorldDateOpen(true);
+      },
+    },
+    {
+      label: "Budgets des ministères",
+      description: "Seuils de financement, bonus et malus des ministères.",
+      keywords: "lois allocation gravité rattrapage économie",
+      targetId: "rules-budgets",
+      open: () => {
+        setLoisOpen(true);
+        setBudgetOpen(true);
+      },
+    },
+    {
+      label: "État-major et mobilisation",
+      description: "Points militaires, recrutement, stock et procuration.",
+      keywords: "armée défense design militaire",
+      targetId: "rules-military-staff",
+      open: () => {
+        setLoisOpen(true);
+        setEtatMajorOpen(true);
+      },
+    },
+    {
+      label: "Lois nationales",
+      description: "Paliers, progression quotidienne et effets de chaque loi.",
+      keywords: "mobilisation fiscalité législation",
+      targetId: "rules-laws",
+      open: () => setLoisOpen(true),
+    },
+    {
+      label: "Relations entre pays",
+      description: "Valeurs de relation utilisées par la diplomatie et les événements.",
+      keywords: "matrice diplomatique alliés hostilité",
+      targetId: "rules-relations",
+      open: () => {
+        setDiplomatieOpen(true);
+        setMatriceOpen(true);
+      },
+    },
+    {
+      label: "Influence internationale",
+      description: "Poids du PIB, de la population, de l’armée et de la stabilité.",
+      keywords: "diplomatie puissance hard power gravité",
+      targetId: "rules-influence",
+      open: () => {
+        setDiplomatieOpen(true);
+        setInfluenceOpen(true);
+      },
+    },
+    {
+      label: "Contrôle et annexion",
+      description: "Influence transmise par un pays contesté, occupé ou annexé.",
+      keywords: "sphère emprise occupation",
+      targetId: "rules-control",
+      open: () => {
+        setDiplomatieOpen(true);
+        setSphereOpen(true);
+      },
+    },
+    {
+      label: "Évolution des idéologies",
+      description: "Vitesse du changement et poids des différentes influences.",
+      keywords: "dérive voisins relations effets",
+      targetId: "rules-ideology",
+      open: () => setIdeologyOpen(true),
+    },
+    {
+      label: "Pays gérés par l’IA",
+      description: "Rythme, ciblage et effets des événements automatiques.",
+      keywords: "intelligence artificielle majeure mineure actions",
+      targetId: "rules-ai",
+      open: () => setAiOpen(true),
+    },
+    {
+      label: "Espionnage et renseignement",
+      description: "Gain après une action et perte quotidienne d’information.",
+      keywords: "intelligence intel brouillard guerre decay",
+      targetId: "rules-intelligence",
+      open: () => setIntelOpen(true),
+    },
+  ].filter((entry) =>
+    matchesSearchText(ruleSearch, [entry.label, entry.description, entry.keywords])
+  );
+
+  function openRuleSearchResult(result: (typeof ruleSearchResults)[number]) {
+    result.open();
+    requestAnimationFrame(() => {
+      const target = document.getElementById(result.targetId);
+      target?.scrollIntoView({ block: "start" });
+      target?.querySelector<HTMLButtonElement>("button")?.focus({ preventScroll: true });
+    });
+  }
 
   const supabase = createClient();
 
@@ -1100,7 +1229,7 @@ export function ReglesForm({
       const r = Math.round(fc);
       return {
         key: `${eff.effect_type}-${effIdx}`,
-        line: `${label}${scopeNote} : ${r >= 0 ? "+" : ""}${r} / jour (points de relation, si plage courante respectée côté cron)`,
+        line: `${label}${scopeNote} : ${r >= 0 ? "+" : ""}${r} / jour (si la relation actuelle reste dans la plage définie)`,
       };
     }
     return {
@@ -1116,8 +1245,9 @@ export function ReglesForm({
           <h1 className="mb-2 text-2xl font-bold text-[var(--foreground)]">
             Règles de simulation
           </h1>
-          <p className="text-[var(--foreground-muted)]">
-            Ces paramètres sont utilisés par le cron pour faire évoluer population, PIB, etc.
+          <p className="max-w-2xl text-[var(--foreground-muted)]">
+            Ces réglages pilotent la mise à jour quotidienne du monde : population, économie,
+            diplomatie, idéologies et pays sans joueur.
           </p>
         </div>
         {items.length > 0 && (
@@ -1130,6 +1260,46 @@ export function ReglesForm({
           >
             {saving ? "Enregistrement…" : "Enregistrer"}
           </button>
+        )}
+      </div>
+      <div className="max-w-3xl rounded-xl border p-4" style={{ borderColor: "var(--border)", background: "var(--background-panel)" }}>
+        <label htmlFor="rule-setting-search" className="mb-2 block text-sm font-medium text-[var(--foreground)]">
+          Trouver un réglage
+        </label>
+        <input
+          id="rule-setting-search"
+          type="search"
+          value={ruleSearch}
+          onChange={(event) => setRuleSearch(event.target.value)}
+          placeholder="Ex. budget, idéologie, espionnage…"
+          className="min-h-12 w-full rounded-lg border bg-[var(--background)] px-3 text-base text-[var(--foreground)] placeholder:text-[var(--foreground-muted)]"
+          style={{ borderColor: "var(--border)" }}
+        />
+        <p className="mt-2 text-xs leading-relaxed text-[var(--foreground-muted)]">
+          Recherchez avec vos mots, puis ouvrez directement le bon panneau.
+        </p>
+        {ruleSearch && (
+          <div className="mt-3 space-y-1" aria-live="polite">
+            {ruleSearchResults.map((result) => (
+              <button
+                key={result.targetId}
+                type="button"
+                onClick={() => openRuleSearchResult(result)}
+                className="flex min-h-14 w-full items-center justify-between gap-3 rounded-lg px-3 py-2 text-left transition-colors hover:bg-[var(--background-elevated)] focus-visible:bg-[var(--background-elevated)]"
+              >
+                <span>
+                  <span className="block text-sm font-medium text-[var(--foreground)]">{result.label}</span>
+                  <span className="block text-xs leading-relaxed text-[var(--foreground-muted)]">{result.description}</span>
+                </span>
+                <span aria-hidden className="shrink-0 text-[var(--accent)]">→</span>
+              </button>
+            ))}
+            {ruleSearchResults.length === 0 && (
+              <p className="px-3 py-4 text-sm text-[var(--foreground-muted)]">
+                Aucun réglage trouvé. Essayez un terme plus général.
+              </p>
+            )}
+          </div>
         )}
       </div>
       {error && <p className="text-[var(--danger)]">{error}</p>}
@@ -1148,7 +1318,8 @@ export function ReglesForm({
         >
           {items.length > 0 && (
             <CollapsibleBlock
-              title="Effets Globaux"
+              id="rules-global"
+              title="Effets globaux"
               infoContent={<TooltipBody text="Réglages appliqués à tous les pays. Ils définissent le climat général de la simulation." />}
               open={effetsGlobauxOpen}
               onToggle={() => setEffetsGlobauxOpen((o) => !o)}
@@ -1156,14 +1327,15 @@ export function ReglesForm({
             >
               {globalGrowthEffectsRule && (
             <CollapsibleBlock
-              title="Global [Appliqué à tous les pays]"
-              infoContent={<TooltipBody text="Effets appliqués à tous les pays à chaque passage du monde (croissance, stats, budget, etc.)." />}
+              id="rules-global-effects"
+              title="Effets quotidiens communs"
+              infoContent={<TooltipBody text="Effets appliqués à tous les pays à chaque passage du monde : croissance, statistiques, budget, etc." />}
               open={globalGrowthOpen}
               onToggle={() => setGlobalGrowthOpen((o) => !o)}
             >
               <div className="p-3 space-y-3">
                 <p className="text-xs text-[var(--foreground-muted)]">
-                  Effets de croissance PIB et population appliqués à tous les pays à chaque passage du cron.
+                  Ces effets sont appliqués à tous les pays pendant la mise à jour quotidienne.
                 </p>
                 <ul className="space-y-2">
                   {getGlobalGrowthEffects().map((e, idx) => (
@@ -1355,8 +1527,9 @@ export function ReglesForm({
           )}
               {statsDiceModifierRangesRule && (
                 <CollapsibleBlock
+                  id="rules-dice-modifiers"
                   title="Statistiques"
-                  infoContent={<TooltipBody text="Bonus ou malus aux jets (dés) selon les stats du pays, pour les demandes joueurs et les events IA." />}
+                  infoContent={<TooltipBody text="Bonus ou malus aux jets de dés selon les statistiques du pays, pour les demandes des joueurs et les événements automatiques." />}
                   open={statsOpen}
                   onToggle={() => setStatsOpen((o) => !o)}
                 >
@@ -1393,6 +1566,7 @@ export function ReglesForm({
               )}
               {worldDateRule && worldDateAdvanceRule && (
                 <CollapsibleBlock
+                  id="rules-world-date"
                   title="Date"
                   infoContent={<TooltipBody text="Date officielle de l'univers et nombre de mois avançant à chaque passage du monde." />}
                   open={worldDateOpen}
@@ -1409,12 +1583,12 @@ export function ReglesForm({
                           className="h-5 w-5 shrink-0 rounded"
                         />
                         <label htmlFor="cron-paused" className="inline-flex min-h-11 items-center text-sm text-[var(--foreground)]">
-                          Jeu en pause (le cron ne s&apos;exécute plus automatiquement ; les jours restent passables manuellement)
+                          Mettre les mises à jour automatiques en pause
                         </label>
                       </div>
                     )}
                     <p className="text-xs text-[var(--foreground-muted)]">
-                      Date du monde affichée aux joueurs (ex. Rapport du Cabinet). À chaque passage du cron, la date avance du nombre de mois indiqué dans la temporalité (0 = date figée).
+                      Date affichée aux joueurs. Chaque jour de jeu, elle avance du nombre de mois choisi ci-dessous. À 0, elle reste figée.
                     </p>
                     <div className="flex flex-wrap items-end gap-x-6 gap-y-2">
                       <div className="flex flex-col gap-0.5">
@@ -1458,7 +1632,7 @@ export function ReglesForm({
                       </div>
                       <div className="flex flex-col gap-0.5">
                         <label className="text-xs text-[var(--foreground-muted)]">
-                          <FormLabel label="Temporalité (mois par mise à jour cron)" tooltip="Détermine de combien de mois la date du monde avance à chaque mise à jour quotidienne. À 0, la date reste figée." />
+                          <FormLabel label="Mois avancés par jour de jeu" tooltip="Détermine de combien de mois la date du monde avance à chaque mise à jour quotidienne. À 0, la date reste figée." />
                         </label>
                         <input
                           aria-label="Temporalité en mois par mise à jour"
@@ -1483,6 +1657,7 @@ export function ReglesForm({
 
           {items.length > 0 && (
           <CollapsibleBlock
+            id="rules-laws"
             title="Lois"
             infoContent={<TooltipBody text="Réglages des ministères, du budget et de la mobilisation. Ils influencent directement l'évolution des pays." />}
             open={loisOpen}
@@ -1490,7 +1665,8 @@ export function ReglesForm({
             variant="section"
           >
           <CollapsibleBlock
-            title="Paramètres Budget"
+            id="rules-budgets"
+            title="Budgets des ministères"
             infoContent={<TooltipBody text="Pour chaque ministère : seuil minimal, bonus si assez financé, malus si sous-financé." />}
             open={budgetOpen}
             onToggle={() => setBudgetOpen((o) => !o)}
@@ -1515,7 +1691,7 @@ export function ReglesForm({
                     <div className="flex flex-wrap items-end gap-x-4 gap-y-2">
                       <div className="flex flex-col gap-0.5">
                         <label className="text-xs text-[var(--foreground-muted)]">
-                          <FormLabel label="% min" tooltip="Seuil minimal de financement à atteindre pour que ce ministère commence à produire correctement ses effets positifs." />
+                          <FormLabel label="Financement minimal (%)" tooltip="Part du budget à atteindre pour que ce ministère produise correctement ses effets positifs." />
                         </label>
                         <input
                           aria-label={`Financement minimal pour ${BUDGET_MINISTRY_LABELS[key] ?? key}`}
@@ -1531,10 +1707,10 @@ export function ReglesForm({
                       </div>
                       <div className="flex flex-col gap-0.5">
                         <label className="text-xs text-[var(--foreground-muted)]">
-                          <FormLabel label="Gravité %" tooltip="Accentue les effets de ce ministère pour les pays en retard sur la moyenne mondiale. Plus la valeur est haute, plus le rattrapage est marqué." />
+                          <FormLabel label="Rattrapage des pays en retard (%)" tooltip="Renforce les effets de ce ministère lorsqu’un pays est sous la moyenne mondiale. Une valeur élevée accélère davantage son rattrapage." />
                         </label>
                         <input
-                          aria-label={`Gravité pour ${BUDGET_MINISTRY_LABELS[key] ?? key}`}
+                          aria-label={`Rattrapage pour ${BUDGET_MINISTRY_LABELS[key] ?? key}`}
                           type="number"
                           min={0}
                           max={100}
@@ -1549,7 +1725,7 @@ export function ReglesForm({
                     <div>
                       <div className="mb-1 flex items-center justify-between">
                         <span className="text-xs text-[var(--foreground-muted)]">
-                          <TitleWithInfo title="Effets (type, bonus, malus, gravité)" tooltip="Liste des effets concrets portés par ce ministère. Chaque ligne décrit ce qu'il aide, ce qu'il pénalise en sous-financement, et si le rattrapage mondial s'applique." className="inline-flex items-center gap-1.5" />
+                          <TitleWithInfo title="Effets du ministère" tooltip="Chaque ligne indique ce que le ministère améliore, ce qu’il pénalise en cas de sous-financement et si le rattrapage mondial s’applique." className="inline-flex items-center gap-1.5" />
                         </span>
                         <button
                           type="button"
@@ -1574,7 +1750,7 @@ export function ReglesForm({
                             >
                               <div className="flex flex-col gap-0.5">
                                 <label className="text-xs text-[var(--foreground-muted)]">
-                                  <FormLabel label="Type" tooltip="Choisit quel domaine ce ministère influence : population, PIB ou l'une des stats du pays." />
+                                  <FormLabel label="Domaine influencé" tooltip="Choisit ce que le ministère influence : population, PIB ou l’une des statistiques du pays." />
                                 </label>
                                 <select
                                   aria-label={`Type de l’effet ${idx + 1} pour ${BUDGET_MINISTRY_LABELS[key] ?? key}`}
@@ -1636,7 +1812,7 @@ export function ReglesForm({
                                   className="rounded"
                                 />
                                 <label htmlFor={`gravity-${r.id}-${idx}`} className="text-xs text-[var(--foreground-muted)]">
-                                  <FormLabel label="Gravité" tooltip="Si activé, l'effet tient compte de l'écart entre le pays et la moyenne mondiale pour renforcer le rattrapage." />
+                                  <FormLabel label="Adapter à l’écart mondial" tooltip="Si activé, l’effet tient compte de l’écart entre le pays et la moyenne mondiale pour renforcer le rattrapage." />
                                 </label>
                               </div>
                               {effect.effect_type === "bilateral_relations" && (
@@ -1721,7 +1897,7 @@ export function ReglesForm({
               style={{ borderColor: "var(--border-muted)", background: "var(--background)" }}
             >
               <div className="mb-2 text-sm font-medium text-[var(--foreground)]">
-                <TitleWithInfo title="Simulateur (test des paramètres)" tooltip="Outil de test rapide pour voir ce que produirait un ministère selon le budget alloué et la situation du pays par rapport au monde." className="inline-flex items-center gap-2" />
+                <TitleWithInfo title="Tester un budget" tooltip="Prévisualisez les effets d’un ministère selon son budget et la situation du pays par rapport au reste du monde." className="inline-flex items-center gap-2" />
               </div>
               <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
                 <div>
@@ -1771,7 +1947,7 @@ export function ReglesForm({
               </div>
               <div className="mt-2">
                 <label className="mb-0.5 block text-xs text-[var(--foreground-muted)]">
-                  <FormLabel label="Allocation % (slider)" tooltip="Part du budget total donnée à ce ministère dans le test. Cela permet de simuler un sous-financement ou un effort volontaire." />
+                  <FormLabel label="Part du budget (%)" tooltip="Part du budget total donnée à ce ministère dans le test. Cela permet de simuler un sous-financement ou un effort volontaire." />
                 </label>
                 <div className="flex items-center gap-2">
                   <input
@@ -1788,7 +1964,7 @@ export function ReglesForm({
                 </div>
               </div>
               <div className="mt-3 rounded border p-2" style={{ borderColor: "var(--border-muted)" }}>
-                <div className="text-xs font-medium text-[var(--foreground-muted)]">Résultat / jour (× 30 ≈ / mois)</div>
+                <div className="text-xs font-medium text-[var(--foreground-muted)]">Résultat quotidien (estimation mensuelle : × 30)</div>
                 <ul className="mt-1 list-none space-y-0.5 font-mono text-sm text-[var(--foreground)]">
                   {bonusesPerDay.map(({ key, line }) => (
                     <li key={key}>{line}</li>
@@ -1817,22 +1993,23 @@ export function ReglesForm({
             };
             return (
               <CollapsibleBlock
+                id="rules-military-staff"
                 key="etat_major"
-                title="État Major"
-                infoContent={<TooltipBody text="Points par tick : Design (industrie), Recrutement (militarisme + pts par % budget Défense), Stock (science), Procuration (budget)." />}
+                title="État-major"
+                infoContent={<TooltipBody text="Points gagnés chaque jour pour concevoir, recruter, stocker et acheter des unités militaires." />}
                 open={etatMajorOpen}
                 onToggle={() => setEtatMajorOpen((o) => !o)}
               >
                 <div className="pl-4 ml-2 border-l-2 space-y-4 p-3" style={{ borderColor: "var(--border-muted)" }}>
                   <div>
-                    <div className="mb-1 text-xs font-medium text-[var(--foreground-muted)]">Bureau de Design (industrie)</div>
+                    <div className="mb-1 text-xs font-medium text-[var(--foreground-muted)]">Conception des unités (industrie)</div>
                     <div className="flex flex-wrap gap-4">
                       <label className="flex items-center gap-2">
-                        <span className="text-xs text-[var(--foreground-muted)]">Min pts/tick</span>
+                        <span className="text-xs text-[var(--foreground-muted)]">Minimum par jour</span>
                         <input type="number" min={0} step={0.5} value={design.min_points_per_tick ?? 1} onChange={(e) => updateEtatMajor("design", "min_points_per_tick", Number(e.target.value) || 0)} className={`${inputClassNarrow} w-20`} style={inputStyle} />
                       </label>
                       <label className="flex items-center gap-2">
-                        <span className="text-xs text-[var(--foreground-muted)]">Max pts/tick</span>
+                        <span className="text-xs text-[var(--foreground-muted)]">Maximum par jour</span>
                         <input type="number" min={0} step={0.5} value={design.max_points_per_tick ?? 10} onChange={(e) => updateEtatMajor("design", "max_points_per_tick", Number(e.target.value) || 0)} className={`${inputClassNarrow} w-20`} style={inputStyle} />
                       </label>
                     </div>
@@ -1841,15 +2018,15 @@ export function ReglesForm({
                     <div className="mb-1 text-xs font-medium text-[var(--foreground-muted)]">Recrutement (militarisme + budget Défense)</div>
                     <div className="flex flex-wrap gap-4">
                       <label className="flex items-center gap-2">
-                        <span className="text-xs text-[var(--foreground-muted)]">Min pts/tick</span>
+                        <span className="text-xs text-[var(--foreground-muted)]">Minimum par jour</span>
                         <input type="number" min={0} step={0.5} value={recrutement.min_points_per_tick ?? 1} onChange={(e) => updateEtatMajor("recrutement", "min_points_per_tick", Number(e.target.value) || 0)} className={`${inputClassNarrow} w-20`} style={inputStyle} />
                       </label>
                       <label className="flex items-center gap-2">
-                        <span className="text-xs text-[var(--foreground-muted)]">Max pts/tick</span>
+                        <span className="text-xs text-[var(--foreground-muted)]">Maximum par jour</span>
                         <input type="number" min={0} step={0.5} value={recrutement.max_points_per_tick ?? 10} onChange={(e) => updateEtatMajor("recrutement", "max_points_per_tick", Number(e.target.value) || 0)} className={`${inputClassNarrow} w-20`} style={inputStyle} />
                       </label>
                       <label className="flex items-center gap-2">
-                        <span className="text-xs text-[var(--foreground-muted)]">Pts par % budget Défense (0–100)</span>
+                        <span className="text-xs text-[var(--foreground-muted)]">Points par % du budget Défense</span>
                         <input type="number" min={0} step={0.01} value={recrutement.points_per_pct_defense ?? 0} onChange={(e) => updateEtatMajor("recrutement", "points_per_pct_defense", Number(e.target.value) || 0)} className={`${inputClassNarrow} w-20`} style={inputStyle} />
                       </label>
                     </div>
@@ -1858,11 +2035,11 @@ export function ReglesForm({
                     <div className="mb-1 text-xs font-medium text-[var(--foreground-muted)]">Stock stratégique (science)</div>
                     <div className="flex flex-wrap gap-4">
                       <label className="flex items-center gap-2">
-                        <span className="text-xs text-[var(--foreground-muted)]">Min pts/tick</span>
+                        <span className="text-xs text-[var(--foreground-muted)]">Minimum par jour</span>
                         <input type="number" min={0} step={0.5} value={stock.min_points_per_tick ?? 1} onChange={(e) => updateEtatMajor("stock", "min_points_per_tick", Number(e.target.value) || 0)} className={`${inputClassNarrow} w-20`} style={inputStyle} />
                       </label>
                       <label className="flex items-center gap-2">
-                        <span className="text-xs text-[var(--foreground-muted)]">Max pts/tick</span>
+                        <span className="text-xs text-[var(--foreground-muted)]">Maximum par jour</span>
                         <input type="number" min={0} step={0.5} value={stock.max_points_per_tick ?? 10} onChange={(e) => updateEtatMajor("stock", "max_points_per_tick", Number(e.target.value) || 0)} className={`${inputClassNarrow} w-20`} style={inputStyle} />
                       </label>
                     </div>
@@ -1871,11 +2048,11 @@ export function ReglesForm({
                     <div className="mb-1 text-xs font-medium text-[var(--foreground-muted)]">Procuration (budget %)</div>
                     <div className="flex flex-wrap gap-4">
                       <label className="flex items-center gap-2">
-                        <span className="text-xs text-[var(--foreground-muted)]">Base pts/tick</span>
+                        <span className="text-xs text-[var(--foreground-muted)]">Base quotidienne</span>
                         <input type="number" min={0} step={0.5} value={procuration.base_points_per_tick ?? 0} onChange={(e) => updateEtatMajor("procuration", "base_points_per_tick", Number(e.target.value) || 0)} className={`${inputClassNarrow} w-20`} style={inputStyle} />
                       </label>
                       <label className="flex items-center gap-2">
-                        <span className="text-xs text-[var(--foreground-muted)]">Pts par % budget</span>
+                        <span className="text-xs text-[var(--foreground-muted)]">Points par % du budget</span>
                         <input type="number" min={0} step={0.1} value={procuration.points_per_pct_budget ?? 0.5} onChange={(e) => updateEtatMajor("procuration", "points_per_pct_budget", Number(e.target.value) || 0)} className={`${inputClassNarrow} w-20`} style={inputStyle} />
                       </label>
                     </div>
@@ -1900,7 +2077,7 @@ export function ReglesForm({
               >
                 <div className="p-3 space-y-4">
                   <p className="text-xs text-[var(--foreground-muted)]">
-                    Les paramètres et effets sont lus par le cron à chaque exécution. Toute modification enregistrée ici sera prise en compte à la prochaine mise à jour quotidienne.
+                    Après enregistrement, les changements seront appliqués lors de la prochaine mise à jour quotidienne.
                   </p>
                   <div>
                     <div className="text-xs font-medium text-[var(--foreground-muted)] mb-2">
@@ -2075,6 +2252,7 @@ export function ReglesForm({
 
           {(countriesForMatrice && relationMapForMatrice) && (
             <CollapsibleBlock
+              id="rules-diplomacy"
               title="Diplomatie"
               infoContent={<TooltipBody text="Relations entre pays : perception mutuelle, influence, emprise et effets de voisinage." />}
               open={diplomatieOpen}
@@ -2082,8 +2260,9 @@ export function ReglesForm({
               variant="section"
             >
               <CollapsibleBlock
+                id="rules-relations"
                 title="Matrice diplomatique"
-                infoContent={<TooltipBody text="Valeur de la relation entre deux pays. Utilisée par les events IA et le calcul d'idéologie." />}
+                infoContent={<TooltipBody text="Valeur de la relation entre deux pays. Elle sert aux événements automatiques et au calcul des idéologies." />}
                 open={matriceOpen}
                 onToggle={() => setMatriceOpen((o) => !o)}
               >
@@ -2093,6 +2272,7 @@ export function ReglesForm({
               </CollapsibleBlock>
               {items.length > 0 && influenceConfigRule && (
                 <CollapsibleBlock
+                  id="rules-influence"
                   title="Influence"
                   infoContent={<TooltipBody text="Calcul du poids international : PIB, population, puissance militaire et stabilité." />}
                   open={influenceOpen}
@@ -2100,26 +2280,26 @@ export function ReglesForm({
                 >
                   <div className="p-3 space-y-3">
                     <p className="text-xs text-[var(--foreground-muted)]">
-                      Score Influence (type Diplomatic Weight) : multiplicateurs des contributions PIB, Population, Hard Power ; stabilité en intervalle (-3 à +3) ; gravité par paramètre.
+                      L’influence internationale combine l’économie, la population, la puissance militaire et la stabilité du pays.
                     </p>
                     <div className="flex flex-wrap gap-x-6 gap-y-3">
                       <div className="flex flex-col gap-0.5">
                         <label className="text-xs text-[var(--foreground-muted)]">
-                          <FormLabel label="Mult. PIB" tooltip="Règle l'importance du PIB dans le calcul de l'influence. Plus la valeur est haute, plus la richesse pèse lourd." />
+                          <FormLabel label="Poids du PIB" tooltip="Règle l’importance du PIB dans le calcul de l’influence. Plus la valeur est haute, plus la richesse pèse lourd." />
                         </label>
                         <input aria-label="Multiplicateur du PIB" type="number" step="any" value={getInfluenceConfig().mult_gdp ?? 1e-9} onChange={(e) => updateInfluenceConfig({ mult_gdp: Number(e.target.value) || 0 })} className="rounded border py-1.5 px-2 text-sm w-28 font-mono" style={{ borderColor: "var(--border)", background: "var(--background)" }} />
                       </div>
                       <div className="flex flex-col gap-0.5">
                         <label className="text-xs text-[var(--foreground-muted)]">
-                          <FormLabel label="Mult. Population" tooltip="Règle l'importance de la population dans le calcul de l'influence." />
+                          <FormLabel label="Poids de la population" tooltip="Règle l’importance de la population dans le calcul de l’influence." />
                         </label>
                         <input aria-label="Multiplicateur de la population" type="number" step="any" value={getInfluenceConfig().mult_population ?? 1e-7} onChange={(e) => updateInfluenceConfig({ mult_population: Number(e.target.value) || 0 })} className="rounded border py-1.5 px-2 text-sm w-28 font-mono" style={{ borderColor: "var(--border)", background: "var(--background)" }} />
                       </div>
                       <div className="flex flex-col gap-0.5">
                         <label className="text-xs text-[var(--foreground-muted)]">
-                          <FormLabel label="Mult. Hard Power" tooltip="Règle l'importance de la puissance militaire dans le calcul de l'influence." />
+                          <FormLabel label="Poids de la puissance militaire" tooltip="Règle l’importance de la puissance militaire dans le calcul de l’influence." />
                         </label>
-                        <input aria-label="Multiplicateur du Hard Power" type="number" step="any" value={getInfluenceConfig().mult_military ?? 0.01} onChange={(e) => updateInfluenceConfig({ mult_military: Number(e.target.value) || 0 })} className="rounded border py-1.5 px-2 text-sm w-28 font-mono" style={{ borderColor: "var(--border)", background: "var(--background)" }} />
+                        <input aria-label="Poids de la puissance militaire" type="number" step="any" value={getInfluenceConfig().mult_military ?? 0.01} onChange={(e) => updateInfluenceConfig({ mult_military: Number(e.target.value) || 0 })} className="rounded border py-1.5 px-2 text-sm w-28 font-mono" style={{ borderColor: "var(--border)", background: "var(--background)" }} />
                       </div>
                     </div>
                     <div className="flex flex-wrap gap-x-6 gap-y-3">
@@ -2139,21 +2319,21 @@ export function ReglesForm({
                     <div className="flex flex-wrap gap-x-6 gap-y-3">
                       <div className="flex flex-col gap-0.5">
                         <label className="text-xs text-[var(--foreground-muted)]">
-                          <FormLabel label="Gravité PIB %" tooltip="Accentue l'effet du PIB pour les pays éloignés de la moyenne mondiale." />
+                          <FormLabel label="Rattrapage lié au PIB (%)" tooltip="Renforce l’effet du PIB lorsque le pays est éloigné de la moyenne mondiale." />
                         </label>
-                        <input aria-label="Gravité du PIB" type="number" min={0} max={100} value={getInfluenceConfig().gravity_pct_gdp ?? 50} onChange={(e) => updateInfluenceConfig({ gravity_pct_gdp: Math.max(0, Math.min(100, Number(e.target.value) || 0)) })} className="rounded border py-1.5 px-2 text-sm w-16 font-mono" style={{ borderColor: "var(--border)", background: "var(--background)" }} />
+                        <input aria-label="Rattrapage lié au PIB" type="number" min={0} max={100} value={getInfluenceConfig().gravity_pct_gdp ?? 50} onChange={(e) => updateInfluenceConfig({ gravity_pct_gdp: Math.max(0, Math.min(100, Number(e.target.value) || 0)) })} className="rounded border py-1.5 px-2 text-sm w-16 font-mono" style={{ borderColor: "var(--border)", background: "var(--background)" }} />
                       </div>
                       <div className="flex flex-col gap-0.5">
                         <label className="text-xs text-[var(--foreground-muted)]">
-                          <FormLabel label="Gravité Population %" tooltip="Accentue l'effet de la population pour les pays éloignés de la moyenne mondiale." />
+                          <FormLabel label="Rattrapage lié à la population (%)" tooltip="Renforce l’effet de la population lorsque le pays est éloigné de la moyenne mondiale." />
                         </label>
-                        <input aria-label="Gravité de la population" type="number" min={0} max={100} value={getInfluenceConfig().gravity_pct_population ?? 50} onChange={(e) => updateInfluenceConfig({ gravity_pct_population: Math.max(0, Math.min(100, Number(e.target.value) || 0)) })} className="rounded border py-1.5 px-2 text-sm w-16 font-mono" style={{ borderColor: "var(--border)", background: "var(--background)" }} />
+                        <input aria-label="Rattrapage lié à la population" type="number" min={0} max={100} value={getInfluenceConfig().gravity_pct_population ?? 50} onChange={(e) => updateInfluenceConfig({ gravity_pct_population: Math.max(0, Math.min(100, Number(e.target.value) || 0)) })} className="rounded border py-1.5 px-2 text-sm w-16 font-mono" style={{ borderColor: "var(--border)", background: "var(--background)" }} />
                       </div>
                       <div className="flex flex-col gap-0.5">
                         <label className="text-xs text-[var(--foreground-muted)]">
-                          <FormLabel label="Gravité Hard Power %" tooltip="Accentue l'effet de la puissance militaire pour les pays éloignés de la moyenne mondiale." />
+                          <FormLabel label="Rattrapage lié à l’armée (%)" tooltip="Renforce l’effet de la puissance militaire lorsque le pays est éloigné de la moyenne mondiale." />
                         </label>
-                        <input aria-label="Gravité du Hard Power" type="number" min={0} max={100} value={getInfluenceConfig().gravity_pct_military ?? 50} onChange={(e) => updateInfluenceConfig({ gravity_pct_military: Math.max(0, Math.min(100, Number(e.target.value) || 0)) })} className="rounded border py-1.5 px-2 text-sm w-16 font-mono" style={{ borderColor: "var(--border)", background: "var(--background)" }} />
+                        <input aria-label="Rattrapage lié à l’armée" type="number" min={0} max={100} value={getInfluenceConfig().gravity_pct_military ?? 50} onChange={(e) => updateInfluenceConfig({ gravity_pct_military: Math.max(0, Math.min(100, Number(e.target.value) || 0)) })} className="rounded border py-1.5 px-2 text-sm w-16 font-mono" style={{ borderColor: "var(--border)", background: "var(--background)" }} />
                       </div>
                     </div>
                   </div>
@@ -2161,6 +2341,7 @@ export function ReglesForm({
               )}
               {items.length > 0 && sphereInfluencePctRule && (
                 <CollapsibleBlock
+                  id="rules-control"
                   title="Sphère"
                   infoContent={
                     <TooltipBody
@@ -2207,6 +2388,7 @@ export function ReglesForm({
 
           {items.length > 0 && (ideologyConfigRule || ideologyEffectsRule) && (
             <CollapsibleBlock
+              id="rules-ideology"
               title="Idéologie"
               infoContent={<TooltipBody text="Vitesse du glissement idéologique des pays (voisins et effets actifs). Effets par idéologie : valeur à 100 % appliquée au prorata du score." />}
               open={ideologyOpen}
@@ -2222,7 +2404,7 @@ export function ReglesForm({
                 <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
                   <div>
                     <label className="mb-1 block text-xs text-[var(--foreground-muted)]">
-                      <FormLabel label="Lissage quotidien" tooltip="Règle la vitesse du changement idéologique. Une faible valeur crée de l'inertie, une forte valeur accélère les bascules." />
+                      <FormLabel label="Vitesse du changement quotidien" tooltip="Une faible valeur rend les idéologies plus stables. Une forte valeur accélère les bascules." />
                     </label>
                     <input
                       aria-label="Lissage idéologique quotidien"
@@ -2437,8 +2619,9 @@ export function ReglesForm({
           <div>
           {aiMajorEffectsRule && aiMinorEffectsRule && (
             <CollapsibleBlock
-              title="Intelligence Artificielle"
-              infoContent={<TooltipBody text="Rythme de génération des events IA et effets permanents pour les IA majeures et mineures." />}
+              id="rules-ai"
+              title="Pays gérés par l’IA"
+              infoContent={<TooltipBody text="Rythme de création des événements et effets permanents pour les puissances majeures et mineures sans joueur." />}
               open={aiOpen}
               onToggle={() => setAiOpen((o) => !o)}
               variant="section"
@@ -2469,7 +2652,7 @@ export function ReglesForm({
                     <div className="grid gap-4 sm:grid-cols-2">
                       <div>
                         <label className="mb-1 block text-xs text-[var(--foreground-muted)]">
-                          <FormLabel label="Intervalle (heures)" tooltip="Délai minimum entre deux passages du cron qui génère les events IA." />
+                          <FormLabel label="Délai entre deux générations (heures)" tooltip="Temps minimum entre deux créations automatiques d’événements pour les pays sans joueur." />
                         </label>
                         <input
                           aria-label="Intervalle des événements IA en heures"
@@ -2744,8 +2927,9 @@ export function ReglesForm({
 
           {intelConfigRule && (
             <CollapsibleBlock
-              title="Espionnage / Intelligence"
-              infoContent={<TooltipBody text="Brouillard de guerre : baisse quotidienne du niveau d'intel et gain lors d'une action d'espionnage acceptée." />}
+              id="rules-intelligence"
+              title="Espionnage et renseignement"
+              infoContent={<TooltipBody text="Brouillard de guerre : perte quotidienne de renseignement et gain après une action d’espionnage acceptée." />}
               open={intelOpen}
               onToggle={() => setIntelOpen((o) => !o)}
               variant="section"
@@ -2754,7 +2938,7 @@ export function ReglesForm({
                 <div className="grid gap-4 sm:grid-cols-2">
                   <div>
                     <label className="mb-1 block text-xs text-[var(--foreground-muted)]">
-                      <FormLabel label="Mode de decay" tooltip="Flat : décrémente un nombre fixe par jour. Pct : décrémente un pourcentage du niveau actuel. Both : applique d'abord le flat, puis le pourcentage sur le résultat." />
+                      <FormLabel label="Mode de perte quotidienne" tooltip="Perte fixe : retire le même nombre de points chaque jour. Pourcentage : retire une part du niveau actuel. Le mode combiné applique les deux dans cet ordre." />
                     </label>
                     <select
                       aria-label="Mode de baisse de l’intelligence"
@@ -2763,14 +2947,14 @@ export function ReglesForm({
                       className="w-full rounded border py-1.5 px-2 text-sm"
                       style={{ borderColor: "var(--border)", background: "var(--background)" }}
                     >
-                      <option value="flat">Flat (fixe)</option>
+                      <option value="flat">Perte fixe</option>
                       <option value="pct">Pourcentage</option>
-                      <option value="both">Les deux (séquentiel)</option>
+                      <option value="both">Fixe puis proportionnelle</option>
                     </select>
                   </div>
                   <div>
                     <label className="mb-1 block text-xs text-[var(--foreground-muted)]">
-                      <FormLabel label="Gain espionnage (base)" tooltip="Delta de référence ajouté au niveau d'intel quand le MJ accepte une action d'espionnage. Le gain réel est proportionnel au jet d'impact." />
+                      <FormLabel label="Gain de renseignement de référence" tooltip="Gain accordé pour un résultat parfait lorsque l’administration accepte une action d’espionnage. Le gain réel dépend du jet d’impact." />
                     </label>
                     <input
                       aria-label="Gain d’intelligence de base"
@@ -2787,7 +2971,7 @@ export function ReglesForm({
                 <div className="grid gap-4 sm:grid-cols-2">
                   <div>
                     <label className="mb-1 block text-xs text-[var(--foreground-muted)]">
-                      <FormLabel label="Decay flat / jour" tooltip="Nombre de points d'intel retirés chaque jour (utilisé si le mode est Flat ou Both)." />
+                      <FormLabel label="Perte fixe par jour" tooltip="Nombre de points de renseignement retirés chaque jour lorsque le mode fixe ou combiné est choisi." />
                     </label>
                     <input
                       aria-label="Baisse fixe de l’intelligence par jour"
@@ -2802,7 +2986,7 @@ export function ReglesForm({
                   </div>
                   <div>
                     <label className="mb-1 block text-xs text-[var(--foreground-muted)]">
-                      <FormLabel label="Decay pct / jour (%)" tooltip="Pourcentage du niveau actuel retiré chaque jour (utilisé si le mode est Pct ou Both)." />
+                      <FormLabel label="Perte proportionnelle par jour (%)" tooltip="Part du niveau actuel retirée chaque jour lorsque le mode proportionnel ou combiné est choisi." />
                     </label>
                     <input
                       aria-label="Baisse en pourcentage de l’intelligence par jour"
@@ -2818,8 +3002,8 @@ export function ReglesForm({
                   </div>
                 </div>
                 <p className="text-xs text-[var(--foreground-muted)]">
-                  Exemple : avec un decay flat de 2 et un mode « flat », un pays à 50 % d'intel passera à 48 % le lendemain.
-                  Avec un gain base de 50 et un jet d'impact de 70/100, le joueur recevra +35 points d'intel.
+                  Exemple : avec une perte fixe de 2, un pays à 50 % de renseignement passera à 48 % le lendemain.
+                  Avec un gain de référence de 50 et un jet d’impact de 70/100, le joueur recevra 35 points.
                 </p>
               </div>
             </CollapsibleBlock>

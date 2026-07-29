@@ -22,7 +22,7 @@ export default async function AdminAvantagesPage() {
             Avantages
           </h1>
           <p className="mt-1 text-[var(--foreground-muted)]">
-            Catégories et avantages (bonus conditionnés par les stats). Les effets utilisent la même logique que les effets actifs.
+            Créez les avantages, leurs conditions de déblocage et leurs effets sur un pays.
           </p>
         </div>
         <Link
