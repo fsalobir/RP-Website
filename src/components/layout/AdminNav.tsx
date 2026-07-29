@@ -11,7 +11,7 @@ export function AdminNav() {
       className="sticky top-0 z-50 border-b bg-[var(--background-elevated)]"
       style={{ borderColor: "var(--border)" }}
     >
-      <div className="relative mx-auto flex min-h-14 max-w-6xl min-w-0 flex-col px-4 sm:h-14 sm:flex-row sm:items-center sm:justify-between">
+      <div className="relative mx-auto flex min-h-14 max-w-6xl min-w-0 flex-col px-4 sm:h-[3.25rem] sm:min-h-[3.25rem] sm:flex-row sm:items-center sm:justify-between">
         <div className="flex w-full items-center justify-between gap-3 sm:w-auto">
           <Link
             href="/admin"

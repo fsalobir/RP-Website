@@ -57,8 +57,8 @@ export default async function AdminPaysEditPage({
   const continents = continentsRes.data ?? [];
 
   return (
-    <div className="mx-auto max-w-6xl px-4 py-10">
-      <div className="mb-2 flex flex-wrap items-center justify-between gap-4">
+    <div className="mx-auto max-w-6xl px-4 py-6">
+      <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold text-[var(--foreground)]">
             Modifier {country.name}
@@ -74,9 +74,8 @@ export default async function AdminPaysEditPage({
           Retour liste
         </Link>
       </div>
-      <div className="mb-8" />
       <CountryForm country={country} continents={continents} />
-      <div className="mt-8 space-y-8">
+      <div className="mt-5 space-y-4">
         <CountryLawsAdminBlock
           countryId={id}
           lawRows={lawRows}

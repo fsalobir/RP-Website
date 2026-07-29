@@ -325,14 +325,14 @@ export function AvantagesManager({
   const previewCategory = categoryById.get(perkCategoryId)?.name_fr ?? "Sans catégorie";
 
   return (
-    <div className="admin-settings-form space-y-10">
+    <div className="admin-settings-form space-y-5">
       <AdminSettingsGuide
         purpose="Un avantage devient visible avec son nom, son icône, ses conditions de déblocage et les bonus qu’il applique."
         impact="La modification d’un avantage existant change immédiatement son affichage et ses effets pour les pays concernés."
         check="Vérifiez l’aperçu, puis lisez les conditions et effets comme le ferait un joueur avant d’enregistrer."
       />
       <section>
-        <h2 className="mb-3 text-lg font-semibold text-[var(--foreground)]">Catégories</h2>
+        <h2 className="mb-2 text-lg font-semibold text-[var(--foreground)]">Catégories</h2>
         <ul className="space-y-2">
           {categories.map((cat) => (
             <li
@@ -371,7 +371,7 @@ export function AvantagesManager({
             Ajouter une catégorie
           </button>
         ) : (
-          <div className="mt-3 rounded border p-4 space-y-3" style={{ borderColor: "var(--border-muted)" }}>
+          <div className="mt-3 space-y-3 rounded border p-3" style={{ borderColor: "var(--border-muted)" }}>
             {categoryError && <p role="alert" className="text-sm text-[var(--danger)]">{categoryError}</p>}
             <div>
               <label htmlFor="perk-category-name" className="mb-1 block text-xs text-[var(--foreground-muted)]">Nom</label>
@@ -385,7 +385,7 @@ export function AvantagesManager({
               />
             </div>
             <div>
-              <label htmlFor="perk-category-order" className="mb-1 block text-xs text-[var(--foreground-muted)]">Ordre</label>
+              <label htmlFor="perk-category-order" className="mb-1 block text-xs text-[var(--foreground-muted)]">Ordre d’affichage</label>
               <input
                 id="perk-category-order"
                 type="number"
@@ -418,8 +418,8 @@ export function AvantagesManager({
       </section>
 
       <section>
-        <h2 className="mb-3 text-lg font-semibold text-[var(--foreground)]">Avantages</h2>
-        <div className="mb-4 max-w-xl">
+        <h2 className="mb-2 text-lg font-semibold text-[var(--foreground)]">Avantages</h2>
+        <div className="mb-3 max-w-xl">
           <label htmlFor="perk-search" className="mb-1 block text-sm font-medium text-[var(--foreground)]">
             Rechercher un avantage
           </label>
@@ -451,11 +451,13 @@ export function AvantagesManager({
                   </span>
                 )}
                 <span className="ml-2 text-xs text-[var(--foreground-muted)]">
-                  {(p.perk_requirements?.length ?? 0) > 0 ? `${p.perk_requirements!.length} requis` : "Aucun requis"}
+                  {(p.perk_requirements?.length ?? 0) > 0
+                    ? `${p.perk_requirements!.length} condition${p.perk_requirements!.length > 1 ? "s" : ""}`
+                    : "Sans condition"}
                 </span>
                 {(p.perk_effects?.length ?? 0) > 0 && (
                   <span className="ml-2 text-xs text-[var(--accent)]">
-                    {p.perk_effects!.length} effet(s)
+                    {p.perk_effects!.length} effet{p.perk_effects!.length > 1 ? "s" : ""}
                   </span>
                 )}
               </div>
@@ -493,13 +495,13 @@ export function AvantagesManager({
             Ajouter un avantage
           </button>
         ) : (
-          <div className="mt-3 rounded border p-4 space-y-4" style={{ borderColor: "var(--border-muted)" }}>
+          <div className="mt-3 space-y-3 rounded border p-3" style={{ borderColor: "var(--border-muted)" }}>
             {perkError && <p role="alert" className="text-sm text-[var(--danger)]">{perkError}</p>}
             <AdminImpactPreview
               title="Aperçu joueur, avant enregistrement"
               description="Le contenu ci-dessous suit immédiatement vos modifications."
             >
-              <div className="flex items-start gap-4">
+              <div className="flex items-start gap-3">
                 <div
                   className="flex shrink-0 items-center justify-center overflow-hidden rounded-lg border bg-[var(--background)] text-xl text-[var(--foreground-muted)]"
                   style={{
@@ -524,7 +526,7 @@ export function AvantagesManager({
                   </p>
                 </div>
               </div>
-              <div className="mt-4 grid gap-4 border-t pt-4 sm:grid-cols-2" style={{ borderColor: "var(--border-muted)" }}>
+              <div className="mt-3 grid gap-3 border-t pt-3 sm:grid-cols-2" style={{ borderColor: "var(--border-muted)" }}>
                 <div>
                   <p className="text-xs font-medium text-[var(--foreground)]">Pour le débloquer</p>
                   {perkRequirements.length > 0 ? (
@@ -613,7 +615,7 @@ export function AvantagesManager({
                     className="block w-full text-sm text-[var(--foreground-muted)] file:mr-2 file:rounded file:border-0 file:py-1.5 file:px-3 file:text-sm file:font-medium file:bg-[var(--accent)] file:text-[#0f1419]"
                   />
                   <p className="mt-0.5 text-xs text-[var(--foreground-muted)]">
-                    Téléverser un fichier (tous les fichiers sont regroupés dans le dossier <em>avantages/icons</em>).
+                    Importez une image ou renseignez une adresse ci-contre.
                   </p>
                 </div>
                 <div className="min-w-[12rem] flex-1">
@@ -660,7 +662,7 @@ export function AvantagesManager({
             </div>
             <div className="grid gap-3 sm:grid-cols-2">
               <div>
-                <label htmlFor="perk-order" className="mb-1 block text-xs text-[var(--foreground-muted)]">Ordre</label>
+                <label htmlFor="perk-order" className="mb-1 block text-xs text-[var(--foreground-muted)]">Ordre d’affichage</label>
                 <input
                   id="perk-order"
                   type="number"
@@ -725,10 +727,10 @@ export function AvantagesManager({
                   }}
                   className="mt-1 text-sm text-[var(--accent)] hover:underline"
                 >
-                  + Ajouter un requis
+                  Ajouter une condition
                 </button>
               ) : (
-                <div className="mt-2 grid grid-cols-1 items-end gap-2 rounded border p-3 sm:flex sm:flex-wrap" style={{ borderColor: "var(--border-muted)" }}>
+                <div className="mt-2 grid grid-cols-1 items-end gap-2 rounded border p-2 sm:flex sm:flex-wrap" style={{ borderColor: "var(--border-muted)" }}>
                   <div>
                     <label htmlFor="perk-requirement-kind" className="mb-0.5 block text-xs text-[var(--foreground-muted)]">Type</label>
                     <select
@@ -848,7 +850,7 @@ export function AvantagesManager({
                   Ajouter un effet
                 </button>
               ) : (
-                <div className="mt-2 rounded border p-3 space-y-2" style={{ borderColor: "var(--border-muted)" }}>
+                <div className="mt-2 space-y-2 rounded border p-2" style={{ borderColor: "var(--border-muted)" }}>
                   <div>
                     <label htmlFor="perk-effect-kind" className="mb-0.5 block text-xs text-[var(--foreground-muted)]">Type d&apos;effet</label>
                     <select
@@ -873,7 +875,7 @@ export function AvantagesManager({
                   </div>
                   {EFFECT_KINDS_WITH_STAT_TARGET.has(effectKind) && (
                     <div>
-                      <label htmlFor="perk-effect-stat" className="mb-0.5 block text-xs text-[var(--foreground-muted)]">Stat</label>
+                      <label htmlFor="perk-effect-stat" className="mb-0.5 block text-xs text-[var(--foreground-muted)]">Statistique</label>
                       <select
                         id="perk-effect-stat"
                         value={currentEffectTarget ?? STAT_KEYS[0]}

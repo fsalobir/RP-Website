@@ -440,7 +440,7 @@ function CollapsibleBlock({
           type="button"
           onClick={onToggle}
           aria-expanded={open}
-          className={`flex min-w-0 flex-1 items-center justify-between gap-3 text-left transition-colors hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--accent)] ${isSection ? "px-3 py-4" : "px-3 py-3"}`}
+          className={`flex min-w-0 flex-1 items-center justify-between gap-3 text-left transition-colors hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--accent)] ${isSection ? "px-2 py-3" : "px-2 py-2"}`}
         >
           <span className="min-w-0">
             <span className="flex flex-wrap items-center gap-2">
@@ -454,7 +454,7 @@ function CollapsibleBlock({
               ) : null}
             </span>
             {visibleDescription ? (
-              <span className="mt-1 block max-w-[72ch] text-xs leading-relaxed text-[var(--foreground-muted)]">
+              <span className="mt-0.5 block max-w-[72ch] text-xs leading-snug text-[var(--foreground-muted)]">
                 {visibleDescription}
               </span>
             ) : null}
@@ -1367,7 +1367,7 @@ export function ReglesForm({
   const inputClassNarrow =
     "w-full max-w-20 rounded border bg-[var(--background)] px-1.5 py-1 font-mono text-xs text-[var(--foreground)] focus:border-[var(--accent)] focus:outline-none focus:ring-1 focus:ring-[var(--accent)]";
   const inputStyle = { borderColor: "var(--border)" };
-  const genericEffectTypeTooltip = "Type de mécanique appliquée (croissance, stat, budget, unité, influence, relation ou idéologie).";
+  const genericEffectTypeTooltip = "Type de mécanique appliquée (croissance, statistique, budget, unité, influence, relation ou idéologie).";
   const genericStatTooltip = "Statistique du pays concernée (militarisme, industrie, science, stabilité).";
   const genericBudgetTooltip = "Ministère concerné par l'effet.";
   const genericBranchTooltip = "Branche militaire ciblée (terre, air, mer, stratégique).";
@@ -1451,19 +1451,18 @@ export function ReglesForm({
   ];
 
   return (
-    <div className="admin-settings-form space-y-5">
-      <div className="mb-7">
-        <h1 className="mb-2 text-2xl font-bold text-[var(--foreground)]">
+    <div className="admin-settings-form space-y-4">
+      <div className="mb-4">
+        <h1 className="mb-1 text-2xl font-bold text-[var(--foreground)]">
           Règles de simulation
         </h1>
-        <p className="max-w-[72ch] leading-relaxed text-[var(--foreground-muted)]">
-          Pilotez la mise à jour quotidienne du monde, les lois, la diplomatie et les pays sans joueur.
-          Chaque section indique maintenant qui verra le changement et quand il s’appliquera.
+        <p className="max-w-[72ch] text-sm leading-snug text-[var(--foreground-muted)]">
+          Réglez les calculs quotidiens, les lois, la diplomatie et les pays sans joueur.
         </p>
       </div>
 
       <AdminSettingsGuide
-        purpose="Modifiez une intention de jeu, puis vérifiez son effet concret dans la section concernée. Les réglages avancés restent accessibles sans encombrer la lecture générale."
+        purpose="Chaque groupe relie un réglage à son effet en jeu."
         impact="La plupart des changements prennent effet au prochain passage quotidien. La date, les jets et certaines valeurs diplomatiques peuvent agir plus tôt."
         check="Contrôlez les seuils dans leur ordre, les minimums face aux maximums et les exemples affichés avant d’enregistrer."
         warning="L’enregistrement applique tout le lot en une seule fois. En cas d’erreur, aucun réglage du lot n’est modifié."
@@ -1471,15 +1470,15 @@ export function ReglesForm({
 
       <section
         aria-labelledby="rules-overview-title"
-        className="rounded-xl border px-4 py-4 sm:px-5"
+        className="rounded-xl border px-3 py-3"
         style={{ background: "var(--background-panel)", borderColor: "var(--border)" }}
       >
         <h2 id="rules-overview-title" className="text-base font-semibold text-[var(--foreground)]">
           Situation générale
         </h2>
-        <dl className="mt-3 divide-y" style={{ borderColor: "var(--border-muted)" }}>
+        <dl className="mt-2 divide-y" style={{ borderColor: "var(--border-muted)" }}>
           {overviewRows.map((row) => (
-            <div key={row.label} className="grid gap-1 py-3 text-sm sm:grid-cols-[9rem_1fr] sm:gap-4">
+            <div key={row.label} className="grid gap-1 py-2 text-sm sm:grid-cols-[7rem_1fr] sm:gap-3">
               <dt className="font-medium text-[var(--foreground)]">{row.label}</dt>
               <dd className="leading-relaxed text-[var(--foreground-muted)]">{row.value}</dd>
             </div>
@@ -1487,8 +1486,8 @@ export function ReglesForm({
         </dl>
       </section>
 
-      <div className="max-w-3xl rounded-xl border p-4" style={{ borderColor: "var(--border)", background: "var(--background-panel)" }}>
-        <label htmlFor="rule-setting-search" className="mb-2 block text-sm font-medium text-[var(--foreground)]">
+      <div className="max-w-3xl rounded-xl border p-3" style={{ borderColor: "var(--border)", background: "var(--background-panel)" }}>
+        <label htmlFor="rule-setting-search" className="mb-1 block text-sm font-medium text-[var(--foreground)]">
           Trouver un réglage
         </label>
         <input
@@ -1497,20 +1496,17 @@ export function ReglesForm({
           value={ruleSearch}
           onChange={(event) => setRuleSearch(event.target.value)}
           placeholder="Ex. budget, idéologie, espionnage…"
-          className="min-h-12 w-full rounded-lg border bg-[var(--background)] px-3 text-base text-[var(--foreground)] placeholder:text-[var(--foreground-muted)]"
+          className="min-h-11 w-full rounded-lg border bg-[var(--background)] px-3 text-base text-[var(--foreground)] placeholder:text-[var(--foreground-muted)]"
           style={{ borderColor: "var(--border)" }}
         />
-        <p className="mt-2 text-xs leading-relaxed text-[var(--foreground-muted)]">
-          Recherchez avec vos mots, puis ouvrez directement le bon panneau.
-        </p>
         {ruleSearch && (
-          <div className="mt-3 space-y-1" aria-live="polite">
+          <div className="mt-2 space-y-1" aria-live="polite">
             {ruleSearchResults.map((result) => (
               <button
                 key={result.targetId}
                 type="button"
                 onClick={() => openRuleSearchResult(result)}
-                className="flex min-h-14 w-full items-center justify-between gap-3 rounded-lg px-3 py-2 text-left transition-colors hover:bg-[var(--background-elevated)] focus-visible:bg-[var(--background-elevated)]"
+                className="flex min-h-11 w-full items-center justify-between gap-3 rounded-lg px-2 py-1.5 text-left transition-colors hover:bg-[var(--background-elevated)] focus-visible:bg-[var(--background-elevated)]"
               >
                 <span>
                   <span className="block text-sm font-medium text-[var(--foreground)]">{result.label}</span>
@@ -1541,7 +1537,7 @@ export function ReglesForm({
         </div>
       ) : (
         <div
-          className="rounded-lg border overflow-hidden p-4 flex flex-col gap-4"
+          className="flex flex-col gap-2 overflow-hidden rounded-lg border p-2"
           style={{ background: "var(--background-panel)", borderColor: "var(--border)" }}
         >
           {items.length > 0 && (
@@ -1561,7 +1557,7 @@ export function ReglesForm({
               open={globalGrowthOpen}
               onToggle={() => setGlobalGrowthOpen((o) => !o)}
             >
-              <div className="p-3 space-y-3">
+              <div className="space-y-3 p-3">
                 <p className="text-xs text-[var(--foreground-muted)]">
                   Ces effets sont appliqués à tous les pays pendant la mise à jour quotidienne.
                 </p>
@@ -1604,7 +1600,7 @@ export function ReglesForm({
                   <div className="rounded border p-3 space-y-2" style={{ borderColor: "var(--border-muted)" }}>
                     <div>
                       <label className="mb-0.5 block text-xs text-[var(--foreground-muted)]">
-                        <FormLabel label="Type d'effet" tooltip={genericEffectTypeTooltip} />
+                        <FormLabel label="Effet" tooltip={genericEffectTypeTooltip} />
                       </label>
                       <select
                         aria-label="Type d’effet global"
@@ -1629,7 +1625,7 @@ export function ReglesForm({
                     {EFFECT_KINDS_WITH_STAT_TARGET.has(globalEffectKind) && (
                       <div>
                         <label className="mb-0.5 block text-xs text-[var(--foreground-muted)]">
-                          <FormLabel label="Stat" tooltip={genericStatTooltip} />
+                          <FormLabel label="Statistique" tooltip={genericStatTooltip} />
                         </label>
                         <select
                           aria-label="Statistique ciblée par l’effet global"
@@ -1701,7 +1697,7 @@ export function ReglesForm({
                     {EFFECT_KINDS_WITH_SUB_TYPE_TARGET.has(globalEffectKind) && (
                       <div>
                         <label className="mb-0.5 block text-xs text-[var(--foreground-muted)]">
-                          <FormLabel label="Sous-branche/type" tooltip="Branche et sous-type militaire ciblé." />
+                          <FormLabel label="Sous-type militaire" tooltip="Branche et sous-type militaire ciblé." />
                         </label>
                         <select
                           aria-label="Sous-branche ciblée par l’effet global"
@@ -1983,7 +1979,7 @@ export function ReglesForm({
                       </div>
                       <div className="flex flex-col gap-0.5">
                         <label className="text-xs text-[var(--foreground-muted)]">
-                          <FormLabel label="Prise en compte de l’écart mondial (%)" tooltip="Part de l’écart à la moyenne mondiale répercutée sur les effets adaptés. 0 % donne le même effet à tous ; 100 % prend tout l’écart en compte." />
+                          <FormLabel label="Correction de l’écart mondial (%)" tooltip="Part de l’écart à la moyenne mondiale répercutée sur les effets adaptés. 0 % donne le même effet à tous ; 100 % prend tout l’écart en compte." />
                         </label>
                         <input
                           aria-label={`Prise en compte de l’écart mondial pour ${BUDGET_MINISTRY_LABELS[key] ?? key}`}
@@ -2055,7 +2051,7 @@ export function ReglesForm({
                               </div>
                               <div className="flex flex-col gap-0.5">
                                 <label className="text-xs text-[var(--foreground-muted)]">
-                                  <FormLabel label="Bonus" tooltip="Effet positif maximal produit à chaque passage du monde quand le ministère est correctement financé." />
+                                  <FormLabel label="Gain quotidien maximal" tooltip="Effet positif maximal produit à chaque passage du monde quand le ministère est correctement financé." />
                                 </label>
                                 <input
                                   aria-label={`Bonus de l’effet ${idx + 1} pour ${BUDGET_MINISTRY_LABELS[key] ?? key}`}
@@ -2070,7 +2066,7 @@ export function ReglesForm({
                               </div>
                               <div className="flex flex-col gap-0.5">
                                 <label className="text-xs text-[var(--foreground-muted)]">
-                                  <FormLabel label="Malus" tooltip="Effet négatif appliqué quand le ministère tombe sous son seuil minimal de financement." />
+                                  <FormLabel label="Perte quotidienne maximale" tooltip="Effet négatif appliqué quand le ministère tombe sous son seuil minimal de financement." />
                                 </label>
                                 <input
                                   aria-label={`Malus de l’effet ${idx + 1} pour ${BUDGET_MINISTRY_LABELS[key] ?? key}`}
@@ -2092,14 +2088,14 @@ export function ReglesForm({
                                   className="rounded"
                                 />
                                 <label htmlFor={`gravity-${r.id}-${idx}`} className="text-xs text-[var(--foreground-muted)]">
-                                  <FormLabel label="Tenir compte de la moyenne mondiale" tooltip="Si activé, un pays sous la moyenne reçoit davantage de bonus et subit moins de malus. Un pays au-dessus connaît l’effet inverse." />
+                                  <FormLabel label="Adapter selon la moyenne mondiale" tooltip="Si activé, un pays sous la moyenne reçoit davantage de bonus et subit moins de malus. Un pays au-dessus connaît l’effet inverse." />
                                 </label>
                               </div>
                               {effect.effect_type === "bilateral_relations" && (
                                 <>
                                   <div className="flex flex-col gap-0.5">
                                     <label className="text-xs text-[var(--foreground-muted)]">
-                                      <FormLabel label="Portée" tooltip="Cibles dont la relation avec le pays sera modifiée chaque jour (si la valeur actuelle est dans la plage ci-dessous)." />
+                                      <FormLabel label="Pays concernés" tooltip="Cibles dont la relation avec le pays sera modifiée chaque jour (si la valeur actuelle est dans la plage ci-dessous)." />
                                     </label>
                                     <select
                                       aria-label={`Portée relationnelle de l’effet ${idx + 1}`}
@@ -2119,7 +2115,7 @@ export function ReglesForm({
                                   </div>
                                   <div className="flex flex-col gap-0.5">
                                     <label className="text-xs text-[var(--foreground-muted)]">
-                                      <FormLabel label="Rel. min" tooltip="Niveau de relation (-100 à 100) en dessous duquel l'effet ne s'applique pas." />
+                                      <FormLabel label="Relation minimale" tooltip="Niveau de relation (-100 à 100) en dessous duquel l'effet ne s'applique pas." />
                                     </label>
                                     <input
                                       aria-label={`Relation minimale de l’effet ${idx + 1}`}
@@ -2137,7 +2133,7 @@ export function ReglesForm({
                                   </div>
                                   <div className="flex flex-col gap-0.5">
                                     <label className="text-xs text-[var(--foreground-muted)]">
-                                      <FormLabel label="Rel. max" tooltip="Niveau de relation au-dessus duquel l'effet ne s'applique pas." />
+                                      <FormLabel label="Relation maximale" tooltip="Niveau de relation au-dessus duquel l'effet ne s'applique pas." />
                                     </label>
                                     <input
                                       aria-label={`Relation maximale de l’effet ${idx + 1}`}
@@ -2595,7 +2591,7 @@ export function ReglesForm({
                     <section>
                       <h4 className="text-sm font-semibold text-[var(--foreground)]">Contribution de base</h4>
                       <p className="mt-1 text-xs text-[var(--foreground-muted)]">
-                        Les unités de référence évitent les coefficients techniques. Les flèches des champs utilisent maintenant des pas raisonnables.
+                        Saisissez directement les points produits par une quantité connue de PIB, de population ou de puissance militaire.
                       </p>
                       <div className="mt-3">
                         <AdminParameterTable
@@ -2843,29 +2839,38 @@ export function ReglesForm({
                 <>
                 <AdminParameterTable
                   label="Calcul quotidien de l’idéologie"
-                  columns={["Coefficient"]}
+                  columns={["Valeur"]}
                   rows={[
                     {
                       key: "daily-step",
                       title: "Vitesse quotidienne",
-                      description: "Part du déplacement calculé qui est réellement appliquée chaque jour.",
+                      description: "Pourcentage du trajet vers la cible appliqué chaque jour.",
                       cells: [
-                        <input
-                          key="daily-step"
-                          aria-label="Vitesse quotidienne de l’idéologie"
-                          type="number"
-                          step="0.01"
-                          value={getIdeologyConfigValue().daily_step}
-                          onChange={(e) => updateIdeologyConfig({ daily_step: Number(e.target.value) || DEFAULT_IDEOLOGY_CONFIG.daily_step })}
-                          className={inputClassNarrow}
-                          style={inputStyle}
-                        />,
+                        <div key="daily-step" className="flex items-center gap-2">
+                          <input
+                            aria-label="Pourcentage quotidien du déplacement idéologique"
+                            type="number"
+                            min={0}
+                            max={100}
+                            step={1}
+                            value={Math.round(getIdeologyConfigValue().daily_step * 10_000) / 100}
+                            onChange={(e) => updateIdeologyConfig({
+                              daily_step: Math.max(
+                                0,
+                                Math.min(100, Number(e.target.value) || DEFAULT_IDEOLOGY_CONFIG.daily_step * 100)
+                              ) / 100,
+                            })}
+                            className={inputClassNarrow}
+                            style={inputStyle}
+                          />
+                          <span className="text-xs text-[var(--foreground-muted)]">%</span>
+                        </div>,
                       ],
                     },
                     {
                       key: "neighbor-pull",
                       title: "Pression des pays voisins",
-                      description: "Force de base avec laquelle les idéologies voisines attirent le pays.",
+                      description: "Poids des voisins face aux effets actifs. 1 = poids de référence ; 0 les ignore.",
                       cells: [
                         <input
                           key="neighbor-pull"
@@ -2882,7 +2887,7 @@ export function ReglesForm({
                     {
                       key: "effect-pull",
                       title: "Effets idéologiques actifs",
-                      description: "Importance des lois, avantages et autres effets qui poussent une idéologie.",
+                      description: "Poids des lois, avantages et autres effets progressifs. 1 conserve leur force ; 0 les ignore.",
                       cells: [
                         <input
                           key="effect-pull"
@@ -2899,13 +2904,13 @@ export function ReglesForm({
                   ]}
                 />
                 <AdminParameterTable
-                  label="Modificateurs du déplacement idéologique"
-                  columns={["Coefficient"]}
+                  label="Forces du déplacement idéologique"
+                  columns={["Valeur"]}
                   rows={[
                     {
                       key: "relation-pull",
                       title: "Relations diplomatiques",
-                      description: "Une bonne relation renforce l’attraction d’un voisin ; une mauvaise la réduit.",
+                      description: "À 0,35, une relation de +100 renforce l’attraction de 35 % ; −100 la réduit de 35 %.",
                       cells: [
                         <input
                           key="relation-pull"
@@ -2922,7 +2927,7 @@ export function ReglesForm({
                     {
                       key: "influence-pull",
                       title: "Influence internationale",
-                      description: "Les voisins influents pèsent davantage dans le déplacement.",
+                      description: "À 0,45, le voisin le plus influent pèse jusqu’à 45 % de plus.",
                       cells: [
                         <input
                           key="influence-pull"
@@ -2939,7 +2944,7 @@ export function ReglesForm({
                     {
                       key: "control-pull",
                       title: "Contrôle territorial",
-                      description: "L’occupation et l’annexion renforcent l’empreinte idéologique du pays dominant.",
+                      description: "À 1,10, un contrôle à 100 % multiplie l’attraction du pays dominant par 2,10.",
                       cells: [
                         <input
                           key="control-pull"
@@ -2956,7 +2961,7 @@ export function ReglesForm({
                     {
                       key: "snap-strength",
                       title: "Impulsions ponctuelles",
-                      description: "Amplifie les chocs brusques par rapport aux influences progressives.",
+                      description: "Multiplicateur des chocs ponctuels : 16 leur donne seize fois le poids d’un effet progressif.",
                       cells: [
                         <input
                           key="snap-strength"
@@ -3032,7 +3037,7 @@ export function ReglesForm({
                               </div>
                               {EFFECT_KINDS_WITH_STAT_TARGET.has(ideologyEffectKind) && (
                                 <div>
-                                  <label className="mb-0.5 block text-xs text-[var(--foreground-muted)]">Stat</label>
+                                  <label className="mb-0.5 block text-xs text-[var(--foreground-muted)]">Statistique</label>
                                   <select aria-label="Statistique ciblée par l’effet idéologique" value={ideologyEffectTarget ?? STAT_KEYS[0]} onChange={(ev) => setIdeologyEffectTarget(ev.target.value || null)} className="w-full rounded border py-1.5 px-2 text-sm" style={{ borderColor: "var(--border)", background: "var(--background)" }}>
                                     {STAT_KEYS.map((k) => (<option key={k} value={k}>{STAT_LABELS[k]}</option>))}
                                   </select>
@@ -3337,7 +3342,7 @@ export function ReglesForm({
                       <div className="rounded border p-3 space-y-2" style={{ borderColor: "var(--border-muted)" }}>
                         <div>
                           <label className="mb-0.5 block text-xs text-[var(--foreground-muted)]">
-                            <FormLabel label="Type d'effet" tooltip={genericEffectTypeTooltip} />
+                            <FormLabel label="Effet" tooltip={genericEffectTypeTooltip} />
                           </label>
                           <select aria-label="Type d’effet pour une IA majeure" value={aiMajorEffectKind} onChange={(ev) => { const k = ev.target.value; setAiMajorEffectKind(k); setAiMajorEffectTarget(getDefaultTargetForKindGlobal(k)); }} className={inputClass} style={inputStyle}>
                             {getEffectKindOptionGroups().map((group) => (
@@ -3347,11 +3352,11 @@ export function ReglesForm({
                             ))}
                           </select>
                         </div>
-                        {EFFECT_KINDS_WITH_STAT_TARGET.has(aiMajorEffectKind) && (<div><label className="mb-0.5 block text-xs text-[var(--foreground-muted)]"><FormLabel label="Stat" tooltip={genericStatTooltip} /></label><select aria-label="Statistique ciblée pour une IA majeure" value={aiMajorEffectTarget ?? STAT_KEYS[0]} onChange={(ev) => setAiMajorEffectTarget(ev.target.value || null)} className={inputClass} style={inputStyle}>{STAT_KEYS.map((k) => (<option key={k} value={k}>{STAT_LABELS[k]}</option>))}</select></div>)}
+                        {EFFECT_KINDS_WITH_STAT_TARGET.has(aiMajorEffectKind) && (<div><label className="mb-0.5 block text-xs text-[var(--foreground-muted)]"><FormLabel label="Statistique" tooltip={genericStatTooltip} /></label><select aria-label="Statistique ciblée pour une IA majeure" value={aiMajorEffectTarget ?? STAT_KEYS[0]} onChange={(ev) => setAiMajorEffectTarget(ev.target.value || null)} className={inputClass} style={inputStyle}>{STAT_KEYS.map((k) => (<option key={k} value={k}>{STAT_LABELS[k]}</option>))}</select></div>)}
                         {EFFECT_KINDS_WITH_BUDGET_TARGET.has(aiMajorEffectKind) && (<div><label className="mb-0.5 block text-xs text-[var(--foreground-muted)]"><FormLabel label="Ministère" tooltip={genericBudgetTooltip} /></label><select aria-label="Ministère ciblé pour une IA majeure" value={aiMajorEffectTarget ?? getBudgetMinistryOptions()[0]?.key ?? ""} onChange={(ev) => setAiMajorEffectTarget(ev.target.value || null)} className={inputClass} style={inputStyle}>{getBudgetMinistryOptions().map(({ key, label }) => (<option key={key} value={key}>{label}</option>))}</select></div>)}
                         {EFFECT_KINDS_WITH_BRANCH_TARGET.has(aiMajorEffectKind) && (<div><label className="mb-0.5 block text-xs text-[var(--foreground-muted)]"><FormLabel label="Branche" tooltip={genericBranchTooltip} /></label><select aria-label="Branche ciblée pour une IA majeure" value={aiMajorEffectTarget ?? MILITARY_BRANCH_EFFECT_IDS[0]} onChange={(ev) => setAiMajorEffectTarget(ev.target.value || null)} className={inputClass} style={inputStyle}>{MILITARY_BRANCH_EFFECT_IDS.map((b) => (<option key={b} value={b}>{MILITARY_BRANCH_EFFECT_LABELS[b]}</option>))}</select></div>)}
                         {EFFECT_KINDS_WITH_ROSTER_UNIT_TARGET.has(aiMajorEffectKind) && (<div><label className="mb-0.5 block text-xs text-[var(--foreground-muted)]"><FormLabel label="Unité" tooltip={genericUnitTooltip} /></label><select aria-label="Unité ciblée pour une IA majeure" value={aiMajorEffectTarget ?? rosterUnits[0]?.id ?? ""} onChange={(ev) => setAiMajorEffectTarget(ev.target.value || null)} className={inputClass} style={inputStyle}>{rosterUnits.map((u) => (<option key={u.id} value={u.id}>{u.name_fr}</option>))}</select></div>)}
-                        {EFFECT_KINDS_WITH_SUB_TYPE_TARGET.has(aiMajorEffectKind) && (<div><label className="mb-0.5 block text-xs text-[var(--foreground-muted)]"><FormLabel label="Sous-branche/type" tooltip="Branche et sous-type militaire." /></label><select aria-label="Sous-branche ciblée pour une IA majeure" value={aiMajorEffectTarget ?? subTypeOptions[0]?.value ?? ""} onChange={(ev) => setAiMajorEffectTarget(ev.target.value || null)} className={inputClass} style={inputStyle}>{subTypeOptions.map((opt) => (<option key={opt.value} value={opt.value}>{opt.label}</option>))}</select></div>)}
+                        {EFFECT_KINDS_WITH_SUB_TYPE_TARGET.has(aiMajorEffectKind) && (<div><label className="mb-0.5 block text-xs text-[var(--foreground-muted)]"><FormLabel label="Sous-type militaire" tooltip="Branche et sous-type militaire." /></label><select aria-label="Sous-branche ciblée pour une IA majeure" value={aiMajorEffectTarget ?? subTypeOptions[0]?.value ?? ""} onChange={(ev) => setAiMajorEffectTarget(ev.target.value || null)} className={inputClass} style={inputStyle}>{subTypeOptions.map((opt) => (<option key={opt.value} value={opt.value}>{opt.label}</option>))}</select></div>)}
                         <div><label className="mb-0.5 block text-xs text-[var(--foreground-muted)]"><FormLabel label={getEffectKindValueHelper(aiMajorEffectKind).valueLabel} tooltip={genericEffectValueTooltip} /></label><input aria-label={getEffectKindValueHelper(aiMajorEffectKind).valueLabel} type="number" step={getEffectKindValueHelper(aiMajorEffectKind).valueStep} value={aiMajorEffectValue} onChange={(e) => setAiMajorEffectValue(e.target.value)} className={inputClassNarrow} style={inputStyle} /></div>
                         <div className="flex gap-2"><button type="button" onClick={() => saveAiEffectForm("major")} className="rounded py-1.5 px-3 text-sm font-medium" style={{ background: "var(--accent)", color: "#0f1419" }}>Enregistrer</button><button type="button" onClick={() => setAiMajorFormOpen(false)} className="rounded border py-1.5 px-3 text-sm" style={{ borderColor: "var(--border)" }}>Annuler</button></div>
                       </div>
@@ -3382,7 +3387,7 @@ export function ReglesForm({
                       <div className="rounded border p-3 space-y-2" style={{ borderColor: "var(--border-muted)" }}>
                         <div>
                           <label className="mb-0.5 block text-xs text-[var(--foreground-muted)]">
-                            <FormLabel label="Type d'effet" tooltip={genericEffectTypeTooltip} />
+                            <FormLabel label="Effet" tooltip={genericEffectTypeTooltip} />
                           </label>
                           <select aria-label="Type d’effet pour une IA mineure" value={aiMinorEffectKind} onChange={(ev) => { const k = ev.target.value; setAiMinorEffectKind(k); setAiMinorEffectTarget(getDefaultTargetForKindGlobal(k)); }} className={inputClass} style={inputStyle}>
                             {getEffectKindOptionGroups().map((group) => (
@@ -3392,11 +3397,11 @@ export function ReglesForm({
                             ))}
                           </select>
                         </div>
-                        {EFFECT_KINDS_WITH_STAT_TARGET.has(aiMinorEffectKind) && (<div><label className="mb-0.5 block text-xs text-[var(--foreground-muted)]"><FormLabel label="Stat" tooltip={genericStatTooltip} /></label><select aria-label="Statistique ciblée pour une IA mineure" value={aiMinorEffectTarget ?? STAT_KEYS[0]} onChange={(ev) => setAiMinorEffectTarget(ev.target.value || null)} className={inputClass} style={inputStyle}>{STAT_KEYS.map((k) => (<option key={k} value={k}>{STAT_LABELS[k]}</option>))}</select></div>)}
+                        {EFFECT_KINDS_WITH_STAT_TARGET.has(aiMinorEffectKind) && (<div><label className="mb-0.5 block text-xs text-[var(--foreground-muted)]"><FormLabel label="Statistique" tooltip={genericStatTooltip} /></label><select aria-label="Statistique ciblée pour une IA mineure" value={aiMinorEffectTarget ?? STAT_KEYS[0]} onChange={(ev) => setAiMinorEffectTarget(ev.target.value || null)} className={inputClass} style={inputStyle}>{STAT_KEYS.map((k) => (<option key={k} value={k}>{STAT_LABELS[k]}</option>))}</select></div>)}
                         {EFFECT_KINDS_WITH_BUDGET_TARGET.has(aiMinorEffectKind) && (<div><label className="mb-0.5 block text-xs text-[var(--foreground-muted)]"><FormLabel label="Ministère" tooltip={genericBudgetTooltip} /></label><select aria-label="Ministère ciblé pour une IA mineure" value={aiMinorEffectTarget ?? getBudgetMinistryOptions()[0]?.key ?? ""} onChange={(ev) => setAiMinorEffectTarget(ev.target.value || null)} className={inputClass} style={inputStyle}>{getBudgetMinistryOptions().map(({ key, label }) => (<option key={key} value={key}>{label}</option>))}</select></div>)}
                         {EFFECT_KINDS_WITH_BRANCH_TARGET.has(aiMinorEffectKind) && (<div><label className="mb-0.5 block text-xs text-[var(--foreground-muted)]"><FormLabel label="Branche" tooltip={genericBranchTooltip} /></label><select aria-label="Branche ciblée pour une IA mineure" value={aiMinorEffectTarget ?? MILITARY_BRANCH_EFFECT_IDS[0]} onChange={(ev) => setAiMinorEffectTarget(ev.target.value || null)} className={inputClass} style={inputStyle}>{MILITARY_BRANCH_EFFECT_IDS.map((b) => (<option key={b} value={b}>{MILITARY_BRANCH_EFFECT_LABELS[b]}</option>))}</select></div>)}
                         {EFFECT_KINDS_WITH_ROSTER_UNIT_TARGET.has(aiMinorEffectKind) && (<div><label className="mb-0.5 block text-xs text-[var(--foreground-muted)]"><FormLabel label="Unité" tooltip={genericUnitTooltip} /></label><select aria-label="Unité ciblée pour une IA mineure" value={aiMinorEffectTarget ?? rosterUnits[0]?.id ?? ""} onChange={(ev) => setAiMinorEffectTarget(ev.target.value || null)} className={inputClass} style={inputStyle}>{rosterUnits.map((u) => (<option key={u.id} value={u.id}>{u.name_fr}</option>))}</select></div>)}
-                        {EFFECT_KINDS_WITH_SUB_TYPE_TARGET.has(aiMinorEffectKind) && (<div><label className="mb-0.5 block text-xs text-[var(--foreground-muted)]"><FormLabel label="Sous-branche/type" tooltip="Branche et sous-type militaire." /></label><select aria-label="Sous-branche ciblée pour une IA mineure" value={aiMinorEffectTarget ?? subTypeOptions[0]?.value ?? ""} onChange={(ev) => setAiMinorEffectTarget(ev.target.value || null)} className={inputClass} style={inputStyle}>{subTypeOptions.map((opt) => (<option key={opt.value} value={opt.value}>{opt.label}</option>))}</select></div>)}
+                        {EFFECT_KINDS_WITH_SUB_TYPE_TARGET.has(aiMinorEffectKind) && (<div><label className="mb-0.5 block text-xs text-[var(--foreground-muted)]"><FormLabel label="Sous-type militaire" tooltip="Branche et sous-type militaire." /></label><select aria-label="Sous-branche ciblée pour une IA mineure" value={aiMinorEffectTarget ?? subTypeOptions[0]?.value ?? ""} onChange={(ev) => setAiMinorEffectTarget(ev.target.value || null)} className={inputClass} style={inputStyle}>{subTypeOptions.map((opt) => (<option key={opt.value} value={opt.value}>{opt.label}</option>))}</select></div>)}
                         <div><label className="mb-0.5 block text-xs text-[var(--foreground-muted)]"><FormLabel label={getEffectKindValueHelper(aiMinorEffectKind).valueLabel} tooltip={genericEffectValueTooltip} /></label><input aria-label={getEffectKindValueHelper(aiMinorEffectKind).valueLabel} type="number" step={getEffectKindValueHelper(aiMinorEffectKind).valueStep} value={aiMinorEffectValue} onChange={(e) => setAiMinorEffectValue(e.target.value)} className={inputClassNarrow} style={inputStyle} /></div>
                         <div className="flex gap-2"><button type="button" onClick={() => saveAiEffectForm("minor")} className="rounded py-1.5 px-3 text-sm font-medium" style={{ background: "var(--accent)", color: "#0f1419" }}>Enregistrer</button><button type="button" onClick={() => setAiMinorFormOpen(false)} className="rounded border py-1.5 px-3 text-sm" style={{ borderColor: "var(--border)" }}>Annuler</button></div>
                       </div>

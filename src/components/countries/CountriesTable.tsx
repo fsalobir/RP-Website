@@ -297,7 +297,7 @@ export function CountriesTable({
                   <button
                     type="button"
                     onClick={() => handleAdminHeaderClick(key)}
-                    className="flex min-h-11 w-full items-center gap-1 p-3 text-left hover:bg-[var(--background-elevated)] hover:text-[var(--foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--accent)]"
+                    className="flex min-h-11 w-full items-center gap-1 p-2 text-left hover:bg-[var(--background-elevated)] hover:text-[var(--foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--accent)]"
                   >
                     {label}
                     {adminSortKey === key && (
@@ -309,12 +309,12 @@ export function CountriesTable({
                 </th>
               ))}
               {showAiStatusColumn && (
-                <th className="p-3 w-32 font-medium text-[var(--foreground-muted)]" style={{ borderColor: "var(--border)" }}>
+                <th className="w-32 p-2 font-medium text-[var(--foreground-muted)]" style={{ borderColor: "var(--border)" }}>
                   Statut IA
                 </th>
               )}
               {showModifierButton && (
-                <th className="p-3 w-24 font-medium text-[var(--foreground-muted)]" style={{ borderColor: "var(--border)" }}>
+                <th className="w-24 p-2 font-medium text-[var(--foreground-muted)]" style={{ borderColor: "var(--border)" }}>
                   Actions
                 </th>
               )}
@@ -331,7 +331,7 @@ export function CountriesTable({
                   className="border-b transition-colors hover:bg-[var(--background-elevated)]"
                   style={{ borderColor: "var(--border-muted)" }}
                 >
-                  <td className="p-3 relative align-middle">
+                  <td className="relative p-2 align-middle">
                     <Link
                       href={adminLayout ? `/admin/pays/${c.id}` : `/pays/${c.slug}`}
                       className="relative z-[1] flex min-h-11 cursor-pointer items-center gap-3 font-medium text-[var(--foreground)] hover:text-[var(--accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
@@ -358,10 +358,10 @@ export function CountriesTable({
                       </span>
                     </Link>
                   </td>
-                  <td className="p-3 text-[var(--foreground)]">
+                  <td className="p-2 text-[var(--foreground)]">
                     {playerName ?? "—"}
                   </td>
-                  <td className="p-3">
+                  <td className="p-2">
                     <select
                       aria-label={`Continent de ${c.name}`}
                       value={c.continent_id ?? ""}
@@ -395,7 +395,7 @@ export function CountriesTable({
                     </select>
                   </td>
                   {showAiStatusColumn && (
-                    <td className="p-3">
+                    <td className="p-2">
                       {playedSet.has(c.id) ? (
                         <span className="text-sm text-[var(--foreground-muted)]" title="Pays assigné à un joueur">
                           {playerName ?? "Joué"}
@@ -433,7 +433,7 @@ export function CountriesTable({
                     </td>
                   )}
                   {showModifierButton && (
-                    <td className="p-3">
+                    <td className="p-2">
                       <Link
                         href={`/admin/pays/${c.id}`}
                         className="inline-flex min-h-11 items-center rounded px-3 py-1.5 text-sm font-medium transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--warning)]"

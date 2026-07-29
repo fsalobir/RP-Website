@@ -7,7 +7,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   return (
     <div className="admin-shell flex min-h-screen flex-col">
       {auth.isAdmin && <AdminNav />}
-      <main className="flex-1">{children}</main>
+      <main className={`flex-1 ${auth.isAdmin ? "admin-density" : ""}`}>{children}</main>
     </div>
   );
 }

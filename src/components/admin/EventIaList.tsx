@@ -53,7 +53,7 @@ function formatRollFormula(rollResult: DiceRollResultRow, adminLabel?: string): 
     parts.push(`${rollResult.modifier >= 0 ? "+" : ""}${rollResult.modifier} (Mod.)`);
   }
   if (rollResult.admin_modifier != null && rollResult.admin_modifier !== 0) {
-    parts.push(`${rollResult.admin_modifier >= 0 ? "+" : ""}${rollResult.admin_modifier} (${adminLabel?.trim() || "Ponctuel"})`);
+    parts.push(`${rollResult.admin_modifier >= 0 ? "+" : ""}${rollResult.admin_modifier} (${adminLabel?.trim() || "Ajustement admin"})`);
   }
   if (rollResult.relation_modifier != null && rollResult.relation_modifier !== 0) {
     parts.push(`${rollResult.relation_modifier >= 0 ? "+" : ""}${rollResult.relation_modifier} (Relations)`);
@@ -107,7 +107,7 @@ type Props = {
   cronDiagnosticError?: string | null;
 };
 
-const panelClass = "rounded-lg border p-6";
+const panelClass = "rounded-lg border p-4";
 const panelStyle = { background: "var(--background-panel)", borderColor: "var(--border)" };
 const EVENTS_PER_PAGE = 10;
 
@@ -122,8 +122,8 @@ function normalizeSearchValue(value: string): string {
 
 function getStatusLabel(status: string): string {
   if (status === "pending") return "en attente";
-  if (status === "accepted") return "accepte";
-  if (status === "refused") return "refuse";
+  if (status === "accepted") return "accepté";
+  if (status === "refused") return "refusé";
   return status;
 }
 
@@ -258,12 +258,12 @@ export function EventIaList({
   }
 
   return (
-    <div className="admin-settings-form space-y-6">
+    <div className="admin-settings-form space-y-4">
       <AdminSettingsGuide
-        purpose="Les événements IA représentent les actions des pays sans joueur. Les événements en attente sont traités avant les autres."
+        purpose="Cette file réunit les actions produites pour les pays sans joueur."
         impact="Accepter applique les conséquences affichées. Simuler un passage peut créer de nouveaux événements selon les quotas des règles."
         check="Vérifiez l’émetteur, la cible, l’échéance, les jets et les effets avant validation."
-        warning="« Vider la liste » supprime tous les événements IA ; cette action demande une confirmation."
+        warning="« Tout supprimer » efface tous les événements IA ; une confirmation est demandée."
       />
       {selected && (
         <EventDetail
@@ -314,14 +314,14 @@ export function EventIaList({
                 )}
                 {cronDiagnostic && !cronDiagnosticError && (
                   <div className="rounded border py-2 px-3" style={{ borderColor: "var(--border)", background: "var(--background)" }}>
-                  <span className="font-medium text-[var(--foreground-muted)]">Diagnostic pg_cron : </span>
+                  <span className="font-medium text-[var(--foreground-muted)]">Diagnostic de la tâche : </span>
                   <span className="text-[var(--foreground)]">
                     {cronDiagnostic.pg_cron_enabled === false ? (
                       <>Extension non activée. {typeof cronDiagnostic.hint === "string" ? cronDiagnostic.hint : ""}</>
                     ) : (
                       <>
-                        Job présent : {cronDiagnostic.job_exists ? "oui" : "non"}
-                        {cronDiagnostic.job_schedule != null && ` · Schedule : ${String(cronDiagnostic.job_schedule)}`}
+                         Tâche présente : {cronDiagnostic.job_exists ? "oui" : "non"}
+                         {cronDiagnostic.job_schedule != null && ` · Fréquence : ${String(cronDiagnostic.job_schedule)}`}
                         {" · "}
                         Exécutions enregistrées : {Array.isArray(cronDiagnostic.recent_runs) ? cronDiagnostic.recent_runs.length : 0}
                         {Array.isArray(cronDiagnostic.recent_runs) && cronDiagnostic.recent_runs.length > 0 && (
@@ -334,9 +334,9 @@ export function EventIaList({
                     const last = cronDiagnostic.recent_runs[0] as { status?: string; return_message?: string };
                     return (
                       <p className="mt-1 text-[var(--foreground)]">
-                        Dernière exécution pg_cron : status = <strong>{last?.status ?? "—"}</strong>
-                        {last?.return_message != null && last.return_message !== "" && (
-                          <> · return_message = <span className="text-[var(--danger)]">{String(last.return_message)}</span></>
+                         Dernière exécution : <strong>{last?.status ?? "—"}</strong>
+                         {last?.return_message != null && last.return_message !== "" && (
+                           <> · Message : <span className="text-[var(--danger)]">{String(last.return_message)}</span></>
                         )}
                       </p>
                     );
@@ -352,11 +352,11 @@ export function EventIaList({
                           ? new Date((cronDiagnostic.last_check as { at: string }).at).toLocaleString("fr-FR")
                           : "—"}
                         {" · "}
-                        would_skip = {(cronDiagnostic.last_check as { would_skip?: boolean }).would_skip === true ? "oui" : "non"}
-                        {(cronDiagnostic.last_check as { reason?: string }).reason != null && ` · raison: ${String((cronDiagnostic.last_check as { reason: string }).reason)}`}
-                        {(cronDiagnostic.last_check as { diff_seconds?: number }).diff_seconds != null && ` · diff_seconds = ${Number((cronDiagnostic.last_check as { diff_seconds: number }).diff_seconds)}`}
-                        {(cronDiagnostic.last_check as { interval_hours?: number }).interval_hours != null && ` · interval_hours = ${Number((cronDiagnostic.last_check as { interval_hours: number }).interval_hours)}`}
-                        {(cronDiagnostic.last_check as { last_run_raw?: string }).last_run_raw != null && ` · last_run_raw = ${String((cronDiagnostic.last_check as { last_run_raw: string }).last_run_raw)}`}
+                        Ignoré : {(cronDiagnostic.last_check as { would_skip?: boolean }).would_skip === true ? "oui" : "non"}
+                        {(cronDiagnostic.last_check as { reason?: string }).reason != null && ` · Raison : ${String((cronDiagnostic.last_check as { reason: string }).reason)}`}
+                        {(cronDiagnostic.last_check as { diff_seconds?: number }).diff_seconds != null && ` · Temps écoulé : ${Number((cronDiagnostic.last_check as { diff_seconds: number }).diff_seconds)} s`}
+                        {(cronDiagnostic.last_check as { interval_hours?: number }).interval_hours != null && ` · Intervalle : ${Number((cronDiagnostic.last_check as { interval_hours: number }).interval_hours)} h`}
+                        {(cronDiagnostic.last_check as { last_run_raw?: string }).last_run_raw != null && ` · Dernière valeur enregistrée : ${String((cronDiagnostic.last_check as { last_run_raw: string }).last_run_raw)}`}
                       </span>
                     </div>
                   )}
@@ -382,7 +382,7 @@ export function EventIaList({
                 className="rounded border px-3 py-1.5 text-sm font-medium hover:bg-[var(--background)] disabled:opacity-50"
                 style={{ borderColor: "var(--border)" }}
               >
-                {simulateLoading ? "Passage en cours…" : "Simuler passage IA"}
+                {simulateLoading ? "Génération…" : "Générer maintenant"}
               </button>
               <button
                 type="button"
@@ -391,7 +391,7 @@ export function EventIaList({
                 className="rounded border px-3 py-1.5 text-sm font-medium hover:bg-[var(--background)] disabled:opacity-50"
                 style={{ borderColor: "var(--border)" }}
               >
-                {processDueLoading ? "Traitement…" : "Traiter les événements arrivés à échéance"}
+                {processDueLoading ? "Application…" : "Appliquer les événements arrivés"}
               </button>
               <button
                 type="button"
@@ -411,12 +411,12 @@ export function EventIaList({
                 className="rounded border px-3 py-1.5 text-sm font-medium text-[var(--danger)] hover:bg-[var(--background)] disabled:opacity-50"
                 style={{ borderColor: "var(--border-muted)" }}
               >
-                {clearLoading ? "Vidage…" : "Vider la liste"}
+                {clearLoading ? "Suppression…" : "Tout supprimer"}
               </button>
             </div>
           </div>
           <div className="w-full max-w-xl">
-            <label htmlFor="ai-event-search" className="mb-1 block text-sm text-[var(--foreground-muted)]">Rechercher un événement</label>
+            <label htmlFor="ai-event-search" className="mb-1 block text-sm text-[var(--foreground-muted)]">Rechercher</label>
             <input
               id="ai-event-search"
               type="text"
@@ -425,14 +425,14 @@ export function EventIaList({
                 setSearchQuery(e.target.value);
                 setCurrentPage(1);
               }}
-              placeholder="Ex: Guerre Russie"
+              placeholder="Guerre, Russie…"
               className="w-full rounded border bg-[var(--background)] px-3 py-2 text-sm text-[var(--foreground)]"
               style={{ borderColor: "var(--border)" }}
             />
           </div>
         </div>
         <div className="mb-4 flex flex-wrap items-center justify-between gap-2 text-sm text-[var(--foreground-muted)]">
-          <span>{filteredEvents.length} événement(s) trouvé(s)</span>
+          <span>{filteredEvents.length} événement{filteredEvents.length > 1 ? "s" : ""}</span>
           <span>Page {effectivePage} / {totalPages}</span>
         </div>
         {error && (
@@ -573,7 +573,7 @@ export function EventIaList({
           aria-labelledby="create-event-title"
         >
           <div
-            className="max-h-[calc(100dvh-2rem)] w-full max-w-md overflow-y-auto rounded-xl border p-5 shadow-xl sm:p-6"
+            className="max-h-[calc(100dvh-2rem)] w-full max-w-md overflow-y-auto rounded-xl border p-4 shadow-xl"
             style={{ background: "var(--background-panel)", borderColor: "var(--border)" }}
             onClick={(e) => e.stopPropagation()}
           >
@@ -852,7 +852,7 @@ function EventDetail({
         const effectLookups = { rosterUnits: [] as { id: string; name_fr: string }[], countries: countriesList };
         return (
           <dl className="mt-4 border-t pt-4 text-sm" style={{ borderColor: "var(--border)" }}>
-            <dt className="mb-2 text-[var(--foreground-muted)]">Effets ajoutés (admin)</dt>
+            <dt className="mb-2 text-[var(--foreground-muted)]">Conséquences ajoutées par l’administration</dt>
             <dd>
               <ul className="list-inside list-disc space-y-1 text-[var(--foreground)]">
                 {effectsList.map((e, idx) => (
@@ -884,7 +884,7 @@ function EventDetail({
         <div className="mt-4 border-t pt-4" style={{ borderColor: "var(--border)" }}>
           <h3 className="mb-2 text-sm font-medium text-[var(--foreground)]">Jets de dés</h3>
           <div className="mb-3 flex flex-wrap items-center gap-2">
-            <label htmlFor={`ai-event-${event.id}-modifier`} className="text-xs text-[var(--foreground-muted)]">Modificateur ponctuel</label>
+            <label htmlFor={`ai-event-${event.id}-modifier`} className="text-xs text-[var(--foreground-muted)]">Ajustement exceptionnel</label>
             <input
               id={`ai-event-${event.id}-modifier`}
               type="text"
@@ -898,13 +898,13 @@ function EventDetail({
               className="w-20 rounded border bg-[var(--background)] px-2 py-1 text-sm"
               style={{ borderColor: "var(--border)" }}
             />
-            <label htmlFor={`ai-event-${event.id}-modifier-label`} className="text-xs text-[var(--foreground-muted)]">Libellé</label>
+            <label htmlFor={`ai-event-${event.id}-modifier-label`} className="text-xs text-[var(--foreground-muted)]">Motif</label>
             <input
               id={`ai-event-${event.id}-modifier-label`}
               type="text"
               value={adminModifierLabel}
               onChange={(e) => setAdminModifierLabel(e.target.value.slice(0, 50))}
-              placeholder="Ponctuel"
+              placeholder="Contexte particulier"
               maxLength={50}
               className="min-w-[8rem] rounded border bg-[var(--background)] px-2 py-1 text-sm"
               style={{ borderColor: "var(--border)" }}
@@ -920,7 +920,7 @@ function EventDetail({
                 await rollD100ForAiEvent(
                   event.id,
                   "success",
-                  value !== 0 ? [{ label: adminModifierLabel.trim() || "Ponctuel", value }] : []
+                  value !== 0 ? [{ label: adminModifierLabel.trim() || "Ajustement admin", value }] : []
                 );
                 setDiceLoading(null);
                 onRefresh();
@@ -940,7 +940,7 @@ function EventDetail({
                 await rollD100ForAiEvent(
                   event.id,
                   "impact",
-                  value !== 0 ? [{ label: adminModifierLabel.trim() || "Ponctuel", value }] : []
+                  value !== 0 ? [{ label: adminModifierLabel.trim() || "Ajustement admin", value }] : []
                 );
                 setDiceLoading(null);
                 onRefresh();
@@ -1021,7 +1021,7 @@ function EventDetail({
               Lancez le jet d&apos;impact pour pouvoir accepter cet événement.
             </p>
           )}
-          <div className="flex flex-wrap items-start gap-6">
+          <div className="flex flex-wrap items-start gap-4">
             <div className="flex flex-wrap items-center gap-2">
               <button
                 type="button"
@@ -1047,7 +1047,7 @@ function EventDetail({
                   checked={scheduleWithAmplitude}
                   onChange={(e) => setScheduleWithAmplitude(e.target.checked)}
                 />
-                Planifier avec amplitude (déclenchement différé)
+                Décaler l’application dans la plage prévue par les règles
               </label>
               <input
                 type="text"

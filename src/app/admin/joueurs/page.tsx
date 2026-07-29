@@ -32,11 +32,11 @@ export default async function AdminJoueursPage() {
   }));
 
   return (
-    <div className="mx-auto max-w-6xl px-4 py-10">
+    <div className="mx-auto max-w-6xl px-4 py-6">
       <h1 className="mb-2 text-2xl font-bold text-[var(--foreground)]">
         Joueurs
       </h1>
-      <p className="mb-8 text-[var(--foreground-muted)]">
+      <p className="mb-5 text-[var(--foreground-muted)]">
         Créez les comptes et attribuez un pays à chaque joueur. L’accès joueur est limité au pays assigné.
       </p>
 

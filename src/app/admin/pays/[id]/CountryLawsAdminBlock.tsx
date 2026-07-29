@@ -44,7 +44,7 @@ function LawScoreRow({
   }
 
   return (
-    <div className="border-b py-4 last:border-b-0" style={{ borderColor: "var(--border-muted)" }}>
+    <div className="border-b py-3 last:border-b-0" style={{ borderColor: "var(--border-muted)" }}>
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h3 className="text-sm font-semibold text-[var(--foreground)]">{def.title_fr}</h3>
@@ -106,14 +106,14 @@ export function CountryLawsAdminBlock({
 }) {
   return (
     <div
-      className="admin-settings-form rounded-lg border p-4 sm:p-6"
+      className="admin-settings-form rounded-lg border p-4"
       style={{ background: "var(--background-panel)", borderColor: "var(--border)" }}
     >
       <h2 className="text-lg font-semibold text-[var(--foreground)]">
         Lois nationales
       </h2>
-      <p className="mt-1 text-sm leading-relaxed text-[var(--foreground-muted)]">
-        Déplacez une loi sur son échelle. Le niveau et ses effets sont recalculés à partir des seuils définis dans les règles.
+      <p className="mt-1 text-sm leading-snug text-[var(--foreground-muted)]">
+        Vous corrigez ici le score actuel. Chaque jour, il se rapproche de la cible choisie par le joueur ; le palier actif et ses effets suivent ce score.
       </p>
       <div className="mt-4">
         {LAW_DEFINITIONS.map((def) => {

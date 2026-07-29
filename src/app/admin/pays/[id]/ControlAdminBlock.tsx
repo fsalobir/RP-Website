@@ -116,7 +116,7 @@ export function ControlAdminBlock({
   const inputStyle = { borderColor: "var(--border)" };
 
   return (
-    <div className="admin-settings-form rounded-lg border p-4 sm:p-6" style={panelStyle}>
+    <div className="admin-settings-form rounded-lg border p-4" style={panelStyle}>
       <h2 className="mb-2 text-lg font-semibold text-[var(--foreground)]">
         Contrôle
       </h2>

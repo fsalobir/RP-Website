@@ -432,11 +432,12 @@ export function IdeologyRulePreview({
   const before = 100 / 6;
   const after = result?.scores[selected] ?? before;
   const delta = after - before;
+  const speedLabel = Math.abs(delta) >= 10 ? "très rapide" : Math.abs(delta) >= 3 ? "rapide" : "modéré";
 
   return (
     <PreviewFrame
-      title="Déplacement idéologique en un jour"
-      description="Scénario fixe : pays neutre, voisin deux fois plus influent, relation +50, occupation et effet actif orientés vers le même pôle."
+      title="Test de dérive en un jour"
+      description="Cas volontairement fort : voisin deux fois plus influent, relation +50, occupation et effet actif poussent tous dans le même sens."
     >
       <div className="grid gap-4 sm:grid-cols-[11rem_minmax(0,1fr)] sm:items-center">
         <div>
@@ -446,6 +447,9 @@ export function IdeologyRulePreview({
           </p>
           <p className="mt-1 text-xs text-[var(--foreground-muted)]">
             Variation quotidienne : {delta >= 0 ? "+" : ""}{compact(delta)} point
+          </p>
+          <p className="mt-1 text-xs font-medium text-[var(--foreground)]">
+            Rythme {speedLabel}
           </p>
         </div>
         <div>
@@ -538,7 +542,7 @@ export function AiRulePreview({ config }: { config: AiConfig }) {
   return (
     <PreviewFrame
       title="Projection sur vingt-quatre heures"
-      description="Estimation directe à rythme constant. Le déclenchement réel peut être décalé par l’amplitude aléatoire configurée."
+      description="Estimation à rythme constant. Le déclenchement réel peut varier dans la plage aléatoire configurée."
     >
       <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_18rem] lg:items-center">
         <div>

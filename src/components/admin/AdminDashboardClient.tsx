@@ -17,9 +17,9 @@ export function AdminDashboardClient({
   const results = useMemo(() => filterAdminNavigation(query), [query]);
 
   return (
-    <div className="space-y-7">
+    <div className="space-y-5">
       <div className="max-w-2xl">
-        <label htmlFor="admin-dashboard-search" className="mb-2 block text-sm font-medium text-[var(--foreground)]">
+        <label htmlFor="admin-dashboard-search" className="mb-1 block text-sm font-medium text-[var(--foreground)]">
           Rechercher dans l’administration
         </label>
         <div className="relative">
@@ -32,7 +32,7 @@ export function AdminDashboardClient({
             value={query}
             onChange={(event) => setQuery(event.target.value)}
             placeholder="Pays, règles, joueurs, Discord…"
-            className="min-h-12 w-full rounded-lg border bg-[var(--background-panel)] py-3 pl-10 pr-12 text-base text-[var(--foreground)] placeholder:text-[var(--foreground-muted)]"
+            className="min-h-11 w-full rounded-lg border bg-[var(--background-panel)] py-2 pl-10 pr-12 text-base text-[var(--foreground)] placeholder:text-[var(--foreground-muted)]"
             style={{ borderColor: "var(--border)" }}
           />
           {query && (
@@ -46,7 +46,7 @@ export function AdminDashboardClient({
             </button>
           )}
         </div>
-        <p className="mt-2 text-sm text-[var(--foreground-muted)]" aria-live="polite">
+        <p className="mt-1 text-xs text-[var(--foreground-muted)]" aria-live="polite">
           {results.length} accès {results.length > 1 ? "trouvés" : "trouvé"}
         </p>
       </div>
@@ -57,7 +57,7 @@ export function AdminDashboardClient({
 
         return (
           <section key={group.id} aria-labelledby={`admin-group-${group.id}`}>
-            <h2 id={`admin-group-${group.id}`} className="mb-3 text-sm font-semibold uppercase tracking-[0.08em] text-[var(--foreground-muted)]">
+            <h2 id={`admin-group-${group.id}`} className="mb-2 text-xs font-semibold uppercase tracking-[0.08em] text-[var(--foreground-muted)]">
               {group.label}
             </h2>
             <div
@@ -75,12 +75,12 @@ export function AdminDashboardClient({
                   <Link
                     key={item.href}
                     href={item.href}
-                    className="group flex min-h-20 items-start gap-3 px-4 py-4 transition-colors hover:bg-[var(--background-elevated)] focus-visible:bg-[var(--background-elevated)] sm:items-center"
+                    className="group flex min-h-16 items-start gap-3 px-3 py-3 transition-colors hover:bg-[var(--background-elevated)] focus-visible:bg-[var(--background-elevated)] sm:items-center"
                     style={{ borderColor: "var(--border-muted)" }}
                   >
                     <span
                       aria-hidden
-                      className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[var(--background-elevated)] text-lg"
+                      className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[var(--background-elevated)] text-base"
                     >
                       {item.icon}
                     </span>
@@ -93,7 +93,7 @@ export function AdminDashboardClient({
                           </span>
                         )}
                       </span>
-                      <span className="mt-1 block text-sm leading-relaxed text-[var(--foreground-muted)]">
+                      <span className="mt-0.5 block text-xs leading-snug text-[var(--foreground-muted)] sm:text-sm">
                         {item.description}
                       </span>
                     </span>

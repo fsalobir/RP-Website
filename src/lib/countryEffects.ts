@@ -44,13 +44,13 @@ export const STAT_LABELS: Record<StatKey, string> = {
   stability: "Stabilité",
 };
 
-/** Sous-types Modificateur d'influence (Global / PIB / Population / Hard Power). */
+/** Sous-types des effets sur l'influence. */
 export const INFLUENCE_MODIFIER_SUB_IDS = ["global", "gdp", "population", "hard_power"] as const;
 export const INFLUENCE_MODIFIER_SUB_LABELS: Record<string, string> = {
-  global: "Global (toute l'influence)",
-  gdp: "PIB (influence économie)",
-  population: "Population",
-  hard_power: "Hard Power (militaire)",
+  global: "Toute l’influence",
+  gdp: "Part liée au PIB",
+  population: "Part liée à la population",
+  hard_power: "Part liée à la puissance militaire",
 };
 
 /** Catégories pour le premier dropdown (libellé FR). */
@@ -69,11 +69,11 @@ export type EffectCategoryId = (typeof EFFECT_CATEGORY_IDS)[number];
 export const EFFECT_CATEGORY_LABELS: Record<EffectCategoryId, string> = {
   gdp_growth: "Croissance PIB",
   population_growth: "Croissance population",
-  stat_delta: "Stats (société)",
-  budget_ministry: "Budget ministère",
-  budget_debt_surplus: "Allocation de Budget Maximum",
+  stat_delta: "Statistique du pays",
+  budget_ministry: "Budget d’un ministère",
+  budget_debt_surplus: "Plafond de répartition du budget",
   military_unit: "Unité militaire",
-  influence_modifier: "Modificateur d'influence",
+  influence_modifier: "Influence internationale",
   ideology: "Idéologie",
 };
 
@@ -81,24 +81,24 @@ export const EFFECT_CATEGORY_LABELS: Record<EffectCategoryId, string> = {
 export const GROWTH_SUB_IDS = ["base", "per_stat"] as const;
 export const GROWTH_SUB_LABELS: Record<string, string> = {
   base: "Base",
-  per_stat: "Par stat",
+  per_stat: "Selon une statistique",
 };
 
 /** Sous-type Budget ministère. */
 export const BUDGET_EFFECT_SUB_IDS = ["min_pct", "effect_multiplier"] as const;
 export const BUDGET_EFFECT_SUB_LABELS: Record<string, string> = {
-  min_pct: "Budget minimum forcé",
-  effect_multiplier: "Bonus/Malus d'effet",
+  min_pct: "Part minimale imposée",
+  effect_multiplier: "Force des effets du ministère",
 };
 
 /** Sous-type Unité militaire. */
 export const MILITARY_UNIT_EFFECT_SUB_IDS = ["unit_extra", "unit_tech_rate", "limit_modifier", "limit_modifier_sub_type", "limit_modifier_roster"] as const;
 export const MILITARY_UNIT_EFFECT_SUB_LABELS: Record<string, string> = {
-  unit_extra: "Bonus/Malus extra (nombre d'unités)",
-  unit_tech_rate: "Bonus points technologie (par jour)",
-  limit_modifier: "Modificateur de limites par branche (%)",
-  limit_modifier_sub_type: "Modificateur de limites par sous-branche/type (%)",
-  limit_modifier_roster: "Modificateur de limites par unité (%)",
+  unit_extra: "Unités ajoutées ou retirées",
+  unit_tech_rate: "Points de technologie par jour",
+  limit_modifier: "Variation de la limite d’une branche (%)",
+  limit_modifier_sub_type: "Variation de la limite d’un type d’unité (%)",
+  limit_modifier_roster: "Variation de la limite d’une unité (%)",
 };
 
 /** Clé composite pour cible sous-branche/type : "branch:sub_type" (sub_type peut être vide). */
@@ -254,20 +254,20 @@ export const EFFECT_KIND_META: Record<EffectKindId, EffectKindMeta> = {
   gdp_growth_per_stat: { targetType: "stat", valueFormat: "percent_decimal", label: "Croissance PIB (par stat)" },
   population_growth_base: { targetType: "none", valueFormat: "percent_decimal", label: "Croissance population (taux de base)" },
   population_growth_per_stat: { targetType: "stat", valueFormat: "percent_decimal", label: "Croissance population (par stat)" },
-  stat_delta: { targetType: "stat", valueFormat: "raw", label: "Stat société" },
-  budget_ministry_min_pct: { targetType: "budget_ministry", valueFormat: "percent_display", label: "Budget ministère (minimum forcé)" },
-  budget_ministry_effect_multiplier: { targetType: "budget_ministry", valueFormat: "multiplier", label: "Budget ministère (bonus/malus d'effet)" },
-  budget_allocation_cap: { targetType: "none", valueFormat: "percent_display", label: "Allocation de Budget Maximum" },
-  military_unit_extra: { targetType: "roster_unit", valueFormat: "integer", label: "Unité militaire (bonus/malus extra)" },
-  military_unit_tech_rate: { targetType: "roster_unit", valueFormat: "integer", label: "Unité militaire (bonus points tech/jour)" },
-  military_unit_limit_modifier: { targetType: "military_branch", valueFormat: "integer_percent", label: "Modificateur de limites par branche (%)" },
-  military_unit_limit_modifier_sub_type: { targetType: "military_sub_type", valueFormat: "integer_percent", label: "Modificateur de limites par sous-branche/type (%)" },
-  military_unit_limit_modifier_roster: { targetType: "roster_unit", valueFormat: "integer_percent", label: "Modificateur de limites par unité (%)" },
-  influence_modifier_global: { targetType: "none", valueFormat: "multiplier", label: "Modificateur d'influence (global)" },
-  influence_modifier_gdp: { targetType: "none", valueFormat: "multiplier", label: "Modificateur d'influence (PIB)" },
-  influence_modifier_population: { targetType: "none", valueFormat: "multiplier", label: "Modificateur d'influence (population)" },
-  influence_modifier_hard_power: { targetType: "none", valueFormat: "multiplier", label: "Modificateur d'influence (Hard Power)" },
-  state_actions_grant: { targetType: "none", valueFormat: "integer", label: "Actions d'État (octroi par tick)" },
+  stat_delta: { targetType: "stat", valueFormat: "raw", label: "Variation d’une statistique du pays" },
+  budget_ministry_min_pct: { targetType: "budget_ministry", valueFormat: "percent_display", label: "Part minimale d’un ministère" },
+  budget_ministry_effect_multiplier: { targetType: "budget_ministry", valueFormat: "multiplier", label: "Force des effets d’un ministère" },
+  budget_allocation_cap: { targetType: "none", valueFormat: "percent_display", label: "Plafond de répartition du budget" },
+  military_unit_extra: { targetType: "roster_unit", valueFormat: "integer", label: "Unités ajoutées ou retirées" },
+  military_unit_tech_rate: { targetType: "roster_unit", valueFormat: "integer", label: "Progression technologique d’une unité" },
+  military_unit_limit_modifier: { targetType: "military_branch", valueFormat: "integer_percent", label: "Limite d’unités d’une branche" },
+  military_unit_limit_modifier_sub_type: { targetType: "military_sub_type", valueFormat: "integer_percent", label: "Limite d’un type d’unité" },
+  military_unit_limit_modifier_roster: { targetType: "roster_unit", valueFormat: "integer_percent", label: "Limite d’une unité précise" },
+  influence_modifier_global: { targetType: "none", valueFormat: "multiplier", label: "Influence totale" },
+  influence_modifier_gdp: { targetType: "none", valueFormat: "multiplier", label: "Influence liée au PIB" },
+  influence_modifier_population: { targetType: "none", valueFormat: "multiplier", label: "Influence liée à la population" },
+  influence_modifier_hard_power: { targetType: "none", valueFormat: "multiplier", label: "Influence liée à la puissance militaire" },
+  state_actions_grant: { targetType: "none", valueFormat: "integer", label: "Actions d’État accordées par jour" },
   relation_delta: { targetType: "country", valueFormat: "raw", label: "Évolution relation bilatérale" },
   ideology_drift_germanic_monarchy: { targetType: "none", valueFormat: "raw", label: "Dérive idéologique (Monarchisme Germanique)" },
   ideology_drift_merina_monarchy: { targetType: "none", valueFormat: "raw", label: "Dérive idéologique (Monarchisme Mérinais)" },
@@ -424,21 +424,21 @@ export function getEffectKindValueHelper(effectKind: string): {
   switch (format) {
     case "percent_decimal":
       return {
-        valueLabel: "Taux (%)",
+        valueLabel: "Taux par jour (%)",
         valueStep: 0.01,
         displayToStored: (x) => x / 100,
         storedToDisplay: (x) => x * 100,
       };
     case "raw":
       return {
-        valueLabel: "Delta",
+        valueLabel: "Variation",
         valueStep: 0.01,
         displayToStored: (x) => x,
         storedToDisplay: (x) => x,
       };
     case "percent_display":
       return {
-        valueLabel: effectKind === "budget_allocation_cap" ? "% (+/-)" : "Min. %",
+        valueLabel: effectKind === "budget_allocation_cap" ? "Variation du plafond (%)" : "Part minimale (%)",
         valueStep: 0.01,
         displayToStored: (x) => x,
         storedToDisplay: (x) => x,
@@ -446,28 +446,33 @@ export function getEffectKindValueHelper(effectKind: string): {
     case "multiplier":
       if (effectKind.startsWith("influence_modifier_")) {
         return {
-          valueLabel: "% (bonus/malus)",
+          valueLabel: "Bonus ou malus (%)",
           valueStep: 1,
           displayToStored: (x) => 1 + x / 100,
           storedToDisplay: (x) => (Number(x) - 1) * 100,
         };
       }
       return {
-        valueLabel: "Mult.",
+        valueLabel: "Bonus ou malus (%)",
         valueStep: 0.01,
         displayToStored: (x) => (100 + x) / 100,
         storedToDisplay: (x) => (x * 100 - 100),
       };
     case "integer":
       return {
-        valueLabel: effectKind === "military_unit_tech_rate" || effectKind === "procuration_points_per_day" ? "Pts/jour" : "Extra",
+        valueLabel:
+          effectKind === "state_actions_grant"
+            ? "Actions par jour"
+            : effectKind === "military_unit_tech_rate" || effectKind === "procuration_points_per_day"
+              ? "Points par jour"
+              : "Nombre d’unités",
         valueStep: 1,
         displayToStored: (x) => Math.floor(x),
         storedToDisplay: (x) => Number(x),
       };
     case "integer_percent":
       return {
-        valueLabel: "%",
+        valueLabel: "Variation (%)",
         valueStep: 0.01,
         displayToStored: (x) => x,
         storedToDisplay: (x) => Number(x),
@@ -503,31 +508,31 @@ export function getEffectDescription(e: CountryEffect | ResolvedEffect, options?
   }
 
   if (e.effect_kind === "budget_ministry_min_pct" && targetLabel) {
-    return `Minimum forcé — ${targetLabel} : ${valueStr}`;
+    return `Part minimale — ${targetLabel} : ${valueStr}`;
   }
   if (e.effect_kind === "budget_ministry_effect_multiplier" && targetLabel) {
-    return `Bonus/Malus d’effet — ${targetLabel} : ${valueStr}`;
+    return `Force des effets — ${targetLabel} : ${valueStr}`;
   }
   if (e.effect_kind === "budget_allocation_cap") {
-    return `Allocation de Budget Maximum : ${valueStr}`;
+    return `Plafond de répartition du budget : ${valueStr}`;
   }
   if (e.effect_kind === "gdp_growth_base") return `Croissance PIB (base) : ${valueStr}`;
   if (e.effect_kind === "gdp_growth_per_stat" && targetLabel) return `Croissance PIB — ${targetLabel} : ${valueStr}`;
   if (e.effect_kind === "population_growth_base") return `Croissance population (base) : ${valueStr}`;
   if (e.effect_kind === "population_growth_per_stat" && targetLabel) return `Croissance population — ${targetLabel} : ${valueStr}`;
-  if (e.effect_kind === "stat_delta" && targetLabel) return `Stat — ${targetLabel} : ${valueStr}`;
-  if (e.effect_kind === "military_unit_extra" && targetLabel) return `Extra unité — ${targetLabel} : ${valueStr}`;
-  if (e.effect_kind === "military_unit_tech_rate" && targetLabel) return `Tech unité — ${targetLabel} : ${valueStr}`;
-  if (e.effect_kind === "military_unit_limit_modifier" && targetLabel) return `Limites branche — ${targetLabel} : ${valueStr}`;
-  if (e.effect_kind === "military_unit_limit_modifier_sub_type" && targetLabel) return `Limites sous-branche/type — ${targetLabel} : ${valueStr}`;
-  if (e.effect_kind === "military_unit_limit_modifier_roster" && targetLabel) return `Limites unité — ${targetLabel} : ${valueStr}`;
-  if (e.effect_kind === "influence_modifier_global") return `Modificateur influence (global) : ${valueStr}`;
-  if (e.effect_kind === "influence_modifier_gdp") return `Modificateur influence (PIB) : ${valueStr}`;
-  if (e.effect_kind === "influence_modifier_population") return `Modificateur influence (population) : ${valueStr}`;
-  if (e.effect_kind === "influence_modifier_hard_power") return `Modificateur influence (Hard Power) : ${valueStr}`;
+  if (e.effect_kind === "stat_delta" && targetLabel) return `Variation — ${targetLabel} : ${valueStr}`;
+  if (e.effect_kind === "military_unit_extra" && targetLabel) return `Unités ajoutées — ${targetLabel} : ${valueStr}`;
+  if (e.effect_kind === "military_unit_tech_rate" && targetLabel) return `Progression technologique — ${targetLabel} : ${valueStr}`;
+  if (e.effect_kind === "military_unit_limit_modifier" && targetLabel) return `Limite de la branche — ${targetLabel} : ${valueStr}`;
+  if (e.effect_kind === "military_unit_limit_modifier_sub_type" && targetLabel) return `Limite du type d’unité — ${targetLabel} : ${valueStr}`;
+  if (e.effect_kind === "military_unit_limit_modifier_roster" && targetLabel) return `Limite de l’unité — ${targetLabel} : ${valueStr}`;
+  if (e.effect_kind === "influence_modifier_global") return `Influence totale : ${valueStr}`;
+  if (e.effect_kind === "influence_modifier_gdp") return `Influence liée au PIB : ${valueStr}`;
+  if (e.effect_kind === "influence_modifier_population") return `Influence liée à la population : ${valueStr}`;
+  if (e.effect_kind === "influence_modifier_hard_power") return `Influence liée à la puissance militaire : ${valueStr}`;
   if (e.effect_kind === "relation_delta" && e.effect_target) {
     const otherName = options?.countryName?.(e.effect_target) ?? "Pays non visible";
-    return `Relation bilatérale — ${otherName} : ${valueStr} par tick`;
+    return `Relation bilatérale — ${otherName} : ${valueStr} par jour`;
   }
   if (e.effect_kind.startsWith("ideology_drift_")) {
     const id = e.effect_kind.replace("ideology_drift_", "") as IdeologyId;

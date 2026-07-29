@@ -231,19 +231,19 @@ export function WikiAdminClient({ initialPages }: { initialPages: WikiPageRow[] 
   );
 
   return (
-    <div className="admin-settings-form mx-auto max-w-6xl px-4 py-8">
-      <h1 className="mb-2 text-2xl font-semibold text-[var(--foreground)]">Wiki</h1>
-      <p className="mb-6 text-sm text-[var(--foreground-muted)]">
-        Éditez les pages du wiki public. Les images sont stockées dans le bucket « wiki-images » (max. 5 Mo).
+    <div className="admin-settings-form mx-auto max-w-6xl px-4 py-6">
+      <h1 className="mb-1 text-2xl font-semibold text-[var(--foreground)]">Wiki</h1>
+      <p className="mb-4 text-sm text-[var(--foreground-muted)]">
+        Éditez les pages visibles par les joueurs. Les images acceptées pèsent au maximum 5 Mo.
       </p>
       <AdminSettingsGuide
-        purpose="L’éditeur reproduit le contenu public : titres, textes et images seront visibles tels qu’ils apparaissent ici."
+        purpose="L’éditeur montre le contenu tel qu’il sera publié."
         impact="Enregistrer modifie immédiatement la page lue par les joueurs. Supprimer une section supprime aussi ses sous-sections."
         check="Relisez le titre, la hiérarchie et le rendu dans l’éditeur avant d’enregistrer."
       />
       {error ? <p role="alert" className="mt-4 text-sm text-[var(--danger)]">{error}</p> : null}
 
-      <div className="mt-6 flex flex-col gap-6 lg:flex-row">
+      <div className="mt-4 flex flex-col gap-4 lg:flex-row">
         <aside className="w-full shrink-0 lg:w-72">
           <div className="rounded-xl border border-[var(--border)] bg-[var(--background-panel)] p-3">
             <div className="mb-2 flex flex-wrap gap-2">
@@ -271,14 +271,14 @@ export function WikiAdminClient({ initialPages }: { initialPages: WikiPageRow[] 
                       <button
                         type="button"
                         onClick={() => selectPage(page.id)}
-                        className={`min-h-11 w-full rounded-lg px-3 py-2 text-left text-sm ${
+                        className={`min-h-11 w-full rounded-lg px-2 py-1.5 text-left text-sm ${
                           selectedId === page.id
                             ? "bg-[var(--accent)]/25 font-medium text-[var(--foreground)]"
                             : "text-[var(--foreground-muted)] hover:bg-[var(--background-elevated)]"
                         }`}
                       >
                         <span className="block">{page.title}</span>
-                        <span className="block truncate text-xs text-[var(--foreground-muted)]">/{page.slug}</span>
+                        <span className="block break-all text-xs text-[var(--foreground-muted)]">/{page.slug}</span>
                       </button>
                     </li>
                   ))

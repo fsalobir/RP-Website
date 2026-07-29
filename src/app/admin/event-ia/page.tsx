@@ -82,9 +82,9 @@ export default async function AdminEventIaPage() {
   const cronDiagnosticError = cronDiagRes && typeof cronDiagRes === "object" && "error" in cronDiagRes ? (cronDiagRes as { error: string }).error : null;
 
   return (
-    <div className="mx-auto max-w-6xl px-4 py-10">
+    <div className="mx-auto max-w-6xl px-4 py-6">
       <h1 className="mb-2 text-2xl font-bold text-[var(--foreground)]">Événements IA</h1>
-      <p className="mb-8 text-[var(--foreground-muted)]">
+      <p className="mb-5 text-[var(--foreground-muted)]">
         Actions d&apos;État proposées automatiquement pour les pays sans joueur. Ouvrez une ligne pour l’examiner, l’accepter ou la refuser.
       </p>
       <EventIaList

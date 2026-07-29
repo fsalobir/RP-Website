@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { replacePlaceholders, getPreviewVars } from "@/lib/discord-format";
-import { AdminImpactPreview, AdminSettingsGuide } from "@/components/admin/AdminSettingsUi";
+import { AdminSettingsGuide } from "@/components/admin/AdminSettingsUi";
 import { matchesSearchText } from "@/lib/searchText";
 import {
   setDispatchTypeEnabled,
@@ -130,31 +130,13 @@ export function BotDiscordForm({
     );
 
   return (
-    <div className="admin-settings-form space-y-8">
+    <div className="admin-settings-form space-y-5">
       <AdminSettingsGuide
-        purpose="Une publication suit trois étapes : l’événement doit être activé, sa destination choisie, puis un modèle de message doit exister."
+        purpose="Une publication nécessite un événement actif, un salon et au moins un modèle de message."
         impact="Un changement d’activation ou de destination s’applique aux prochaines publications. Modifier un modèle change le texte que recevra Discord."
         check="Ouvrez l’aperçu du message et vérifiez le salon choisi avant de quitter la page."
         warning="Les identifiants de salon sont enregistrés quand vous quittez le champ."
       />
-      <AdminImpactPreview title="Parcours d’une publication" description="Si une étape manque, le message ne peut pas arriver au bon endroit.">
-        <ol className="grid gap-2 text-sm sm:grid-cols-[1fr_auto_1fr_auto_1fr] sm:items-center">
-          <li className="rounded-lg border px-3 py-3 text-[var(--foreground)]" style={{ borderColor: "var(--border-muted)" }}>
-            <span className="block text-xs text-[var(--foreground-muted)]">1. Événement</span>
-            Activé
-          </li>
-          <li aria-hidden className="hidden text-center text-[var(--accent)] sm:block">→</li>
-          <li className="rounded-lg border px-3 py-3 text-[var(--foreground)]" style={{ borderColor: "var(--border-muted)" }}>
-            <span className="block text-xs text-[var(--foreground-muted)]">2. Destination</span>
-            Salon national ou international
-          </li>
-          <li aria-hidden className="hidden text-center text-[var(--accent)] sm:block">→</li>
-          <li className="rounded-lg border px-3 py-3 text-[var(--foreground)]" style={{ borderColor: "var(--border-muted)" }}>
-            <span className="block text-xs text-[var(--foreground-muted)]">3. Message</span>
-            Modèle rendu et publié
-          </li>
-        </ol>
-      </AdminImpactPreview>
       <div className="max-w-xl">
         <label htmlFor="discord-settings-search" className="mb-1 block text-sm font-medium text-[var(--foreground)]">
           Rechercher une action ou un modèle
@@ -172,7 +154,7 @@ export function BotDiscordForm({
       {settingsError && <p role="alert" className="text-sm text-[var(--danger)]">{settingsError}</p>}
       {success && <p aria-live="polite" className="text-sm text-[var(--accent)]">{success}</p>}
       <section
-        className="rounded-xl border p-4 sm:p-6"
+        className="rounded-xl border p-4"
         style={{ borderColor: "var(--border)", background: "var(--background-panel)" }}
       >
         <h2 className="mb-2 text-lg font-semibold text-[var(--foreground)]">Configuration générale</h2>
@@ -190,24 +172,24 @@ export function BotDiscordForm({
       </section>
 
       <section
-        className="rounded-xl border p-4 sm:p-6"
+        className="rounded-xl border p-4"
         style={{ borderColor: "var(--border)", background: "var(--background-panel)" }}
       >
-        <h2 className="mb-4 text-lg font-semibold text-[var(--foreground)]">Canaux par continent</h2>
-        <p className="mb-4 text-sm text-[var(--foreground-muted)]">
+        <h2 className="mb-2 text-lg font-semibold text-[var(--foreground)]">Salons par continent</h2>
+        <p className="mb-3 text-sm leading-snug text-[var(--foreground-muted)]">
           Pour chaque continent, indiquez les salons utilisés pour les nouvelles nationales et internationales. L’identifiant se copie depuis Discord avec le mode développeur.
         </p>
         {channelError && <p role="alert" className="mb-2 text-sm text-[var(--danger)]">{channelError}</p>}
-        <div className="space-y-4">
+        <div className="space-y-2">
           {continents.map((c) => (
             <div
               key={c.id}
-              className="grid grid-cols-1 items-end gap-4 rounded-lg border p-4 md:grid-cols-[7rem_minmax(0,1fr)_minmax(0,1fr)]"
+              className="grid grid-cols-1 items-end gap-3 rounded-lg border p-3 md:grid-cols-[7rem_minmax(0,1fr)_minmax(0,1fr)]"
               style={{ borderColor: "var(--border-muted)" }}
             >
               <span className="w-28 text-sm font-medium text-[var(--foreground)]">{c.label_fr}</span>
               <div className="min-w-0">
-                <label htmlFor={`discord-national-${c.id}`} className="mb-1 block text-xs text-[var(--foreground-muted)]">ID canal national</label>
+                <label htmlFor={`discord-national-${c.id}`} className="mb-1 block text-xs text-[var(--foreground-muted)]">Salon national</label>
                 <input
                   id={`discord-national-${c.id}`}
                   type="text"
@@ -236,7 +218,7 @@ export function BotDiscordForm({
                 />
               </div>
               <div className="min-w-0">
-                <label htmlFor={`discord-international-${c.id}`} className="mb-1 block text-xs text-[var(--foreground-muted)]">ID canal international</label>
+                <label htmlFor={`discord-international-${c.id}`} className="mb-1 block text-xs text-[var(--foreground-muted)]">Salon international</label>
                 <input
                   id={`discord-international-${c.id}`}
                   type="text"
@@ -270,11 +252,11 @@ export function BotDiscordForm({
       </section>
 
       <section
-        className="rounded-xl border p-4 sm:p-6"
+        className="rounded-xl border p-4"
         style={{ borderColor: "var(--border)", background: "var(--background-panel)" }}
       >
-        <h2 className="mb-4 text-lg font-semibold text-[var(--foreground)]">Événements publiés</h2>
-        <p className="mb-4 text-sm text-[var(--foreground-muted)]">
+        <h2 className="mb-2 text-lg font-semibold text-[var(--foreground)]">Événements publiés</h2>
+        <p className="mb-3 text-sm text-[var(--foreground-muted)]">
           Activez les actions à publier, puis choisissez leur salon : national ou international.
         </p>
         <ul className="space-y-3">
@@ -332,11 +314,11 @@ export function BotDiscordForm({
       </section>
 
       <section
-        className="rounded-xl border p-4 sm:p-6"
+        className="rounded-xl border p-4"
         style={{ borderColor: "var(--border)", background: "var(--background-panel)" }}
       >
-        <h2 className="mb-4 text-lg font-semibold text-[var(--foreground)]">Modèles de messages</h2>
-        <p className="mb-4 text-sm text-[var(--foreground-muted)]">
+        <h2 className="mb-2 text-lg font-semibold text-[var(--foreground)]">Modèles de messages</h2>
+        <p className="mb-3 text-sm leading-snug text-[var(--foreground-muted)]">
           Les éléments entre accolades sont remplacés automatiquement. Si plusieurs modèles existent pour une action, l’un d’eux est choisi au hasard.
         </p>
         {templateError && <p role="alert" className="mb-2 text-sm text-[var(--danger)]">{templateError}</p>}
@@ -346,12 +328,12 @@ export function BotDiscordForm({
             items: templates.filter((tpl) => tpl.dispatch_type_id === type.id),
           }))
           .map(({ type, items }) => (
-            <div key={type.id} className="mb-8">
+            <div key={type.id} className="mb-5">
               <h3 className="mb-2 text-sm font-medium text-[var(--foreground)]">{type.label_fr}</h3>
               {items.map((tpl) => (
                 <div
                   key={tpl.id}
-                  className="mb-4 rounded border p-4"
+                  className="mb-2 rounded border p-3"
                   style={{ borderColor: "var(--border-muted)" }}
                 >
                   {editingTemplateId === tpl.id ? (
@@ -406,7 +388,7 @@ export function BotDiscordForm({
                         <button
                           type="button"
                           onClick={async () => {
-                            if (confirm("Supprimer ce template ?")) {
+                            if (confirm("Supprimer ce modèle ?")) {
                               setTemplateError(null);
                               const result = await deleteTemplate(tpl.id);
                               if (result.error) setTemplateError(result.error);
@@ -432,7 +414,7 @@ export function BotDiscordForm({
                 }}
                 className="text-sm text-[var(--accent)] hover:underline"
               >
-                + Ajouter un template
+                Ajouter un modèle
               </button>
             </div>
           ))}
@@ -512,7 +494,7 @@ function EmbedPreviewModal({
       onClick={onClose}
       role="dialog"
       aria-modal="true"
-      aria-label="Aperçu du template Discord"
+      aria-label="Aperçu du modèle Discord"
     >
       <div
         className="max-h-[90vh] w-full max-w-md overflow-auto rounded-lg border shadow-lg"
@@ -523,7 +505,7 @@ function EmbedPreviewModal({
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between border-b p-3" style={{ borderColor: "var(--border)" }}>
-          <h3 className="text-sm font-semibold text-[var(--foreground)]">Aperçu (données de démo)</h3>
+          <h3 className="text-sm font-semibold text-[var(--foreground)]">Aperçu avec des données d’exemple</h3>
           <div className="flex items-center gap-2">
             <button
               type="button"
@@ -548,7 +530,7 @@ function EmbedPreviewModal({
         </div>
         <div className="p-4">
           <p className="mb-2 text-xs text-[var(--foreground-muted)]">
-            Rendu type embed Discord (titre, description, couleur, image, footer).
+            Rendu envoyé dans Discord.
           </p>
           {loading && !snippets ? (
             <p className="text-sm text-[var(--foreground-muted)]">Chargement…</p>
@@ -666,7 +648,7 @@ function TemplateEditForm({
         />
       </div>
       <div>
-        <label htmlFor={`template-${template.id}-color`} className="mb-1 block text-xs text-[var(--foreground-muted)]">Couleur du message (code hexadécimal, ex. 2e7d32)</label>
+        <label htmlFor={`template-${template.id}-color`} className="mb-1 block text-xs text-[var(--foreground-muted)]">Couleur du message (ex. 2e7d32)</label>
         <input
           id={`template-${template.id}-color`}
           type="text"

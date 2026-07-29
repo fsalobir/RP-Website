@@ -11,11 +11,11 @@ export default async function AdminDashboardPage() {
     supabase.from("perks").select("id", { count: "exact", head: true }),
   ]);
   return (
-    <div className="mx-auto max-w-6xl px-4 py-10">
+    <div className="mx-auto max-w-6xl px-4 py-6">
       <h1 className="mb-2 text-2xl font-bold text-[var(--foreground)]">
         Tableau de bord
       </h1>
-      <p className="mb-8 max-w-2xl text-[var(--foreground-muted)]">
+      <p className="mb-5 max-w-2xl text-[var(--foreground-muted)]">
         Retrouvez une page par son nom ou par la tâche que vous voulez accomplir.
       </p>
       <AdminDashboardClient

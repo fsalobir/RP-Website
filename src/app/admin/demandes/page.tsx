@@ -96,12 +96,12 @@ const rosterUnitIds = rosterUnits.map((u) => ({ id: u.id, name_fr: u.name_fr }))
   const espionageIntelGainBase = Number(intelConfig.espionage_intel_gain_base ?? 50);
 
   return (
-    <div className="mx-auto max-w-6xl px-4 py-10">
+    <div className="mx-auto max-w-6xl px-4 py-6">
       <h1 className="mb-2 text-2xl font-bold text-[var(--foreground)]">
         Demandes
       </h1>
-      <p className="mb-8 text-[var(--foreground-muted)]">
-        Tickets des joueurs (actions d'État). Cliquez sur une ligne pour voir le détail, modifier l'effet attaché, accepter ou refuser.
+      <p className="mb-5 text-[var(--foreground-muted)]">
+        Examinez les actions envoyées par les joueurs, puis acceptez-les ou refusez-les.
       </p>
       <DemandesList
         requests={requests}

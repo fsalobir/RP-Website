@@ -44,22 +44,22 @@ export function JoueursManager({
   );
 
   return (
-    <div className="admin-settings-form space-y-8">
+    <div className="admin-settings-form space-y-5">
       <AdminSettingsGuide
-        purpose="Un compte joueur donne accès à un seul pays. L’assignation détermine immédiatement les données que la personne peut gérer."
+        purpose="Chaque compte joueur donne accès à un seul pays."
         impact="Le joueur peut ouvrir les espaces privés de son pays et utiliser son solde de points d’action."
         check="Vérifiez l’email et le pays avant la création. Un changement d’assignation prend effet dès la prochaine navigation du joueur."
         warning="Supprimer un joueur détruit aussi son compte de connexion. Cette action n’est pas réversible."
       />
 
       <section
-        className="rounded-xl border p-4 sm:p-6"
+        className="rounded-xl border p-4"
         style={{ borderColor: "var(--border)", background: "var(--background-panel)" }}
       >
         <h2 className="text-lg font-semibold text-[var(--foreground)]">
           Créer un joueur
         </h2>
-        <p className="mb-4 mt-1 text-sm text-[var(--foreground-muted)]">
+        <p className="mb-3 mt-1 text-sm text-[var(--foreground-muted)]">
           Crée le compte de connexion et l’assigne au pays choisi en une seule opération.
         </p>
         <form
@@ -74,7 +74,7 @@ export function JoueursManager({
             setCreateSuccess(result.existingAssigned ? "Compte existant assigné au pays." : true);
             router.refresh();
           }}
-          className="grid grid-cols-1 items-end gap-4 sm:grid-cols-2 xl:grid-cols-5"
+          className="grid grid-cols-1 items-end gap-3 sm:grid-cols-2 xl:grid-cols-5"
         >
           <div className="min-w-0">
             <label htmlFor="new-player-name" className="mb-1 block text-sm text-[var(--foreground-muted)]">Nom</label>
@@ -145,10 +145,10 @@ export function JoueursManager({
       </section>
 
       <section
-        className="rounded-xl border p-4 sm:p-6"
+        className="rounded-xl border p-4"
         style={{ borderColor: "var(--border)", background: "var(--background-panel)" }}
       >
-        <div className="mb-4 flex flex-wrap items-end justify-between gap-4">
+        <div className="mb-3 flex flex-wrap items-end justify-between gap-3">
           <div>
             <h2 className="text-lg font-semibold text-[var(--foreground)]">Joueurs assignés</h2>
             <p className="mt-1 text-sm text-[var(--foreground-muted)]">
@@ -178,11 +178,11 @@ export function JoueursManager({
             Aucun joueur ne correspond à cette recherche.
           </p>
         ) : (
-          <ul className="space-y-3">
+          <ul className="space-y-2">
             {filteredPlayers.map((p) => (
               <li
                 key={p.user_id}
-                className="flex flex-col items-stretch gap-3 rounded-lg border p-3 sm:flex-row sm:flex-wrap sm:items-center"
+                className="flex flex-col items-stretch gap-2 rounded-lg border px-3 py-2 sm:flex-row sm:flex-wrap sm:items-center"
                 style={{ borderColor: "var(--border-muted)" }}
               >
                 {editingNameId === p.user_id ? (

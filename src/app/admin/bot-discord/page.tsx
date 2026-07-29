@@ -73,11 +73,11 @@ export default async function AdminBotDiscordPage() {
       : new Date().toLocaleDateString("fr-FR", { dateStyle: "medium" });
 
   return (
-    <div className="mx-auto max-w-6xl px-4 py-10">
+    <div className="mx-auto max-w-6xl px-4 py-6">
       <h1 className="mb-2 text-2xl font-bold text-[var(--foreground)]">
         Publications Discord
       </h1>
-      <p className="mb-8 text-[var(--foreground-muted)]">
+      <p className="mb-5 text-[var(--foreground-muted)]">
         Choisissez quels événements sont publiés, dans quels salons et avec quel message.
       </p>
       <BotDiscordForm

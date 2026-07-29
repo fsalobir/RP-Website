@@ -4,13 +4,8 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { setRelation, resetAllRelations, randomizeAllRelations } from "./actions";
 import { RELATION_MIN, RELATION_MAX } from "@/lib/relations";
-import { InfoTooltip } from "@/components/ui/InfoTooltip";
 
 type Country = { id: string; name: string; slug: string };
-
-function TooltipBody({ text }: { text: string }) {
-  return <div className="text-xs leading-snug">{text}</div>;
-}
 
 function getRelationLabel(value: number): string {
   if (value <= -75) return "Hostilité extrême";
@@ -86,21 +81,15 @@ export function MatriceDiplomatiqueForm({
   };
 
   return (
-    <div className="admin-settings-form space-y-7">
+    <div className="admin-settings-form space-y-4">
       <section>
-        <h2 className="inline-flex items-center gap-2 text-lg font-semibold text-[var(--foreground)]">
-          <span>Modifier une relation</span>
-          <InfoTooltip label="Relation diplomatique" content={<TooltipBody text="Valeur réciproque utilisée par les actions, les événements IA et l’évolution idéologique." />} side="bottom" />
-        </h2>
-        <p className="mb-5 mt-1 text-sm leading-relaxed text-[var(--foreground-muted)]">
-          Choisissez deux pays : leur valeur actuelle est chargée automatiquement avant toute modification.
+        <h2 className="text-lg font-semibold text-[var(--foreground)]">Modifier une relation</h2>
+        <p className="mb-3 mt-1 text-sm leading-snug text-[var(--foreground-muted)]">
+          Cette valeur réciproque influence les actions, les événements IA et les idéologies. La valeur actuelle est chargée après le choix des deux pays.
         </p>
-        <div className="grid grid-cols-1 items-end gap-4 sm:grid-cols-2 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(14rem,1fr)_auto]">
+        <div className="grid grid-cols-1 items-end gap-3 sm:grid-cols-2 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(14rem,1fr)_auto]">
           <div className="flex min-w-0 flex-col gap-1">
-            <div className="inline-flex items-center gap-1.5 text-sm text-[var(--foreground-muted)]">
-              <label htmlFor="relation-country-a">Pays A</label>
-              <InfoTooltip label="Pays A" content={<TooltipBody text="Premier pays de la relation bilatérale à modifier." />} />
-            </div>
+            <label htmlFor="relation-country-a" className="text-sm text-[var(--foreground-muted)]">Premier pays</label>
             <select
               id="relation-country-a"
               value={countryA}
@@ -123,10 +112,7 @@ export function MatriceDiplomatiqueForm({
             </select>
           </div>
           <div className="flex min-w-0 flex-col gap-1">
-            <div className="inline-flex items-center gap-1.5 text-sm text-[var(--foreground-muted)]">
-              <label htmlFor="relation-country-b">Pays B</label>
-              <InfoTooltip label="Pays B" content={<TooltipBody text="Second pays de la paire, nécessairement différent du premier." />} />
-            </div>
+            <label htmlFor="relation-country-b" className="text-sm text-[var(--foreground-muted)]">Second pays</label>
             <select
               id="relation-country-b"
               value={countryB}
@@ -149,10 +135,9 @@ export function MatriceDiplomatiqueForm({
             </select>
           </div>
           <div className="flex min-w-0 flex-col gap-1">
-            <div className="inline-flex items-center gap-1.5 text-sm text-[var(--foreground-muted)]">
-              <label htmlFor="relation-range">Relation ({RELATION_MIN} à {RELATION_MAX})</label>
-              <InfoTooltip label="Valeur de relation" content={<TooltipBody text="−100 représente l’hostilité totale, 0 la neutralité et +100 une alliance très forte." />} />
-            </div>
+            <label htmlFor="relation-range" className="text-sm text-[var(--foreground-muted)]">
+              Relation : −100 hostile · 0 neutre · +100 allié
+            </label>
             <div className="flex min-w-0 items-center gap-3">
               <input
                 id="relation-range"
@@ -186,7 +171,7 @@ export function MatriceDiplomatiqueForm({
           </button>
         </div>
         {countryA && countryB && countryA !== countryB && (
-          <div className="mt-5 rounded-lg bg-[var(--background-elevated)] p-4">
+          <div className="mt-3 rounded-lg bg-[var(--background-elevated)] p-3">
             <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
               <p className="text-[var(--foreground-muted)]">
                 Valeur enregistrée : <strong className="text-[var(--foreground)]">{currentValue ?? 0}</strong>
@@ -213,7 +198,7 @@ export function MatriceDiplomatiqueForm({
         )}
       </section>
 
-      <section className="border-t pt-5" style={{ borderColor: "var(--border-muted)" }}>
+      <section className="border-t pt-4" style={{ borderColor: "var(--border-muted)" }}>
         <h3 className="text-sm font-semibold text-[var(--foreground)]">Actions sur toute la matrice</h3>
         <p className="mt-1 text-xs leading-relaxed text-[var(--foreground-muted)]">
           Ces actions remplacent toutes les relations existantes. Une confirmation est demandée.

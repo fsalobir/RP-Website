@@ -208,6 +208,45 @@ body {
   outline-offset: 1px;
 }
 
+.admin-density > .mx-auto {
+  padding-top: 1.5rem;
+  padding-bottom: 2rem;
+}
+
+.admin-density > .mx-auto > h1 + p {
+  margin-bottom: 1.25rem;
+  max-width: 72ch;
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+
+.admin-density .admin-settings-form > * + * {
+  margin-top: 1rem;
+}
+
+@media (min-width: 640px) and (pointer: fine) {
+  .admin-shell :where(button, input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]), select, textarea, summary) {
+    min-height: 2.25rem;
+  }
+
+  .admin-shell button {
+    min-width: 2.25rem;
+  }
+
+  .admin-shell label:has(> input[type="checkbox"], > input[type="radio"]) {
+    min-height: 2.25rem;
+  }
+
+  .admin-settings-form :where(
+    input:not([type="hidden"]):not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+    select,
+    textarea
+  ) {
+    min-height: 2.25rem;
+    font-size: 0.875rem;
+  }
+}
+
 @media (max-width: 639px) {
   .admin-settings-form :where(input, select, textarea) {
     font-size: 1rem;

@@ -95,7 +95,7 @@ export function RosterEditor({
     return m;
   }, [levels]);
 
-  const panelClass = "rounded-lg border p-5";
+  const panelClass = "rounded-lg border p-4";
   const panelStyle = { background: "var(--background-panel)", borderColor: "var(--border)" };
   const inputClass =
     "w-full rounded border bg-[var(--background)] px-2 py-1 text-xs sm:text-sm text-[var(--foreground)] focus:border-[var(--accent)] focus:outline-none focus:ring-1 focus:ring-[var(--accent)]";
@@ -404,9 +404,9 @@ export function RosterEditor({
   }, [query, units]);
 
   return (
-    <div className="admin-settings-form space-y-8">
+    <div className="admin-settings-form space-y-5">
       <AdminSettingsGuide
-        purpose="Le roster définit les familles d’unités accessibles à tous les pays, puis la puissance, le personnel, le coût et le niveau scientifique de chaque palier."
+        purpose="Cette page définit les unités accessibles à tous les pays et les valeurs de chaque niveau."
         impact="Ces valeurs alimentent l’état-major, les effectifs affichés, la puissance militaire et l’influence internationale."
         check="Pour chaque niveau, vérifiez que la puissance et le coût progressent de façon cohérente, et que le seuil scientifique reste atteignable."
         warning="Supprimer une unité peut retirer une référence utilisée par des pays ou des effets. L’import CSV peut modifier plusieurs unités d’un coup."
@@ -416,13 +416,13 @@ export function RosterEditor({
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
             <h2 className="text-lg font-semibold text-[var(--foreground)]">Unités</h2>
-            <p className="mt-1 max-w-[72ch] text-sm leading-relaxed text-[var(--foreground-muted)]">
-              Un niveau représente 100 points de progression. Ouvrez une unité pour comparer tous ses niveaux sur une seule grille.
+            <p className="mt-1 max-w-[72ch] text-sm leading-snug text-[var(--foreground-muted)]">
+              Ouvrez une unité pour régler sa quantité de base et comparer ses niveaux.
             </p>
             <details className="mt-3 text-sm text-[var(--foreground-muted)]">
-              <summary className="min-h-11 cursor-pointer text-[var(--accent)]">Comment préparer le fichier CSV</summary>
+              <summary className="min-h-11 cursor-pointer text-[var(--accent)]">Format du fichier CSV</summary>
               <p className="max-w-[72ch] pb-2 leading-relaxed">
-                Utilisez une ligne par niveau. Renseignez le nom, la base et le nombre de niveaux uniquement sur la ligne du niveau 1 ; les lignes suivantes portent seulement les valeurs propres à leur niveau.
+                Utilisez une ligne par niveau. Renseignez le nom, la quantité de base et le nombre de niveaux uniquement sur la ligne du niveau 1 ; les lignes suivantes portent seulement les valeurs propres à leur niveau.
               </p>
             </details>
           </div>
@@ -433,7 +433,7 @@ export function RosterEditor({
               className="rounded border py-2 px-3 text-sm font-medium"
               style={{ borderColor: "var(--border)", color: "var(--foreground)" }}
             >
-              Télécharger CSV roster (template MJ)
+              Télécharger le modèle CSV
             </button>
             <input
               ref={importFileRef}
@@ -452,7 +452,7 @@ export function RosterEditor({
               className="rounded border py-2 px-3 text-sm font-medium disabled:opacity-50"
               style={{ borderColor: "var(--border)", color: "var(--foreground)" }}
             >
-              {csvImporting ? "Import CSV…" : "Importer CSV roster"}
+              {csvImporting ? "Import…" : "Importer un CSV"}
             </button>
             <button
               type="button"
@@ -475,7 +475,7 @@ export function RosterEditor({
           </div>
         </div>
 
-        <label className="mt-5 block max-w-sm">
+        <label className="mt-4 block max-w-sm">
           <span className="sr-only">Rechercher une unité</span>
           <input
             type="search"
@@ -511,7 +511,7 @@ export function RosterEditor({
         if (query && list.length === 0) return null;
         return (
           <section key={branch} className={panelClass} style={panelStyle}>
-            <div className="mb-4 flex items-center justify-between gap-3">
+            <div className="mb-3 flex items-center justify-between gap-3">
               <h3 className="text-lg font-semibold text-[var(--foreground)]">
                 {branchEmoji(branch)} {BRANCH_LABELS[branch]}
               </h3>
@@ -521,7 +521,7 @@ export function RosterEditor({
             {list.length === 0 ? (
               <p className="text-sm text-[var(--foreground-muted)]">Aucune unité.</p>
             ) : (
-              <div className="space-y-6">
+              <div className="space-y-2">
                 {list.map((u) => {
                   const isSaving = savingId === u.id;
                   const suggestions = subtypeSuggestions(u.branch);
@@ -579,7 +579,7 @@ export function RosterEditor({
                             <div className="break-words text-xs text-[var(--foreground-muted)] [overflow-wrap:anywhere]">
                               {BRANCH_LABELS[u.branch]}
                               {u.sub_type ? ` • ${u.sub_type}` : ""}
-                              {` • ${u.level_count} niveau${u.level_count > 1 ? "x" : ""} • base ${formatNumber(u.base_count)}`}
+                              {` • ${u.level_count} niveau${u.level_count > 1 ? "x" : ""} • ${formatNumber(u.base_count)} par pays`}
                             </div>
                           </div>
                         </div>
@@ -702,11 +702,11 @@ export function RosterEditor({
                             </div>
                           </div>
 
-                          {/* Ligne 3 : Base + Tri + Niveaux */}
+                          {/* Ligne 3 : quantité commune + tri + niveaux */}
                           <div className="grid gap-3 sm:grid-cols-3 mb-3">
                             <div>
                               <label htmlFor={`roster-${u.id}-base`} className="text-[10px] font-semibold uppercase text-[var(--foreground-muted)]">
-                                Base
+                                Quantité de base par pays
                               </label>
                               <input
                                 id={`roster-${u.id}-base`}
@@ -721,7 +721,7 @@ export function RosterEditor({
                             </div>
                             <div>
                               <label htmlFor={`roster-${u.id}-order`} className="text-[10px] font-semibold uppercase text-[var(--foreground-muted)]">
-                                Tri
+                                Ordre d’affichage
                               </label>
                               <input
                                 id={`roster-${u.id}-order`}
@@ -752,9 +752,7 @@ export function RosterEditor({
                                 onBlur={() => ensureLevelsForUnit(u)}
                                 disabled={isSaving}
                               />
-                              <p className="mt-1 text-[10px] text-[var(--foreground-muted)]">
-                                100 points / niveau.
-                              </p>
+                              <p className="mt-1 text-[10px] text-[var(--foreground-muted)]">100 points de progression par niveau.</p>
                             </div>
                           </div>
 
@@ -762,8 +760,8 @@ export function RosterEditor({
                             <h4 id={`roster-${u.id}-levels-title`} className="text-sm font-semibold text-[var(--foreground)]">
                               Conséquences par niveau
                             </h4>
-                            <p className="mt-1 text-xs leading-relaxed text-[var(--foreground-muted)]">
-                              Lisez chaque ligne comme un palier complet : effectif d’une unité, puissance produite, coût d’acquisition et science nécessaire.
+                            <p className="mt-1 text-xs leading-snug text-[var(--foreground-muted)]">
+                              Chaque ligne décrit un palier complet de l’unité.
                             </p>
 
                             <div className="mt-4 hidden grid-cols-[3.5rem_repeat(4,minmax(0,1fr))] gap-3 px-3 text-xs font-medium text-[var(--foreground-muted)] sm:grid">
@@ -777,7 +775,7 @@ export function RosterEditor({
                               {levelValues.map((level) => (
                                 <div
                                   key={level.level}
-                                  className="grid grid-cols-2 gap-3 p-3 sm:grid-cols-[3.5rem_repeat(4,minmax(0,1fr))] sm:items-end"
+                                  className="grid grid-cols-2 gap-2 p-2 sm:grid-cols-[3.5rem_repeat(4,minmax(0,1fr))] sm:items-end"
                                   style={{ borderColor: "var(--border-muted)" }}
                                 >
                                   <p className="col-span-2 self-center text-sm font-semibold text-[var(--foreground)] sm:col-span-1">
@@ -878,7 +876,7 @@ export function RosterEditor({
                               >
                                 {levelValues.map((level) => (
                                   <div key={level.level} className="flex h-full min-w-0 flex-1 flex-col justify-end">
-                                    <span className="mb-1 truncate text-center text-[10px] text-[var(--foreground-muted)]">{formatNumber(level.hardPower)}</span>
+                                    <span className="mb-1 break-words text-center text-[10px] leading-tight text-[var(--foreground-muted)]">{formatNumber(level.hardPower)}</span>
                                     <span
                                       className="w-full rounded-t bg-[var(--accent)]"
                                       style={{ height: `${Math.max(3, (level.hardPower / maximumHardPower) * 70)}%` }}

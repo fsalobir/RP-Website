@@ -40,14 +40,14 @@ export default async function AdminPaysListPage() {
   const countryIdsWithPlayer = (countryPlayers ?? []).map((p) => (p as { country_id: string }).country_id);
 
   return (
-    <div className="mx-auto max-w-6xl px-4 py-10">
-      <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+    <div className="mx-auto max-w-6xl px-4 py-6">
+      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold text-[var(--foreground)]">
             Pays
           </h1>
           <p className="mt-1 text-[var(--foreground-muted)]">
-            Modifier les nations et leurs indicateurs.
+            Recherchez un pays, puis ouvrez sa fiche ou modifiez son statut directement.
           </p>
         </div>
         <div className="flex flex-col items-start gap-3 sm:items-end">
@@ -61,17 +61,17 @@ export default async function AdminPaysListPage() {
         </div>
       </div>
       <AdminSettingsGuide
-        purpose="Cette liste donne accès aux données de chaque pays. Les menus Continent et Statut IA sont enregistrés dès leur modification."
+        purpose="Le continent et le statut IA sont enregistrés dès leur modification."
         impact="Le continent change le contexte régional. Le statut IA détermine si le pays peut recevoir des événements automatiques."
         check="Recherchez le pays, vérifiez son joueur éventuel, puis ouvrez sa fiche pour les réglages détaillés."
       />
-      <details className="my-6 rounded-xl border" style={{ borderColor: "var(--border)", background: "var(--background-panel)" }}>
-        <summary className="min-h-12 cursor-pointer px-4 py-3 font-medium text-[var(--foreground)]">
+      <details className="my-4 rounded-xl border" style={{ borderColor: "var(--border)", background: "var(--background-panel)" }}>
+        <summary className="min-h-11 cursor-pointer px-3 py-2 font-medium text-[var(--foreground)]">
           Actions sur l’ensemble du monde
           <span className="ml-2 text-sm font-normal text-[var(--warning)]">à utiliser avec prudence</span>
         </summary>
         <div className="border-t p-4" style={{ borderColor: "var(--border-muted)" }}>
-          <p className="mb-4 max-w-2xl text-sm leading-relaxed text-[var(--foreground-muted)]">
+          <p className="mb-3 max-w-2xl text-sm leading-snug text-[var(--foreground-muted)]">
             Ces commandes modifient tous les pays ou font avancer la simulation. Chaque action demande une confirmation.
           </p>
           <div className="flex flex-wrap items-start gap-3">

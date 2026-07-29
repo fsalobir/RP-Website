@@ -31,7 +31,7 @@ export default async function AdminReglesPage() {
   });
 
   return (
-    <div className="mx-auto max-w-6xl px-4 py-10">
+    <div className="mx-auto max-w-6xl px-4 py-6">
       <ReglesForm
         rules={rules}
         rosterUnits={rosterUnits}

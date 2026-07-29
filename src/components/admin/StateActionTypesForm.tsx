@@ -4,7 +4,6 @@ import { useMemo, useState } from "react";
 import { updateStateActionTypes } from "@/app/admin/actions-etat/actions";
 import { AdminSaveBar, AdminSettingsGuide } from "@/components/admin/AdminSettingsUi";
 import { DisclosureChevron } from "@/components/ui/DisclosureChevron";
-import { InfoTooltip } from "@/components/ui/InfoTooltip";
 import {
   actionRequiresTarget,
   actionRequiresTargetAcceptance,
@@ -247,10 +246,8 @@ function NumberField({
 }) {
   return (
     <label htmlFor={id} className="block min-w-0">
-      <span className="flex min-h-11 items-center gap-1 text-sm font-medium text-[var(--foreground)]">
-        <span>{label}</span>
-        <InfoTooltip label={label} content={help} />
-      </span>
+      <span className="block text-sm font-medium text-[var(--foreground)]">{label}</span>
+      <span className="mt-0.5 block text-xs leading-snug text-[var(--foreground-muted)]">{help}</span>
       <input
         id={id}
         type="number"
@@ -259,10 +256,10 @@ function NumberField({
         max={max}
         step={step}
         onChange={(event) => onChange(Number(event.target.value))}
-        className="min-h-12 w-full rounded-lg border bg-[var(--background)] px-3 text-base text-[var(--foreground)] focus:border-[var(--accent)] focus:outline-none focus:ring-2 focus:ring-[var(--accent)]"
+        className="mt-1.5 min-h-11 w-full rounded-lg border bg-[var(--background)] px-3 text-base text-[var(--foreground)] focus:border-[var(--accent)] focus:outline-none focus:ring-2 focus:ring-[var(--accent)]"
         style={{ borderColor: "var(--border)" }}
       />
-      {hint ? <span className="mt-1 block text-xs leading-relaxed text-[var(--foreground-muted)]">{hint}</span> : null}
+      {hint ? <span className="mt-1 block text-xs leading-snug text-[var(--foreground-muted)]">{hint}</span> : null}
     </label>
   );
 }
@@ -338,7 +335,7 @@ function ActionPreview({ type, edit }: { type: StateActionType; edit: EditState 
   return (
     <aside
       aria-label={`Aperçu de ${type.label_fr}`}
-      className="border-t pt-5 lg:border-l lg:border-t-0 lg:pl-6 lg:pt-0"
+      className="border-t pt-4 lg:border-l lg:border-t-0 lg:pl-4 lg:pt-0"
       style={{ borderColor: "var(--border-muted)" }}
     >
       <h3 className="text-sm font-semibold text-[var(--foreground)]">Aperçu côté joueur</h3>
@@ -346,7 +343,7 @@ function ActionPreview({ type, edit }: { type: StateActionType; edit: EditState 
         Exemple illustratif. Il ne modifie aucune donnée.
       </p>
 
-      <div className="mt-5">
+      <div className="mt-3">
         <p className="text-sm text-[var(--foreground-muted)]">Coût affiché</p>
         <p className="mt-1 text-xl font-semibold text-[var(--foreground)]">
           {edit.cost} point{edit.cost > 1 ? "s" : ""} d’action
@@ -410,7 +407,7 @@ function ActionPreview({ type, edit }: { type: StateActionType; edit: EditState 
                   <dd className="font-medium text-[var(--foreground)]">{formatSigned(relationModifier)}</dd>
                 </div>
                 <div className="flex justify-between gap-3">
-                  <dt className="text-[var(--foreground-muted)]">Rapport des influences ({ratio.toFixed(2)})</dt>
+                  <dt className="text-[var(--foreground-muted)]">Influence émetteur ÷ cible ({ratio.toFixed(2)})</dt>
                   <dd className="font-medium text-[var(--foreground)]">{formatSigned(balanceModifier)}</dd>
                 </div>
                 <div className="flex justify-between gap-3">
@@ -481,7 +478,7 @@ function TypeRow({
         type="button"
         onClick={onToggle}
         aria-expanded={expanded}
-        className="flex min-h-16 w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-[var(--background-elevated)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--accent)]"
+            className="flex min-h-14 w-full items-center gap-3 px-3 py-2 text-left transition-colors hover:bg-[var(--background-elevated)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--accent)]"
       >
         <DisclosureChevron open={expanded} direction="right" className="shrink-0 text-[var(--foreground-muted)]" />
         <span className="min-w-0 flex-1">
@@ -493,7 +490,7 @@ function TypeRow({
               </span>
             ) : null}
           </span>
-          <span className="mt-1 block text-sm leading-relaxed text-[var(--foreground-muted)]">
+          <span className="mt-0.5 block text-xs leading-snug text-[var(--foreground-muted)] sm:text-sm">
             {ACTION_DESCRIPTIONS[type.key] ?? "Action dont la résolution finale reste contrôlée par le MJ."}
           </span>
         </span>
@@ -505,8 +502,8 @@ function TypeRow({
       {expanded && (
       <div className="grid">
         <div className="min-h-0 overflow-hidden">
-          <div className="border-t p-4 sm:p-5" style={{ borderColor: "var(--border-muted)" }}>
-            <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_20rem]">
+          <div className="border-t p-3" style={{ borderColor: "var(--border-muted)" }}>
+            <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_18rem]">
               <div className="min-w-0">
                 <div className="flex items-start justify-between gap-3">
                   <div>
@@ -525,7 +522,7 @@ function TypeRow({
                   </button>
                 </div>
 
-                <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                <div className="mt-3 grid gap-3 sm:grid-cols-2">
                   <NumberField
                     id={`action-${type.id}-cost`}
                     label="Coût en points d’action"
@@ -565,7 +562,7 @@ function TypeRow({
                 </div>
 
                 {isDemandeUp ? (
-                  <div className="mt-6 grid gap-5 sm:grid-cols-2">
+                  <div className="mt-4 grid gap-4 sm:grid-cols-2">
                     <StatBonusCheckboxes
                       label="Pour une hausse d’effectifs"
                       statBonus={edit.statBonusUpNombre}
@@ -580,7 +577,7 @@ function TypeRow({
                 ) : null}
 
                 {isDiplo ? (
-                  <details className="mt-6 border-t pt-4" style={{ borderColor: "var(--border-muted)" }}>
+                  <details className="mt-4 border-t pt-3" style={{ borderColor: "var(--border-muted)" }}>
                     <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between text-sm font-semibold text-[var(--foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] [&::-webkit-details-marker]:hidden">
                       Réglages avancés du jet
                       <span aria-hidden className="text-[var(--foreground-muted)]">▾</span>
@@ -596,12 +593,12 @@ function TypeRow({
                 ) : null}
 
                 {isPriseInfluence ? (
-                  <details className="mt-6 border-t pt-4" style={{ borderColor: "var(--border-muted)" }}>
+                  <details className="mt-4 border-t pt-3" style={{ borderColor: "var(--border-muted)" }}>
                     <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between text-sm font-semibold text-[var(--foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] [&::-webkit-details-marker]:hidden">
                       Réglages avancés du rapport de force
                       <span aria-hidden className="text-[var(--foreground-muted)]">▾</span>
                     </summary>
-                    <div className="grid gap-4 pt-3 sm:grid-cols-2">
+                    <div className="grid gap-3 pt-3 sm:grid-cols-2">
                       <NumberField
                         id={`action-${type.id}-relations-amplitude`}
                         label="Poids de la relation"
@@ -613,7 +610,7 @@ function TypeRow({
                       />
                       <NumberField
                         id={`action-${type.id}-balance-ratio`}
-                        label="Rapport neutre"
+                        label="Rapport sans bonus ni malus"
                         help="Rapport entre l’influence de l’émetteur et celle de la cible qui ne donne ni bonus ni malus."
                         value={edit.equilibreDesForces.ratioEquilibre}
                         min={0}
@@ -626,7 +623,7 @@ function TypeRow({
                       />
                       <NumberField
                         id={`action-${type.id}-min-ratio`}
-                        label="Rapport du malus maximal"
+                        label="Rapport qui atteint le malus maximal"
                         help="À ce rapport ou en dessous, le malus maximal est appliqué."
                         value={edit.equilibreDesForces.ratioMin}
                         min={0}
@@ -652,7 +649,7 @@ function TypeRow({
                       />
                       <NumberField
                         id={`action-${type.id}-max-ratio`}
-                        label="Rapport du bonus maximal"
+                        label="Rapport qui atteint le bonus maximal"
                         help="À ce rapport ou au-dessus, le bonus maximal est appliqué."
                         value={edit.equilibreDesForces.ratioMax}
                         min={0}
@@ -806,19 +803,19 @@ export function StateActionTypesForm({ types }: { types: StateActionType[] }) {
   ];
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <AdminSettingsGuide
-        purpose="Ces réglages définissent ce qu’un joueur dépense, les conditions d’accès à l’action et l’amplitude possible de son résultat."
-        impact="Le coût est visible avant l’envoi. Les seuils et amplitudes modifient ensuite les jets et leurs conséquences."
+        purpose="Ces réglages définissent le coût, les conditions d’accès et l’ampleur maximale de chaque action."
+        impact="Le coût est visible avant l’envoi. Les seuils et valeurs maximales modifient ensuite les jets et leurs conséquences."
         check="Testez au moins un cas faible, neutre et fort dans l’aperçu. Aucun exemple affiché ici n’est enregistré."
         warning="Une modification s’applique aux prochaines demandes. Les demandes déjà résolues ne sont pas recalculées."
       />
 
       <section
-        className="rounded-xl border p-4 sm:p-5"
+        className="rounded-xl border p-3"
         style={{ background: "var(--background-panel)", borderColor: "var(--border)" }}
       >
-        <div className="flex flex-wrap items-end justify-between gap-4">
+        <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
             <h2 className="text-lg font-semibold text-[var(--foreground)]">Paramètres des actions</h2>
             <p className="mt-1 text-sm text-[var(--foreground-muted)]">
@@ -832,13 +829,13 @@ export function StateActionTypesForm({ types }: { types: StateActionType[] }) {
               value={query}
               onChange={(event) => setQuery(event.target.value)}
               placeholder="Rechercher une action…"
-              className="min-h-12 w-full rounded-lg border bg-[var(--background)] px-3 text-base text-[var(--foreground)] placeholder:text-[var(--foreground-muted)]"
+              className="min-h-11 w-full rounded-lg border bg-[var(--background)] px-3 text-base text-[var(--foreground)] placeholder:text-[var(--foreground-muted)]"
               style={{ borderColor: "var(--border)" }}
             />
           </label>
         </div>
 
-        <div className="mt-6 space-y-7">
+        <div className="mt-4 space-y-5">
           {groupsToRender.map((group) => (
             <section key={group.id} aria-labelledby={`action-group-${group.id}`}>
               <h3 id={`action-group-${group.id}`} className="mb-3 text-sm font-semibold text-[var(--foreground)]">

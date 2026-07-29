@@ -64,10 +64,10 @@ export function MobilisationAdminBlock({
 
   return (
     <div
-      className="rounded-lg border p-4 sm:p-6"
+      className="rounded-lg border p-4"
       style={{ background: "var(--background-panel)", borderColor: "var(--border)" }}
     >
-      <h2 className="mb-4 text-lg font-semibold text-[var(--foreground)]">
+      <h2 className="mb-3 text-lg font-semibold text-[var(--foreground)]">
         Mobilisation
       </h2>
       <div className="flex flex-wrap items-end gap-4">

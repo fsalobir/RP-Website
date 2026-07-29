@@ -128,26 +128,26 @@ export function CountryForm({
     setSaving(false);
   }
 
-  const panelClass = "rounded-lg border p-4 sm:p-6";
+  const panelClass = "rounded-lg border p-4";
   const panelStyle = { background: "var(--background-panel)", borderColor: "var(--border)" };
   const inputClass =
     "min-h-11 w-full rounded border bg-[var(--background)] px-3 py-2 text-[var(--foreground)] focus:border-[var(--accent)] focus:outline-none focus:ring-2 focus:ring-[var(--accent)]";
   const inputStyle = { borderColor: "var(--border)" };
 
   return (
-    <form onSubmit={handleSubmit} className="admin-settings-form space-y-8">
+    <form onSubmit={handleSubmit} className="admin-settings-form space-y-5">
       <AdminSettingsGuide
-        purpose="Cette fiche pose l’identité publique du pays et ses valeurs de départ. Les lois, le contrôle et le militaire se règlent ensuite dans leurs blocs dédiés."
+        purpose="Cette fiche définit l’identité publique et les valeurs de départ du pays."
         impact="Le nom, le régime, le drapeau, la population et le PIB sont visibles par les joueurs. Les statistiques influencent aussi les jets et la simulation."
         check="Vérifiez le drapeau, l’adresse de la page et les bornes des quatre statistiques dans l’aperçu."
       />
 
       <section className={panelClass} style={panelStyle}>
         <h2 className="text-lg font-semibold text-[var(--foreground)]">Identité</h2>
-        <p className="mb-4 mt-1 text-sm leading-relaxed text-[var(--foreground-muted)]">
+        <p className="mb-3 mt-1 text-sm leading-snug text-[var(--foreground-muted)]">
           Informations affichées sur la fiche pays et dans les listes.
         </p>
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div className="grid gap-3 sm:grid-cols-2">
           <div>
             <label htmlFor="country-name" className="mb-1 block text-sm text-[var(--foreground-muted)]">Nom</label>
             <input
@@ -253,10 +253,10 @@ export function CountryForm({
 
       <section className={panelClass} style={panelStyle}>
         <h2 className="text-lg font-semibold text-[var(--foreground)]">Capacités du pays</h2>
-        <p className="mb-4 mt-1 text-sm leading-relaxed text-[var(--foreground-muted)]">
+        <p className="mb-3 mt-1 text-sm leading-snug text-[var(--foreground-muted)]">
           Ces quatre valeurs servent aux jets, aux effets et à plusieurs calculs de puissance.
         </p>
-        <div className="grid gap-4 sm:grid-cols-4">
+        <div className="grid gap-3 sm:grid-cols-4">
           {(["militarism", "industry", "science"] as const).map((key) => (
             <div key={key}>
               <label htmlFor={`country-${key}`} className="mb-1 block text-sm text-[var(--foreground-muted)]">
@@ -294,10 +294,10 @@ export function CountryForm({
 
       <section className={panelClass} style={panelStyle}>
         <h2 className="text-lg font-semibold text-[var(--foreground)]">Population et économie</h2>
-        <p className="mb-4 mt-1 text-sm leading-relaxed text-[var(--foreground-muted)]">
+        <p className="mb-3 mt-1 text-sm leading-snug text-[var(--foreground-muted)]">
           Valeurs de départ utilisées par les classements, l’influence et la croissance quotidienne.
         </p>
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div className="grid gap-3 sm:grid-cols-2">
           <div>
             <label htmlFor="country-population" className="mb-1 block text-sm text-[var(--foreground-muted)]">Population</label>
             <input
@@ -330,7 +330,7 @@ export function CountryForm({
         <h2 id="country-preview-title" className="text-lg font-semibold text-[var(--foreground)]">
           Aperçu de la fiche
         </h2>
-        <div className="mt-4 flex flex-col gap-4 sm:flex-row sm:items-center">
+        <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center">
           <div
             className="flex h-20 w-28 shrink-0 items-center justify-center overflow-hidden rounded-lg border bg-[var(--background)]"
             style={{ borderColor: "var(--border)" }}
@@ -361,7 +361,7 @@ export function CountryForm({
       </section>
 
       {error && <p className="text-[var(--danger)]" role="alert">{error}</p>}
-      <div className="flex flex-wrap gap-4">
+      <div className="flex flex-wrap gap-2">
         <button
           type="submit"
           disabled={saving}
