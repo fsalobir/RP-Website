@@ -99,7 +99,7 @@ export function InfluenceRulePreview({ config }: { config: InfluenceConfig }) {
   return (
     <PreviewFrame
       title="Conséquence en direct"
-      description="Les trois profils restent identiques pendant que vous modifiez les poids ci-dessus. La moyenne mondiale de cet exemple est calculée entre eux ; le jeu utilise tous les pays."
+      description="Les trois profils restent identiques pendant que vous modifiez les réglages ci-dessus. La moyenne mondiale de cet exemple est calculée entre eux ; le jeu utilise tous les pays."
     >
       <div className="space-y-5">
         {results.map(({ profile, result }) => {

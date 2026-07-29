@@ -56,8 +56,13 @@ function stableNum(n: number): number {
   return Object.is(rounded, -0) ? 0 : rounded;
 }
 
-/** Facteur de gravité (comme expectedNextTick). Borné [0,1 ; 2]. */
-function gravityFactor(worldAvg: number, countryVal: number, gravityPct: number, contribution: number): number {
+/** Correction d’une contribution selon son écart à la moyenne mondiale. Bornée [0,1 ; 2]. */
+export function computeInfluenceGravityFactor(
+  worldAvg: number,
+  countryVal: number,
+  gravityPct: number,
+  contribution: number
+): number {
   if (worldAvg === 0) return 1;
   const k = gravityPct / 100;
   const ratio = worldAvg > 0 ? (worldAvg - countryVal) / worldAvg : 0;
@@ -140,9 +145,9 @@ export function computeInfluenceForAll(
   const byCountry = new Map<string, InfluenceResult>();
   for (const c of countries) {
     const comp = compsByCountry.get(c.id)!;
-    const gfGdp = gravityFactor(worldAvgGdp, comp.gdp, gravityGdp, comp.gdp);
-    const gfPop = gravityFactor(worldAvgPop, comp.population, gravityPop, comp.population);
-    const gfMil = gravityFactor(worldAvgMil, comp.military, gravityMil, comp.military);
+    const gfGdp = computeInfluenceGravityFactor(worldAvgGdp, comp.gdp, gravityGdp, comp.gdp);
+    const gfPop = computeInfluenceGravityFactor(worldAvgPop, comp.population, gravityPop, comp.population);
+    const gfMil = computeInfluenceGravityFactor(worldAvgMil, comp.military, gravityMil, comp.military);
 
     const afterGravity = {
       gdp: stableNum(comp.gdp * gfGdp),

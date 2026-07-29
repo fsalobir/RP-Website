@@ -1,7 +1,17 @@
 import { describe, expect, it } from "vitest";
-import { applyInfluenceModifiers, computeInfluenceForAll } from "@/lib/influence";
+import {
+  applyInfluenceModifiers,
+  computeInfluenceForAll,
+  computeInfluenceGravityFactor,
+} from "@/lib/influence";
 
 describe("PLAN_SCENARIOS_TEST — Section 5 (Influence)", () => {
+  it("rend lisible la correction d’un écart de 50 % à la moyenne mondiale", () => {
+    expect(computeInfluenceGravityFactor(100, 50, 0, 1)).toBe(1);
+    expect(computeInfluenceGravityFactor(100, 50, 50, 1)).toBe(1.25);
+    expect(computeInfluenceGravityFactor(100, 150, 50, 1)).toBe(0.75);
+  });
+
   it("Scénario 5.1 — Contributions brutes + clamp stabilité (t dans [0,1])", () => {
     const config = {
       mult_gdp: 1e-9,

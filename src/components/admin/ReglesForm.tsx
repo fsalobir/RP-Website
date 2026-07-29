@@ -66,7 +66,78 @@ import { LAW_DEFINITIONS, type LawDefinition } from "@/lib/laws";
 import { MatriceDiplomatiqueForm } from "@/app/admin/matrice-diplomatique/MatriceDiplomatiqueForm";
 import { DisclosureChevron } from "@/components/ui/DisclosureChevron";
 import { InfoTooltip } from "@/components/ui/InfoTooltip";
+import { computeInfluenceGravityFactor } from "@/lib/influence";
 import { matchesSearchText } from "@/lib/searchText";
+
+const GDP_INFLUENCE_REFERENCE = 1_000_000_000_000;
+const POPULATION_INFLUENCE_REFERENCE = 10_000_000;
+const MILITARY_INFLUENCE_REFERENCE = 100;
+
+function influencePointsForReference(
+  multiplier: number | undefined,
+  fallback: number,
+  reference: number
+): number {
+  const value = typeof multiplier === "number" && Number.isFinite(multiplier) ? multiplier : fallback;
+  return Math.round(value * reference * 100) / 100;
+}
+
+function formatInfluenceFactor(value: number): string {
+  return `×${value.toLocaleString("fr-FR", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`;
+}
+
+function influenceMultiplierPercent(multiplier: number | undefined, fallback: number): number {
+  const value = typeof multiplier === "number" && Number.isFinite(multiplier) ? multiplier : fallback;
+  return Math.round(value * 10_000) / 100;
+}
+
+function InfluenceWorldGapControl({
+  id,
+  label,
+  value,
+  onChange,
+}: {
+  id: string;
+  label: string;
+  value: number;
+  onChange: (value: number) => void;
+}) {
+  const safeValue = Math.max(0, Math.min(100, Number(value) || 0));
+  const belowAverage = computeInfluenceGravityFactor(100, 50, safeValue, 1);
+  const aboveAverage = computeInfluenceGravityFactor(100, 150, safeValue, 1);
+
+  return (
+    <div>
+      <div className="flex items-baseline justify-between gap-3">
+        <label htmlFor={id} className="text-sm font-medium text-[var(--foreground)]">{label}</label>
+        <output htmlFor={id} className="text-sm font-semibold text-[var(--foreground)]">{safeValue} %</output>
+      </div>
+      <input
+        id={id}
+        type="range"
+        min={0}
+        max={100}
+        step={5}
+        value={safeValue}
+        onChange={(event) => onChange(Number(event.target.value))}
+        className="mt-2 w-full accent-[var(--accent)]"
+      />
+      <dl className="mt-2 grid grid-cols-2 gap-3 text-xs">
+        <div>
+          <dt className="text-[var(--foreground-muted)]">50 % sous la moyenne</dt>
+          <dd className="mt-0.5 font-semibold text-[var(--foreground)]">{formatInfluenceFactor(belowAverage)}</dd>
+        </div>
+        <div>
+          <dt className="text-[var(--foreground-muted)]">50 % au-dessus</dt>
+          <dd className="mt-0.5 font-semibold text-[var(--foreground)]">{formatInfluenceFactor(aboveAverage)}</dd>
+        </div>
+      </dl>
+    </div>
+  );
+}
 
 function RecalculerVoisinagesButton() {
   const [loading, setLoading] = useState(false);
@@ -2476,64 +2547,147 @@ export function ReglesForm({
                   open={influenceOpen}
                   onToggle={() => setInfluenceOpen((o) => !o)}
                 >
-                  <div className="p-3 space-y-3">
-                    <p className="text-xs text-[var(--foreground-muted)]">
-                      L’influence internationale combine l’économie, la population, la puissance militaire et la stabilité du pays.
+                  <div className="space-y-5 p-3">
+                    <p className="max-w-[72ch] text-xs leading-relaxed text-[var(--foreground-muted)]">
+                      L’économie, la population et l’armée produisent d’abord des points d’influence. La stabilité modifie ensuite leur total.
                     </p>
-                    <div className="flex flex-wrap gap-x-6 gap-y-3">
-                      <div className="flex flex-col gap-0.5">
-                        <label className="text-xs text-[var(--foreground-muted)]">
-                          <FormLabel label="Poids du PIB" tooltip="Règle l’importance du PIB dans le calcul de l’influence. Plus la valeur est haute, plus la richesse pèse lourd." />
+
+                    <section>
+                      <h4 className="text-sm font-semibold text-[var(--foreground)]">Contribution de base</h4>
+                      <p className="mt-1 text-xs text-[var(--foreground-muted)]">
+                        Les unités de référence évitent les coefficients techniques. Les flèches des champs utilisent maintenant des pas raisonnables.
+                      </p>
+                      <div className="mt-3 grid gap-4 md:grid-cols-3">
+                        <label className="block">
+                          <span className="text-sm text-[var(--foreground)]">1 000 milliards de PIB donnent</span>
+                          <span className="mt-1 flex items-center gap-2">
+                            <input
+                              aria-label="Influence produite par 1 000 milliards de PIB"
+                              type="number"
+                              min={0}
+                              step={50}
+                              value={influencePointsForReference(getInfluenceConfig().mult_gdp, 1e-9, GDP_INFLUENCE_REFERENCE)}
+                              onChange={(event) => updateInfluenceConfig({
+                                mult_gdp: (Number(event.target.value) || 0) / GDP_INFLUENCE_REFERENCE,
+                              })}
+                              className="w-28 rounded border bg-[var(--background)] px-2 py-1.5 text-sm text-[var(--foreground)]"
+                              style={inputStyle}
+                            />
+                            <span className="text-xs text-[var(--foreground-muted)]">points</span>
+                          </span>
                         </label>
-                        <input aria-label="Multiplicateur du PIB" type="number" step="any" value={getInfluenceConfig().mult_gdp ?? 1e-9} onChange={(e) => updateInfluenceConfig({ mult_gdp: Number(e.target.value) || 0 })} className="rounded border py-1.5 px-2 text-sm w-28 font-mono" style={{ borderColor: "var(--border)", background: "var(--background)" }} />
-                      </div>
-                      <div className="flex flex-col gap-0.5">
-                        <label className="text-xs text-[var(--foreground-muted)]">
-                          <FormLabel label="Poids de la population" tooltip="Règle l’importance de la population dans le calcul de l’influence." />
+                        <label className="block">
+                          <span className="text-sm text-[var(--foreground)]">10 millions d’habitants donnent</span>
+                          <span className="mt-1 flex items-center gap-2">
+                            <input
+                              aria-label="Influence produite par 10 millions d’habitants"
+                              type="number"
+                              min={0}
+                              step={10}
+                              value={influencePointsForReference(getInfluenceConfig().mult_population, 1e-7, POPULATION_INFLUENCE_REFERENCE)}
+                              onChange={(event) => updateInfluenceConfig({
+                                mult_population: (Number(event.target.value) || 0) / POPULATION_INFLUENCE_REFERENCE,
+                              })}
+                              className="w-28 rounded border bg-[var(--background)] px-2 py-1.5 text-sm text-[var(--foreground)]"
+                              style={inputStyle}
+                            />
+                            <span className="text-xs text-[var(--foreground-muted)]">points</span>
+                          </span>
                         </label>
-                        <input aria-label="Multiplicateur de la population" type="number" step="any" value={getInfluenceConfig().mult_population ?? 1e-7} onChange={(e) => updateInfluenceConfig({ mult_population: Number(e.target.value) || 0 })} className="rounded border py-1.5 px-2 text-sm w-28 font-mono" style={{ borderColor: "var(--border)", background: "var(--background)" }} />
-                      </div>
-                      <div className="flex flex-col gap-0.5">
-                        <label className="text-xs text-[var(--foreground-muted)]">
-                          <FormLabel label="Poids de la puissance militaire" tooltip="Règle l’importance de la puissance militaire dans le calcul de l’influence." />
+                        <label className="block">
+                          <span className="text-sm text-[var(--foreground)]">100 points de puissance militaire donnent</span>
+                          <span className="mt-1 flex items-center gap-2">
+                            <input
+                              aria-label="Influence produite par 100 points de puissance militaire"
+                              type="number"
+                              min={0}
+                              step={5}
+                              value={influencePointsForReference(getInfluenceConfig().mult_military, 0.01, MILITARY_INFLUENCE_REFERENCE)}
+                              onChange={(event) => updateInfluenceConfig({
+                                mult_military: (Number(event.target.value) || 0) / MILITARY_INFLUENCE_REFERENCE,
+                              })}
+                              className="w-28 rounded border bg-[var(--background)] px-2 py-1.5 text-sm text-[var(--foreground)]"
+                              style={inputStyle}
+                            />
+                            <span className="text-xs text-[var(--foreground-muted)]">points</span>
+                          </span>
                         </label>
-                        <input aria-label="Poids de la puissance militaire" type="number" step="any" value={getInfluenceConfig().mult_military ?? 0.01} onChange={(e) => updateInfluenceConfig({ mult_military: Number(e.target.value) || 0 })} className="rounded border py-1.5 px-2 text-sm w-28 font-mono" style={{ borderColor: "var(--border)", background: "var(--background)" }} />
                       </div>
-                    </div>
-                    <div className="flex flex-wrap gap-x-6 gap-y-3">
-                      <div className="flex flex-col gap-0.5">
-                        <label className="text-xs text-[var(--foreground-muted)]">
-                          <FormLabel label="Stabilité : modif. à min (-3)" tooltip="Définit à quel point une stabilité très mauvaise réduit l'influence internationale du pays." />
+                    </section>
+
+                    <section className="border-t pt-4" style={{ borderColor: "var(--border-muted)" }}>
+                      <h4 className="text-sm font-semibold text-[var(--foreground)]">Effet de la stabilité</h4>
+                      <p className="mt-1 text-xs text-[var(--foreground-muted)]">
+                        Ce pourcentage est appliqué au total obtenu ci-dessus. Une stabilité intermédiaire produit une valeur intermédiaire.
+                      </p>
+                      <div className="mt-3 grid gap-4 sm:grid-cols-2">
+                        <label className="block">
+                          <span className="text-sm text-[var(--foreground)]">Avec une stabilité de −3, l’influence finale vaut</span>
+                          <span className="mt-1 flex items-center gap-2">
+                            <input
+                              aria-label="Pourcentage d’influence conservé avec une stabilité de moins 3"
+                              type="number"
+                              min={0}
+                              step={5}
+                              value={influenceMultiplierPercent(getInfluenceConfig().stability_modifier_min, 0)}
+                              onChange={(event) => updateInfluenceConfig({
+                                stability_modifier_min: (Number(event.target.value) || 0) / 100,
+                              })}
+                              className="w-24 rounded border bg-[var(--background)] px-2 py-1.5 text-sm text-[var(--foreground)]"
+                              style={inputStyle}
+                            />
+                            <span className="text-xs text-[var(--foreground-muted)]">% de la base</span>
+                          </span>
                         </label>
-                        <input aria-label="Modificateur minimal de stabilité" type="number" step="any" value={getInfluenceConfig().stability_modifier_min ?? 0} onChange={(e) => updateInfluenceConfig({ stability_modifier_min: Number(e.target.value) ?? 0 })} className="rounded border py-1.5 px-2 text-sm w-24 font-mono" style={{ borderColor: "var(--border)", background: "var(--background)" }} />
-                      </div>
-                      <div className="flex flex-col gap-0.5">
-                        <label className="text-xs text-[var(--foreground-muted)]">
-                          <FormLabel label="Stabilité : modif. à max (+3)" tooltip="Définit à quel point une stabilité excellente renforce l'influence internationale du pays." />
+                        <label className="block">
+                          <span className="text-sm text-[var(--foreground)]">Avec une stabilité de +3, l’influence finale vaut</span>
+                          <span className="mt-1 flex items-center gap-2">
+                            <input
+                              aria-label="Pourcentage d’influence conservé avec une stabilité de plus 3"
+                              type="number"
+                              min={0}
+                              step={5}
+                              value={influenceMultiplierPercent(getInfluenceConfig().stability_modifier_max, 1)}
+                              onChange={(event) => updateInfluenceConfig({
+                                stability_modifier_max: (Number(event.target.value) || 0) / 100,
+                              })}
+                              className="w-24 rounded border bg-[var(--background)] px-2 py-1.5 text-sm text-[var(--foreground)]"
+                              style={inputStyle}
+                            />
+                            <span className="text-xs text-[var(--foreground-muted)]">% de la base</span>
+                          </span>
                         </label>
-                        <input aria-label="Modificateur maximal de stabilité" type="number" step="any" value={getInfluenceConfig().stability_modifier_max ?? 1} onChange={(e) => updateInfluenceConfig({ stability_modifier_max: Number(e.target.value) ?? 1 })} className="rounded border py-1.5 px-2 text-sm w-24 font-mono" style={{ borderColor: "var(--border)", background: "var(--background)" }} />
                       </div>
-                    </div>
-                    <div className="flex flex-wrap gap-x-6 gap-y-3">
-                      <div className="flex flex-col gap-0.5">
-                        <label className="text-xs text-[var(--foreground-muted)]">
-                          <FormLabel label="Rattrapage lié au PIB (%)" tooltip="Renforce l’effet du PIB lorsque le pays est éloigné de la moyenne mondiale." />
-                        </label>
-                        <input aria-label="Rattrapage lié au PIB" type="number" min={0} max={100} value={getInfluenceConfig().gravity_pct_gdp ?? 50} onChange={(e) => updateInfluenceConfig({ gravity_pct_gdp: Math.max(0, Math.min(100, Number(e.target.value) || 0)) })} className="rounded border py-1.5 px-2 text-sm w-16 font-mono" style={{ borderColor: "var(--border)", background: "var(--background)" }} />
+                    </section>
+
+                    <section className="border-t pt-4" style={{ borderColor: "var(--border-muted)" }}>
+                      <h4 className="text-sm font-semibold text-[var(--foreground)]">
+                        Correction des écarts avec la moyenne mondiale
+                      </h4>
+                      <p className="mt-1 max-w-[72ch] text-xs leading-relaxed text-[var(--foreground-muted)]">
+                        Cette correction rapproche les contributions des pays sans créer une nouvelle source d’influence. Un pays à la moyenne reste toujours à ×1,00. À 0 %, les écarts restent bruts ; à 100 %, la correction est maximale.
+                      </p>
+                      <div className="mt-3 grid gap-5 lg:grid-cols-3">
+                        <InfluenceWorldGapControl
+                          id="influence-gap-gdp"
+                          label="PIB"
+                          value={getInfluenceConfig().gravity_pct_gdp ?? 50}
+                          onChange={(value) => updateInfluenceConfig({ gravity_pct_gdp: value })}
+                        />
+                        <InfluenceWorldGapControl
+                          id="influence-gap-population"
+                          label="Population"
+                          value={getInfluenceConfig().gravity_pct_population ?? 50}
+                          onChange={(value) => updateInfluenceConfig({ gravity_pct_population: value })}
+                        />
+                        <InfluenceWorldGapControl
+                          id="influence-gap-military"
+                          label="Puissance militaire"
+                          value={getInfluenceConfig().gravity_pct_military ?? 50}
+                          onChange={(value) => updateInfluenceConfig({ gravity_pct_military: value })}
+                        />
                       </div>
-                      <div className="flex flex-col gap-0.5">
-                        <label className="text-xs text-[var(--foreground-muted)]">
-                          <FormLabel label="Rattrapage lié à la population (%)" tooltip="Renforce l’effet de la population lorsque le pays est éloigné de la moyenne mondiale." />
-                        </label>
-                        <input aria-label="Rattrapage lié à la population" type="number" min={0} max={100} value={getInfluenceConfig().gravity_pct_population ?? 50} onChange={(e) => updateInfluenceConfig({ gravity_pct_population: Math.max(0, Math.min(100, Number(e.target.value) || 0)) })} className="rounded border py-1.5 px-2 text-sm w-16 font-mono" style={{ borderColor: "var(--border)", background: "var(--background)" }} />
-                      </div>
-                      <div className="flex flex-col gap-0.5">
-                        <label className="text-xs text-[var(--foreground-muted)]">
-                          <FormLabel label="Rattrapage lié à l’armée (%)" tooltip="Renforce l’effet de la puissance militaire lorsque le pays est éloigné de la moyenne mondiale." />
-                        </label>
-                        <input aria-label="Rattrapage lié à l’armée" type="number" min={0} max={100} value={getInfluenceConfig().gravity_pct_military ?? 50} onChange={(e) => updateInfluenceConfig({ gravity_pct_military: Math.max(0, Math.min(100, Number(e.target.value) || 0)) })} className="rounded border py-1.5 px-2 text-sm w-16 font-mono" style={{ borderColor: "var(--border)", background: "var(--background)" }} />
-                      </div>
-                    </div>
+                    </section>
                     <InfluenceRulePreview config={getInfluenceConfig()} />
                   </div>
                 </CollapsibleBlock>
