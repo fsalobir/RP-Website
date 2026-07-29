@@ -205,7 +205,7 @@ export function CountryTabEtatMajor({
       )}
 
       <section
-        className="relative overflow-visible rounded-xl min-h-[280px]"
+        className="relative overflow-visible rounded-xl sm:min-h-[280px]"
         style={{ ...panelStyle, isolation: "isolate" }}
       >
         <div className="absolute inset-0 overflow-hidden rounded-xl">
@@ -216,11 +216,11 @@ export function CountryTabEtatMajor({
           />
           <div className="absolute inset-0 bg-gradient-to-b from-black/22 via-black/10 to-black/26" />
         </div>
-        <div className="relative z-10 flex flex-col gap-5 p-6">
-          <h3 className="text-2xl font-bold tracking-tight text-white drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)] [text-shadow:0_0_20px_rgba(0,0,0,0.8)]">
+        <div className="relative z-10 flex flex-col gap-5 p-4 sm:p-6">
+          <h2 className="text-xl font-bold tracking-tight text-white drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)] [text-shadow:0_0_20px_rgba(0,0,0,0.8)] sm:text-2xl">
             Bureau de Design
-          </h3>
-          <div className="rounded-2xl border border-white/25 bg-white/15 p-5 shadow-xl backdrop-blur-xl max-w-2xl">
+          </h2>
+          <div className="max-w-2xl rounded-2xl border border-white/25 bg-white/15 p-4 shadow-xl backdrop-blur-xl sm:p-5">
             <p className="mb-4 text-sm font-medium text-white/95">
               Recherche et développement de nouvelles technologies militaires
             </p>
@@ -242,7 +242,7 @@ export function CountryTabEtatMajor({
       </section>
 
       <section
-        className="relative overflow-visible rounded-xl min-h-[280px]"
+        className="relative overflow-visible rounded-xl sm:min-h-[280px]"
         style={{ ...panelStyle, isolation: "isolate" }}
       >
         <div className="absolute inset-0 overflow-hidden rounded-xl">
@@ -254,11 +254,11 @@ export function CountryTabEtatMajor({
           />
           <div className="absolute inset-0 bg-gradient-to-b from-black/22 via-black/10 to-black/26" />
         </div>
-        <div className="relative z-10 flex flex-col gap-5 p-6">
-          <h3 className="text-2xl font-bold tracking-tight text-white drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)] [text-shadow:0_0_20px_rgba(0,0,0,0.8)]">
+        <div className="relative z-10 flex flex-col gap-5 p-4 sm:p-6">
+          <h2 className="text-xl font-bold tracking-tight text-white drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)] [text-shadow:0_0_20px_rgba(0,0,0,0.8)] sm:text-2xl">
             Recrutement
-          </h3>
-          <div className="rounded-2xl border border-white/25 bg-white/15 p-5 shadow-xl backdrop-blur-xl max-w-2xl">
+          </h2>
+          <div className="max-w-2xl rounded-2xl border border-white/25 bg-white/15 p-4 shadow-xl backdrop-blur-xl sm:p-5">
             <p className="mb-4 text-sm font-medium text-white/95">
               Déploiement de nouvelles brigades d&apos;infanterie et de blindés
             </p>
@@ -280,7 +280,7 @@ export function CountryTabEtatMajor({
       </section>
 
       <section
-        className="relative overflow-visible rounded-xl min-h-[280px]"
+        className="relative overflow-visible rounded-xl sm:min-h-[280px]"
         style={{ ...panelStyle, isolation: "isolate" }}
       >
         <div className="absolute inset-0 overflow-hidden rounded-xl">
@@ -291,11 +291,11 @@ export function CountryTabEtatMajor({
           />
           <div className="absolute inset-0 bg-gradient-to-b from-black/18 via-black/8 to-black/22" />
         </div>
-        <div className="relative z-10 flex flex-col gap-5 p-6">
-          <h3 className="text-2xl font-bold tracking-tight text-white drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)] [text-shadow:0_0_20px_rgba(0,0,0,0.8)]">
+        <div className="relative z-10 flex flex-col gap-5 p-4 sm:p-6">
+          <h2 className="text-xl font-bold tracking-tight text-white drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)] [text-shadow:0_0_20px_rgba(0,0,0,0.8)] sm:text-2xl">
             Procuration
-          </h3>
-          <div className="rounded-2xl border border-white/25 bg-white/15 p-5 shadow-xl backdrop-blur-xl max-w-2xl">
+          </h2>
+          <div className="max-w-2xl rounded-2xl border border-white/25 bg-white/15 p-4 shadow-xl backdrop-blur-xl sm:p-5">
             <p className="mb-4 text-sm font-medium text-white/95">
               Déploiement de nouveaux navires ou escadrons aériens
             </p>
@@ -317,7 +317,7 @@ export function CountryTabEtatMajor({
       </section>
 
       <section
-        className="relative overflow-visible rounded-xl min-h-[280px]"
+        className="relative overflow-visible rounded-xl sm:min-h-[280px]"
         style={{ ...panelStyle, isolation: "isolate" }}
       >
         <div className="absolute inset-0 overflow-hidden rounded-xl">
@@ -328,11 +328,11 @@ export function CountryTabEtatMajor({
           />
           <div className="absolute inset-0 bg-gradient-to-b from-black/18 via-black/8 to-black/22" />
         </div>
-        <div className="relative z-10 flex flex-col gap-5 p-6">
-          <h3 className="text-2xl font-bold tracking-tight text-white drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)] [text-shadow:0_0_20px_rgba(0,0,0,0.8)]">
+        <div className="relative z-10 flex flex-col gap-5 p-4 sm:p-6">
+          <h2 className="text-xl font-bold tracking-tight text-white drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)] [text-shadow:0_0_20px_rgba(0,0,0,0.8)] sm:text-2xl">
             Stock Stratégique
-          </h3>
-          <div className="rounded-2xl border border-white/25 bg-white/15 p-5 shadow-xl backdrop-blur-xl max-w-2xl">
+          </h2>
+          <div className="max-w-2xl rounded-2xl border border-white/25 bg-white/15 p-4 shadow-xl backdrop-blur-xl sm:p-5">
             <p className="mb-4 text-sm font-medium text-white/95">
               Déploiement de nouveaux stocks de missiles, lanceurs, et consommables.
             </p>
@@ -529,7 +529,7 @@ function EtatMajorSection({
       </div>
       {selected && (
         <div className={cardClass} style={cardStyle}>
-          <div className="flex items-center justify-between gap-3">
+          <div className="flex flex-col items-stretch gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex min-w-0 flex-1 items-center gap-3">
               {selected.icon_url && (
                 <div className="relative h-12 w-12 flex-shrink-0 overflow-hidden rounded bg-[var(--background)]">
@@ -550,7 +550,7 @@ function EtatMajorSection({
               </div>
             </div>
             <div
-              className={`flex flex-shrink-0 flex-col items-end justify-center gap-0.5 rounded-lg border px-2.5 py-1.5 text-right ${glassContext ? "border-white/25 bg-black/20" : "border-[var(--border-muted)] bg-[var(--background)]"}`}
+              className={`flex flex-shrink-0 flex-col items-start justify-center gap-0.5 rounded-lg border px-2.5 py-1.5 text-left sm:items-end sm:text-right ${glassContext ? "border-white/25 bg-black/20" : "border-[var(--border-muted)] bg-[var(--background)]"}`}
             >
               <div className={`whitespace-nowrap text-sm font-semibold ${glassContext ? "text-white" : "text-[var(--accent)]"}`}>
                 +{configPtsPerDay} pts / jour

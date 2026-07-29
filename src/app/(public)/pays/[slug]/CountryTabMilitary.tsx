@@ -352,7 +352,7 @@ export function CountryTabMilitary({
                       >
                         <div className="overflow-hidden">
                           <div className="overflow-x-auto">
-                            <table className="w-full text-sm table-fixed">
+                            <table className="min-w-[680px] w-full table-fixed text-sm">
                               <thead>
                                 <tr className="border-b border-white/25">
                                   <th className={`w-12 pb-1.5 pt-1 px-2 text-center font-medium text-xs ${glassMutedClass}`}>Icône</th>
@@ -711,7 +711,7 @@ function FoggedBranchView({
         Données fragmentaires — les fourchettes ci-dessous sont des estimations.
       </p>
       <div className="overflow-x-auto rounded-xl border border-white/25" style={{ background: "rgba(255,255,255,0.12)", backdropFilter: "blur(12px)" }}>
-        <table className="w-full text-sm">
+        <table className="min-w-[620px] w-full text-sm">
           <thead>
             <tr className="border-b border-white/25">
               <th className={`pb-2 px-3 text-left font-medium text-sm ${mutedClass}`}>Branche</th>
@@ -801,7 +801,7 @@ function FoggedUnitView({
         {BRANCH_LABELS[branch]}
       </h2>
       <div className="overflow-x-auto rounded-xl border border-white/25" style={{ background: "rgba(255,255,255,0.12)", backdropFilter: "blur(12px)" }}>
-        <table className="w-full text-sm table-fixed">
+        <table className="min-w-[680px] w-full table-fixed text-sm">
           <thead>
             <tr className="border-b border-white/25">
               <th className={`w-12 pb-1.5 pt-1 px-2 text-center font-medium text-sm ${mutedClass}`}>Icône</th>

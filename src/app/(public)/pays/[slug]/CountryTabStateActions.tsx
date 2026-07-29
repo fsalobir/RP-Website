@@ -22,9 +22,6 @@ import {
 import { normalizeAdminEffectsAdded, formatAdminEffectLabel } from "@/lib/countryEffects";
 import { InfoTooltip } from "@/components/ui/InfoTooltip";
 
-const panelClass = "rounded-lg border p-6";
-const panelStyle = { background: "var(--background-panel)", borderColor: "var(--border)" };
-
 /** Descriptions courtes pour l'infobulle de chaque type d'action. */
 const ACTION_TOOLTIPS: Record<string, string> = {
   demande_up: "Demande au MJ une hausse de vos capacités (effectifs, niveau technologique, etc.) selon les règles du jeu.",
@@ -268,10 +265,10 @@ export function CountryTabStateActions({
                         {catTypes.map((t) => (
                           <li
                             key={t.id}
-                            className="flex flex-wrap items-center justify-between gap-2 rounded border py-2 px-3"
+                            className="flex flex-wrap items-stretch justify-between gap-2 rounded border px-3 py-2 sm:items-center"
                             style={{ borderColor: "var(--border-muted)" }}
                           >
-                          <div className="flex flex-wrap items-center gap-2 min-w-0">
+                          <div className="flex min-w-0 flex-wrap items-center gap-2">
                             <span className="font-medium text-[var(--foreground)]">{t.label_fr}</span>
                             <InfoTooltip
                               content={ACTION_TOOLTIPS[t.key] ?? "Action d'état."}
@@ -290,7 +287,7 @@ export function CountryTabStateActions({
                               setMessage("");
                             }}
                             disabled={balance < t.cost}
-                            className="rounded bg-[var(--accent)] px-3 py-1.5 text-sm text-white hover:bg-[var(--accent-hover)] disabled:opacity-50 shrink-0"
+                            className="w-full shrink-0 rounded bg-[var(--accent)] px-3 py-1.5 text-sm text-white hover:bg-[var(--accent-hover)] disabled:opacity-50 sm:w-auto"
                           >
                             Lancer
                           </button>
@@ -329,18 +326,18 @@ export function CountryTabStateActions({
                     {new Date(r.created_at).toLocaleString("fr-FR")}
                   </p>
                 </div>
-                <div className="flex gap-2">
+                <div className="flex w-full flex-wrap gap-2 sm:w-auto">
                   {refusingId === r.id ? (
-                    <div className="flex flex-col gap-2">
+                    <div className="flex w-full flex-col gap-2 sm:min-w-80">
                       <textarea
                         value={refusalMessage}
                         onChange={(e) => setRefusalMessage(e.target.value.slice(0, 200))}
                         placeholder="Message optionnel (transmis à l'émetteur)"
                         rows={2}
-                        className="rounded border bg-[var(--background)] px-2 py-1 text-sm"
-                        style={{ borderColor: "var(--border)", minWidth: 200 }}
+                        className="w-full min-w-0 rounded border bg-[var(--background)] px-2 py-1 text-sm"
+                        style={{ borderColor: "var(--border)" }}
                       />
-                      <div className="flex gap-2">
+                      <div className="flex flex-wrap gap-2">
                         <button
                           type="button"
                           onClick={async () => {
@@ -428,7 +425,7 @@ export function CountryTabStateActions({
           />
         </div>
         <div className="overflow-x-auto">
-          <table className="w-full text-sm">
+          <table className="min-w-[680px] w-full text-sm">
             <thead>
               <tr style={{ borderColor: "var(--border)" }}>
                 <th className="border-b p-2 text-left font-medium text-[var(--foreground-muted)]">Date</th>
@@ -524,7 +521,7 @@ export function CountryTabStateActions({
       {modalType &&
         createPortal(
           <div
-            className="fixed inset-0 overflow-y-auto bg-black/50"
+            className="country-interface fixed inset-0 overflow-y-auto bg-black/50"
             style={{ zIndex: 100001 }}
             role="dialog"
             aria-modal="true"
@@ -532,7 +529,7 @@ export function CountryTabStateActions({
           >
             <div className="flex min-h-full items-center justify-center p-4 py-10">
               <div
-                className="w-full max-w-lg max-h-[min(85dvh,calc(100dvh-5rem))] overflow-y-auto overscroll-contain rounded-lg border p-6 shadow-lg"
+                className="max-h-[min(85dvh,calc(100dvh-5rem))] w-full max-w-lg overflow-y-auto overscroll-contain rounded-lg border p-4 shadow-lg sm:p-6"
                 style={{ background: "var(--background-panel)", borderColor: "var(--border)" }}
                 onClick={(e) => e.stopPropagation()}
               >
@@ -1000,8 +997,8 @@ function PriseInfluenceModalContent({
       <p className="mb-2 text-xs font-medium uppercase tracking-wider text-[var(--foreground-muted)]">
         Équilibre des puissances
       </p>
-      <div className="flex gap-0">
-        <div className="flex-1 py-3 pr-4">
+      <div className="flex flex-col sm:flex-row">
+        <div className="flex-1 py-3 sm:pr-4">
           <p className="mb-2 text-xs font-medium uppercase tracking-wider text-[var(--foreground-muted)]">Émetteur</p>
           <div className="flex items-center gap-3">
             {emitterCountry.flag_url ? (
@@ -1018,8 +1015,8 @@ function PriseInfluenceModalContent({
             </div>
           </div>
         </div>
-        <div className="w-px shrink-0 bg-[var(--border)]" aria-hidden />
-        <div className="flex-1 py-3 pl-4">
+        <div className="h-px w-full shrink-0 bg-[var(--border)] sm:h-auto sm:w-px" aria-hidden />
+        <div className="flex-1 py-3 sm:pl-4">
           <p className="mb-2 text-xs font-medium uppercase tracking-wider text-[var(--foreground-muted)]">Cible</p>
           {targetCountry ? (
             <div className="flex items-center gap-3">
@@ -1091,7 +1088,7 @@ function PriseInfluenceModalContent({
 
       <p className="mb-4 text-xs text-[var(--foreground-muted)]">Coût : {cost} action(s).</p>
 
-      <div className="flex justify-end gap-2">
+      <div className="flex flex-wrap justify-end gap-2">
         <button
           type="button"
           onClick={onCancel}
@@ -1142,8 +1139,8 @@ function DiplomatiqueModalCommon({
 }) {
   return (
     <>
-      <div className="flex gap-0">
-        <div className="flex-1 py-3 pr-4">
+      <div className="flex flex-col sm:flex-row">
+        <div className="flex-1 py-3 sm:pr-4">
           <p className="mb-2 text-xs font-medium uppercase tracking-wider text-[var(--foreground-muted)]">Émetteur</p>
           <div className="flex items-center gap-3">
             {emitterCountry.flag_url ? (
@@ -1158,8 +1155,8 @@ function DiplomatiqueModalCommon({
             </div>
           </div>
         </div>
-        <div className="w-px shrink-0 bg-[var(--border)]" aria-hidden />
-        <div className="flex-1 py-3 pl-4">
+        <div className="h-px w-full shrink-0 bg-[var(--border)] sm:h-auto sm:w-px" aria-hidden />
+        <div className="flex-1 py-3 sm:pl-4">
           <p className="mb-2 text-xs font-medium uppercase tracking-wider text-[var(--foreground-muted)]">Cible</p>
           {targetCountry ? (
             <div className="flex items-center gap-3">
@@ -1227,7 +1224,7 @@ function DiplomatiqueModalCommon({
 
       <p className="mb-4 text-xs text-[var(--foreground-muted)]">Coût : {cost} action(s).</p>
 
-      <div className="flex justify-end gap-2">
+      <div className="flex flex-wrap justify-end gap-2">
         <button
           type="button"
           onClick={onCancel}
@@ -1299,8 +1296,8 @@ function BilateralAgreementModalContent({
 
       <hr className="my-4" style={{ borderColor: "var(--border)" }} />
 
-      <div className="flex gap-0">
-        <div className="flex-1 py-3 pr-4">
+      <div className="flex flex-col sm:flex-row">
+        <div className="flex-1 py-3 sm:pr-4">
           <p className="mb-2 text-xs font-medium uppercase tracking-wider text-[var(--foreground-muted)]">Émetteur</p>
           <div className="flex items-center gap-3">
             {emitterCountry.flag_url ? (
@@ -1315,8 +1312,8 @@ function BilateralAgreementModalContent({
             </div>
           </div>
         </div>
-        <div className="w-px shrink-0 bg-[var(--border)]" aria-hidden />
-        <div className="flex-1 py-3 pl-4">
+        <div className="h-px w-full shrink-0 bg-[var(--border)] sm:h-auto sm:w-px" aria-hidden />
+        <div className="flex-1 py-3 sm:pl-4">
           <p className="mb-2 text-xs font-medium uppercase tracking-wider text-[var(--foreground-muted)]">Cible</p>
           {targetCountry ? (
             <div className="flex items-center gap-3">
@@ -1377,7 +1374,7 @@ function BilateralAgreementModalContent({
 
       <p className="mb-4 text-xs text-[var(--foreground-muted)]">Coût : {cost} action(s).</p>
 
-      <div className="flex justify-end gap-2">
+      <div className="flex flex-wrap justify-end gap-2">
         <button type="button" onClick={onCancel} className="rounded border px-4 py-2 text-sm" style={{ borderColor: "var(--border)" }}>
           Annuler
         </button>
@@ -1433,8 +1430,8 @@ function CovertOpModalContent({
 
       <hr className="my-4" style={{ borderColor: "var(--border)" }} />
 
-      <div className="flex gap-0">
-        <div className="flex-1 py-3 pr-4">
+      <div className="flex flex-col sm:flex-row">
+        <div className="flex-1 py-3 sm:pr-4">
           <p className="mb-2 text-xs font-medium uppercase tracking-wider text-[var(--foreground-muted)]">Émetteur</p>
           <div className="flex items-center gap-3">
             {emitterCountry.flag_url ? (
@@ -1449,8 +1446,8 @@ function CovertOpModalContent({
             </div>
           </div>
         </div>
-        <div className="w-px shrink-0 bg-[var(--border)]" aria-hidden />
-        <div className="flex-1 py-3 pl-4">
+        <div className="h-px w-full shrink-0 bg-[var(--border)] sm:h-auto sm:w-px" aria-hidden />
+        <div className="flex-1 py-3 sm:pl-4">
           <p className="mb-2 text-xs font-medium uppercase tracking-wider text-[var(--foreground-muted)]">Cible</p>
           {targetCountry ? (
             <div className="flex items-center gap-3">
@@ -1499,7 +1496,7 @@ function CovertOpModalContent({
 
       <p className="mb-4 text-xs text-[var(--foreground-muted)]">Coût : {cost} action(s).</p>
 
-      <div className="flex justify-end gap-2">
+      <div className="flex flex-wrap justify-end gap-2">
         <button type="button" onClick={onCancel} className="rounded border px-4 py-2 text-sm" style={{ borderColor: "var(--border)" }}>
           Annuler
         </button>
@@ -1588,7 +1585,7 @@ function DemandeUpModalContent({
 
       <p className="mb-4 text-xs text-[var(--foreground-muted)]">Coût : {cost} action(s).</p>
 
-      <div className="flex justify-end gap-2">
+      <div className="flex flex-wrap justify-end gap-2">
         <button type="button" onClick={onCancel} className="rounded border px-4 py-2 text-sm" style={{ borderColor: "var(--border)" }}>
           Annuler
         </button>
@@ -1688,7 +1685,7 @@ function InternalActionModalContent({
 
       <p className="mb-4 text-xs text-[var(--foreground-muted)]">Coût : {cost} action(s).</p>
 
-      <div className="flex justify-end gap-2">
+      <div className="flex flex-wrap justify-end gap-2">
         <button type="button" onClick={onCancel} className="rounded border px-4 py-2 text-sm" style={{ borderColor: "var(--border)" }}>
           Annuler
         </button>
@@ -1773,7 +1770,7 @@ function GenericActionModalContent({
           {error}
         </p>
       )}
-      <div className="flex justify-end gap-2">
+      <div className="flex flex-wrap justify-end gap-2">
         <button type="button" onClick={onCancel} className="rounded border px-4 py-2 text-sm" style={{ borderColor: "var(--border)" }}>
           Annuler
         </button>

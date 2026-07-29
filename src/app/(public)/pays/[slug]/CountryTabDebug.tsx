@@ -354,7 +354,7 @@ export function CountryTabDebug({
                 const ok = Math.abs(delta) < 1e-9;
                 return (
                   <li key={row.label} className="flex flex-wrap items-center gap-2 text-[var(--foreground-muted)]">
-                    <span className="min-w-56 text-[var(--foreground)]">{row.label}</span>
+                    <span className="w-full text-[var(--foreground)] sm:w-auto sm:min-w-56">{row.label}</span>
                     <span>SQL: {row.type === "rate" ? formatRate(row.cron) : formatDelta(row.cron)}</span>
                     <span>Debug: {row.type === "rate" ? formatRate(row.debug) : formatDelta(row.debug)}</span>
                     <span className={ok ? "text-[var(--accent)]" : "text-[var(--danger)]"}>

@@ -122,7 +122,7 @@ body {
 .wiki-tiptap .ProseMirror-focused {
   outline: none !important;
 }
-/* Nœud image = <img> atom : ProseMirror met la classe sur l’img, pas sur un parent. */
+/* Le nœud image est atomique : ProseMirror met la classe sur l’image, pas sur un parent. */
 .wiki-tiptap .ProseMirror-selectednode img.wiki-img,
 .wiki-tiptap .ProseMirror img.wiki-img.ProseMirror-selectednode {
   outline: 2px solid var(--accent, #22c55e);
@@ -160,4 +160,19 @@ body {
   clear: both;
   margin: 0.75rem 0;
   max-width: 100%;
+}
+
+@media (max-width: 639px) {
+  .country-interface :where(
+    button,
+    input:not([type="hidden"]):not([type="checkbox"]):not([type="radio"]),
+    select,
+    textarea
+  ) {
+    min-height: 2.75rem;
+  }
+
+  .country-interface :where(input, select, textarea) {
+    font-size: 1rem;
+  }
 }

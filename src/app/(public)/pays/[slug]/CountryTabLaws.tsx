@@ -195,7 +195,7 @@ function LawCard({
         aria-expanded={expanded}
       >
         {expanded ? (
-          <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3">
+          <div className="grid gap-1 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:gap-3">
             <span className="flex min-w-0 items-center gap-1.5 leading-tight">
               <span className={`truncate text-lg font-bold ${glassTextClass}`}>{def.title_fr}</span>
               <span className={`shrink-0 text-xs ${glassMutedClass}`} aria-hidden>
@@ -203,7 +203,7 @@ function LawCard({
               </span>
             </span>
             <span
-              className={`shrink-0 whitespace-nowrap text-right text-sm font-bold leading-tight ${glassTextClass}`}
+              className={`shrink-0 text-left text-sm font-bold leading-tight sm:whitespace-nowrap sm:text-right ${glassTextClass}`}
               title={rightSummary}
             >
               {rightSummary}
@@ -232,7 +232,7 @@ function LawCard({
         className={`overflow-hidden transition-[max-height,opacity] duration-300 ease-in-out ${expanded ? "opacity-100" : "opacity-0"}`}
         style={{ maxHeight: expanded ? "2000px" : "0px" }}
       >
-        <div className="relative px-5 pt-3 pb-5">
+        <div className="relative px-3 pb-5 pt-3 sm:px-5">
           <div
             className={`space-y-1 pt-1 transition-[filter] duration-200 ${isLoading ? "pointer-events-none select-none blur-[3px]" : ""}`}
             aria-busy={isLoading}

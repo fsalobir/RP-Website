@@ -224,6 +224,7 @@ export function CountryTabPerks({
         <button
           type="button"
           onClick={() => setFilter("all")}
+          aria-pressed={filter === "all"}
           className={`rounded border px-3 py-1.5 text-sm font-medium ${filter === "all" ? "border-[var(--accent)] bg-[var(--accent)]/10 text-[var(--accent)]" : "border-[var(--border)] text-[var(--foreground-muted)] hover:border-[var(--border-muted)] hover:text-[var(--foreground)]"}`}
         >
           Tous
@@ -231,6 +232,7 @@ export function CountryTabPerks({
         <button
           type="button"
           onClick={() => setFilter("active")}
+          aria-pressed={filter === "active"}
           className={`rounded border px-3 py-1.5 text-sm font-medium ${filter === "active" ? "border-[var(--accent)] bg-[var(--accent)]/10 text-[var(--accent)]" : "border-[var(--border)] text-[var(--foreground-muted)] hover:border-[var(--border-muted)] hover:text-[var(--foreground)]"}`}
         >
           Activés
@@ -238,6 +240,7 @@ export function CountryTabPerks({
         <button
           type="button"
           onClick={() => setFilter("inactive")}
+          aria-pressed={filter === "inactive"}
           className={`rounded border px-3 py-1.5 text-sm font-medium ${filter === "inactive" ? "border-[var(--accent)] bg-[var(--accent)]/10 text-[var(--accent)]" : "border-[var(--border)] text-[var(--foreground-muted)] hover:border-[var(--border-muted)] hover:text-[var(--foreground)]"}`}
         >
           Désactivés

@@ -191,7 +191,7 @@ export function CountryTabCabinet({
           <div className="absolute inset-0 bg-[var(--background-panel)]/85" />
         </div>
 
-        <div className="relative z-10 p-6">
+        <div className="relative z-10 p-4 sm:p-6">
           {!breakdown || !expected ? (
             <p className={`text-sm ${glassMutedClass}`}>
               Les données nécessaires au rapport (moyennes monde, paramètres) ne sont pas encore disponibles.
@@ -203,9 +203,9 @@ export function CountryTabCabinet({
           ) : (
             /* Box du rapport : centrée, taille naturelle (pas de scroll) */
             <div className="max-w-3xl mx-auto w-full rounded-2xl">
-              <article className={`${glassPanelClass} px-6 py-6`} style={{ fontFamily: "Georgia, 'Times New Roman', serif" }}>
-                <header className={`mb-8 border-b pb-4 ${glassBorderClass}`}>
-                <h2 className="text-center text-xl font-semibold tracking-wide text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]">
+              <article className={`${glassPanelClass} px-4 py-5 sm:px-6 sm:py-6`} style={{ fontFamily: "Georgia, 'Times New Roman', serif" }}>
+                <header className={`mb-6 border-b pb-4 sm:mb-8 ${glassBorderClass}`}>
+                <h2 className="text-center text-lg font-semibold tracking-wide text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)] sm:text-xl">
                   Rapport ministériel pour {reportTitleDate}
                 </h2>
               </header>
@@ -277,7 +277,7 @@ export function CountryTabCabinet({
                     <h3 className="text-base font-semibold text-white" style={{ fontFamily: "inherit" }}>
                       {block.ministryLabel}
                     </h3>
-                    <div className="space-y-2 pl-0" style={{ textAlign: "justify" }}>
+                    <div className="space-y-2 pl-0 text-left sm:text-justify">
                       {block.paragraphs.map((p, i) => (
                         <p
                           key={i}

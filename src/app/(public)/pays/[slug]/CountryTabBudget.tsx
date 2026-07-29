@@ -174,10 +174,13 @@ export function CountryTabBudget({
                 const forcedMin = forcedMinPcts[key] ?? 0;
                 const amountMonthlyBn = (totalBudgetMonthly * value) / 100 / 1e9;
                 return (
-                  <div key={key} className="flex flex-wrap items-center gap-4 py-1">
-                    <div className="w-64 shrink-0">
+                  <div
+                    key={key}
+                    className="grid gap-2 py-2 sm:grid-cols-[minmax(12rem,16rem)_minmax(0,1fr)_7rem] sm:items-center sm:gap-4"
+                  >
+                    <div>
                       <Tooltip content={tooltip}>
-                        <span className="inline-flex items-center gap-1.5 text-sm font-medium text-[var(--foreground)]">
+                        <span className="inline-flex flex-wrap items-center gap-1.5 text-sm font-medium text-[var(--foreground)]">
                           {label}
                           {forcedMin > 0 && (
                             <span className="text-xs text-[var(--danger)]">(min. {forcedMin} %)</span>
@@ -236,7 +239,7 @@ export function CountryTabBudget({
                         </span>
                       )}
                     </div>
-                    <div className="w-28 shrink-0 text-right font-mono text-sm text-[var(--foreground)]">
+                    <div className="text-left font-mono text-sm text-[var(--foreground)] sm:text-right">
                       {amountMonthlyBn >= 0.01 ? `${amountMonthlyBn.toFixed(2)} Bn $ / Mois` : "—"}
                     </div>
                   </div>

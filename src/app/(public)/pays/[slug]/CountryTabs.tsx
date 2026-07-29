@@ -631,7 +631,7 @@ export function CountryTabs({
   }, [limitsByBranch, resolvedEffects]);
 
   const panelClass =
-    "rounded-lg border p-6";
+    "rounded-lg border p-4 sm:p-6";
   const panelStyle = {
     background: "var(--background-panel)",
     borderColor: "var(--border)",
@@ -902,10 +902,10 @@ export function CountryTabs({
   const glassTextClass = "text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.4)]";
   const glassMutedClass = "text-white/90";
   const tabButtonClass =
-    "tab min-h-11 rounded-lg border-b-2 px-3 py-2 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]";
+    "min-h-11 rounded-lg border px-3 py-2 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]";
 
   return (
-    <div>
+    <div className="country-interface">
       <div
         className={`mb-4 flex flex-wrap items-center gap-4 p-4 sm:mb-8 sm:gap-6 sm:p-6 ${glassPanelClass}`}
         style={glassPanelStyle}
@@ -969,7 +969,7 @@ export function CountryTabs({
         generalEditMode &&
         createPortal(
           <div
-            className="fixed inset-0 overflow-y-auto bg-black/50"
+            className="country-interface fixed inset-0 overflow-y-auto bg-black/50"
             style={{ zIndex: 100001 }}
             role="dialog"
             aria-modal="true"
@@ -1064,7 +1064,7 @@ export function CountryTabs({
 
       <nav
         aria-label="Sections du pays"
-        className="tab-list mb-4 grid grid-cols-2 items-stretch gap-2 rounded-xl border border-white/25 p-2 sm:mb-6 sm:flex sm:flex-wrap sm:items-center sm:px-4 sm:py-3"
+        className="mb-4 grid grid-cols-2 items-stretch gap-2 rounded-xl border border-white/25 p-2 sm:mb-6 sm:flex sm:flex-wrap sm:items-center sm:px-4 sm:py-3"
         style={glassPanelStyle}
       >
         <button
