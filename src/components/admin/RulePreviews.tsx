@@ -457,36 +457,53 @@ function applyIntelDecay(value: number, config: IntelConfig): number {
 export function IntelRulePreview({ config }: { config: IntelConfig }) {
   const values = [100];
   for (let day = 1; day <= 7; day += 1) values.push(applyIntelDecay(values[day - 1], config));
-  const points = values.map((value, index) => `${10 + index * 40},${65 - value * 0.55}`).join(" ");
+  const afterSevenDays = values[7];
+  const totalLoss = 100 - afterSevenDays;
   const espionageGain = Math.round(((config.espionage_intel_gain_base ?? 50) * 70) / 100);
+  const afterEspionage = Math.min(100, afterSevenDays + espionageGain);
+  const usefulGain = afterEspionage - afterSevenDays;
+  const cappedGain = espionageGain - usefulGain;
 
   return (
     <PreviewFrame
-      title="Évolution sur sept jours"
-      description="La courbe part de 100 points de renseignement et applique exactement le mode choisi à chaque passage quotidien."
+      title="Exemple complet"
+      description="Le même stock est suivi dans l’ordre : sept jours sans nouvelle action, puis un espionnage."
     >
-      <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_15rem] lg:items-center">
-        <div>
-          <svg viewBox="0 0 300 80" role="img" aria-label={`Le renseignement passe de 100 à ${compact(values[7])} en sept jours`} className="h-28 w-full" preserveAspectRatio="none">
-            <line x1="10" y1="65" x2="290" y2="65" stroke="var(--border-muted)" />
-            <polyline points={points} fill="none" stroke="var(--accent)" strokeWidth="3" vectorEffect="non-scaling-stroke" />
-            {values.map((value, index) => (
-              <circle key={index} cx={10 + index * 40} cy={65 - value * 0.55} r="4" fill="var(--background-panel)" stroke="var(--accent)" strokeWidth="2" vectorEffect="non-scaling-stroke" />
-            ))}
-          </svg>
-          <div className="flex justify-between text-xs text-[var(--foreground-muted)]">
-            <span>Aujourd’hui : 100</span>
-            <span>Jour 7 : {compact(values[7])}</span>
+      <ol
+        className="grid overflow-hidden rounded-xl border divide-y sm:grid-cols-3 sm:divide-x sm:divide-y-0"
+        style={{ borderColor: "var(--border)", background: "var(--background)" }}
+      >
+        <li className="p-4">
+          <p className="text-xs font-medium text-[var(--foreground-muted)]">Aujourd’hui</p>
+          <p className="mt-1 text-2xl font-semibold text-[var(--foreground)]">100 / 100</p>
+          <div className="mt-3 h-2 overflow-hidden rounded-full bg-[var(--background-panel)]">
+            <div className="h-full w-full bg-[var(--accent)]" />
           </div>
-        </div>
-        <div className="border-t pt-4 lg:border-l lg:border-t-0 lg:pl-5 lg:pt-0" style={{ borderColor: "var(--border-muted)" }}>
-          <p className="text-sm text-[var(--foreground-muted)]">Espionnage à 70/100</p>
-          <p className="mt-1 text-2xl font-semibold text-[var(--accent)]">+{espionageGain} points</p>
+          <p className="mt-2 text-xs text-[var(--foreground-muted)]">Stock de départ</p>
+        </li>
+        <li className="p-4">
+          <p className="text-xs font-medium text-[var(--foreground-muted)]">Après 7 jours sans agir</p>
+          <p className="mt-1 text-2xl font-semibold text-[var(--foreground)]">{compact(afterSevenDays)} / 100</p>
+          <div className="mt-3 h-2 overflow-hidden rounded-full bg-[var(--background-panel)]">
+            <div className="h-full bg-[var(--warning)]" style={{ width: `${afterSevenDays}%` }} />
+          </div>
+          <p className="mt-2 text-xs text-[var(--foreground-muted)]">Perte totale : −{compact(totalLoss)} points</p>
+        </li>
+        <li className="p-4">
+          <p className="text-xs font-medium text-[var(--foreground-muted)]">Puis espionnage · impact 70/100</p>
+          <p className="mt-1 text-2xl font-semibold text-[var(--accent)]">{compact(afterEspionage)} / 100</p>
+          <div className="mt-3 h-2 overflow-hidden rounded-full bg-[var(--background-panel)]">
+            <div className="h-full bg-[var(--accent)]" style={{ width: `${afterEspionage}%` }} />
+          </div>
           <p className="mt-2 text-xs leading-relaxed text-[var(--foreground-muted)]">
-            Le gain de référence correspond à un jet parfait ; le résultat réel est proportionnel.
+            +{espionageGain} calculés, soit +{compact(usefulGain)} utiles
+            {cappedGain > 0 ? ` ; ${compact(cappedGain)} dépassent le plafond.` : "."}
           </p>
-        </div>
-      </div>
+        </li>
+      </ol>
+      <p className="mt-3 text-xs leading-relaxed text-[var(--foreground-muted)]">
+        Le renseignement baisse chaque jour sans nouvelle action. Un espionnage le fait remonter, sans jamais dépasser 100.
+      </p>
     </PreviewFrame>
   );
 }

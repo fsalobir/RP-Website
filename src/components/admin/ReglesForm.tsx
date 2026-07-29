@@ -1437,6 +1437,7 @@ export function ReglesForm({
   const worldPaused = cronPausedRule?.value === true || String(cronPausedRule?.value) === "true";
   const aiOverview = getAiEventsConfig();
   const intelOverview = getIntelConfig();
+  const intelDecayMode = intelOverview.decay_mode ?? "flat";
   const configuredMinistries = BUDGET_MINISTRY_KEYS.filter((key) => rulesByKey.has(key)).length;
   const configuredLaws = LAW_DEFINITIONS.filter(
     (definition) => getLawConfigRule(definition) && getLawEffectsRule(definition)
@@ -1445,7 +1446,7 @@ export function ReglesForm({
     flat: "perte fixe",
     pct: "perte proportionnelle",
     both: "perte fixe puis proportionnelle",
-  }[intelOverview.decay_mode ?? "flat"];
+  }[intelDecayMode];
   const overviewRows = [
     {
       label: "Monde",
@@ -1461,7 +1462,7 @@ export function ReglesForm({
     },
     {
       label: "Renseignement",
-      value: `${intelligenceModeLabel} · espionnage parfait : +${intelOverview.espionage_intel_gain_base ?? 50} points`,
+      value: `${intelligenceModeLabel} · gain maximal d’un espionnage : +${intelOverview.espionage_intel_gain_base ?? 50} points`,
     },
   ];
 
@@ -3297,26 +3298,26 @@ export function ReglesForm({
                 <div className="grid gap-4 sm:grid-cols-2">
                   <div>
                     <label className="mb-1 block text-xs text-[var(--foreground-muted)]">
-                      <FormLabel label="Mode de perte quotidienne" tooltip="Perte fixe : retire le même nombre de points chaque jour. Pourcentage : retire une part du niveau actuel. Le mode combiné applique les deux dans cet ordre." />
+                      <FormLabel label="Mode de diminution" tooltip="Détermine comment le renseignement baisse chaque jour sans nouvelle action d’espionnage." />
                     </label>
                     <select
-                      aria-label="Mode de baisse de l’intelligence"
-                      value={getIntelConfig().decay_mode ?? "flat"}
+                      aria-label="Mode de diminution du renseignement"
+                      value={intelDecayMode}
                       onChange={(e) => updateIntelConfig({ decay_mode: e.target.value as "flat" | "pct" | "both" })}
                       className="w-full rounded border py-1.5 px-2 text-sm"
                       style={{ borderColor: "var(--border)", background: "var(--background)" }}
                     >
-                      <option value="flat">Perte fixe</option>
-                      <option value="pct">Pourcentage</option>
-                      <option value="both">Fixe puis proportionnelle</option>
+                      <option value="flat">Même nombre de points chaque jour</option>
+                      <option value="pct">Pourcentage du niveau restant</option>
+                      <option value="both">Points fixes, puis pourcentage</option>
                     </select>
                   </div>
                   <div>
                     <label className="mb-1 block text-xs text-[var(--foreground-muted)]">
-                      <FormLabel label="Gain de renseignement de référence" tooltip="Gain accordé pour un résultat parfait lorsque l’administration accepte une action d’espionnage. Le gain réel dépend du jet d’impact." />
+                      <FormLabel label="Gain maximal d’un espionnage (points)" tooltip="Points gagnés avec un impact de 100/100. Avec un impact de 70/100, l’action rapporte 70 % de cette valeur." />
                     </label>
                     <input
-                      aria-label="Gain d’intelligence de base"
+                      aria-label="Gain maximal de renseignement après un espionnage"
                       type="number"
                       min={0}
                       max={100}
@@ -3328,12 +3329,13 @@ export function ReglesForm({
                   </div>
                 </div>
                 <div className="grid gap-4 sm:grid-cols-2">
+                  {intelDecayMode !== "pct" && (
                   <div>
                     <label className="mb-1 block text-xs text-[var(--foreground-muted)]">
-                      <FormLabel label="Perte fixe par jour" tooltip="Nombre de points de renseignement retirés chaque jour lorsque le mode fixe ou combiné est choisi." />
+                      <FormLabel label="Points perdus chaque jour" tooltip="Ce nombre est retiré chaque jour, quel que soit le niveau de renseignement restant." />
                     </label>
                     <input
-                      aria-label="Baisse fixe de l’intelligence par jour"
+                      aria-label="Points de renseignement perdus chaque jour"
                       type="number"
                       min={0}
                       step={0.5}
@@ -3343,12 +3345,14 @@ export function ReglesForm({
                       style={{ borderColor: "var(--border)", background: "var(--background)" }}
                     />
                   </div>
+                  )}
+                  {intelDecayMode !== "flat" && (
                   <div>
                     <label className="mb-1 block text-xs text-[var(--foreground-muted)]">
-                      <FormLabel label="Perte proportionnelle par jour (%)" tooltip="Part du niveau actuel retirée chaque jour lorsque le mode proportionnel ou combiné est choisi." />
+                      <FormLabel label="Part du niveau restant perdue chaque jour (%)" tooltip="Le pourcentage est recalculé sur le niveau restant. À 5 %, 100 devient 95, puis 90,25." />
                     </label>
                     <input
-                      aria-label="Baisse en pourcentage de l’intelligence par jour"
+                      aria-label="Part du renseignement restant perdue chaque jour"
                       type="number"
                       min={0}
                       max={100}
@@ -3359,8 +3363,9 @@ export function ReglesForm({
                       style={{ borderColor: "var(--border)", background: "var(--background)" }}
                     />
                   </div>
+                  )}
                 </div>
-                <IntelRulePreview config={getIntelConfig()} />
+                <IntelRulePreview config={intelOverview} />
               </div>
             </CollapsibleBlock>
           )}
