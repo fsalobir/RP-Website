@@ -7,6 +7,7 @@ import {
   computeStatModifierBreakdown,
   STATE_ACTION_STAT_RANGES,
 } from "@/lib/stateActionModifiers";
+import { cronGravityFactorTs } from "@/lib/ruleParameters";
 import {
   computeWorldIdeologies,
   createZeroScores,
@@ -309,6 +310,96 @@ export function DiceModifierRulePreview({
         </div>
       </div>
     </PreviewFrame>
+  );
+}
+
+export function BudgetWorldGapPreview({
+  weight,
+  adaptedEffectCount,
+}: {
+  weight: number;
+  adaptedEffectCount: number;
+}) {
+  const safeWeight = Math.max(0, Math.min(100, Number(weight) || 0));
+  const situations = [
+    { label: "Pays 50 % sous la moyenne", countryValue: 50 },
+    { label: "Pays à la moyenne", countryValue: 100 },
+    { label: "Pays 50 % au-dessus", countryValue: 150 },
+  ].map((situation) => ({
+    ...situation,
+    bonusFactor: cronGravityFactorTs(1, true, safeWeight, 100, situation.countryValue),
+    malusFactor: Math.abs(cronGravityFactorTs(-1, true, safeWeight, 100, situation.countryValue)),
+  }));
+  const factor = (value: number) =>
+    `×${value.toLocaleString("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+  return (
+    <section className="border-t pt-3" style={{ borderColor: "var(--border-muted)" }}>
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <h5 className="text-sm font-medium text-[var(--foreground)]">Conséquence de ce pourcentage</h5>
+        <p className="text-xs text-[var(--foreground-muted)]">
+          {safeWeight === 0
+            ? "L’écart mondial est ignoré"
+            : safeWeight === 100
+              ? "L’écart mondial est entièrement pris en compte"
+              : `${safeWeight} % de l’écart mondial est pris en compte`}
+        </p>
+      </div>
+
+      {adaptedEffectCount === 0 && (
+        <p
+          className="mt-2 rounded-lg border px-3 py-2 text-xs text-[var(--foreground)]"
+          style={{ borderColor: "var(--warning)", background: "color-mix(in srgb, var(--warning) 10%, transparent)" }}
+        >
+          Ce pourcentage ne modifie actuellement aucun effet de ce ministère. Activez « Tenir compte de la moyenne mondiale » sur une ligne d’effet pour l’utiliser.
+        </p>
+      )}
+
+      <div className="mt-3 hidden sm:block">
+        <table className="w-full text-left text-xs">
+          <thead className="text-[var(--foreground-muted)]">
+            <tr>
+              <th className="pb-2 pr-4 font-medium">Situation du pays</th>
+              <th className="pb-2 px-4 font-medium">Effet positif reçu</th>
+              <th className="pb-2 pl-4 font-medium">Malus subi</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-[var(--border-muted)] text-[var(--foreground)]">
+            {situations.map((situation) => (
+              <tr key={situation.label}>
+                <th className="py-2 pr-4 font-medium">{situation.label}</th>
+                <td className="px-4 py-2">
+                  <strong>{factor(situation.bonusFactor)}</strong>
+                </td>
+                <td className="py-2 pl-4">
+                  <strong>{factor(situation.malusFactor)}</strong>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <div className="mt-3 divide-y divide-[var(--border-muted)] sm:hidden">
+        {situations.map((situation) => (
+          <div key={situation.label} className="py-2 text-xs">
+            <p className="font-medium text-[var(--foreground)]">{situation.label}</p>
+            <dl className="mt-1 grid grid-cols-2 gap-4">
+              <div>
+                <dt className="text-[var(--foreground-muted)]">Effet positif reçu</dt>
+                <dd className="mt-0.5 font-semibold text-[var(--foreground)]">{factor(situation.bonusFactor)}</dd>
+              </div>
+              <div>
+                <dt className="text-[var(--foreground-muted)]">Malus subi</dt>
+                <dd className="mt-0.5 font-semibold text-[var(--foreground)]">{factor(situation.malusFactor)}</dd>
+              </div>
+            </dl>
+          </div>
+        ))}
+      </div>
+      <p className="mt-2 text-xs leading-relaxed text-[var(--foreground-muted)]">
+        Exemple illustratif avec une moyenne mondiale de 100. Le jeu refait ce calcul séparément pour chaque domaine concerné.
+      </p>
+    </section>
   );
 }
 

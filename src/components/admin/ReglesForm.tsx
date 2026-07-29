@@ -10,6 +10,7 @@ import {
 import { AdminSaveBar, AdminSettingsGuide } from "@/components/admin/AdminSettingsUi";
 import {
   AiRulePreview,
+  BudgetWorldGapPreview,
   DiceModifierRulePreview,
   IdeologyRulePreview,
   InfluenceRulePreview,
@@ -288,7 +289,7 @@ const RULE_SECTION_META: Record<string, { description: string; impact: string }>
     impact: "Évolution des pays",
   },
   "rules-budgets": {
-    description: "Seuils de financement, bonus, malus et rattrapage de chaque ministère.",
+    description: "Seuils de financement, bonus, malus et prise en compte de la moyenne mondiale.",
     impact: "Effets quotidiens",
   },
   "rules-military-staff": {
@@ -1855,12 +1856,17 @@ export function ReglesForm({
               if (!r) return null;
               const val = getBudgetValue(r);
               const effectsList = val.effects ?? [];
+              const adaptedEffectCount = getEffectsListForMinistry(key, val).filter((effect) =>
+                effect.gravity_applies ??
+                BUDGET_EFFECT_TYPES.find((type) => type.id === effect.effect_type)?.defaultGravityApplies ??
+                false
+              ).length;
               const isOpen = budgetMinistryOpen[key] ?? false;
               return (
                 <CollapsibleBlock
                   key={r.id}
                   title={BUDGET_MINISTRY_LABELS[key] ?? key}
-                  description="Seuil de financement, rattrapage et effets produits par ce ministère."
+                  description="Seuil de financement et effets quotidiens produits par ce ministère."
                   impact="Chaque jour"
                   open={isOpen}
                   onToggle={() =>
@@ -1887,10 +1893,10 @@ export function ReglesForm({
                       </div>
                       <div className="flex flex-col gap-0.5">
                         <label className="text-xs text-[var(--foreground-muted)]">
-                          <FormLabel label="Rattrapage des pays en retard (%)" tooltip="Renforce les effets de ce ministère lorsqu’un pays est sous la moyenne mondiale. Une valeur élevée accélère davantage son rattrapage." />
+                          <FormLabel label="Prise en compte de l’écart mondial (%)" tooltip="Part de l’écart à la moyenne mondiale répercutée sur les effets adaptés. 0 % donne le même effet à tous ; 100 % prend tout l’écart en compte." />
                         </label>
                         <input
-                          aria-label={`Rattrapage pour ${BUDGET_MINISTRY_LABELS[key] ?? key}`}
+                          aria-label={`Prise en compte de l’écart mondial pour ${BUDGET_MINISTRY_LABELS[key] ?? key}`}
                           type="number"
                           min={0}
                           max={100}
@@ -1902,10 +1908,14 @@ export function ReglesForm({
                         />
                       </div>
                     </div>
+                    <BudgetWorldGapPreview
+                      weight={val.gravity_pct ?? 50}
+                      adaptedEffectCount={adaptedEffectCount}
+                    />
                     <div>
                       <div className="mb-1 flex items-center justify-between">
                         <span className="text-xs text-[var(--foreground-muted)]">
-                          <TitleWithInfo title="Effets du ministère" tooltip="Chaque ligne indique ce que le ministère améliore, ce qu’il pénalise en cas de sous-financement et si le rattrapage mondial s’applique." className="inline-flex items-center gap-1.5" />
+                          <TitleWithInfo title="Effets du ministère" tooltip="Chaque ligne indique ce que le ministère améliore, ce qu’il pénalise en cas de sous-financement et si la moyenne mondiale modifie cet effet." className="inline-flex items-center gap-1.5" />
                         </span>
                         <button
                           type="button"
@@ -1992,7 +2002,7 @@ export function ReglesForm({
                                   className="rounded"
                                 />
                                 <label htmlFor={`gravity-${r.id}-${idx}`} className="text-xs text-[var(--foreground-muted)]">
-                                  <FormLabel label="Adapter à l’écart mondial" tooltip="Si activé, l’effet tient compte de l’écart entre le pays et la moyenne mondiale pour renforcer le rattrapage." />
+                                  <FormLabel label="Tenir compte de la moyenne mondiale" tooltip="Si activé, un pays sous la moyenne reçoit davantage de bonus et subit moins de malus. Un pays au-dessus connaît l’effet inverse." />
                                 </label>
                               </div>
                               {effect.effect_type === "bilateral_relations" && (
@@ -2098,7 +2108,7 @@ export function ReglesForm({
                 </div>
                 <div>
                   <label className="mb-0.5 block text-xs text-[var(--foreground-muted)]">
-                    <FormLabel label="Valeur de base du pays" tooltip="Valeur actuelle estimée du pays sur le domaine testé, avant application du ministère." />
+                    <FormLabel label="Valeur du pays dans le domaine testé" tooltip="Valeur actuelle estimée du pays sur le domaine testé, avant application du ministère." />
                   </label>
                   <input
                     aria-label="Valeur de base du pays simulé"
@@ -2112,7 +2122,7 @@ export function ReglesForm({
                 </div>
                 <div>
                   <label className="mb-0.5 block text-xs text-[var(--foreground-muted)]">
-                    <FormLabel label="Moyenne mondiale" tooltip="Référence utilisée pour mesurer si le pays est en avance ou en retard, notamment pour les effets de gravité." />
+                    <FormLabel label="Moyenne mondiale du même domaine" tooltip="Référence comparée à la valeur du pays pour adapter les effets qui tiennent compte de la moyenne mondiale." />
                   </label>
                   <input
                     aria-label="Moyenne mondiale simulée"
