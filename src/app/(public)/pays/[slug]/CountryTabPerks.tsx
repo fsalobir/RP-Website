@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { getEffectDescription } from "@/lib/countryEffects";
+import { getEffectDescription, isEffectDisplayPositive } from "@/lib/countryEffects";
 import type { ResolvedEffect } from "@/lib/countryEffects";
 import { formatRequirementLabel } from "@/lib/perkRequirements";
 import type { Country } from "@/types/database";
@@ -198,17 +198,21 @@ export function CountryTabPerks({
           {effects.length > 0 && (
             <div className="mt-2 border-t pt-2" style={{ borderColor: "var(--border-muted)" }}>
               <p className="mb-1 text-xs font-medium text-[var(--foreground-muted)]">Effets si actif</p>
-              <ul
-                className={`list-inside list-disc space-y-0.5 text-sm ${active ? "text-[var(--accent)]" : "text-[var(--foreground)]"}`}
-              >
-                {effects.map((e, i) => (
-                  <li key={i}>
-                    {getEffectDescription(toResolvedEffect(e), {
-                      rosterUnitName: (id) => rosterUnitsFlat.find((u) => u.id === id)?.name_fr ?? null,
-                      countryName: () => null,
-                    })}
-                  </li>
-                ))}
+              <ul className="list-inside list-disc space-y-0.5 text-sm">
+                {effects.map((e, i) => {
+                  const effect = toResolvedEffect(e);
+                  return (
+                    <li
+                      key={i}
+                      className={active ? (isEffectDisplayPositive(effect) ? "text-[var(--accent)]" : "text-[var(--danger)]") : "text-[var(--foreground)]"}
+                    >
+                      {getEffectDescription(effect, {
+                        rosterUnitName: (id) => rosterUnitsFlat.find((u) => u.id === id)?.name_fr ?? null,
+                        countryName: () => null,
+                      })}
+                    </li>
+                  );
+                })}
               </ul>
             </div>
           )}
@@ -225,7 +229,7 @@ export function CountryTabPerks({
           type="button"
           onClick={() => setFilter("all")}
           aria-pressed={filter === "all"}
-          className={`rounded border px-3 py-1.5 text-sm font-medium ${filter === "all" ? "border-[var(--accent)] bg-[var(--accent)]/10 text-[var(--accent)]" : "border-[var(--border)] text-[var(--foreground-muted)] hover:border-[var(--border-muted)] hover:text-[var(--foreground)]"}`}
+          className={`rounded border px-3 py-1.5 text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] ${filter === "all" ? "border-[var(--accent)] bg-[var(--accent)]/10 text-[var(--accent)]" : "border-[var(--border)] text-[var(--foreground-muted)] hover:border-[var(--border-muted)] hover:text-[var(--foreground)]"}`}
         >
           Tous
         </button>
@@ -233,7 +237,7 @@ export function CountryTabPerks({
           type="button"
           onClick={() => setFilter("active")}
           aria-pressed={filter === "active"}
-          className={`rounded border px-3 py-1.5 text-sm font-medium ${filter === "active" ? "border-[var(--accent)] bg-[var(--accent)]/10 text-[var(--accent)]" : "border-[var(--border)] text-[var(--foreground-muted)] hover:border-[var(--border-muted)] hover:text-[var(--foreground)]"}`}
+          className={`rounded border px-3 py-1.5 text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] ${filter === "active" ? "border-[var(--accent)] bg-[var(--accent)]/10 text-[var(--accent)]" : "border-[var(--border)] text-[var(--foreground-muted)] hover:border-[var(--border-muted)] hover:text-[var(--foreground)]"}`}
         >
           Activés
         </button>
@@ -241,7 +245,7 @@ export function CountryTabPerks({
           type="button"
           onClick={() => setFilter("inactive")}
           aria-pressed={filter === "inactive"}
-          className={`rounded border px-3 py-1.5 text-sm font-medium ${filter === "inactive" ? "border-[var(--accent)] bg-[var(--accent)]/10 text-[var(--accent)]" : "border-[var(--border)] text-[var(--foreground-muted)] hover:border-[var(--border-muted)] hover:text-[var(--foreground)]"}`}
+          className={`rounded border px-3 py-1.5 text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] ${filter === "inactive" ? "border-[var(--accent)] bg-[var(--accent)]/10 text-[var(--accent)]" : "border-[var(--border)] text-[var(--foreground-muted)] hover:border-[var(--border-muted)] hover:text-[var(--foreground)]"}`}
         >
           Désactivés
         </button>

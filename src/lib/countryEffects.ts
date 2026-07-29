@@ -493,7 +493,7 @@ export function getEffectDescription(e: CountryEffect | ResolvedEffect, options?
   let targetLabel: string | null = null;
   if (e.effect_target) {
     if (e.effect_kind === "military_unit_extra" || e.effect_kind === "military_unit_tech_rate" || e.effect_kind === "military_unit_limit_modifier_roster")
-      targetLabel = options?.rosterUnitName?.(e.effect_target) ?? e.effect_target;
+      targetLabel = options?.rosterUnitName?.(e.effect_target) ?? "Unité non visible";
     else if (e.effect_kind === "military_unit_limit_modifier_sub_type" && e.effect_target)
       targetLabel = (() => { const p = parseSubTypeTarget(e.effect_target); return formatSubTypeTargetLabel(p.branch, p.subType); })();
     else if (e.effect_kind === "military_unit_limit_modifier")
@@ -526,7 +526,7 @@ export function getEffectDescription(e: CountryEffect | ResolvedEffect, options?
   if (e.effect_kind === "influence_modifier_population") return `Modificateur influence (population) : ${valueStr}`;
   if (e.effect_kind === "influence_modifier_hard_power") return `Modificateur influence (Hard Power) : ${valueStr}`;
   if (e.effect_kind === "relation_delta" && e.effect_target) {
-    const otherName = options?.countryName?.(e.effect_target) ?? e.effect_target;
+    const otherName = options?.countryName?.(e.effect_target) ?? "Pays non visible";
     return `Relation bilatérale — ${otherName} : ${valueStr} par tick`;
   }
   if (e.effect_kind.startsWith("ideology_drift_")) {
@@ -547,11 +547,13 @@ export function getEffectDescription(e: CountryEffect | ResolvedEffect, options?
 
 export function formatEffectValue(effectKind: string | null | undefined, value: number): string {
   const kind = effectKind ?? "";
+  const twoDecimals = (number: number) =>
+    number.toLocaleString("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   if (kind === "budget_ministry_min_pct") return `${Number(value)} %`;
   if (kind === "budget_ministry_effect_multiplier") return `${(value * 100 - 100).toFixed(0)} %`;
   if (kind === "budget_allocation_cap") return `${value >= 0 ? "+" : ""}${value} %`;
   if (kind.startsWith("gdp_growth") || kind.startsWith("population_growth")) {
-    return (value * 100).toFixed(2) + " %";
+    return `${twoDecimals(value * 100)} %`;
   }
   if (kind === "military_unit_tech_rate") return `${Number(value)} pts/jour`;
   if (kind === "military_unit_extra") return (Number(value) >= 0 ? "+" : "") + String(Number(value));
@@ -563,11 +565,11 @@ export function formatEffectValue(effectKind: string | null | undefined, value: 
   }
   if (kind === "relation_delta") return `${Number(value) >= 0 ? "+" : ""}${Number(value)}`;
   if (kind.startsWith("ideology_drift_") || kind.startsWith("ideology_snap_")) {
-    return `${Number(value) >= 0 ? "+" : ""}${Number(value).toFixed(2)}`;
+    return `${Number(value) >= 0 ? "+" : ""}${twoDecimals(Number(value))}`;
   }
   if (kind === "procuration_points_per_day") return `${Number(value)} pts/jour`;
   if (kind === "recrutement_bonus_percent" || kind === "design_bonus_percent" || kind === "procuration_bonus_percent") {
-    return `${Number(value) >= 0 ? "+" : ""}${Number(value).toFixed(2)} %`;
+    return `${Number(value) >= 0 ? "+" : ""}${twoDecimals(Number(value))} %`;
   }
   return String(value);
 }

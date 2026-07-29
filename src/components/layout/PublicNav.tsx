@@ -33,7 +33,7 @@ export function PublicNav({
         </Link>
         <nav
           aria-label="Navigation principale"
-          className="-mx-4 flex w-[calc(100%+2rem)] min-w-0 items-center gap-1 overflow-x-auto border-t border-[var(--border)] px-2 sm:mx-0 sm:w-auto sm:overflow-visible sm:border-0 sm:px-0"
+          className="-mx-4 flex w-[calc(100%+2rem)] min-w-0 items-center gap-1 overflow-x-auto overscroll-x-contain border-t border-[var(--border)] px-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:mx-0 sm:w-auto sm:overflow-visible sm:border-0 sm:px-0"
         >
           <Link href={paysHref} className={navLinkClass}>
             <span aria-hidden className="mr-1.5">🌍</span>{paysLabel}

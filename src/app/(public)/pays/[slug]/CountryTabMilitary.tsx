@@ -212,7 +212,7 @@ export function CountryTabMilitary({
         <IntelGauge level={intelLevel} panelClass={glassPanelClass} panelStyle={glassPanelStyle} textClass={glassTextClass} mutedClass={glassMutedClass} />
         {canAdjustIntelForTesting && (
           <section className={glassPanelClass} style={glassPanelStyle}>
-            <h3 className={`mb-2 text-sm font-semibold ${glassTextClass}`}>Test - Ajuster le renseignement</h3>
+            <h2 className={`mb-2 text-sm font-semibold ${glassTextClass}`}>Test - Ajuster le renseignement</h2>
             <p className={`mb-3 text-xs ${glassMutedClass}`}>
               Outil temporaire de test. Delta exact appliqué sur le niveau de renseignement de ce pays.
             </p>
@@ -223,6 +223,7 @@ export function CountryTabMilitary({
                 max={100}
                 value={intelDeltaInput}
                 onChange={(e) => setIntelDeltaInput(e.target.value)}
+                aria-label="Ajustement du niveau de renseignement"
                 className="w-28 rounded border border-white/25 bg-white/10 px-2 py-1.5 text-sm text-white"
               />
               <button
@@ -250,10 +251,10 @@ export function CountryTabMilitary({
               <div className="absolute inset-0 bg-[var(--background-panel)]/75" />
             </div>
             <div className="relative z-10 flex flex-col items-center justify-center gap-4 py-12 px-6">
-              <span className="text-4xl opacity-40">🔍</span>
+              <span className="text-4xl opacity-40" aria-hidden>🔍</span>
+              <h2 className={`text-center text-lg font-semibold ${glassTextClass}`}>Renseignement insuffisant</h2>
               <p className={`text-center text-sm max-w-md ${glassMutedClass}`}>
-                Renseignement insuffisant. Les services de renseignement ne disposent d'aucune information
-                fiable sur les capacités militaires de ce pays.
+                Les services de renseignement ne disposent d&apos;aucune information fiable sur les capacités militaires de ce pays.
               </p>
               <p className={`text-center text-xs opacity-90 ${glassMutedClass}`}>
                 Lancez une opération d'espionnage pour en savoir plus.
@@ -630,18 +631,23 @@ function IntelGauge({
     pct < 25 ? "var(--danger)" : pct < 50 ? "#e6a817" : pct < 75 ? "#d4a017" : "var(--accent)";
   const content = (
     <div className="flex items-center gap-4">
-      <span className="text-lg">🔍</span>
+      <span className="text-lg" aria-hidden>🔍</span>
       <div className="flex-1 min-w-0">
         <div className="flex items-baseline gap-2 mb-1.5">
-          <span className={`text-sm font-semibold ${textClass}`}>
+          <h2 className={`text-sm font-semibold ${textClass}`}>
             Niveau de renseignement
-          </span>
+          </h2>
           <span className="text-xs font-mono" style={{ color }}>
             {pct} %
           </span>
         </div>
         <div
           className="h-2 w-full rounded-full overflow-hidden bg-white/20"
+          role="progressbar"
+          aria-label="Niveau de renseignement"
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-valuenow={pct}
         >
           <div
             className="h-full rounded-full transition-all duration-500"

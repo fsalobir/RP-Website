@@ -185,7 +185,7 @@ function SpherePieChart({
                 style={{ backgroundColor: SPHERE_PIE_COLORS[s.colorIndex % SPHERE_PIE_COLORS.length] }}
               />
               {s.flag_url ? (
-                <Link href={`/pays/${s.slug}`} className="shrink-0">
+                <Link href={`/pays/${s.slug}`} className="shrink-0" aria-label={`Voir ${s.name}`}>
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img src={s.flag_url} alt="" width={16} height={11} className="inline-block h-[11px] w-4 rounded object-cover align-middle" />
                 </Link>
@@ -392,7 +392,7 @@ export function CountryTabGeneral({
           value: percentChange(previousSnapshot.population, country.population),
           suffix: " %",
         },
-        strongestStatChange && strongestStatChange.value !== 0
+        strongestStatChange && Math.abs(strongestStatChange.value) >= 0.05
           ? { label: strongestStatChange.label, value: strongestStatChange.value, suffix: "" }
           : null,
       ].filter((trend): trend is { label: string; value: number; suffix: string } => trend?.value != null)
@@ -841,7 +841,7 @@ export function CountryTabGeneral({
                         {law.effects.map((effect, idx) => (
                           <p
                             key={`${law.lawKey}-${idx}`}
-                            className={`text-sm font-semibold ${effect.value >= 0 ? "text-[var(--accent)]" : "text-[var(--danger)]"}`}
+                            className={`text-sm font-semibold ${isEffectDisplayPositive(effect) ? "text-[var(--accent)]" : "text-[var(--danger)]"}`}
                           >
                             {getEffectDescription(effect, {
                               rosterUnitName: (id) => rosterUnitsFlat.find((u) => u.id === id)?.name_fr ?? null,

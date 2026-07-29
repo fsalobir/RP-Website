@@ -6,6 +6,7 @@ import { LAW_DEFINITIONS, getLawLevelKeyFromScore, getLawEffectsForLevel, type C
 import {
   EFFECT_KIND_LABELS,
   formatEffectValue,
+  isEffectDisplayPositive,
   MILITARY_BRANCH_EFFECT_LABELS,
   STAT_LABELS,
   formatSubTypeTargetLabel,
@@ -23,7 +24,7 @@ function resolveTargetLabel(
 ): string {
   if (!target) return "";
   if (effectKind === "military_unit_extra" || effectKind === "military_unit_tech_rate" || effectKind === "military_unit_limit_modifier_roster") {
-    return rosterNameById.get(target) ?? target;
+    return rosterNameById.get(target) ?? "Unité non visible";
   }
   if (effectKind === "military_unit_limit_modifier_sub_type" && target) {
     const p = parseSubTypeTarget(target);
@@ -53,8 +54,9 @@ function EffectLine({
   const label = EFFECT_KIND_LABELS[effectKind] ?? effectKind;
   const targetStr = resolveTargetLabel(effectKind, effectTarget, rosterNameById);
   const valStr = formatEffectValue(effectKind, value);
-  const isPositive = value > 0;
-  const isNegative = value < 0;
+  const isNeutral = effectKind.startsWith("influence_modifier_") ? value === 1 : value === 0;
+  const isPositive = !isNeutral && isEffectDisplayPositive({ effect_kind: effectKind, value });
+  const isNegative = !isNeutral && !isPositive;
 
   return (
     <li className="flex items-baseline gap-1.5 text-xs leading-relaxed">
@@ -183,14 +185,13 @@ function LawCard({
     <div
       className={`rounded-xl border ${glassBorderClass}`}
       style={{
-        background: "rgba(255,255,255,0.12)",
-        backdropFilter: "blur(12px)",
+        background: "rgba(255,255,255,0.06)",
       }}
     >
       <button
         type="button"
         onClick={() => setExpanded((e) => !e)}
-        className={`relative w-full text-left transition-all duration-200 ${expanded ? "px-5 py-4 border-b" : "h-10 px-3"}`}
+        className={`relative min-h-11 w-full text-left transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--accent)] ${expanded ? "px-5 py-4 border-b" : "px-3"}`}
         style={expanded ? { borderColor: "rgba(255,255,255,0.22)" } : undefined}
         aria-expanded={expanded}
       >
@@ -249,18 +250,13 @@ function LawCard({
                 ? "var(--accent-muted)"
                 : "rgba(255,255,255,0.28)";
             const bottomClr = levelEffects.length > 0 ? "transparent" : borderClr;
-            const cardShadow = isCurrent
-              ? "0 0 0 1px rgba(16,185,129,0.45), 0 0 16px rgba(16,185,129,0.28)"
-              : isTarget
-                ? "0 0 0 1px rgba(148,163,184,0.45), 0 0 14px rgba(148,163,184,0.22)"
-                : "0 0 0 1px rgba(255,255,255,0.08)";
             return (
               <div key={level.key}>
                 <button
                   type="button"
                   disabled={!canEditCountry || isLoading}
                   onClick={() => handleClick(level.key)}
-                  className="flex w-full items-center gap-3 rounded-t border border-solid px-3 py-2 text-left text-sm font-medium transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+                  className="flex min-h-11 w-full items-center gap-3 rounded-t border border-solid px-3 py-2 text-left text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-60"
                   style={{
                     borderTopColor: borderClr,
                     borderRightColor: borderClr,
@@ -273,7 +269,6 @@ function LawCard({
                         : "rgba(255,255,255,0.14)",
                     color: "#ffffff",
                     borderRadius: levelEffects.length > 0 ? "0.375rem 0.375rem 0 0" : "0.375rem",
-                    boxShadow: cardShadow,
                   }}
                 >
                   <span className="flex-1 font-semibold text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.5)]">{level.label}</span>
@@ -301,7 +296,6 @@ function LawCard({
                           ? "var(--accent-muted)"
                           : "rgba(255,255,255,0.22)",
                       background: "rgba(15,23,42,0.55)",
-                      boxShadow: cardShadow,
                     }}
                   >
                     <ul className="space-y-0.5">
@@ -377,7 +371,7 @@ export function CountryTabLaws({
   return (
     <section
       className={`${panelClass} rounded-xl border p-4 ${glassBorderClass}`}
-      style={{ ...panelStyle, background: "rgba(255,255,255,0.12)", backdropFilter: "blur(12px)" }}
+      style={{ ...panelStyle, background: "rgba(12,20,32,0.92)", borderColor: "rgba(255,255,255,0.2)" }}
     >
       <h2 className={`mb-4 text-lg font-semibold ${glassTextClass}`}>
         Lois nationales
