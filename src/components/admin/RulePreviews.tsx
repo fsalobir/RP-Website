@@ -99,29 +99,30 @@ export function InfluenceRulePreview({ config }: { config: InfluenceConfig }) {
   return (
     <PreviewFrame
       title="Conséquence en direct"
-      description="Les trois profils restent identiques pendant que vous modifiez les réglages ci-dessus. La moyenne mondiale de cet exemple est calculée entre eux ; le jeu utilise tous les pays."
+      description="La longueur compare l’influence totale sur une même échelle. Les couleurs montrent la part apportée par le PIB, la population et l’armée."
     >
       <div className="space-y-5">
         {results.map(({ profile, result }) => {
           const stability = result.componentsAfterGravity.stabilityMultiplier;
+          const barWidth = (result.influence / maximum) * 100;
           const segments = [
             {
               key: "gdp",
               label: "PIB",
               color: "var(--accent)",
-              width: (result.componentsAfterGravity.gdp * stability / maximum) * 100,
+              width: result.influence > 0 ? (result.componentsAfterGravity.gdp * stability / result.influence) * 100 : 0,
             },
             {
               key: "population",
               label: "Population",
               color: "var(--warning)",
-              width: (result.componentsAfterGravity.population * stability / maximum) * 100,
+              width: result.influence > 0 ? (result.componentsAfterGravity.population * stability / result.influence) * 100 : 0,
             },
             {
               key: "military",
               label: "Armée",
               color: "#60a5fa",
-              width: (result.componentsAfterGravity.military * stability / maximum) * 100,
+              width: result.influence > 0 ? (result.componentsAfterGravity.military * stability / result.influence) * 100 : 0,
             },
           ];
           return (
@@ -138,18 +139,21 @@ export function InfluenceRulePreview({ config }: { config: InfluenceConfig }) {
                   <span className="ml-2">· stabilité ×{compact(stability)}</span>
                 </p>
               </div>
-              <div
-                role="img"
-                aria-label={`${profile.label} : influence ${compact(result.influence)}, composée du PIB, de la population et de l'armée`}
-                className="mt-2 flex h-7 overflow-hidden rounded-md bg-[var(--background)]"
-              >
-                {segments.map((segment) => (
-                  <span
-                    key={segment.key}
-                    title={`${segment.label} : ${compact(segment.width)} % de l’échelle`}
-                    style={{ width: `${Math.max(0, segment.width)}%`, background: segment.color }}
-                  />
-                ))}
+              <div className="mt-2 h-7">
+                <div
+                  role="img"
+                  aria-label={`${profile.label} : influence ${compact(result.influence)}, composée du PIB, de la population et de l'armée`}
+                  className="flex h-full overflow-hidden rounded-md"
+                  style={{ width: `${Math.max(0, Math.min(100, barWidth))}%` }}
+                >
+                  {segments.map((segment) => (
+                    <span
+                      key={segment.key}
+                      title={`${segment.label} : ${compact(segment.width)} % de l’influence de ce profil`}
+                      style={{ width: `${Math.max(0, segment.width)}%`, background: segment.color }}
+                    />
+                  ))}
+                </div>
               </div>
             </div>
           );
@@ -160,7 +164,7 @@ export function InfluenceRulePreview({ config }: { config: InfluenceConfig }) {
         <span><i className="mr-1 inline-block h-2.5 w-2.5 rounded-sm bg-[var(--warning)]" />Population</span>
         <span><i className="mr-1 inline-block h-2.5 w-2.5 rounded-sm bg-[#60a5fa]" />Armée</span>
         <span className="text-[var(--foreground)]">
-          La grande puissance vaut {medium > 0 ? `${compact(strong / medium)}×` : "—"} la puissance moyenne.
+          Échelle maximale : {compact(maximum)} points · la grande puissance vaut {medium > 0 ? `${compact(strong / medium)}×` : "—"} la puissance moyenne.
         </span>
       </div>
     </PreviewFrame>
