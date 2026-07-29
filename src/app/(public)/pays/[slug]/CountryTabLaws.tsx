@@ -15,6 +15,7 @@ import {
 } from "@/lib/countryEffects";
 import { BUDGET_MINISTRY_LABELS } from "@/lib/ruleParameters";
 import { formatNumber } from "@/lib/format";
+import { DisclosureChevron } from "@/components/ui/DisclosureChevron";
 import { setLawScoreImmediate, setLawTarget } from "./actions";
 
 const LAW_ICONS: Record<string, string> = {
@@ -200,11 +201,11 @@ function LawCard({
       <button
         type="button"
         onClick={() => setExpanded((e) => !e)}
-        className={`relative min-h-11 w-full px-3 py-3 text-left transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--accent)] sm:px-4 ${expanded ? "border-b" : ""}`}
+        className={`group relative min-h-11 w-full px-3 py-3 text-left transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--accent)] sm:px-4 ${expanded ? "border-b" : ""}`}
         style={expanded ? { borderColor: "rgba(255,255,255,0.22)" } : undefined}
         aria-expanded={expanded}
       >
-        <span className="grid grid-cols-[2.25rem_minmax(0,1fr)_auto] items-center gap-x-3">
+        <span className="grid grid-cols-[2.25rem_minmax(0,1fr)_2.5rem] items-center gap-x-3">
           <span
             aria-hidden
             className="row-span-2 flex h-9 w-9 items-center justify-center rounded-lg border border-white/15 bg-black/20 text-lg"
@@ -214,14 +215,10 @@ function LawCard({
           <span className={`min-w-0 text-sm font-bold leading-snug sm:text-base ${glassTextClass}`}>
             {def.title_fr}
           </span>
-          <span
-            aria-hidden
-            className={`text-xs transition-transform duration-200 ease-out ${glassMutedClass}`}
-            style={{ transform: expanded ? "rotate(180deg)" : "rotate(0deg)" }}
-          >
-            ▾
+          <span className="col-start-3 row-span-2 row-start-1 flex h-10 w-10 items-center justify-center self-center rounded-lg text-white/80 transition-colors group-hover:bg-white/5 group-active:bg-white/10">
+            <DisclosureChevron open={expanded} />
           </span>
-          <span className={`col-span-2 col-start-2 mt-0.5 min-w-0 break-words text-xs leading-snug ${glassMutedClass}`}>
+          <span className={`col-start-2 col-end-3 mt-0.5 min-w-0 break-words text-xs leading-snug ${glassMutedClass}`}>
             {rightSummary}
           </span>
         </span>

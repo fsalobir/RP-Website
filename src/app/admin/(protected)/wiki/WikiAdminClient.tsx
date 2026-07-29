@@ -4,6 +4,7 @@ import type { Editor } from "@tiptap/core";
 import type { JSONContent } from "@tiptap/core";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { DisclosureChevron } from "@/components/ui/DisclosureChevron";
 import {
   createWikiPageAction,
   deleteWikiPageAction,
@@ -42,19 +43,15 @@ function AdminTreeRow({
           <button
             type="button"
             onClick={() => toggleExpand(node.slug)}
-            className="shrink-0 rounded p-1 text-[var(--foreground-muted)] hover:bg-[var(--background-elevated)] hover:text-[var(--foreground)]"
+            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-[var(--foreground-muted)] hover:bg-[var(--background-elevated)] hover:text-[var(--foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
             aria-expanded={expanded}
+            aria-label={`${expanded ? "Replier" : "Développer"} ${node.title}`}
             title={expanded ? "Replier" : "Développer"}
           >
-            <span
-              className={`inline-block text-xs transition-transform ${expanded ? "rotate-90" : ""}`}
-              aria-hidden
-            >
-              ▶
-            </span>
+            <DisclosureChevron open={expanded} direction="right" />
           </button>
         ) : (
-          <span className="inline-block w-7 shrink-0" aria-hidden />
+          <span className="inline-block w-11 shrink-0" aria-hidden />
         )}
         <button
           type="button"

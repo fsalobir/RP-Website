@@ -4,6 +4,7 @@ import { Fragment, useState } from "react";
 import type { MilitaryBranch } from "@/types/database";
 import { formatNumber } from "@/lib/format";
 import { Tooltip } from "@/components/ui/Tooltip";
+import { DisclosureChevron } from "@/components/ui/DisclosureChevron";
 import {
   formatEffectValue,
   getEffectiveMilitaryUnitCount,
@@ -334,15 +335,11 @@ export function CountryTabMilitary({
                       <button
                         type="button"
                         onClick={() => setMilitarySubtypeOpen((prev) => ({ ...prev, [subKey]: prev[subKey] === false }))}
+                        aria-expanded={isOpen}
                         className={`flex w-full items-center gap-2 py-1.5 px-3 text-left text-sm font-medium ${glassTextClass} hover:bg-white/10 transition-colors`}
                         style={{ background: "rgba(255,255,255,0.12)", backdropFilter: "blur(12px)" }}
                       >
-                        <span
-                          className="inline-block transition-transform duration-200 ease-out"
-                          style={{ transform: isOpen ? "rotate(90deg)" : "rotate(0deg)" }}
-                        >
-                          ▶
-                        </span>
+                        <DisclosureChevron open={isOpen} direction="right" />
                         <span>{label}</span>
                         <span className={glassMutedClass}>Personnel : {formatNumber(subPersonnel)}</span>
                       </button>

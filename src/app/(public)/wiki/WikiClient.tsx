@@ -2,6 +2,7 @@
 
 import { useState, useCallback, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
+import { DisclosureChevron } from "@/components/ui/DisclosureChevron";
 import { WikiPageBody } from "./WikiPageBody";
 import {
   buildWikiTree,
@@ -53,15 +54,14 @@ function TreeNav({
                 <button
                   type="button"
                   onClick={() => toggleExpand(node.slug)}
-                  className="shrink-0 rounded p-1 text-white/85 hover:text-white hover:bg-white/10"
+                  className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-white/85 hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60"
                   aria-expanded={expanded}
+                  aria-label={`${expanded ? "Replier" : "Développer"} ${node.title}`}
                   title={expanded ? "Replier" : "Développer"}
                 >
-                  <span className={`inline-block transition-transform ${expanded ? "rotate-90" : ""}`} aria-hidden>
-                    ▶
-                  </span>
+                  <DisclosureChevron open={expanded} direction="right" />
                 </button>
-              ) : null}
+              ) : <span className="inline-block w-11 shrink-0" aria-hidden />}
               <button
                 type="button"
                 onClick={() => {

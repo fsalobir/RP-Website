@@ -3,6 +3,7 @@
 import { useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { DisclosureChevron } from "@/components/ui/DisclosureChevron";
 import {
   buildRosterTemplateCsv,
   parseRosterCsv,
@@ -527,13 +528,7 @@ export function RosterEditor({
                             </div>
                           </div>
                         </div>
-                        <span
-                          className="inline-block shrink-0 text-xs text-[var(--foreground-muted)] transition-transform duration-200 ease-out"
-                          style={{ transform: expanded ? "rotate(180deg)" : "rotate(0deg)" }}
-                          aria-hidden
-                        >
-                          ▼
-                        </span>
+                        <DisclosureChevron open={expanded} className="text-[var(--foreground-muted)]" />
                       </button>
 
                       <div
