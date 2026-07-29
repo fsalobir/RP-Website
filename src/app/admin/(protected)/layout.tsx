@@ -1,7 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { getCachedAuth } from "@/lib/auth-server";
 import { redirect } from "next/navigation";
-import { AdminNav } from "@/components/layout/AdminNav";
 
 export default async function AdminProtectedLayout({ children }: { children: React.ReactNode }) {
   const auth = await getCachedAuth();
@@ -23,11 +22,6 @@ export default async function AdminProtectedLayout({ children }: { children: Rea
     redirect("/admin/connexion?error=non-admin");
   }
 
-  return (
-    <div className="min-h-screen flex flex-col">
-      <AdminNav />
-      <main className="flex-1">{children}</main>
-    </div>
-  );
+  return <>{children}</>;
 }
 

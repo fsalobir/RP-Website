@@ -219,19 +219,18 @@ export function BotDiscordForm({
                 <span className="text-sm font-medium text-[var(--foreground-muted)]">{stateAction.label_fr}</span>
                 <div className="flex flex-wrap items-center gap-4 pl-2">
                   <div className="flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      id={`type-${accepted.id}`}
-                      checked={accepted.enabled}
-                      onChange={async () => {
-                        await setDispatchTypeEnabled(accepted.id, !accepted.enabled);
-                        router.refresh();
-                      }}
-                      className="h-4 w-4 rounded border"
-                      style={{ borderColor: "var(--border)", accentColor: "var(--accent)" }}
-                    />
-                    <label htmlFor={`type-${accepted.id}`} className="text-sm text-[var(--foreground)]">
-                      {accepted.label_fr}
+                    <label className="inline-flex min-h-11 items-center gap-2 text-sm text-[var(--foreground)]">
+                      <input
+                        type="checkbox"
+                        checked={accepted.enabled}
+                        onChange={async () => {
+                          await setDispatchTypeEnabled(accepted.id, !accepted.enabled);
+                          router.refresh();
+                        }}
+                        className="h-5 w-5 rounded border"
+                        style={{ borderColor: "var(--border)", accentColor: "var(--accent)" }}
+                      />
+                      <span>{accepted.label_fr}</span>
                     </label>
                     <select
                       aria-label={`Destination Discord pour ${accepted.label_fr}`}

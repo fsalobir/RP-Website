@@ -52,7 +52,7 @@ export default async function AdminPaysListPage() {
         <div className="flex flex-col items-start gap-3 sm:items-end">
           <Link
             href="/admin/pays/nouveau"
-            className="btn-primary rounded py-2 px-4"
+            className="btn-primary inline-flex min-h-11 items-center rounded px-4 py-2"
             style={{ background: "var(--accent)", color: "#0f1419", fontWeight: 600 }}
           >
             Nouveau pays

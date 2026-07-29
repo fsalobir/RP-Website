@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 // Mock relations/hardPower/influence to avoid DB complexity and to control modifiers.
 vi.mock("@/lib/relations", () => ({
@@ -20,6 +20,8 @@ vi.mock("@/lib/influence", () => ({
 }));
 
 import { computeAiEventDiceRoll } from "@/lib/stateActionDice";
+
+afterEach(() => vi.restoreAllMocks());
 
 type SupabaseMock = {
   from: (table: string) => any;
@@ -114,7 +116,6 @@ describe("PLAN_SCENARIOS_TEST — Section 9 (Dés)", () => {
     expect(result?.roll).toBe(1);
     expect(result?.modifier).toBe(10);
     expect(result?.total).toBe(11);
-    Math.random.mockRestore?.();
   });
 
   it("Scénario 9.2 — Stat modifier : interpolation linéaire + round", async () => {
@@ -138,7 +139,6 @@ describe("PLAN_SCENARIOS_TEST — Section 9 (Dés)", () => {
     expect(result?.stat_modifiers?.militarism).toBe(5);
     expect(result?.modifier).toBe(5);
     expect(result?.total).toBe(6);
-    Math.random.mockRestore?.();
   });
 
   it("Scénario 9.3 — stat_bonus désactive une stat (science)", async () => {
@@ -161,7 +161,6 @@ describe("PLAN_SCENARIOS_TEST — Section 9 (Dés)", () => {
     expect(result?.stat_modifiers).toEqual({}); // no stat modifiers
     expect(result?.modifier).toBe(0);
     expect(result?.total).toBe(1);
-    Math.random.mockRestore?.();
   });
 
   it("Scénario 9.4 — prise_influence : relationModifier = round((relation/100)*amplitude)", async () => {
@@ -183,7 +182,6 @@ describe("PLAN_SCENARIOS_TEST — Section 9 (Dés)", () => {
 
     // mocked getRelation returns -40 => round((-40/100)*30) = -12
     expect(result?.relation_modifier).toBe(-12);
-    Math.random.mockRestore?.();
   });
 
   it("Scénario 9.5 — prise_influence : influenceModifier piecewise (ratio)", async () => {
@@ -213,7 +211,6 @@ describe("PLAN_SCENARIOS_TEST — Section 9 (Dés)", () => {
     });
 
     expect(result?.influence_modifier).toBe(20);
-    Math.random.mockRestore?.();
   });
 });
 

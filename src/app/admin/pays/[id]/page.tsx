@@ -69,7 +69,7 @@ export default async function AdminPaysEditPage({
         </div>
         <Link
           href="/admin/pays"
-          className="shrink-0 rounded border border-[var(--border)] bg-[var(--background-elevated)] px-4 py-2 text-sm font-medium text-[var(--foreground)] hover:bg-[var(--background)] hover:text-[var(--accent)]"
+          className="inline-flex min-h-11 shrink-0 items-center rounded border border-[var(--border)] bg-[var(--background-elevated)] px-4 py-2 text-sm font-medium text-[var(--foreground)] hover:bg-[var(--background)] hover:text-[var(--accent)]"
         >
           Retour liste
         </Link>

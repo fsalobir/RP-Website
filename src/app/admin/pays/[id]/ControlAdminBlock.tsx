@@ -188,13 +188,13 @@ export function ControlAdminBlock({
 
       {availableCountries.length > 0 && (
         <div className="flex flex-wrap items-end gap-3 rounded border p-3" style={{ borderColor: "var(--border-muted)" }}>
-          <div>
+          <div className="w-full min-w-0 sm:w-auto">
             <label htmlFor="new-controller" className="mb-0.5 block text-xs text-[var(--foreground-muted)]">Ajouter un contrôleur</label>
             <select
               id="new-controller"
               value={newControllerId}
               onChange={(e) => setNewControllerId(e.target.value)}
-              className="rounded border bg-[var(--background)] px-2 py-1.5 text-sm text-[var(--foreground)] min-w-[180px]"
+              className="w-full min-w-0 max-w-full rounded border bg-[var(--background)] px-2 py-1.5 text-sm text-[var(--foreground)] sm:w-auto sm:min-w-[180px]"
               style={inputStyle}
             >
               <option value="">— Choisir un pays —</option>

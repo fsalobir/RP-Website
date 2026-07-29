@@ -1406,9 +1406,9 @@ export function ReglesForm({
                           id="cron-paused"
                           checked={cronPausedRule.value === true || String(cronPausedRule.value) === "true"}
                           onChange={(e) => updateValue(cronPausedRule.id, e.target.checked)}
-                          className="rounded"
+                          className="h-5 w-5 shrink-0 rounded"
                         />
-                        <label htmlFor="cron-paused" className="text-sm text-[var(--foreground)]">
+                        <label htmlFor="cron-paused" className="inline-flex min-h-11 items-center text-sm text-[var(--foreground)]">
                           Jeu en pause (le cron ne s&apos;exécute plus automatiquement ; les jours restent passables manuellement)
                         </label>
                       </div>
