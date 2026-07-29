@@ -5,6 +5,8 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
 import type { Country } from "@/types/database";
+import { AdminSettingsGuide } from "@/components/admin/AdminSettingsUi";
+import { formatGdp, formatNumber } from "@/lib/format";
 
 function slugify(s: string) {
   return s
@@ -133,9 +135,18 @@ export function CountryForm({
   const inputStyle = { borderColor: "var(--border)" };
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-8">
+    <form onSubmit={handleSubmit} className="admin-settings-form space-y-8">
+      <AdminSettingsGuide
+        purpose="Cette fiche pose l’identité publique du pays et ses valeurs de départ. Les lois, le contrôle et le militaire se règlent ensuite dans leurs blocs dédiés."
+        impact="Le nom, le régime, le drapeau, la population et le PIB sont visibles par les joueurs. Les statistiques influencent aussi les jets et la simulation."
+        check="Vérifiez le drapeau, l’adresse de la page et les bornes des quatre statistiques dans l’aperçu."
+      />
+
       <section className={panelClass} style={panelStyle}>
-        <h2 className="mb-4 text-lg font-semibold text-[var(--foreground)]">Généralités</h2>
+        <h2 className="text-lg font-semibold text-[var(--foreground)]">Identité</h2>
+        <p className="mb-4 mt-1 text-sm leading-relaxed text-[var(--foreground-muted)]">
+          Informations affichées sur la fiche pays et dans les listes.
+        </p>
         <div className="grid gap-4 sm:grid-cols-2">
           <div>
             <label htmlFor="country-name" className="mb-1 block text-sm text-[var(--foreground-muted)]">Nom</label>
@@ -150,7 +161,7 @@ export function CountryForm({
             />
           </div>
           <div>
-            <label htmlFor="country-slug" className="mb-1 block text-sm text-[var(--foreground-muted)]">Slug (URL)</label>
+            <label htmlFor="country-slug" className="mb-1 block text-sm text-[var(--foreground-muted)]">Adresse de la page</label>
             <input
               id="country-slug"
               type="text"
@@ -158,7 +169,11 @@ export function CountryForm({
               onChange={(e) => update("slug", e.target.value)}
               className={inputClass}
               style={inputStyle}
+              aria-describedby="country-slug-help"
             />
+            <p id="country-slug-help" className="mt-1 text-xs text-[var(--foreground-muted)]">
+              Utilisée après « /pays/ ». Elle est créée automatiquement pour un nouveau pays.
+            </p>
           </div>
           <div>
             <label htmlFor="country-regime" className="mb-1 block text-sm text-[var(--foreground-muted)]">Régime</label>
@@ -195,7 +210,16 @@ export function CountryForm({
               <input
                 type="file"
                 accept="image/jpeg,image/png,image/gif,image/webp"
-                onChange={(e) => setFlagFile(e.target.files?.[0] ?? null)}
+                onChange={(e) => {
+                  const file = e.target.files?.[0] ?? null;
+                  if (file && file.size > 5 * 1024 * 1024) {
+                    setError("Le drapeau dépasse 5 Mo. Choisissez une image plus légère.");
+                    e.target.value = "";
+                    return;
+                  }
+                  setError(null);
+                  setFlagFile(file);
+                }}
                 className="hidden"
                 id="admin-country-flag-upload"
               />
@@ -203,7 +227,7 @@ export function CountryForm({
                 htmlFor="admin-country-flag-upload"
                 className="inline-flex min-h-11 cursor-pointer items-center rounded border border-[var(--border)] bg-[var(--accent)] px-3 py-1.5 text-sm font-medium text-[#0f1419] hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
               >
-                Upload
+                Choisir un drapeau
               </label>
               {flagFile && (
                 <p className="text-xs text-[var(--foreground-muted)]">
@@ -216,8 +240,8 @@ export function CountryForm({
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
                     src={flagPreviewUrl ?? form.flag_url ?? ""}
-                    alt=""
-                    className="mt-1 h-12 w-16 rounded border object-cover"
+                    alt={`Drapeau de ${form.name || "ce pays"}`}
+                    className="mt-1 h-12 w-16 rounded border bg-[var(--background)] object-contain"
                     style={{ borderColor: "var(--border)" }}
                   />
                 </div>
@@ -228,7 +252,10 @@ export function CountryForm({
       </section>
 
       <section className={panelClass} style={panelStyle}>
-        <h2 className="mb-4 text-lg font-semibold text-[var(--foreground)]">Société</h2>
+        <h2 className="text-lg font-semibold text-[var(--foreground)]">Capacités du pays</h2>
+        <p className="mb-4 mt-1 text-sm leading-relaxed text-[var(--foreground-muted)]">
+          Ces quatre valeurs servent aux jets, aux effets et à plusieurs calculs de puissance.
+        </p>
         <div className="grid gap-4 sm:grid-cols-4">
           {(["militarism", "industry", "science"] as const).map((key) => (
             <div key={key}>
@@ -266,7 +293,10 @@ export function CountryForm({
       </section>
 
       <section className={panelClass} style={panelStyle}>
-        <h2 className="mb-4 text-lg font-semibold text-[var(--foreground)]">Macros</h2>
+        <h2 className="text-lg font-semibold text-[var(--foreground)]">Population et économie</h2>
+        <p className="mb-4 mt-1 text-sm leading-relaxed text-[var(--foreground-muted)]">
+          Valeurs de départ utilisées par les classements, l’influence et la croissance quotidienne.
+        </p>
         <div className="grid gap-4 sm:grid-cols-2">
           <div>
             <label htmlFor="country-population" className="mb-1 block text-sm text-[var(--foreground-muted)]">Population</label>
@@ -292,6 +322,40 @@ export function CountryForm({
               className={inputClass}
               style={inputStyle}
             />
+          </div>
+        </div>
+      </section>
+
+      <section className={panelClass} style={panelStyle} aria-labelledby="country-preview-title">
+        <h2 id="country-preview-title" className="text-lg font-semibold text-[var(--foreground)]">
+          Aperçu de la fiche
+        </h2>
+        <div className="mt-4 flex flex-col gap-4 sm:flex-row sm:items-center">
+          <div
+            className="flex h-20 w-28 shrink-0 items-center justify-center overflow-hidden rounded-lg border bg-[var(--background)]"
+            style={{ borderColor: "var(--border)" }}
+          >
+            {flagPreviewUrl || form.flag_url ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={flagPreviewUrl ?? form.flag_url}
+                alt=""
+                className="h-full w-full object-contain"
+              />
+            ) : (
+              <span className="text-xs text-[var(--foreground-muted)]">Sans drapeau</span>
+            )}
+          </div>
+          <div className="min-w-0">
+            <p className="break-words text-xl font-semibold text-[var(--foreground)]">
+              {form.name || "Nom du pays"}
+            </p>
+            <p className="mt-1 text-sm text-[var(--foreground-muted)]">
+              {form.regime || "Régime non renseigné"}
+            </p>
+            <p className="mt-3 text-sm text-[var(--foreground)]">
+              {formatNumber(Number(form.population) || 0)} habitants · PIB {formatGdp(Number(form.gdp) || 0)}
+            </p>
           </div>
         </div>
       </section>

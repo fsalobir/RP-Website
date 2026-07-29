@@ -1,8 +1,10 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { createPlayer, assignPlayer, deletePlayer, updatePlayerName, addStateActions } from "./actions";
+import { AdminSettingsGuide } from "@/components/admin/AdminSettingsUi";
+import { matchesSearchText } from "@/lib/searchText";
 
 type PlayerRow = {
   user_id: string;
@@ -31,16 +33,35 @@ export function JoueursManager({
   const [nameError, setNameError] = useState<string | null>(null);
   const [addingActionsCountryId, setAddingActionsCountryId] = useState<string | null>(null);
   const [addActionsError, setAddActionsError] = useState<string | null>(null);
+  const [actionSuccess, setActionSuccess] = useState<string | null>(null);
+  const [query, setQuery] = useState("");
+
+  const filteredPlayers = useMemo(
+    () => players.filter((player) =>
+      matchesSearchText(query, [player.name ?? "", player.email, player.countryName])
+    ),
+    [players, query]
+  );
 
   return (
-    <div className="space-y-8">
+    <div className="admin-settings-form space-y-8">
+      <AdminSettingsGuide
+        purpose="Un compte joueur donne accès à un seul pays. L’assignation détermine immédiatement les données que la personne peut gérer."
+        impact="Le joueur peut ouvrir les espaces privés de son pays et utiliser son solde de points d’action."
+        check="Vérifiez l’email et le pays avant la création. Un changement d’assignation prend effet dès la prochaine navigation du joueur."
+        warning="Supprimer un joueur détruit aussi son compte de connexion. Cette action n’est pas réversible."
+      />
+
       <section
         className="rounded-xl border p-4 sm:p-6"
         style={{ borderColor: "var(--border)", background: "var(--background-panel)" }}
       >
-        <h2 className="mb-4 text-lg font-semibold text-[var(--foreground)]">
+        <h2 className="text-lg font-semibold text-[var(--foreground)]">
           Créer un joueur
         </h2>
+        <p className="mb-4 mt-1 text-sm text-[var(--foreground-muted)]">
+          Crée le compte de connexion et l’assigne au pays choisi en une seule opération.
+        </p>
         <form
           action={async (formData) => {
             setCreateError(null);
@@ -127,17 +148,38 @@ export function JoueursManager({
         className="rounded-xl border p-4 sm:p-6"
         style={{ borderColor: "var(--border)", background: "var(--background-panel)" }}
       >
-        <h2 className="mb-4 text-lg font-semibold text-[var(--foreground)]">
-          Joueurs assignés
-        </h2>
+        <div className="mb-4 flex flex-wrap items-end justify-between gap-4">
+          <div>
+            <h2 className="text-lg font-semibold text-[var(--foreground)]">Joueurs assignés</h2>
+            <p className="mt-1 text-sm text-[var(--foreground-muted)]">
+              {players.length} compte{players.length > 1 ? "s" : ""} actif{players.length > 1 ? "s" : ""}.
+            </p>
+          </div>
+          <label className="w-full sm:max-w-xs">
+            <span className="sr-only">Rechercher un joueur</span>
+            <input
+              type="search"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Nom, email ou pays…"
+              className="min-h-11 w-full rounded-lg border bg-[var(--background)] px-3 text-base text-[var(--foreground)] placeholder:text-[var(--foreground-muted)]"
+              style={{ borderColor: "var(--border)" }}
+            />
+          </label>
+        </div>
         {(assignError || nameError || addActionsError) && (
           <p role="alert" className="mb-2 text-sm text-[var(--danger)]">{assignError || nameError || addActionsError}</p>
         )}
+        {actionSuccess && <p role="status" className="mb-2 text-sm text-[var(--accent)]">{actionSuccess}</p>}
         {players.length === 0 ? (
           <p className="text-[var(--foreground-muted)]">Aucun joueur.</p>
+        ) : filteredPlayers.length === 0 ? (
+          <p className="rounded-lg border px-4 py-8 text-center text-sm text-[var(--foreground-muted)]" style={{ borderColor: "var(--border-muted)" }}>
+            Aucun joueur ne correspond à cette recherche.
+          </p>
         ) : (
           <ul className="space-y-3">
-            {players.map((p) => (
+            {filteredPlayers.map((p) => (
               <li
                 key={p.user_id}
                 className="flex flex-col items-stretch gap-3 rounded-lg border p-3 sm:flex-row sm:flex-wrap sm:items-center"
@@ -216,27 +258,36 @@ export function JoueursManager({
                   disabled={addingActionsCountryId !== null}
                   onClick={async () => {
                     setAddActionsError(null);
+                    setActionSuccess(null);
                     setAddingActionsCountryId(p.country_id);
                     const result = await addStateActions(p.country_id, 25);
                     setAddingActionsCountryId(null);
                     if (result.error) setAddActionsError(result.error);
-                    else router.refresh();
+                    else {
+                      setActionSuccess(`25 points d’action ajoutés à ${p.countryName}.`);
+                      router.refresh();
+                    }
                   }}
-                  className="text-sm text-[var(--accent)] hover:underline disabled:opacity-50"
+                  className="min-h-11 rounded-lg px-2 text-sm text-[var(--accent)] hover:bg-[var(--background-elevated)] disabled:opacity-50"
                 >
-                  {addingActionsCountryId === p.country_id ? "…" : "Ajouter actions"}
+                  {addingActionsCountryId === p.country_id ? "Ajout…" : "Ajouter 25 PA"}
                 </button>
                 <form
                   action={async () => {
                     if (!confirm("Supprimer ce joueur ? Son compte sera supprimé.")) return;
-                    await deletePlayer(p.user_id);
-                    router.refresh();
+                    setActionSuccess(null);
+                    const result = await deletePlayer(p.user_id);
+                    if (result.error) setAssignError(result.error);
+                    else {
+                      setActionSuccess("Joueur supprimé.");
+                      router.refresh();
+                    }
                   }}
                   className="sm:ml-auto"
                 >
                   <button
                     type="submit"
-                    className="text-sm text-[var(--danger)] hover:underline"
+                    className="min-h-11 rounded-lg px-2 text-sm text-[var(--danger)] hover:bg-[var(--background-elevated)]"
                   >
                     Supprimer
                   </button>

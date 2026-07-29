@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { AdminSettingsGuide } from "@/components/admin/AdminSettingsUi";
 import {
   acceptAiEvent,
   refuseAiEvent,
@@ -257,7 +258,13 @@ export function EventIaList({
   }
 
   return (
-    <div className="space-y-6">
+    <div className="admin-settings-form space-y-6">
+      <AdminSettingsGuide
+        purpose="Les événements IA représentent les actions des pays sans joueur. Les événements en attente sont traités avant les autres."
+        impact="Accepter applique les conséquences affichées. Simuler un passage peut créer de nouveaux événements selon les quotas des règles."
+        check="Vérifiez l’émetteur, la cible, l’échéance, les jets et les effets avant validation."
+        warning="« Vider la liste » supprime tous les événements IA ; cette action demande une confirmation."
+      />
       {selected && (
         <EventDetail
           event={selected}

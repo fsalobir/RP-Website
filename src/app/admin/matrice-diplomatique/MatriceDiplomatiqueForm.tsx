@@ -12,6 +12,14 @@ function TooltipBody({ text }: { text: string }) {
   return <div className="text-xs leading-snug">{text}</div>;
 }
 
+function getRelationLabel(value: number): string {
+  if (value <= -75) return "Hostilité extrême";
+  if (value <= -25) return "Hostilité";
+  if (value < 25) return "Neutre";
+  if (value < 75) return "Proximité";
+  return "Alliance forte";
+}
+
 export function MatriceDiplomatiqueForm({
   countries,
   relationMap,
@@ -78,24 +86,30 @@ export function MatriceDiplomatiqueForm({
   };
 
   return (
-    <div className="space-y-8">
-      <section className="rounded-xl border p-4 sm:p-6" style={{ borderColor: "var(--border)", background: "var(--background-panel)" }}>
-        <h2 className="mb-4 inline-flex items-center gap-2 text-lg font-semibold text-[var(--foreground)]">
+    <div className="admin-settings-form space-y-7">
+      <section>
+        <h2 className="inline-flex items-center gap-2 text-lg font-semibold text-[var(--foreground)]">
           <span>Modifier une relation</span>
-          <InfoTooltip content={<TooltipBody text="Valeur de la relation entre deux pays. Utilisée par les events IA et l'idéologie." />} side="bottom" />
+          <InfoTooltip label="Relation diplomatique" content={<TooltipBody text="Valeur réciproque utilisée par les actions, les événements IA et l’évolution idéologique." />} side="bottom" />
         </h2>
+        <p className="mb-5 mt-1 text-sm leading-relaxed text-[var(--foreground-muted)]">
+          Choisissez deux pays : leur valeur actuelle est chargée automatiquement avant toute modification.
+        </p>
         <div className="grid grid-cols-1 items-end gap-4 sm:grid-cols-2 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(14rem,1fr)_auto]">
           <div className="flex min-w-0 flex-col gap-1">
             <div className="inline-flex items-center gap-1.5 text-sm text-[var(--foreground-muted)]">
               <label htmlFor="relation-country-a">Pays A</label>
-              <InfoTooltip content={<TooltipBody text="Premier pays de la relation bilatérale à modifier." />} />
+              <InfoTooltip label="Pays A" content={<TooltipBody text="Premier pays de la relation bilatérale à modifier." />} />
             </div>
             <select
               id="relation-country-a"
               value={countryA}
               onChange={(e) => {
-                setCountryA(e.target.value);
-                if (e.target.value === countryB) setCountryB("");
+                const nextA = e.target.value;
+                const nextB = nextA === countryB ? "" : countryB;
+                setCountryA(nextA);
+                if (nextB !== countryB) setCountryB(nextB);
+                setValue(nextA && nextB ? relationMap[key(nextA, nextB)] ?? 0 : 0);
               }}
               className="w-full min-w-0 rounded border bg-[var(--background)] px-3 py-2 text-[var(--foreground)]"
               style={{ borderColor: "var(--border)" }}
@@ -111,14 +125,17 @@ export function MatriceDiplomatiqueForm({
           <div className="flex min-w-0 flex-col gap-1">
             <div className="inline-flex items-center gap-1.5 text-sm text-[var(--foreground-muted)]">
               <label htmlFor="relation-country-b">Pays B</label>
-              <InfoTooltip content={<TooltipBody text="Second pays de la paire (doit être différent du premier)." />} />
+              <InfoTooltip label="Pays B" content={<TooltipBody text="Second pays de la paire, nécessairement différent du premier." />} />
             </div>
             <select
               id="relation-country-b"
               value={countryB}
               onChange={(e) => {
-                setCountryB(e.target.value);
-                if (e.target.value === countryA) setCountryA("");
+                const nextB = e.target.value;
+                const nextA = nextB === countryA ? "" : countryA;
+                setCountryB(nextB);
+                if (nextA !== countryA) setCountryA(nextA);
+                setValue(nextA && nextB ? relationMap[key(nextA, nextB)] ?? 0 : 0);
               }}
               className="w-full min-w-0 rounded border bg-[var(--background)] px-3 py-2 text-[var(--foreground)]"
               style={{ borderColor: "var(--border)" }}
@@ -134,7 +151,7 @@ export function MatriceDiplomatiqueForm({
           <div className="flex min-w-0 flex-col gap-1">
             <div className="inline-flex items-center gap-1.5 text-sm text-[var(--foreground-muted)]">
               <label htmlFor="relation-range">Relation ({RELATION_MIN} à {RELATION_MAX})</label>
-              <InfoTooltip content={<TooltipBody text="Qualité du lien : négatif = hostilité, positif = proximité. Utilisé par les events IA et l'idéologie." />} />
+              <InfoTooltip label="Valeur de relation" content={<TooltipBody text="−100 représente l’hostilité totale, 0 la neutralité et +100 une alliance très forte." />} />
             </div>
             <div className="flex min-w-0 items-center gap-3">
               <input
@@ -144,7 +161,7 @@ export function MatriceDiplomatiqueForm({
                 max={RELATION_MAX}
                 value={value}
                 onChange={(e) => setValue(Number(e.target.value))}
-                className="min-w-0 flex-1"
+                className="min-h-11 min-w-0 flex-1 accent-[var(--accent)]"
               />
               <input
                 aria-label="Valeur numérique de la relation"
@@ -153,7 +170,7 @@ export function MatriceDiplomatiqueForm({
                 max={RELATION_MAX}
                 value={value}
                 onChange={(e) => setValue(Number(e.target.value))}
-                className="w-20 rounded border bg-[var(--background)] px-2 py-2 text-center text-[var(--foreground)]"
+                className="min-h-11 w-24 rounded-lg border bg-[var(--background)] px-2 text-center text-base text-[var(--foreground)]"
                 style={{ borderColor: "var(--border)" }}
               />
             </div>
@@ -162,25 +179,51 @@ export function MatriceDiplomatiqueForm({
             type="button"
             onClick={handleSave}
             disabled={isPending || !countryA || !countryB || countryA === countryB}
-            className="w-full rounded px-4 py-2 text-sm font-medium text-white opacity-90 hover:opacity-100 disabled:opacity-50"
+            className="min-h-11 w-full rounded-lg px-4 text-sm font-semibold text-[#0f1419] disabled:opacity-50"
             style={{ background: "var(--accent)" }}
           >
-            Enregistrer
+            {isPending ? "Enregistrement…" : "Enregistrer la relation"}
           </button>
         </div>
         {countryA && countryB && countryA !== countryB && (
-          <p className="mt-3 text-sm text-[var(--foreground-muted)]">
-            Relation actuelle : <strong className="text-[var(--foreground)]">{currentValue ?? 0}</strong>
-          </p>
+          <div className="mt-5 rounded-lg bg-[var(--background-elevated)] p-4">
+            <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
+              <p className="text-[var(--foreground-muted)]">
+                Valeur enregistrée : <strong className="text-[var(--foreground)]">{currentValue ?? 0}</strong>
+              </p>
+              <p className="font-semibold text-[var(--foreground)]">
+                Nouvelle lecture : {getRelationLabel(value)}
+              </p>
+            </div>
+            <div
+              aria-label={`Échelle diplomatique : ${getRelationLabel(value)}, valeur ${value}`}
+              role="img"
+              className="relative mt-4 h-2 rounded-full"
+              style={{ background: "linear-gradient(90deg, var(--danger), var(--border-muted) 50%, var(--accent))" }}
+            >
+              <span
+                className="absolute top-1/2 h-4 w-4 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-[var(--foreground)] bg-[var(--background)]"
+                style={{ left: `${((value - RELATION_MIN) / (RELATION_MAX - RELATION_MIN)) * 100}%` }}
+              />
+            </div>
+            <div className="mt-2 flex justify-between text-xs text-[var(--foreground-muted)]">
+              <span>Hostilité</span><span>Neutre</span><span>Alliance</span>
+            </div>
+          </div>
         )}
       </section>
 
-      <section className="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
+      <section className="border-t pt-5" style={{ borderColor: "var(--border-muted)" }}>
+        <h3 className="text-sm font-semibold text-[var(--foreground)]">Actions sur toute la matrice</h3>
+        <p className="mt-1 text-xs leading-relaxed text-[var(--foreground-muted)]">
+          Ces actions remplacent toutes les relations existantes. Une confirmation est demandée.
+        </p>
+        <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
         <button
           type="button"
           onClick={handleResetAll}
           disabled={isPending}
-          className="rounded px-4 py-2 text-sm font-medium text-white opacity-90 hover:opacity-100 disabled:opacity-50"
+          className="min-h-11 rounded-lg px-4 text-sm font-medium text-white disabled:opacity-50"
           style={{ background: "var(--danger)" }}
         >
           Réinitialiser toutes les relations (0)
@@ -189,11 +232,12 @@ export function MatriceDiplomatiqueForm({
           type="button"
           onClick={handleRandom}
           disabled={isPending}
-          className="rounded border px-4 py-2 text-sm font-medium opacity-90 hover:opacity-100 disabled:opacity-50"
+          className="min-h-11 rounded-lg border px-4 text-sm font-medium hover:bg-[var(--background-elevated)] disabled:opacity-50"
           style={{ borderColor: "var(--border)", color: "var(--foreground)" }}
         >
           Relations aléatoires
         </button>
+        </div>
       </section>
 
       {message && (

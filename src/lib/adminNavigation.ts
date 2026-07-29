@@ -39,8 +39,8 @@ export const ADMIN_NAVIGATION_ITEMS: readonly AdminNavigationItem[] = [
   },
   {
     href: "/admin/roster",
-    label: "Roster militaire",
-    description: "Définir les modèles d’unités militaires disponibles en jeu.",
+    label: "Unités militaires",
+    description: "Définir les modèles d’unités, leurs niveaux, leur puissance et leur coût.",
     group: "world",
     icon: "🛡️",
     keywords: ["unités", "armée", "templates", "effectifs", "militaire"],

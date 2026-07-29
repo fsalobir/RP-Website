@@ -3,6 +3,8 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { replacePlaceholders, getPreviewVars } from "@/lib/discord-format";
+import { AdminImpactPreview, AdminSettingsGuide } from "@/components/admin/AdminSettingsUi";
+import { matchesSearchText } from "@/lib/searchText";
 import {
   setDispatchTypeEnabled,
   setDispatchTypeDestination,
@@ -61,6 +63,9 @@ export function BotDiscordForm({
   const router = useRouter();
   const [channelError, setChannelError] = useState<string | null>(null);
   const [templateError, setTemplateError] = useState<string | null>(null);
+  const [settingsError, setSettingsError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
+  const [query, setQuery] = useState("");
   const [editingTemplateId, setEditingTemplateId] = useState<string | null>(null);
   const [previewState, setPreviewState] = useState<{
     template: Template;
@@ -110,10 +115,62 @@ export function BotDiscordForm({
   const dispatchByStateAction = stateActionTypes.map((sat) => ({
     stateAction: sat,
     accepted: dispatchTypes.find((d) => d.state_action_type_id === sat.id && d.outcome === "accepted"),
-  }));
+  })).filter(({ stateAction, accepted }) =>
+    matchesSearchText(query, [stateAction.label_fr, accepted?.label_fr ?? "", accepted?.destination ?? ""])
+  );
+  const visibleDispatchTypes = dispatchTypes
+    .filter((dispatch) => dispatch.state_action_type_id != null && dispatch.outcome === "accepted")
+    .filter((dispatch) =>
+      matchesSearchText(query, [
+        dispatch.label_fr,
+        ...templates
+          .filter((template) => template.dispatch_type_id === dispatch.id)
+          .flatMap((template) => [template.label_fr, template.body_template]),
+      ])
+    );
 
   return (
-    <div className="space-y-8">
+    <div className="admin-settings-form space-y-8">
+      <AdminSettingsGuide
+        purpose="Une publication suit trois étapes : l’événement doit être activé, sa destination choisie, puis un modèle de message doit exister."
+        impact="Un changement d’activation ou de destination s’applique aux prochaines publications. Modifier un modèle change le texte que recevra Discord."
+        check="Ouvrez l’aperçu du message et vérifiez le salon choisi avant de quitter la page."
+        warning="Les identifiants de salon sont enregistrés quand vous quittez le champ."
+      />
+      <AdminImpactPreview title="Parcours d’une publication" description="Si une étape manque, le message ne peut pas arriver au bon endroit.">
+        <ol className="grid gap-2 text-sm sm:grid-cols-[1fr_auto_1fr_auto_1fr] sm:items-center">
+          <li className="rounded-lg border px-3 py-3 text-[var(--foreground)]" style={{ borderColor: "var(--border-muted)" }}>
+            <span className="block text-xs text-[var(--foreground-muted)]">1. Événement</span>
+            Activé
+          </li>
+          <li aria-hidden className="hidden text-center text-[var(--accent)] sm:block">→</li>
+          <li className="rounded-lg border px-3 py-3 text-[var(--foreground)]" style={{ borderColor: "var(--border-muted)" }}>
+            <span className="block text-xs text-[var(--foreground-muted)]">2. Destination</span>
+            Salon national ou international
+          </li>
+          <li aria-hidden className="hidden text-center text-[var(--accent)] sm:block">→</li>
+          <li className="rounded-lg border px-3 py-3 text-[var(--foreground)]" style={{ borderColor: "var(--border-muted)" }}>
+            <span className="block text-xs text-[var(--foreground-muted)]">3. Message</span>
+            Modèle rendu et publié
+          </li>
+        </ol>
+      </AdminImpactPreview>
+      <div className="max-w-xl">
+        <label htmlFor="discord-settings-search" className="mb-1 block text-sm font-medium text-[var(--foreground)]">
+          Rechercher une action ou un modèle
+        </label>
+        <input
+          id="discord-settings-search"
+          type="search"
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+          placeholder="Influence, reconnaissance, mobilisation…"
+          className="min-h-11 w-full rounded-lg border bg-[var(--background)] px-3 text-base text-[var(--foreground)]"
+          style={{ borderColor: "var(--border)" }}
+        />
+      </div>
+      {settingsError && <p role="alert" className="text-sm text-[var(--danger)]">{settingsError}</p>}
+      {success && <p aria-live="polite" className="text-sm text-[var(--accent)]">{success}</p>}
       <section
         className="rounded-xl border p-4 sm:p-6"
         style={{ borderColor: "var(--border)", background: "var(--background-panel)" }}
@@ -164,13 +221,17 @@ export function BotDiscordForm({
                   style={{ borderColor: "var(--border)" }}
                   onBlur={async () => {
                     setChannelError(null);
+                    setSuccess(null);
                     const err = await saveRegionChannel({
                       continent_id: c.id,
                       channel_kind: "national",
                       discord_channel_id: (effectiveChannelValues[`${c.id}:national`] ?? "").trim(),
                     });
                     if (err.error) setChannelError(err.error);
-                    else router.refresh();
+                    else {
+                      setSuccess(`Salon national de ${c.label_fr} enregistré.`);
+                      router.refresh();
+                    }
                   }}
                 />
               </div>
@@ -189,13 +250,17 @@ export function BotDiscordForm({
                   style={{ borderColor: "var(--border)" }}
                   onBlur={async () => {
                     setChannelError(null);
+                    setSuccess(null);
                     const err = await saveRegionChannel({
                       continent_id: c.id,
                       channel_kind: "international",
                       discord_channel_id: (effectiveChannelValues[`${c.id}:international`] ?? "").trim(),
                     });
                     if (err.error) setChannelError(err.error);
-                    else router.refresh();
+                    else {
+                      setSuccess(`Salon international de ${c.label_fr} enregistré.`);
+                      router.refresh();
+                    }
                   }}
                 />
               </div>
@@ -224,8 +289,14 @@ export function BotDiscordForm({
                         type="checkbox"
                         checked={accepted.enabled}
                         onChange={async () => {
-                          await setDispatchTypeEnabled(accepted.id, !accepted.enabled);
-                          router.refresh();
+                          setSettingsError(null);
+                          setSuccess(null);
+                          const result = await setDispatchTypeEnabled(accepted.id, !accepted.enabled);
+                          if (result.error) setSettingsError(result.error);
+                          else {
+                            setSuccess(`${accepted.label_fr} ${accepted.enabled ? "désactivé" : "activé"}.`);
+                            router.refresh();
+                          }
                         }}
                         className="h-5 w-5 rounded border"
                         style={{ borderColor: "var(--border)", accentColor: "var(--accent)" }}
@@ -237,8 +308,14 @@ export function BotDiscordForm({
                       value={accepted.destination}
                       onChange={async (e) => {
                         const dest = e.target.value as "national" | "international";
-                        await setDispatchTypeDestination(accepted.id, dest);
-                        router.refresh();
+                        setSettingsError(null);
+                        setSuccess(null);
+                        const result = await setDispatchTypeDestination(accepted.id, dest);
+                        if (result.error) setSettingsError(result.error);
+                        else {
+                          setSuccess(`${accepted.label_fr} sera publié dans le salon ${dest}.`);
+                          router.refresh();
+                        }
                       }}
                       className="rounded border bg-[var(--background)] px-2 py-1 text-sm text-[var(--foreground)]"
                       style={{ borderColor: "var(--border)" }}
@@ -263,8 +340,7 @@ export function BotDiscordForm({
           Les éléments entre accolades sont remplacés automatiquement. Si plusieurs modèles existent pour une action, l’un d’eux est choisi au hasard.
         </p>
         {templateError && <p role="alert" className="mb-2 text-sm text-[var(--danger)]">{templateError}</p>}
-        {dispatchTypes
-          .filter((d) => d.state_action_type_id != null && d.outcome === "accepted")
+        {visibleDispatchTypes
           .map((type) => ({
             type,
             items: templates.filter((tpl) => tpl.dispatch_type_id === type.id),
@@ -331,8 +407,10 @@ export function BotDiscordForm({
                           type="button"
                           onClick={async () => {
                             if (confirm("Supprimer ce template ?")) {
-                              await deleteTemplate(tpl.id);
-                              router.refresh();
+                              setTemplateError(null);
+                              const result = await deleteTemplate(tpl.id);
+                              if (result.error) setTemplateError(result.error);
+                              else router.refresh();
                             }
                           }}
                           className="text-xs text-[var(--danger)] hover:underline"

@@ -38,6 +38,8 @@ import {
   type PerkEffectInput,
   type PerkRequirementInput,
 } from "./actions";
+import { AdminImpactPreview, AdminSettingsGuide } from "@/components/admin/AdminSettingsUi";
+import { matchesSearchText } from "@/lib/searchText";
 
 const inputClass = "w-full rounded border py-1.5 px-2 text-sm text-[var(--foreground)]";
 const inputStyle = { borderColor: "var(--border)", background: "var(--background)" } as const;
@@ -75,6 +77,7 @@ export function AvantagesManager({
   const [perkEffects, setPerkEffects] = useState<PerkEffectInput[]>([]);
   const [perkRequirements, setPerkRequirements] = useState<PerkRequirementInput[]>([]);
   const [perkError, setPerkError] = useState<string | null>(null);
+  const [perkQuery, setPerkQuery] = useState("");
 
   const [requirementFormOpen, setRequirementFormOpen] = useState(false);
   const [editingRequirementIndex, setEditingRequirementIndex] = useState<number | null>(null);
@@ -151,7 +154,11 @@ export function AvantagesManager({
   }
   async function handleDeleteCategory(id: string) {
     if (!confirm("Supprimer cette catégorie ? Les avantages qui y sont rattachés n’auront plus de catégorie.")) return;
-    await deletePerkCategory(id);
+    const result = await deletePerkCategory(id);
+    if (result.error) {
+      setCategoryError(result.error);
+      return;
+    }
     window.location.reload();
   }
 
@@ -247,7 +254,11 @@ export function AvantagesManager({
   }
   async function handleDeletePerk(id: string) {
     if (!confirm("Supprimer cet avantage ?")) return;
-    await deletePerk(id);
+    const result = await deletePerk(id);
+    if (result.error) {
+      setPerkError(result.error);
+      return;
+    }
     window.location.reload();
   }
 
@@ -296,9 +307,30 @@ export function AvantagesManager({
   }
 
   const categoryById = new Map(categories.map((c) => [c.id, c]));
+  const filteredPerks = perks.filter((perk) =>
+    matchesSearchText(perkQuery, [
+      perk.name_fr,
+      perk.description_fr ?? "",
+      categoryById.get(perk.category_id ?? "")?.name_fr ?? "",
+      ...(perk.perk_requirements ?? []).map((requirement) => formatRequirementLabel(requirement)),
+      ...(perk.perk_effects ?? []).map((effect) =>
+        getEffectDescription(effect as ResolvedEffect, {
+          rosterUnitName: (id) => rosterUnits.find((unit) => unit.id === id)?.name_fr ?? null,
+          countryName: () => null,
+        })
+      ),
+    ])
+  );
+  const previewIconUrl = perkIconPreviewUrl || perkIconUrl;
+  const previewCategory = categoryById.get(perkCategoryId)?.name_fr ?? "Sans catégorie";
 
   return (
-    <div className="space-y-10">
+    <div className="admin-settings-form space-y-10">
+      <AdminSettingsGuide
+        purpose="Un avantage devient visible avec son nom, son icône, ses conditions de déblocage et les bonus qu’il applique."
+        impact="La modification d’un avantage existant change immédiatement son affichage et ses effets pour les pays concernés."
+        check="Vérifiez l’aperçu, puis lisez les conditions et effets comme le ferait un joueur avant d’enregistrer."
+      />
       <section>
         <h2 className="mb-3 text-lg font-semibold text-[var(--foreground)]">Catégories</h2>
         <ul className="space-y-2">
@@ -387,8 +419,25 @@ export function AvantagesManager({
 
       <section>
         <h2 className="mb-3 text-lg font-semibold text-[var(--foreground)]">Avantages</h2>
+        <div className="mb-4 max-w-xl">
+          <label htmlFor="perk-search" className="mb-1 block text-sm font-medium text-[var(--foreground)]">
+            Rechercher un avantage
+          </label>
+          <input
+            id="perk-search"
+            type="search"
+            value={perkQuery}
+            onChange={(event) => setPerkQuery(event.target.value)}
+            placeholder="Nom, catégorie, condition ou effet…"
+            className={inputClass}
+            style={inputStyle}
+          />
+          <p className="mt-1 text-xs text-[var(--foreground-muted)]" aria-live="polite">
+            {filteredPerks.length} avantage{filteredPerks.length > 1 ? "s" : ""} affiché{filteredPerks.length > 1 ? "s" : ""}
+          </p>
+        </div>
         <ul className="space-y-2">
-          {perks.map((p) => (
+          {filteredPerks.map((p) => (
             <li
               key={p.id}
               className="flex flex-wrap items-center justify-between gap-2 rounded border py-2 px-3"
@@ -429,6 +478,11 @@ export function AvantagesManager({
             </li>
           ))}
         </ul>
+        {filteredPerks.length === 0 && (
+          <p className="rounded border px-4 py-6 text-center text-sm text-[var(--foreground-muted)]" style={{ borderColor: "var(--border-muted)" }}>
+            Aucun avantage ne correspond à cette recherche.
+          </p>
+        )}
         {!perkFormOpen ? (
           <button
             type="button"
@@ -441,6 +495,67 @@ export function AvantagesManager({
         ) : (
           <div className="mt-3 rounded border p-4 space-y-4" style={{ borderColor: "var(--border-muted)" }}>
             {perkError && <p role="alert" className="text-sm text-[var(--danger)]">{perkError}</p>}
+            <AdminImpactPreview
+              title="Aperçu joueur, avant enregistrement"
+              description="Le contenu ci-dessous suit immédiatement vos modifications."
+            >
+              <div className="flex items-start gap-4">
+                <div
+                  className="flex shrink-0 items-center justify-center overflow-hidden rounded-lg border bg-[var(--background)] text-xl text-[var(--foreground-muted)]"
+                  style={{
+                    borderColor: "var(--border-muted)",
+                    width: Math.min(72, perkIconSize),
+                    height: Math.min(72, perkIconSize),
+                  }}
+                >
+                  {previewIconUrl ? (
+                    <img src={previewIconUrl} alt="" className="h-full w-full object-contain" />
+                  ) : (
+                    <span aria-hidden>★</span>
+                  )}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs font-medium uppercase tracking-wide text-[var(--accent)]">{previewCategory}</p>
+                  <p className="mt-1 break-words text-base font-semibold text-[var(--foreground)]">
+                    {perkName.trim() || "Nom de l’avantage"}
+                  </p>
+                  <p className="mt-1 whitespace-pre-wrap break-words text-sm leading-relaxed text-[var(--foreground-muted)]">
+                    {perkDescription.trim() || "La description visible par les joueurs apparaîtra ici."}
+                  </p>
+                </div>
+              </div>
+              <div className="mt-4 grid gap-4 border-t pt-4 sm:grid-cols-2" style={{ borderColor: "var(--border-muted)" }}>
+                <div>
+                  <p className="text-xs font-medium text-[var(--foreground)]">Pour le débloquer</p>
+                  {perkRequirements.length > 0 ? (
+                    <ul className="mt-2 space-y-1 text-xs leading-relaxed text-[var(--foreground-muted)]">
+                      {perkRequirements.map((requirement, index) => (
+                        <li key={index}>✓ {formatRequirementLabel(requirement)}</li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="mt-2 text-xs text-[var(--warning)]">Aucune condition : l’avantage est accessible sans seuil.</p>
+                  )}
+                </div>
+                <div>
+                  <p className="text-xs font-medium text-[var(--foreground)]">Ce qu’il change</p>
+                  {perkEffects.length > 0 ? (
+                    <ul className="mt-2 space-y-1 text-xs leading-relaxed text-[var(--foreground-muted)]">
+                      {perkEffects.map((effect, index) => (
+                        <li key={index}>
+                          → {getEffectDescription(effect as ResolvedEffect, {
+                            rosterUnitName: (id) => rosterUnits.find((unit) => unit.id === id)?.name_fr ?? null,
+                            countryName: () => null,
+                          })}
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="mt-2 text-xs text-[var(--warning)]">Aucun effet : le déblocage n’aura aucune conséquence en jeu.</p>
+                  )}
+                </div>
+              </div>
+            </AdminImpactPreview>
             <div className="grid gap-3 sm:grid-cols-2">
               <div>
                 <label htmlFor="perk-title" className="mb-1 block text-xs text-[var(--foreground-muted)]">Titre</label>

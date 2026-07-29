@@ -6,6 +6,7 @@ import { AdvanceDayButton } from "../../pays/AdvanceDayButton";
 import { RandomizeBudgetsButton } from "../../pays/RandomizeBudgetsButton";
 import { RandomizeIdeologiesButton } from "../../pays/RandomizeIdeologiesButton";
 import { updateCountryAiStatus, updateCountryContinent } from "../../pays/actions";
+import { AdminSettingsGuide } from "@/components/admin/AdminSettingsUi";
 
 export default async function AdminPaysListPage() {
   const supabase = await createClient();
@@ -40,7 +41,7 @@ export default async function AdminPaysListPage() {
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-10">
-      <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+      <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold text-[var(--foreground)]">
             Pays
@@ -57,12 +58,30 @@ export default async function AdminPaysListPage() {
           >
             Nouveau pays
           </Link>
-          <ResetStatsButton />
-          <AdvanceDayButton />
-          <RandomizeBudgetsButton />
-          <RandomizeIdeologiesButton />
         </div>
       </div>
+      <AdminSettingsGuide
+        purpose="Cette liste donne accès aux données de chaque pays. Les menus Continent et Statut IA sont enregistrés dès leur modification."
+        impact="Le continent change le contexte régional. Le statut IA détermine si le pays peut recevoir des événements automatiques."
+        check="Recherchez le pays, vérifiez son joueur éventuel, puis ouvrez sa fiche pour les réglages détaillés."
+      />
+      <details className="my-6 rounded-xl border" style={{ borderColor: "var(--border)", background: "var(--background-panel)" }}>
+        <summary className="min-h-12 cursor-pointer px-4 py-3 font-medium text-[var(--foreground)]">
+          Actions sur l’ensemble du monde
+          <span className="ml-2 text-sm font-normal text-[var(--warning)]">à utiliser avec prudence</span>
+        </summary>
+        <div className="border-t p-4" style={{ borderColor: "var(--border-muted)" }}>
+          <p className="mb-4 max-w-2xl text-sm leading-relaxed text-[var(--foreground-muted)]">
+            Ces commandes modifient tous les pays ou font avancer la simulation. Chaque action demande une confirmation.
+          </p>
+          <div className="flex flex-wrap items-start gap-3">
+            <AdvanceDayButton />
+            <RandomizeBudgetsButton />
+            <RandomizeIdeologiesButton />
+            <ResetStatsButton />
+          </div>
+        </div>
+      </details>
 
       {!countries?.length ? (
         <div

@@ -71,6 +71,7 @@ const ADMIN_COLUMNS = [
   { key: "player" as const, label: "Joueur" },
   { key: "continent" as const, label: "Continent" },
 ];
+const ADMIN_PAGE_SIZE = 25;
 
 function getSortValue(row: Row, key: SortKey): number | string | null {
   const c = row.country;
@@ -172,6 +173,9 @@ export function CountriesTable({
   const [continentPendingId, setContinentPendingId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [assignmentFilter, setAssignmentFilter] = useState<"all" | "assigned_only">("all");
+  const [adminPage, setAdminPage] = useState(1);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [actionSuccess, setActionSuccess] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
   const assignedSet = useMemo(() => new Set(assignedCountryIds), [assignedCountryIds]);
@@ -242,6 +246,12 @@ export function CountriesTable({
     : { background: "var(--background-panel)", border: "1px solid var(--border)", borderRadius: "var(--radius)" };
 
   if (adminLayout) {
+    const adminPageCount = Math.max(1, Math.ceil(sortedRows.length / ADMIN_PAGE_SIZE));
+    const effectiveAdminPage = Math.min(adminPage, adminPageCount);
+    const visibleAdminRows = sortedRows.slice(
+      (effectiveAdminPage - 1) * ADMIN_PAGE_SIZE,
+      effectiveAdminPage * ADMIN_PAGE_SIZE
+    );
     return (
       <div className="rounded-lg border" style={panelStyle}>
         <div className="p-3 border-b" style={{ borderColor: "var(--border)" }}>
@@ -249,11 +259,26 @@ export function CountriesTable({
             type="search"
             placeholder="Rechercher par pays, joueur ou continent…"
             value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
+            onChange={(e) => {
+              setSearchQuery(e.target.value);
+              setAdminPage(1);
+            }}
             className="min-h-11 w-full max-w-md rounded border bg-[var(--background)] px-3 py-2 text-sm text-[var(--foreground)] placeholder:text-[var(--foreground-muted)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
             style={{ borderColor: "var(--border)" }}
             aria-label="Rechercher dans la liste des pays"
           />
+          <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-xs text-[var(--foreground-muted)]">
+            <span>{sortedRows.length} pays trouvé{sortedRows.length > 1 ? "s" : ""}</span>
+            <span>Page {effectiveAdminPage} sur {adminPageCount}</span>
+          </div>
+          {actionError && (
+            <p role="alert" className="mt-3 rounded-lg border border-red-500/40 bg-red-500/10 px-3 py-2 text-sm text-[var(--danger)]">
+              {actionError}
+            </p>
+          )}
+          {!actionError && actionSuccess && (
+            <p aria-live="polite" className="mt-3 text-sm text-[var(--accent)]">{actionSuccess}</p>
+          )}
           <p className="mt-2 text-xs text-[var(--foreground-muted)] sm:hidden">
             Faites glisser le tableau pour voir toutes les colonnes.
           </p>
@@ -296,7 +321,7 @@ export function CountriesTable({
             </tr>
           </thead>
           <tbody>
-            {sortedRows.map((row) => {
+            {visibleAdminRows.map((row) => {
               const { country: c } = row;
               const playerName = playerNameByCountryId[c.id];
               const isContinentPending = continentPendingId === c.id;
@@ -345,8 +370,15 @@ export function CountriesTable({
                         const continentId = v === "" ? null : v;
                         if (updateCountryContinentAction) {
                           setContinentPendingId(c.id);
+                          setActionError(null);
+                          setActionSuccess(null);
                           startTransition(() => {
-                            updateCountryContinentAction(c.id, continentId).finally(() => setContinentPendingId(null));
+                            void updateCountryContinentAction(c.id, continentId)
+                              .then((result) => {
+                                if (result.error) setActionError(`${c.name} : ${result.error}`);
+                                else setActionSuccess(`Continent de ${c.name} enregistré.`);
+                              })
+                              .finally(() => setContinentPendingId(null));
                           });
                         }
                       }}
@@ -377,8 +409,15 @@ export function CountriesTable({
                             const aiStatus = v === "major" || v === "minor" ? v : null;
                             if (updateAiStatusAction) {
                               setPendingId(c.id);
+                              setActionError(null);
+                              setActionSuccess(null);
                               startTransition(() => {
-                                updateAiStatusAction(c.id, aiStatus).finally(() => setPendingId(null));
+                                void updateAiStatusAction(c.id, aiStatus)
+                                  .then((result) => {
+                                    if (result.error) setActionError(`${c.name} : ${result.error}`);
+                                    else setActionSuccess(`Statut IA de ${c.name} enregistré.`);
+                                  })
+                                  .finally(() => setPendingId(null));
                               });
                             }
                           }}
@@ -407,7 +446,7 @@ export function CountriesTable({
                 </tr>
               );
             })}
-            {sortedRows.length === 0 && (
+            {visibleAdminRows.length === 0 && (
               <tr>
                 <td
                   colSpan={ADMIN_COLUMNS.length + Number(showAiStatusColumn) + Number(showModifierButton)}
@@ -420,6 +459,32 @@ export function CountriesTable({
           </tbody>
         </table>
         </div>
+        {sortedRows.length > ADMIN_PAGE_SIZE && (
+          <div className="flex items-center justify-between gap-3 border-t p-3" style={{ borderColor: "var(--border)" }}>
+            <button
+              type="button"
+              onClick={() => setAdminPage((page) => Math.max(1, page - 1))}
+              disabled={effectiveAdminPage === 1}
+              className="min-h-11 rounded-lg border px-4 text-sm font-medium text-[var(--foreground)] disabled:opacity-40"
+              style={{ borderColor: "var(--border)" }}
+            >
+              Précédent
+            </button>
+            <span className="text-sm text-[var(--foreground-muted)]">
+              {Math.min((effectiveAdminPage - 1) * ADMIN_PAGE_SIZE + 1, sortedRows.length)}–
+              {Math.min(effectiveAdminPage * ADMIN_PAGE_SIZE, sortedRows.length)} sur {sortedRows.length}
+            </span>
+            <button
+              type="button"
+              onClick={() => setAdminPage((page) => Math.min(adminPageCount, page + 1))}
+              disabled={effectiveAdminPage === adminPageCount}
+              className="min-h-11 rounded-lg border px-4 text-sm font-medium text-[var(--foreground)] disabled:opacity-40"
+              style={{ borderColor: "var(--border)" }}
+            >
+              Suivant
+            </button>
+          </div>
+        )}
       </div>
     );
   }

@@ -1,8 +1,22 @@
 "use client";
 
 import { useState, useMemo } from "react";
-import { createClient } from "@/lib/supabase/client";
-import { revalidateCountryPageGlobals, computeMapRegionNeighbors, getVoisinagesByCountry, type VoisinageEntry } from "@/app/admin/regles/actions";
+import {
+  computeMapRegionNeighbors,
+  getVoisinagesByCountry,
+  saveRuleParameters,
+  type VoisinageEntry,
+} from "@/app/admin/regles/actions";
+import { AdminSaveBar, AdminSettingsGuide } from "@/components/admin/AdminSettingsUi";
+import {
+  AiRulePreview,
+  DiceModifierRulePreview,
+  IdeologyRulePreview,
+  InfluenceRulePreview,
+  IntelRulePreview,
+  LawThresholdRulePreview,
+  SphereRulePreview,
+} from "@/components/admin/RulePreviews";
 import type { RuleParameter } from "@/types/database";
 import {
   getRuleLabel,
@@ -211,7 +225,14 @@ function TitleWithInfo({
   return (
     <span className={className ?? "inline-flex items-center gap-2"}>
       <span>{title}</span>
-      {tooltip ? <InfoTooltip side={side} warning={Boolean(warning)} content={<TooltipBody text={tooltip} warning={warning} />} /> : null}
+      {tooltip ? (
+        <InfoTooltip
+          label={typeof title === "string" ? title : undefined}
+          side={side}
+          warning={Boolean(warning)}
+          content={<TooltipBody text={tooltip} warning={warning} />}
+        />
+      ) : null}
     </span>
   );
 }
@@ -232,16 +253,84 @@ function FormLabel({
   return (
     <span className={`inline-flex items-center gap-1.5 ${className}`}>
       <span>{label}</span>
-      {tooltip ? <InfoTooltip side={side} warning={Boolean(warning)} content={<TooltipBody text={tooltip} warning={warning} />} /> : null}
+      {tooltip ? (
+        <InfoTooltip
+          label={typeof label === "string" ? label : undefined}
+          side={side}
+          warning={Boolean(warning)}
+          content={<TooltipBody text={tooltip} warning={warning} />}
+        />
+      ) : null}
     </span>
   );
 }
+
+const RULE_SECTION_META: Record<string, { description: string; impact: string }> = {
+  "rules-global": {
+    description: "Le rythme commun de la simulation et les calculs appliqués à tous les pays.",
+    impact: "Tous les pays",
+  },
+  "rules-global-effects": {
+    description: "Croissance et effets ajoutés automatiquement à chaque passage du monde.",
+    impact: "Chaque jour",
+  },
+  "rules-dice-modifiers": {
+    description: "Traduit les statistiques d’un pays en bonus ou malus sur ses jets.",
+    impact: "Jets joueurs et IA",
+  },
+  "rules-world-date": {
+    description: "Date affichée, pause générale et vitesse du calendrier.",
+    impact: "Calendrier mondial",
+  },
+  "rules-laws": {
+    description: "Budgets, mobilisation et lois qui font évoluer les pays dans le temps.",
+    impact: "Évolution des pays",
+  },
+  "rules-budgets": {
+    description: "Seuils de financement, bonus, malus et rattrapage de chaque ministère.",
+    impact: "Effets quotidiens",
+  },
+  "rules-military-staff": {
+    description: "Points gagnés pour concevoir, recruter, stocker et agir par procuration.",
+    impact: "Capacités militaires",
+  },
+  "rules-diplomacy": {
+    description: "Relations, influence internationale et contrôle exercé sur d’autres pays.",
+    impact: "Diplomatie",
+  },
+  "rules-relations": {
+    description: "Valeur réciproque entre deux pays, de l’hostilité totale à l’alliance.",
+    impact: "Actions et idéologies",
+  },
+  "rules-influence": {
+    description: "Poids relatif du PIB, de la population, de l’armée et de la stabilité.",
+    impact: "Classement et influence",
+  },
+  "rules-control": {
+    description: "Part d’influence transmise au pays qui conteste, occupe ou annexe.",
+    impact: "Sphères d’influence",
+  },
+  "rules-ideology": {
+    description: "Vitesse et forces qui déplacent l’alignement idéologique d’un pays.",
+    impact: "Alignement quotidien",
+  },
+  "rules-ai": {
+    description: "Fréquence, volume, cibles et effets des actions créées sans joueur.",
+    impact: "Pays IA",
+  },
+  "rules-intelligence": {
+    description: "Gain par espionnage et disparition progressive des renseignements.",
+    impact: "Brouillard de guerre",
+  },
+};
 
 function CollapsibleBlock({
   id,
   title,
   infoContent,
   infoWarning,
+  description,
+  impact,
   open,
   onToggle,
   children,
@@ -251,12 +340,17 @@ function CollapsibleBlock({
   title: string;
   infoContent?: React.ReactNode;
   infoWarning?: boolean;
+  description?: string;
+  impact?: string;
   open: boolean;
   onToggle: () => void;
   children: React.ReactNode;
   variant?: "default" | "section";
 }) {
   const isSection = variant === "section";
+  const meta = id ? RULE_SECTION_META[id] : undefined;
+  const visibleDescription = description ?? meta?.description;
+  const visibleImpact = impact ?? meta?.impact;
   return (
     <div
       id={id}
@@ -266,30 +360,48 @@ function CollapsibleBlock({
         background: isSection ? "var(--background-panel)" : undefined,
       }}
     >
-      <button
-        type="button"
-        onClick={onToggle}
-        aria-expanded={open}
-        className={`flex w-full items-center justify-between gap-2 text-left transition-colors hover:opacity-90 ${isSection ? "px-5 py-4" : "px-4 py-2.5"}`}
-        style={{ background: isSection ? "var(--background-elevated)" : "var(--background-elevated)" }}
-      >
-        <span
-          className={`${isSection ? "text-base font-semibold" : "text-sm font-medium"} text-[var(--foreground)] inline-flex items-center gap-2`}
-        >
-          {title}
-          {infoContent ? <InfoTooltip side="bottom" warning={infoWarning} content={infoContent} /> : null}
-        </span>
-        <DisclosureChevron open={open} />
-      </button>
       <div
-        aria-hidden={!open}
-        inert={!open}
-        className="grid"
-        style={{
-          gridTemplateRows: open ? "1fr" : "0fr",
-          transition: "grid-template-rows 0.25s ease-out",
-        }}
+        className={`flex items-stretch ${isSection ? "px-2" : "px-1"}`}
+        style={{ background: "var(--background-elevated)" }}
       >
+        <button
+          type="button"
+          onClick={onToggle}
+          aria-expanded={open}
+          className={`flex min-w-0 flex-1 items-center justify-between gap-3 text-left transition-colors hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--accent)] ${isSection ? "px-3 py-4" : "px-3 py-3"}`}
+        >
+          <span className="min-w-0">
+            <span className="flex flex-wrap items-center gap-2">
+              <span className={`${isSection ? "text-base font-semibold" : "text-sm font-medium"} text-[var(--foreground)]`}>
+                {title}
+              </span>
+              {visibleImpact ? (
+                <span className="rounded-full border px-2 py-0.5 text-xs font-medium text-[var(--foreground-muted)]" style={{ borderColor: "var(--border-muted)" }}>
+                  {visibleImpact}
+                </span>
+              ) : null}
+            </span>
+            {visibleDescription ? (
+              <span className="mt-1 block max-w-[72ch] text-xs leading-relaxed text-[var(--foreground-muted)]">
+                {visibleDescription}
+              </span>
+            ) : null}
+          </span>
+          <DisclosureChevron open={open} className="shrink-0" />
+        </button>
+        {infoContent ? (
+          <div className="flex shrink-0 items-center">
+            <InfoTooltip
+              label={title}
+              side="bottom"
+              warning={infoWarning}
+              content={infoContent}
+            />
+          </div>
+        ) : null}
+      </div>
+      {open && (
+      <div className="grid">
         <div className="min-h-0 overflow-hidden">
           <div
             className={isSection ? "border-t py-1" : "divide-y"}
@@ -299,6 +411,7 @@ function CollapsibleBlock({
           </div>
         </div>
       </div>
+      )}
     </div>
   );
 }
@@ -339,8 +452,10 @@ export function ReglesForm({
   stateActionTypesForAi?: { id: string; key: string; label_fr: string }[];
 }) {
   const [items, setItems] = useState(rules);
+  const [savedItems, setSavedItems] = useState(rules);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
   const [ruleValueError, setRuleValueError] = useState<string | null>(null);
   const [globalGrowthOpen, setGlobalGrowthOpen] = useState(false);
   const [globalEffectFormOpen, setGlobalEffectFormOpen] = useState(false);
@@ -509,41 +624,35 @@ export function ReglesForm({
     });
   }
 
-  const supabase = createClient();
+  const dirtyItems = useMemo(() => {
+    const savedById = new Map(savedItems.map((row) => [row.id, row.value]));
+    return items.filter((row) => JSON.stringify(row.value) !== JSON.stringify(savedById.get(row.id)));
+  }, [items, savedItems]);
 
   const updateValue = (id: string, value: unknown) => {
+    setError(null);
+    setSuccess(null);
     setItems((prev) =>
       prev.map((r) => (r.id === id ? { ...r, value } : r))
     );
   };
 
   async function saveAll() {
-    if (items.length === 0) return;
+    if (dirtyItems.length === 0 || saving) return;
     setError(null);
+    setSuccess(null);
     if (ruleValueError) {
       setError("Impossible d'enregistrer : une ou plusieurs valeurs sont invalides (JSON). Corrigez-les puis réessayez.");
       return;
     }
     setSaving(true);
     try {
-      let hadError = false;
-      for (const row of items) {
-        const { error: err } = await supabase
-          .from("rule_parameters")
-          .update({ value: row.value })
-          .eq("id", row.id);
-        if (err) {
-          setError(err.message);
-          hadError = true;
-          break;
-        }
-      }
-      if (!hadError) {
-        try {
-          await revalidateCountryPageGlobals();
-        } catch (revalidateErr) {
-          console.warn("Revalidation du cache échouée (données tout de même enregistrées):", revalidateErr);
-        }
+      const result = await saveRuleParameters(dirtyItems);
+      if (result.error) {
+        setError(`${result.error} Aucun changement de ce lot n’a été appliqué.`);
+      } else {
+        setSavedItems(items);
+        setSuccess(`${dirtyItems.length} réglage${dirtyItems.length > 1 ? "s" : ""} enregistré${dirtyItems.length > 1 ? "s" : ""}.`);
       }
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e);
@@ -556,6 +665,13 @@ export function ReglesForm({
     } finally {
       setSaving(false);
     }
+  }
+
+  function resetAll() {
+    setItems(savedItems);
+    setError(null);
+    setSuccess(null);
+    setRuleValueError(null);
   }
 
   const rulesByKey = useMemo(() => new Map(items.map((r) => [r.key, r])), [items]);
@@ -1238,30 +1354,81 @@ export function ReglesForm({
     };
   });
 
+  const worldDateValue =
+    typeof worldDateRule?.value === "object" && worldDateRule.value !== null
+      ? worldDateRule.value as { month?: number; year?: number }
+      : {};
+  const worldMonth = Math.max(1, Math.min(12, Number(worldDateValue.month ?? 1)));
+  const worldYear = Number(worldDateValue.year ?? 2025);
+  const worldAdvance = Number(worldDateAdvanceRule?.value ?? 1);
+  const worldPaused = cronPausedRule?.value === true || String(cronPausedRule?.value) === "true";
+  const aiOverview = getAiEventsConfig();
+  const intelOverview = getIntelConfig();
+  const configuredMinistries = BUDGET_MINISTRY_KEYS.filter((key) => rulesByKey.has(key)).length;
+  const configuredLaws = LAW_DEFINITIONS.filter(
+    (definition) => getLawConfigRule(definition) && getLawEffectsRule(definition)
+  ).length;
+  const intelligenceModeLabel = {
+    flat: "perte fixe",
+    pct: "perte proportionnelle",
+    both: "perte fixe puis proportionnelle",
+  }[intelOverview.decay_mode ?? "flat"];
+  const overviewRows = [
+    {
+      label: "Monde",
+      value: `${worldPaused ? "Mises à jour en pause" : "Mises à jour actives"} · ${MOIS_LABELS[worldMonth - 1]} ${worldYear} · +${worldAdvance} mois/jour`,
+    },
+    {
+      label: "Évolution",
+      value: `${getGlobalGrowthEffects().length} effet${getGlobalGrowthEffects().length > 1 ? "s" : ""} commun${getGlobalGrowthEffects().length > 1 ? "s" : ""} · ${configuredMinistries} ministères · ${configuredLaws} lois`,
+    },
+    {
+      label: "Pays IA",
+      value: `Toutes les ${aiOverview.interval_hours ?? 1} h · ${aiOverview.count_major_per_run ?? 0} action(s) majeure(s) et ${aiOverview.count_minor_per_run ?? 0} mineure(s) par passage`,
+    },
+    {
+      label: "Renseignement",
+      value: `${intelligenceModeLabel} · espionnage parfait : +${intelOverview.espionage_intel_gain_base ?? 50} points`,
+    },
+  ];
+
   return (
-    <div className="space-y-4">
-      <div className="mb-8 flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h1 className="mb-2 text-2xl font-bold text-[var(--foreground)]">
-            Règles de simulation
-          </h1>
-          <p className="max-w-2xl text-[var(--foreground-muted)]">
-            Ces réglages pilotent la mise à jour quotidienne du monde : population, économie,
-            diplomatie, idéologies et pays sans joueur.
-          </p>
-        </div>
-        {items.length > 0 && (
-          <button
-            type="button"
-            onClick={saveAll}
-            disabled={saving}
-            className="shrink-0 rounded py-2 px-4 text-sm font-medium disabled:opacity-50"
-            style={{ background: "var(--accent)", color: "#0f1419" }}
-          >
-            {saving ? "Enregistrement…" : "Enregistrer"}
-          </button>
-        )}
+    <div className="admin-settings-form space-y-5">
+      <div className="mb-7">
+        <h1 className="mb-2 text-2xl font-bold text-[var(--foreground)]">
+          Règles de simulation
+        </h1>
+        <p className="max-w-[72ch] leading-relaxed text-[var(--foreground-muted)]">
+          Pilotez la mise à jour quotidienne du monde, les lois, la diplomatie et les pays sans joueur.
+          Chaque section indique maintenant qui verra le changement et quand il s’appliquera.
+        </p>
       </div>
+
+      <AdminSettingsGuide
+        purpose="Modifiez une intention de jeu, puis vérifiez son effet concret dans la section concernée. Les réglages avancés restent accessibles sans encombrer la lecture générale."
+        impact="La plupart des changements prennent effet au prochain passage quotidien. La date, les jets et certaines valeurs diplomatiques peuvent agir plus tôt."
+        check="Contrôlez les seuils dans leur ordre, les minimums face aux maximums et les exemples affichés avant d’enregistrer."
+        warning="L’enregistrement applique tout le lot en une seule fois. En cas d’erreur, aucun réglage du lot n’est modifié."
+      />
+
+      <section
+        aria-labelledby="rules-overview-title"
+        className="rounded-xl border px-4 py-4 sm:px-5"
+        style={{ background: "var(--background-panel)", borderColor: "var(--border)" }}
+      >
+        <h2 id="rules-overview-title" className="text-base font-semibold text-[var(--foreground)]">
+          Situation générale
+        </h2>
+        <dl className="mt-3 divide-y" style={{ borderColor: "var(--border-muted)" }}>
+          {overviewRows.map((row) => (
+            <div key={row.label} className="grid gap-1 py-3 text-sm sm:grid-cols-[9rem_1fr] sm:gap-4">
+              <dt className="font-medium text-[var(--foreground)]">{row.label}</dt>
+              <dd className="leading-relaxed text-[var(--foreground-muted)]">{row.value}</dd>
+            </div>
+          ))}
+        </dl>
+      </section>
+
       <div className="max-w-3xl rounded-xl border p-4" style={{ borderColor: "var(--border)", background: "var(--background-panel)" }}>
         <label htmlFor="rule-setting-search" className="mb-2 block text-sm font-medium text-[var(--foreground)]">
           Trouver un réglage
@@ -1302,8 +1469,11 @@ export function ReglesForm({
           </div>
         )}
       </div>
-      {error && <p className="text-[var(--danger)]">{error}</p>}
-      {ruleValueError && <p className="text-[var(--danger)]">{ruleValueError}</p>}
+      {ruleValueError && (
+        <p role="alert" className="rounded-lg bg-[color-mix(in_srgb,var(--danger)_12%,transparent)] px-3 py-2 text-sm text-[var(--danger)]">
+          {ruleValueError}
+        </p>
+      )}
       {!(items.length > 0 || (countriesForMatrice && relationMapForMatrice)) ? (
         <div
           className="rounded-lg border p-8 text-center"
@@ -1561,6 +1731,7 @@ export function ReglesForm({
                         );
                       })}
                     </div>
+                    <DiceModifierRulePreview ranges={getStatsDiceModifierRanges()} />
                   </div>
                 </CollapsibleBlock>
               )}
@@ -1682,6 +1853,8 @@ export function ReglesForm({
                 <CollapsibleBlock
                   key={r.id}
                   title={BUDGET_MINISTRY_LABELS[key] ?? key}
+                  description="Seuil de financement, rattrapage et effets produits par ce ministère."
+                  impact="Chaque jour"
                   open={isOpen}
                   onToggle={() =>
                     setBudgetMinistryOpen((prev) => ({ ...prev, [key]: !(prev[key] ?? false) }))
@@ -2067,10 +2240,13 @@ export function ReglesForm({
             const effectsRule = getLawEffectsRule(def);
             if (!configRule || !effectsRule) return null;
             const isOpen = lawSectionsOpen[def.lawKey] ?? false;
+            const lawConfig = getLawConfig(def);
             return (
               <CollapsibleBlock
                 key={def.lawKey}
                 title={def.title_fr}
+                description={`Seuils, vitesse de progression et conséquences de la loi « ${def.title_fr} ».`}
+                impact="Prochaine mise à jour"
                 infoContent={<TooltipBody text={`Seuils, pas quotidien et effets par palier pour la loi « ${def.title_fr} ».`} />}
                 open={isOpen}
                 onToggle={() => setLawSectionsOpen((o) => ({ ...o, [def.lawKey]: !o[def.lawKey] }))}
@@ -2079,6 +2255,11 @@ export function ReglesForm({
                   <p className="text-xs text-[var(--foreground-muted)]">
                     Après enregistrement, les changements seront appliqués lors de la prochaine mise à jour quotidienne.
                   </p>
+                  <LawThresholdRulePreview
+                    levels={def.levels}
+                    thresholds={lawConfig.level_thresholds ?? {}}
+                    dailyStep={Number(lawConfig.daily_step ?? 20)}
+                  />
                   <div>
                     <div className="text-xs font-medium text-[var(--foreground-muted)] mb-2">
                       <TitleWithInfo title="Seuils par palier (score 0–500)" tooltip="Chaque valeur indique à partir de quel score le pays entre dans ce palier." className="inline-flex items-center gap-1.5" />
@@ -2336,6 +2517,7 @@ export function ReglesForm({
                         <input aria-label="Rattrapage lié à l’armée" type="number" min={0} max={100} value={getInfluenceConfig().gravity_pct_military ?? 50} onChange={(e) => updateInfluenceConfig({ gravity_pct_military: Math.max(0, Math.min(100, Number(e.target.value) || 0)) })} className="rounded border py-1.5 px-2 text-sm w-16 font-mono" style={{ borderColor: "var(--border)", background: "var(--background)" }} />
                       </div>
                     </div>
+                    <InfluenceRulePreview config={getInfluenceConfig()} />
                   </div>
                 </CollapsibleBlock>
               )}
@@ -2380,6 +2562,7 @@ export function ReglesForm({
                         <input aria-label="Seuil d’influence annexé" type="number" min={0} max={100} value={getSphereInfluencePct().annexed ?? 100} onChange={(e) => updateSphereInfluencePct({ annexed: Math.max(0, Math.min(100, Number(e.target.value) || 0)) })} className="rounded border py-1.5 px-2 text-sm w-20 font-mono" style={{ borderColor: "var(--border)", background: "var(--background)" }} />
                       </div>
                     </div>
+                    <SphereRulePreview values={getSphereInfluencePct()} />
                   </div>
                 </CollapsibleBlock>
               )}
@@ -2503,6 +2686,10 @@ export function ReglesForm({
                     />
                   </div>
                 </div>
+                <IdeologyRulePreview
+                  config={getIdeologyConfigValue()}
+                  sphere={getSphereInfluencePct()}
+                />
                 </>
                 )}
                 {ideologyEffectsRule && (
@@ -2825,6 +3012,7 @@ export function ReglesForm({
                         ))}
                       </div>
                     </div>
+                    <AiRulePreview config={getAiEventsConfig()} />
                   </div>
                 )}
 
@@ -3001,16 +3189,24 @@ export function ReglesForm({
                     />
                   </div>
                 </div>
-                <p className="text-xs text-[var(--foreground-muted)]">
-                  Exemple : avec une perte fixe de 2, un pays à 50 % de renseignement passera à 48 % le lendemain.
-                  Avec un gain de référence de 50 et un jet d’impact de 70/100, le joueur recevra 35 points.
-                </p>
+                <IntelRulePreview config={getIntelConfig()} />
               </div>
             </CollapsibleBlock>
           )}
 
         </div>
       )}
+
+      {items.length > 0 ? (
+        <AdminSaveBar
+          dirtyCount={dirtyItems.length}
+          saving={saving}
+          onSave={saveAll}
+          onReset={resetAll}
+          error={error}
+          success={success}
+        />
+      ) : null}
     </div>
   );
 }

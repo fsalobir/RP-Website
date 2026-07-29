@@ -194,3 +194,22 @@ body {
     font-size: 1rem;
   }
 }
+
+.admin-settings-form :where(
+  input:not([type="hidden"]):not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+  select,
+  textarea
+) {
+  min-height: 2.75rem;
+}
+
+.admin-settings-form :where(input, select, textarea):focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+@media (max-width: 639px) {
+  .admin-settings-form :where(input, select, textarea) {
+    font-size: 1rem;
+  }
+}

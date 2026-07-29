@@ -6,6 +6,11 @@ import { revalidatePath } from "next/cache";
 import { getRelation } from "@/lib/relations";
 import { computeHardPowerByCountry } from "@/lib/hardPower";
 import { computeInfluenceForAll } from "@/lib/influence";
+import {
+  computePowerBalanceModifier,
+  computeRelationModifier,
+  getPowerBalanceConfig,
+} from "@/lib/stateActionModifiers";
 import type { AdminEffectAdded, DiceResults, DiceRollResult, MilitaryBranch } from "@/types/database";
 import {
   applyStateActionConsequences,
@@ -124,7 +129,7 @@ export async function rollD100(
     const amplitudeRel = typeof paramsSchema.amplitude_relations === "number" ? paramsSchema.amplitude_relations : 0;
     if (typeof targetCountryId === "string" && targetCountryId && amplitudeRel !== 0) {
       const relation = await getRelation(supabase, req.country_id, targetCountryId);
-      relationModifier = Math.round((relation / 100) * amplitudeRel);
+      relationModifier = computeRelationModifier(relation, amplitudeRel);
     }
     if (typeof targetCountryId === "string" && targetCountryId) {
       const [countriesRes, cmuRes, rosterRes, levelsRes, influenceConfigRes] = await Promise.all([
@@ -147,23 +152,7 @@ export async function rollD100(
       const emitterInfluence = influenceByCountry.get(req.country_id)?.influence ?? 0;
       const targetInfluence = influenceByCountry.get(targetCountryId)?.influence ?? 0;
       const ratio = targetInfluence > 0 ? emitterInfluence / targetInfluence : 0;
-      const eq = (paramsSchema.equilibre_des_forces ?? {}) as Record<string, number>;
-      const ratioEquilibre = typeof eq.ratio_equilibre === "number" ? eq.ratio_equilibre : 1;
-      const malusMax = typeof eq.malus_max === "number" ? eq.malus_max : 20;
-      const bonusMax = typeof eq.bonus_max === "number" ? eq.bonus_max : 20;
-      const ratioMin = typeof eq.ratio_min === "number" ? eq.ratio_min : 0.5;
-      const ratioMax = typeof eq.ratio_max === "number" ? eq.ratio_max : 2;
-      if (ratio <= ratioMin) {
-        influenceModifier = -malusMax;
-      } else if (ratio < ratioEquilibre) {
-        influenceModifier = Math.round(-malusMax * (ratioEquilibre - ratio) / (ratioEquilibre - ratioMin));
-      } else if (ratio > ratioEquilibre) {
-        if (ratio >= ratioMax) {
-          influenceModifier = bonusMax;
-        } else {
-          influenceModifier = Math.round(bonusMax * (ratio - ratioEquilibre) / (ratioMax - ratioEquilibre));
-        }
-      }
+      influenceModifier = computePowerBalanceModifier(ratio, getPowerBalanceConfig(paramsSchema));
     }
   }
 

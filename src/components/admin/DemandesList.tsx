@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { AdminSettingsGuide } from "@/components/admin/AdminSettingsUi";
 import {
   acceptRequest,
   refuseRequest,
@@ -213,7 +214,12 @@ export function DemandesList({ requests, rosterUnitIds, rosterUnits = [], target
   }
 
   return (
-    <div className="space-y-6">
+    <div className="admin-settings-form space-y-6">
+      <AdminSettingsGuide
+        purpose="Chaque demande reprend ce qu’a envoyé le joueur, les jets déjà effectués et les conséquences prévues."
+        impact="Accepter applique les effets affichés. Refuser clôt la demande ; le remboursement dépend du choix indiqué dans le détail."
+        check="Vérifiez le pays, la cible, les jets et la liste finale des effets avant de décider."
+      />
       {selected && (
         <RequestDetail
           request={selected}

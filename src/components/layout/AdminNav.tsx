@@ -11,7 +11,7 @@ export function AdminNav() {
       className="sticky top-0 z-50 border-b bg-[var(--background-elevated)]"
       style={{ borderColor: "var(--border)" }}
     >
-      <div className="relative mx-auto flex max-w-6xl min-w-0 flex-col px-4 sm:h-14 sm:flex-row sm:items-center sm:justify-between">
+      <div className="relative mx-auto flex min-h-14 max-w-6xl min-w-0 flex-col px-4 sm:h-14 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex w-full items-center justify-between gap-3 sm:w-auto">
           <Link
             href="/admin"
@@ -19,11 +19,16 @@ export function AdminNav() {
           >
             Tableau de bord
           </Link>
-          <AdminAccessMenu />
+          <div className="ml-auto flex items-center gap-1">
+            <AdminAccessMenu />
+            <div className="sm:hidden">
+              <AdminSignOut compact />
+            </div>
+          </div>
         </div>
         <nav
           aria-label="Navigation d’administration"
-          className="-mx-4 flex w-[calc(100%+2rem)] min-w-0 items-center gap-1 overflow-x-auto overscroll-x-contain border-t border-[var(--border)] px-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:mx-0 sm:w-auto sm:overflow-visible sm:border-0 sm:px-0"
+          className="hidden min-w-0 items-center gap-1 sm:flex"
         >
           <Link href="/" className={navLinkClass}>
             <span aria-hidden className="mr-1.5">👁️</span>Accès Joueur

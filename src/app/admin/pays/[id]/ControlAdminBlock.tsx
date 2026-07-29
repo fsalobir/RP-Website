@@ -35,11 +35,13 @@ export function ControlAdminBlock({
   const [newIsAnnexed, setNewIsAnnexed] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editSharePct, setEditSharePct] = useState("");
   const [editIsAnnexed, setEditIsAnnexed] = useState(false);
 
   const status = deriveStatus(controls);
+  const totalShare = controls.reduce((sum, row) => sum + Number(row.share_pct || 0), 0);
   const availableCountries = otherCountries.filter(
     (c) => c.id !== countryId && !controls.some((r) => r.controller_country_id === c.id)
   );
@@ -47,6 +49,7 @@ export function ControlAdminBlock({
   async function handleAdd() {
     if (!newControllerId.trim()) return;
     setError(null);
+    setSuccess(null);
     setSaving(true);
     const result = await upsertCountryControl(
       countryId,
@@ -60,12 +63,14 @@ export function ControlAdminBlock({
       setNewControllerId("");
       setNewSharePct("100");
       setNewIsAnnexed(false);
+      setSuccess("Contrôle ajouté.");
       router.refresh();
     }
   }
 
   async function handleUpdate(row: ControlRow) {
     setError(null);
+    setSuccess(null);
     setSaving(true);
     const result = await updateCountryControl(
       row.id,
@@ -77,18 +82,22 @@ export function ControlAdminBlock({
     if (result.error) setError(result.error);
     else {
       setEditingId(null);
+      setSuccess("Contrôle mis à jour.");
       router.refresh();
     }
   }
 
   async function handleDelete(controlId: string) {
+    if (!confirm("Supprimer ce contrôle ?")) return;
     setError(null);
+    setSuccess(null);
     setSaving(true);
     const result = await deleteCountryControl(controlId, countryId);
     setSaving(false);
     if (result.error) setError(result.error);
     else {
       setEditingId(null);
+      setSuccess("Contrôle supprimé.");
       router.refresh();
     }
   }
@@ -107,13 +116,28 @@ export function ControlAdminBlock({
   const inputStyle = { borderColor: "var(--border)" };
 
   return (
-    <div className="rounded-lg border p-4 sm:p-6" style={panelStyle}>
+    <div className="admin-settings-form rounded-lg border p-4 sm:p-6" style={panelStyle}>
       <h2 className="mb-2 text-lg font-semibold text-[var(--foreground)]">
         Contrôle
       </h2>
       <p className="mb-4 text-sm text-[var(--foreground-muted)]">
-        Parts détenues par d&apos;autres pays sur ce pays. Statut dérivé : <strong className="text-[var(--foreground)]">{status}</strong>.
+        Parts détenues par d&apos;autres pays. Le statut public est calculé automatiquement à partir de cette répartition.
       </p>
+      <dl className="mb-5 grid gap-3 rounded-lg bg-[var(--background-elevated)] p-3 text-sm sm:grid-cols-2">
+        <div>
+          <dt className="text-[var(--foreground-muted)]">Statut public actuel</dt>
+          <dd className="mt-1 font-semibold text-[var(--foreground)]">{status}</dd>
+        </div>
+        <div>
+          <dt className="text-[var(--foreground-muted)]">Contrôle déclaré</dt>
+          <dd className="mt-1 font-semibold text-[var(--foreground)]">{totalShare} % au total</dd>
+        </div>
+      </dl>
+      {totalShare > 100 ? (
+        <p role="alert" className="mb-4 rounded-lg bg-[color-mix(in_srgb,var(--warning)_12%,transparent)] px-3 py-2 text-sm text-[var(--foreground)]">
+          Le total dépasse 100 %. Le jeu l’accepte, mais cette répartition est difficile à interpréter pour les joueurs.
+        </p>
+      ) : null}
 
       <ul className="mb-6 space-y-2">
         {controls.map((row) => (
@@ -132,7 +156,7 @@ export function ControlAdminBlock({
                   value={editSharePct}
                   onChange={(e) => setEditSharePct(e.target.value)}
                   aria-label={`Part contrôlée par ${row.controller_name}, en pourcentage`}
-                  className="w-16 rounded border bg-[var(--background)] px-1.5 py-0.5 text-sm font-mono"
+                  className="min-h-11 w-20 rounded-lg border bg-[var(--background)] px-2 text-base"
                   style={inputStyle}
                 />
                 <span className="text-sm text-[var(--foreground-muted)]">%</span>
@@ -148,14 +172,14 @@ export function ControlAdminBlock({
                   type="button"
                   onClick={() => handleUpdate(row)}
                   disabled={saving}
-                  className="text-sm text-[var(--accent)] hover:underline disabled:opacity-50"
+                  className="min-h-11 rounded-lg px-2 text-sm text-[var(--accent)] hover:bg-[var(--background-elevated)] disabled:opacity-50"
                 >
                   Enregistrer
                 </button>
                 <button
                   type="button"
                   onClick={() => setEditingId(null)}
-                  className="text-sm text-[var(--foreground-muted)] hover:underline"
+                  className="min-h-11 rounded-lg px-2 text-sm text-[var(--foreground-muted)] hover:bg-[var(--background-elevated)]"
                 >
                   Annuler
                 </button>
@@ -168,7 +192,7 @@ export function ControlAdminBlock({
                 <button
                   type="button"
                   onClick={() => startEdit(row)}
-                  className="text-sm text-[var(--accent)] hover:underline"
+                  className="min-h-11 rounded-lg px-2 text-sm text-[var(--accent)] hover:bg-[var(--background-elevated)]"
                 >
                   Modifier
                 </button>
@@ -176,7 +200,7 @@ export function ControlAdminBlock({
                   type="button"
                   onClick={() => handleDelete(row.id)}
                   disabled={saving}
-                  className="text-sm text-[var(--danger)] hover:underline disabled:opacity-50"
+                  className="min-h-11 rounded-lg px-2 text-sm text-[var(--danger)] hover:bg-[var(--background-elevated)] disabled:opacity-50"
                 >
                   Supprimer
                 </button>
@@ -212,7 +236,7 @@ export function ControlAdminBlock({
               max={100}
               value={newSharePct}
               onChange={(e) => setNewSharePct(e.target.value)}
-              className="w-16 rounded border bg-[var(--background)] px-1.5 py-1.5 text-sm font-mono"
+              className="min-h-11 w-20 rounded-lg border bg-[var(--background)] px-2 text-base"
               style={inputStyle}
             />
           </div>
@@ -228,7 +252,7 @@ export function ControlAdminBlock({
             type="button"
             onClick={handleAdd}
             disabled={saving || !newControllerId}
-            className="rounded py-1.5 px-3 text-sm font-medium disabled:opacity-50"
+            className="min-h-11 rounded-lg px-3 text-sm font-medium disabled:opacity-50"
             style={{ background: "var(--accent)", color: "#0f1419" }}
           >
             Ajouter
@@ -237,6 +261,7 @@ export function ControlAdminBlock({
       )}
 
       {error && <p className="mt-3 text-sm text-[var(--danger)]" role="alert">{error}</p>}
+      {success && <p className="mt-3 text-sm text-[var(--accent)]" role="status">{success}</p>}
     </div>
   );
 }

@@ -3,7 +3,7 @@
 import { createClient } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
 
-export function AdminSignOut() {
+export function AdminSignOut({ compact = false }: { compact?: boolean }) {
   const router = useRouter();
 
   async function handleSignOut() {
@@ -17,9 +17,14 @@ export function AdminSignOut() {
     <button
       type="button"
       onClick={handleSignOut}
-      className="inline-flex min-h-11 w-full cursor-pointer items-center rounded px-2 text-sm whitespace-nowrap text-[var(--foreground-muted)] transition-colors hover:bg-[var(--background)] hover:text-[var(--danger)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] sm:w-auto"
+      aria-label={compact ? "Se déconnecter" : undefined}
+      title={compact ? "Se déconnecter" : undefined}
+      className={`inline-flex min-h-11 cursor-pointer items-center rounded text-sm whitespace-nowrap text-[var(--foreground-muted)] transition-colors hover:bg-[var(--background)] hover:text-[var(--danger)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] ${
+        compact ? "w-11 justify-center" : "w-full px-2 sm:w-auto"
+      }`}
     >
-      <span aria-hidden className="mr-1.5">🚪</span>Déconnexion
+      <span aria-hidden className={compact ? "" : "mr-1.5"}>🚪</span>
+      {!compact && "Déconnexion"}
     </button>
   );
 }
