@@ -7,7 +7,7 @@ import {
   saveRuleParameters,
   type VoisinageEntry,
 } from "@/app/admin/regles/actions";
-import { AdminSaveBar, AdminSettingsGuide } from "@/components/admin/AdminSettingsUi";
+import { AdminParameterTable, AdminSaveBar, AdminSettingsGuide } from "@/components/admin/AdminSettingsUi";
 import {
   AiRulePreview,
   BudgetWorldGapPreview,
@@ -1781,36 +1781,43 @@ export function ReglesForm({
                     <p className="text-xs text-[var(--foreground-muted)]">
                       Indiquez ce que chaque statistique ajoute au jet lorsque le pays est au score minimum puis au score maximum. Les scores intermédiaires sont calculés automatiquement.
                     </p>
-                    <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
-                      {STAT_KEYS.map((statKey) => {
+                    <AdminParameterTable
+                      label="Effets des statistiques sur les jets"
+                      columns={["Au score minimum", "Au score maximum"]}
+                      rows={STAT_KEYS.map((statKey) => {
                         const ranges = getStatsDiceModifierRanges()[statKey] ?? { min: -10, max: 20 };
                         const statRange = STATE_ACTION_STAT_RANGES[statKey];
-                        return (
-                          <div key={statKey} className="rounded border p-3" style={{ borderColor: "var(--border-muted)" }}>
-                            <div className="mb-2">
-                              <div className="text-sm font-medium text-[var(--foreground)]">{STAT_LABELS[statKey]}</div>
-                              <div className="text-xs text-[var(--foreground-muted)]">
-                                Score du pays : {statRange.min} à {statRange.max}
-                              </div>
-                            </div>
-                            <div className="flex flex-wrap gap-2">
-                              <div className="flex flex-col gap-0.5">
-                                <label className="text-xs text-[var(--foreground-muted)]">
-                                  <FormLabel label={`Effet au score ${statRange.min}`} tooltip={`Effet ajouté au jet quand ${STAT_LABELS[statKey].toLowerCase()} vaut ${statRange.min}.`} />
-                                </label>
-                                <input aria-label={`Minimum pour ${STAT_LABELS[statKey]}`} type="number" value={ranges.min} onChange={(e) => updateStatsDiceModifierRanges(statKey, "min", Number(e.target.value) ?? -10)} className={inputClassNarrow} style={inputStyle} />
-                              </div>
-                              <div className="flex flex-col gap-0.5">
-                                <label className="text-xs text-[var(--foreground-muted)]">
-                                  <FormLabel label={`Effet au score ${statRange.max}`} tooltip={`Effet ajouté au jet quand ${STAT_LABELS[statKey].toLowerCase()} vaut ${statRange.max}.`} />
-                                </label>
-                                <input aria-label={`Maximum pour ${STAT_LABELS[statKey]}`} type="number" value={ranges.max} onChange={(e) => updateStatsDiceModifierRanges(statKey, "max", Number(e.target.value) ?? 20)} className={inputClassNarrow} style={inputStyle} />
-                              </div>
-                            </div>
-                          </div>
-                        );
+                        return {
+                          key: statKey,
+                          title: STAT_LABELS[statKey],
+                          description: `Score du pays : ${statRange.min} à ${statRange.max}`,
+                          cells: [
+                            <div key="min" className="flex items-center gap-2">
+                              <input
+                                aria-label={`Effet au score minimum pour ${STAT_LABELS[statKey]}`}
+                                type="number"
+                                value={ranges.min}
+                                onChange={(e) => updateStatsDiceModifierRanges(statKey, "min", Number(e.target.value) ?? -10)}
+                                className={`${inputClassNarrow} w-24`}
+                                style={inputStyle}
+                              />
+                              <span className="text-xs text-[var(--foreground-muted)]">points</span>
+                            </div>,
+                            <div key="max" className="flex items-center gap-2">
+                              <input
+                                aria-label={`Effet au score maximum pour ${STAT_LABELS[statKey]}`}
+                                type="number"
+                                value={ranges.max}
+                                onChange={(e) => updateStatsDiceModifierRanges(statKey, "max", Number(e.target.value) ?? 20)}
+                                className={`${inputClassNarrow} w-24`}
+                                style={inputStyle}
+                              />
+                              <span className="text-xs text-[var(--foreground-muted)]">points</span>
+                            </div>,
+                          ],
+                        };
                       })}
-                    </div>
+                    />
                     <DiceModifierRulePreview ranges={getStatsDiceModifierRanges()} />
                   </div>
                 </CollapsibleBlock>
@@ -1841,65 +1848,75 @@ export function ReglesForm({
                     <p className="text-xs text-[var(--foreground-muted)]">
                       Date affichée aux joueurs. Chaque jour de jeu, elle avance du nombre de mois choisi ci-dessous. À 0, elle reste figée.
                     </p>
-                    <div className="flex flex-wrap items-end gap-x-6 gap-y-2">
-                      <div className="flex flex-col gap-0.5">
-                        <label className="text-xs text-[var(--foreground-muted)]">
-                          <FormLabel label="Mois" tooltip="Choisit le mois affiché comme date actuelle de l'univers." />
-                        </label>
-                        <select
-                          aria-label="Mois du monde"
-                          value={typeof worldDateRule.value === "object" && worldDateRule.value !== null && "month" in worldDateRule.value ? Number((worldDateRule.value as { month?: number }).month) : 1}
-                          onChange={(e) => {
-                            const month = Number(e.target.value);
-                            const current = typeof worldDateRule.value === "object" && worldDateRule.value !== null && "year" in worldDateRule.value ? (worldDateRule.value as { year?: number }).year : 2025;
-                            updateValue(worldDateRule.id, { month, year: current });
-                          }}
-                          className="rounded border py-1.5 px-2 text-sm w-36"
-                          style={{ borderColor: "var(--border)", background: "var(--background)" }}
-                        >
-                          {MOIS_LABELS.map((label, i) => (
-                            <option key={i} value={i + 1}>{label}</option>
-                          ))}
-                        </select>
-                      </div>
-                      <div className="flex flex-col gap-0.5">
-                        <label className="text-xs text-[var(--foreground-muted)]">
-                          <FormLabel label="Année" tooltip="Choisit l'année affichée comme date actuelle de l'univers." />
-                        </label>
-                        <input
-                          aria-label="Année du monde"
-                          type="number"
-                          min={1}
-                          max={9999}
-                          value={typeof worldDateRule.value === "object" && worldDateRule.value !== null && "year" in worldDateRule.value ? Number((worldDateRule.value as { year?: number }).year) : 2025}
-                          onChange={(e) => {
-                            const year = Math.max(1, Math.min(9999, Number(e.target.value) || 2025));
-                            const current = typeof worldDateRule.value === "object" && worldDateRule.value !== null && "month" in worldDateRule.value ? (worldDateRule.value as { month?: number }).month : 1;
-                            updateValue(worldDateRule.id, { month: current, year });
-                          }}
-                          className="rounded border py-1.5 px-2 text-sm w-20"
-                          style={{ borderColor: "var(--border)", background: "var(--background)" }}
-                        />
-                      </div>
-                      <div className="flex flex-col gap-0.5">
-                        <label className="text-xs text-[var(--foreground-muted)]">
-                          <FormLabel label="Mois avancés par jour de jeu" tooltip="Détermine de combien de mois la date du monde avance à chaque mise à jour quotidienne. À 0, la date reste figée." />
-                        </label>
-                        <input
-                          aria-label="Temporalité en mois par mise à jour"
-                          type="number"
-                          min={0}
-                          max={12}
-                          value={typeof worldDateAdvanceRule.value === "number" ? worldDateAdvanceRule.value : (worldDateAdvanceRule.value as unknown as number) ?? 1}
-                          onChange={(e) => {
-                            const v = Math.max(0, Math.min(12, Math.round(Number(e.target.value)) ?? 0));
-                            updateValue(worldDateAdvanceRule.id, v);
-                          }}
-                          className="rounded border py-1.5 px-2 text-sm w-16"
-                          style={{ borderColor: "var(--border)", background: "var(--background)" }}
-                        />
-                      </div>
-                    </div>
+                    <AdminParameterTable
+                      label="Date et rythme du monde"
+                      columns={["Valeur"]}
+                      rows={[
+                        {
+                          key: "month",
+                          title: "Mois affiché",
+                          description: "Mois actuel visible par les joueurs.",
+                          cells: [
+                            <select
+                              key="month"
+                              aria-label="Mois du monde"
+                              value={worldMonth}
+                              onChange={(e) => updateValue(worldDateRule.id, { month: Number(e.target.value), year: worldYear })}
+                              className="w-full max-w-48 rounded border px-3 py-2 text-sm"
+                              style={{ borderColor: "var(--border)", background: "var(--background)" }}
+                            >
+                              {MOIS_LABELS.map((label, i) => (
+                                <option key={i} value={i + 1}>{label}</option>
+                              ))}
+                            </select>,
+                          ],
+                        },
+                        {
+                          key: "year",
+                          title: "Année affichée",
+                          description: "Année actuelle visible par les joueurs.",
+                          cells: [
+                            <input
+                              key="year"
+                              aria-label="Année du monde"
+                              type="number"
+                              min={1}
+                              max={9999}
+                              value={worldYear}
+                              onChange={(e) => updateValue(worldDateRule.id, {
+                                month: worldMonth,
+                                year: Math.max(1, Math.min(9999, Number(e.target.value) || 2025)),
+                              })}
+                              className={`${inputClassNarrow} w-28`}
+                              style={inputStyle}
+                            />,
+                          ],
+                        },
+                        {
+                          key: "advance",
+                          title: "Avance à chaque jour de jeu",
+                          description: "À 0, la date reste figée.",
+                          cells: [
+                            <div key="advance" className="flex items-center gap-2">
+                              <input
+                                aria-label="Mois avancés par mise à jour"
+                                type="number"
+                                min={0}
+                                max={12}
+                                value={worldAdvance}
+                                onChange={(e) => updateValue(
+                                  worldDateAdvanceRule.id,
+                                  Math.max(0, Math.min(12, Math.round(Number(e.target.value)) || 0))
+                                )}
+                                className={`${inputClassNarrow} w-24`}
+                                style={inputStyle}
+                              />
+                              <span className="text-xs text-[var(--foreground-muted)]">mois</span>
+                            </div>,
+                          ],
+                        },
+                      ]}
+                    />
                   </div>
                 </CollapsibleBlock>
               )}
@@ -2262,63 +2279,80 @@ export function ReglesForm({
                 open={etatMajorOpen}
                 onToggle={() => setEtatMajorOpen((o) => !o)}
               >
-                <div className="pl-4 ml-2 border-l-2 space-y-4 p-3" style={{ borderColor: "var(--border-muted)" }}>
-                  <div>
-                    <div className="mb-1 text-xs font-medium text-[var(--foreground-muted)]">Conception des unités (industrie)</div>
-                    <div className="flex flex-wrap gap-4">
-                      <label className="flex items-center gap-2">
-                        <span className="text-xs text-[var(--foreground-muted)]">Minimum par jour</span>
-                        <input type="number" min={0} step={0.5} value={design.min_points_per_tick ?? 1} onChange={(e) => updateEtatMajor("design", "min_points_per_tick", Number(e.target.value) || 0)} className={`${inputClassNarrow} w-20`} style={inputStyle} />
-                      </label>
-                      <label className="flex items-center gap-2">
-                        <span className="text-xs text-[var(--foreground-muted)]">Maximum par jour</span>
-                        <input type="number" min={0} step={0.5} value={design.max_points_per_tick ?? 10} onChange={(e) => updateEtatMajor("design", "max_points_per_tick", Number(e.target.value) || 0)} className={`${inputClassNarrow} w-20`} style={inputStyle} />
-                      </label>
-                    </div>
-                  </div>
-                  <div>
-                    <div className="mb-1 text-xs font-medium text-[var(--foreground-muted)]">Recrutement (militarisme + budget Défense)</div>
-                    <div className="flex flex-wrap gap-4">
-                      <label className="flex items-center gap-2">
-                        <span className="text-xs text-[var(--foreground-muted)]">Minimum par jour</span>
-                        <input type="number" min={0} step={0.5} value={recrutement.min_points_per_tick ?? 1} onChange={(e) => updateEtatMajor("recrutement", "min_points_per_tick", Number(e.target.value) || 0)} className={`${inputClassNarrow} w-20`} style={inputStyle} />
-                      </label>
-                      <label className="flex items-center gap-2">
-                        <span className="text-xs text-[var(--foreground-muted)]">Maximum par jour</span>
-                        <input type="number" min={0} step={0.5} value={recrutement.max_points_per_tick ?? 10} onChange={(e) => updateEtatMajor("recrutement", "max_points_per_tick", Number(e.target.value) || 0)} className={`${inputClassNarrow} w-20`} style={inputStyle} />
-                      </label>
-                      <label className="flex items-center gap-2">
-                        <span className="text-xs text-[var(--foreground-muted)]">Points par % du budget Défense</span>
-                        <input type="number" min={0} step={0.01} value={recrutement.points_per_pct_defense ?? 0} onChange={(e) => updateEtatMajor("recrutement", "points_per_pct_defense", Number(e.target.value) || 0)} className={`${inputClassNarrow} w-20`} style={inputStyle} />
-                      </label>
-                    </div>
-                  </div>
-                  <div>
-                    <div className="mb-1 text-xs font-medium text-[var(--foreground-muted)]">Stock stratégique (science)</div>
-                    <div className="flex flex-wrap gap-4">
-                      <label className="flex items-center gap-2">
-                        <span className="text-xs text-[var(--foreground-muted)]">Minimum par jour</span>
-                        <input type="number" min={0} step={0.5} value={stock.min_points_per_tick ?? 1} onChange={(e) => updateEtatMajor("stock", "min_points_per_tick", Number(e.target.value) || 0)} className={`${inputClassNarrow} w-20`} style={inputStyle} />
-                      </label>
-                      <label className="flex items-center gap-2">
-                        <span className="text-xs text-[var(--foreground-muted)]">Maximum par jour</span>
-                        <input type="number" min={0} step={0.5} value={stock.max_points_per_tick ?? 10} onChange={(e) => updateEtatMajor("stock", "max_points_per_tick", Number(e.target.value) || 0)} className={`${inputClassNarrow} w-20`} style={inputStyle} />
-                      </label>
-                    </div>
-                  </div>
-                  <div>
-                    <div className="mb-1 text-xs font-medium text-[var(--foreground-muted)]">Procuration (budget %)</div>
-                    <div className="flex flex-wrap gap-4">
-                      <label className="flex items-center gap-2">
-                        <span className="text-xs text-[var(--foreground-muted)]">Base quotidienne</span>
-                        <input type="number" min={0} step={0.5} value={procuration.base_points_per_tick ?? 0} onChange={(e) => updateEtatMajor("procuration", "base_points_per_tick", Number(e.target.value) || 0)} className={`${inputClassNarrow} w-20`} style={inputStyle} />
-                      </label>
-                      <label className="flex items-center gap-2">
-                        <span className="text-xs text-[var(--foreground-muted)]">Points par % du budget</span>
-                        <input type="number" min={0} step={0.1} value={procuration.points_per_pct_budget ?? 0.5} onChange={(e) => updateEtatMajor("procuration", "points_per_pct_budget", Number(e.target.value) || 0)} className={`${inputClassNarrow} w-20`} style={inputStyle} />
-                      </label>
-                    </div>
-                  </div>
+                <div className="p-3">
+                  <AdminParameterTable
+                    label="Progression quotidienne de l’État-major"
+                    columns={["Base ou minimum quotidien", "Maximum quotidien", "Gain par 1 % de budget"]}
+                    rows={[
+                      {
+                        key: "design",
+                        title: "Conception des unités",
+                        description: "Progression soutenue par l’industrie.",
+                        cells: [
+                          <div key="min" className="flex items-center gap-2">
+                            <input aria-label="Minimum quotidien de conception" type="number" min={0} step={0.5} value={design.min_points_per_tick ?? 1} onChange={(e) => updateEtatMajor("design", "min_points_per_tick", Number(e.target.value) || 0)} className={inputClassNarrow} style={inputStyle} />
+                            <span className="text-xs text-[var(--foreground-muted)]">points</span>
+                          </div>,
+                          <div key="max" className="flex items-center gap-2">
+                            <input aria-label="Maximum quotidien de conception" type="number" min={0} step={0.5} value={design.max_points_per_tick ?? 10} onChange={(e) => updateEtatMajor("design", "max_points_per_tick", Number(e.target.value) || 0)} className={inputClassNarrow} style={inputStyle} />
+                            <span className="text-xs text-[var(--foreground-muted)]">points</span>
+                          </div>,
+                          null,
+                        ],
+                      },
+                      {
+                        key: "recruitment",
+                        title: "Recrutement",
+                        description: "Progression soutenue par le militarisme et le budget Défense.",
+                        cells: [
+                          <div key="min" className="flex items-center gap-2">
+                            <input aria-label="Minimum quotidien de recrutement" type="number" min={0} step={0.5} value={recrutement.min_points_per_tick ?? 1} onChange={(e) => updateEtatMajor("recrutement", "min_points_per_tick", Number(e.target.value) || 0)} className={inputClassNarrow} style={inputStyle} />
+                            <span className="text-xs text-[var(--foreground-muted)]">points</span>
+                          </div>,
+                          <div key="max" className="flex items-center gap-2">
+                            <input aria-label="Maximum quotidien de recrutement" type="number" min={0} step={0.5} value={recrutement.max_points_per_tick ?? 10} onChange={(e) => updateEtatMajor("recrutement", "max_points_per_tick", Number(e.target.value) || 0)} className={inputClassNarrow} style={inputStyle} />
+                            <span className="text-xs text-[var(--foreground-muted)]">points</span>
+                          </div>,
+                          <div key="budget" className="flex items-center gap-2">
+                            <input aria-label="Gain de recrutement par pourcentage du budget Défense" type="number" min={0} step={0.01} value={recrutement.points_per_pct_defense ?? 0} onChange={(e) => updateEtatMajor("recrutement", "points_per_pct_defense", Number(e.target.value) || 0)} className={inputClassNarrow} style={inputStyle} />
+                            <span className="text-xs text-[var(--foreground-muted)]">point</span>
+                          </div>,
+                        ],
+                      },
+                      {
+                        key: "stock",
+                        title: "Stock stratégique",
+                        description: "Progression soutenue par la science.",
+                        cells: [
+                          <div key="min" className="flex items-center gap-2">
+                            <input aria-label="Minimum quotidien du stock stratégique" type="number" min={0} step={0.5} value={stock.min_points_per_tick ?? 1} onChange={(e) => updateEtatMajor("stock", "min_points_per_tick", Number(e.target.value) || 0)} className={inputClassNarrow} style={inputStyle} />
+                            <span className="text-xs text-[var(--foreground-muted)]">points</span>
+                          </div>,
+                          <div key="max" className="flex items-center gap-2">
+                            <input aria-label="Maximum quotidien du stock stratégique" type="number" min={0} step={0.5} value={stock.max_points_per_tick ?? 10} onChange={(e) => updateEtatMajor("stock", "max_points_per_tick", Number(e.target.value) || 0)} className={inputClassNarrow} style={inputStyle} />
+                            <span className="text-xs text-[var(--foreground-muted)]">points</span>
+                          </div>,
+                          null,
+                        ],
+                      },
+                      {
+                        key: "procurement",
+                        title: "Procuration",
+                        description: "Progression directement liée au budget affecté.",
+                        cells: [
+                          <div key="base" className="flex items-center gap-2">
+                            <input aria-label="Base quotidienne de procuration" type="number" min={0} step={0.5} value={procuration.base_points_per_tick ?? 0} onChange={(e) => updateEtatMajor("procuration", "base_points_per_tick", Number(e.target.value) || 0)} className={inputClassNarrow} style={inputStyle} />
+                            <span className="text-xs text-[var(--foreground-muted)]">points</span>
+                          </div>,
+                          null,
+                          <div key="budget" className="flex items-center gap-2">
+                            <input aria-label="Gain de procuration par pourcentage du budget" type="number" min={0} step={0.1} value={procuration.points_per_pct_budget ?? 0.5} onChange={(e) => updateEtatMajor("procuration", "points_per_pct_budget", Number(e.target.value) || 0)} className={inputClassNarrow} style={inputStyle} />
+                            <span className="text-xs text-[var(--foreground-muted)]">point</span>
+                          </div>,
+                        ],
+                      },
+                    ]}
+                  />
                 </div>
               </CollapsibleBlock>
             );
@@ -2349,20 +2383,22 @@ export function ReglesForm({
                     thresholds={lawConfig.level_thresholds ?? {}}
                     dailyStep={Number(lawConfig.daily_step ?? 20)}
                   />
-                  <div>
-                    <div className="text-xs font-medium text-[var(--foreground-muted)] mb-2">
-                      <TitleWithInfo title="Seuils par palier (score 0–500)" tooltip="Chaque valeur indique à partir de quel score le pays entre dans ce palier." className="inline-flex items-center gap-1.5" />
-                    </div>
-                    <div className="grid gap-2 grid-cols-2 sm:grid-cols-3 lg:grid-cols-5">
-                      {def.levels.map((level) => {
+                  <div className="space-y-2">
+                    <p className="text-xs leading-relaxed text-[var(--foreground-muted)]">
+                      Chaque seuil indique à partir de quel score le pays entre dans ce palier.
+                    </p>
+                    <AdminParameterTable
+                      label={`Seuils des paliers de la loi ${def.title_fr}`}
+                      columns={["Score d’entrée"]}
+                      rows={def.levels.map((level) => {
                         const config = getLawConfig(def);
                         const thresholds = config.level_thresholds ?? {};
                         const val = thresholds[level.key] ?? 0;
-                        return (
-                          <div key={level.key} className="flex flex-col gap-0.5">
-                            <label className="text-xs text-[var(--foreground-muted)]">
-                              <FormLabel label={level.label} tooltip={`Score minimal pour le palier « ${level.label} ».`} />
-                            </label>
+                        return {
+                          key: level.key,
+                          title: level.label,
+                          cells: [
+                            <div key={level.key} className="flex items-center gap-2">
                             <input
                               aria-label={`Seuil du palier ${level.label}`}
                               type="number"
@@ -2370,13 +2406,15 @@ export function ReglesForm({
                               max={500}
                               value={val}
                               onChange={(e) => updateLawThreshold(def, level.key, Math.max(0, Math.min(500, Number(e.target.value) || 0)))}
-                              className="rounded border py-1.5 px-2 text-sm w-20 font-mono"
-                              style={{ borderColor: "var(--border)", background: "var(--background)" }}
+                              className={inputClassNarrow}
+                              style={inputStyle}
                             />
-                          </div>
-                        );
+                              <span className="text-xs text-[var(--foreground-muted)]">sur 500</span>
+                            </div>,
+                          ],
+                        };
                       })}
-                    </div>
+                    />
                   </div>
                   <div className="space-y-4">
                     {def.levels.map((level) => {
@@ -2558,10 +2596,16 @@ export function ReglesForm({
                       <p className="mt-1 text-xs text-[var(--foreground-muted)]">
                         Les unités de référence évitent les coefficients techniques. Les flèches des champs utilisent maintenant des pas raisonnables.
                       </p>
-                      <div className="mt-3 grid gap-4 md:grid-cols-3">
-                        <label className="block">
-                          <span className="text-sm text-[var(--foreground)]">1 000 milliards de PIB donnent</span>
-                          <span className="mt-1 flex items-center gap-2">
+                      <div className="mt-3">
+                        <AdminParameterTable
+                          label="Contribution de base à l’influence"
+                          columns={["Points d’influence"]}
+                          rows={[
+                            {
+                              key: "gdp",
+                              title: "1 000 milliards de PIB",
+                              cells: [
+                                <div key="gdp" className="flex items-center gap-2">
                             <input
                               aria-label="Influence produite par 1 000 milliards de PIB"
                               type="number"
@@ -2571,15 +2615,18 @@ export function ReglesForm({
                               onChange={(event) => updateInfluenceConfig({
                                 mult_gdp: (Number(event.target.value) || 0) / GDP_INFLUENCE_REFERENCE,
                               })}
-                              className="w-28 rounded border bg-[var(--background)] px-2 py-1.5 text-sm text-[var(--foreground)]"
+                              className={inputClassNarrow}
                               style={inputStyle}
                             />
                             <span className="text-xs text-[var(--foreground-muted)]">points</span>
-                          </span>
-                        </label>
-                        <label className="block">
-                          <span className="text-sm text-[var(--foreground)]">10 millions d’habitants donnent</span>
-                          <span className="mt-1 flex items-center gap-2">
+                                </div>,
+                              ],
+                            },
+                            {
+                              key: "population",
+                              title: "10 millions d’habitants",
+                              cells: [
+                                <div key="population" className="flex items-center gap-2">
                             <input
                               aria-label="Influence produite par 10 millions d’habitants"
                               type="number"
@@ -2589,15 +2636,18 @@ export function ReglesForm({
                               onChange={(event) => updateInfluenceConfig({
                                 mult_population: (Number(event.target.value) || 0) / POPULATION_INFLUENCE_REFERENCE,
                               })}
-                              className="w-28 rounded border bg-[var(--background)] px-2 py-1.5 text-sm text-[var(--foreground)]"
+                              className={inputClassNarrow}
                               style={inputStyle}
                             />
                             <span className="text-xs text-[var(--foreground-muted)]">points</span>
-                          </span>
-                        </label>
-                        <label className="block">
-                          <span className="text-sm text-[var(--foreground)]">100 points de puissance militaire donnent</span>
-                          <span className="mt-1 flex items-center gap-2">
+                                </div>,
+                              ],
+                            },
+                            {
+                              key: "military",
+                              title: "100 points de puissance militaire",
+                              cells: [
+                                <div key="military" className="flex items-center gap-2">
                             <input
                               aria-label="Influence produite par 100 points de puissance militaire"
                               type="number"
@@ -2607,12 +2657,15 @@ export function ReglesForm({
                               onChange={(event) => updateInfluenceConfig({
                                 mult_military: (Number(event.target.value) || 0) / MILITARY_INFLUENCE_REFERENCE,
                               })}
-                              className="w-28 rounded border bg-[var(--background)] px-2 py-1.5 text-sm text-[var(--foreground)]"
+                              className={inputClassNarrow}
                               style={inputStyle}
                             />
                             <span className="text-xs text-[var(--foreground-muted)]">points</span>
-                          </span>
-                        </label>
+                                </div>,
+                              ],
+                            },
+                          ]}
+                        />
                       </div>
                     </section>
 
@@ -2621,10 +2674,16 @@ export function ReglesForm({
                       <p className="mt-1 text-xs text-[var(--foreground-muted)]">
                         Ce pourcentage est appliqué au total obtenu ci-dessus. Une stabilité intermédiaire produit une valeur intermédiaire.
                       </p>
-                      <div className="mt-3 grid gap-4 sm:grid-cols-2">
-                        <label className="block">
-                          <span className="text-sm text-[var(--foreground)]">Avec une stabilité de −3, l’influence finale vaut</span>
-                          <span className="mt-1 flex items-center gap-2">
+                      <div className="mt-3">
+                        <AdminParameterTable
+                          label="Effet de la stabilité sur l’influence"
+                          columns={["Influence finale"]}
+                          rows={[
+                            {
+                              key: "stability-min",
+                              title: "Stabilité à −3",
+                              cells: [
+                                <div key="stability-min" className="flex items-center gap-2">
                             <input
                               aria-label="Pourcentage d’influence conservé avec une stabilité de moins 3"
                               type="number"
@@ -2634,15 +2693,18 @@ export function ReglesForm({
                               onChange={(event) => updateInfluenceConfig({
                                 stability_modifier_min: (Number(event.target.value) || 0) / 100,
                               })}
-                              className="w-24 rounded border bg-[var(--background)] px-2 py-1.5 text-sm text-[var(--foreground)]"
+                              className={inputClassNarrow}
                               style={inputStyle}
                             />
                             <span className="text-xs text-[var(--foreground-muted)]">% de la base</span>
-                          </span>
-                        </label>
-                        <label className="block">
-                          <span className="text-sm text-[var(--foreground)]">Avec une stabilité de +3, l’influence finale vaut</span>
-                          <span className="mt-1 flex items-center gap-2">
+                                </div>,
+                              ],
+                            },
+                            {
+                              key: "stability-max",
+                              title: "Stabilité à +3",
+                              cells: [
+                                <div key="stability-max" className="flex items-center gap-2">
                             <input
                               aria-label="Pourcentage d’influence conservé avec une stabilité de plus 3"
                               type="number"
@@ -2652,12 +2714,15 @@ export function ReglesForm({
                               onChange={(event) => updateInfluenceConfig({
                                 stability_modifier_max: (Number(event.target.value) || 0) / 100,
                               })}
-                              className="w-24 rounded border bg-[var(--background)] px-2 py-1.5 text-sm text-[var(--foreground)]"
+                              className={inputClassNarrow}
                               style={inputStyle}
                             />
                             <span className="text-xs text-[var(--foreground-muted)]">% de la base</span>
-                          </span>
-                        </label>
+                                </div>,
+                              ],
+                            },
+                          ]}
+                        />
                       </div>
                     </section>
 
@@ -2714,26 +2779,45 @@ export function ReglesForm({
                     <p className="text-xs text-[var(--foreground-muted)]">
                       Pour chaque statut, choisissez la part de l&apos;influence du pays contrôlé transférée au pays contrôleur.
                     </p>
-                    <div className="flex flex-wrap gap-x-6 gap-y-3">
-                      <div className="flex flex-col gap-0.5">
-                        <label className="text-xs text-[var(--foreground-muted)]">
-                          <FormLabel label="Contesté : part transférée (%)" tooltip="Part d'influence transmise quand le contrôle du pays reste disputé." />
-                        </label>
-                        <input aria-label="Part d’influence transférée si le contrôle est contesté" type="number" min={0} max={100} value={getSphereInfluencePct().contested ?? 50} onChange={(e) => updateSphereInfluencePct({ contested: Math.max(0, Math.min(100, Number(e.target.value) || 0)) })} className="rounded border py-1.5 px-2 text-sm w-20 font-mono" style={{ borderColor: "var(--border)", background: "var(--background)" }} />
-                      </div>
-                      <div className="flex flex-col gap-0.5">
-                        <label className="text-xs text-[var(--foreground-muted)]">
-                          <FormLabel label="Occupé : part transférée (%)" tooltip="Part d'influence transmise quand le pays est occupé mais pas encore annexé." />
-                        </label>
-                        <input aria-label="Part d’influence transférée si le pays est occupé" type="number" min={0} max={100} value={getSphereInfluencePct().occupied ?? 80} onChange={(e) => updateSphereInfluencePct({ occupied: Math.max(0, Math.min(100, Number(e.target.value) || 0)) })} className="rounded border py-1.5 px-2 text-sm w-20 font-mono" style={{ borderColor: "var(--border)", background: "var(--background)" }} />
-                      </div>
-                      <div className="flex flex-col gap-0.5">
-                        <label className="text-xs text-[var(--foreground-muted)]">
-                          <FormLabel label="Annexé : part transférée (%)" tooltip="Part d'influence transmise quand le pays est considéré comme entièrement annexé." />
-                        </label>
-                        <input aria-label="Part d’influence transférée si le pays est annexé" type="number" min={0} max={100} value={getSphereInfluencePct().annexed ?? 100} onChange={(e) => updateSphereInfluencePct({ annexed: Math.max(0, Math.min(100, Number(e.target.value) || 0)) })} className="rounded border py-1.5 px-2 text-sm w-20 font-mono" style={{ borderColor: "var(--border)", background: "var(--background)" }} />
-                      </div>
-                    </div>
+                    <AdminParameterTable
+                      label="Influence transférée selon le statut de contrôle"
+                      columns={["Part transférée"]}
+                      rows={[
+                        {
+                          key: "contested",
+                          title: "Contesté",
+                          description: "Le contrôle du pays reste partagé ou disputé.",
+                          cells: [
+                            <div key="value" className="flex items-center gap-2">
+                              <input aria-label="Part d’influence transférée si le contrôle est contesté" type="number" min={0} max={100} value={getSphereInfluencePct().contested ?? 50} onChange={(e) => updateSphereInfluencePct({ contested: Math.max(0, Math.min(100, Number(e.target.value) || 0)) })} className={inputClassNarrow} style={inputStyle} />
+                              <span className="text-xs text-[var(--foreground-muted)]">%</span>
+                            </div>,
+                          ],
+                        },
+                        {
+                          key: "occupied",
+                          title: "Occupé",
+                          description: "Le pays est entièrement contrôlé, sans être annexé.",
+                          cells: [
+                            <div key="value" className="flex items-center gap-2">
+                              <input aria-label="Part d’influence transférée si le pays est occupé" type="number" min={0} max={100} value={getSphereInfluencePct().occupied ?? 80} onChange={(e) => updateSphereInfluencePct({ occupied: Math.max(0, Math.min(100, Number(e.target.value) || 0)) })} className={inputClassNarrow} style={inputStyle} />
+                              <span className="text-xs text-[var(--foreground-muted)]">%</span>
+                            </div>,
+                          ],
+                        },
+                        {
+                          key: "annexed",
+                          title: "Annexé",
+                          description: "Le pays est intégré au territoire du contrôleur.",
+                          cells: [
+                            <div key="value" className="flex items-center gap-2">
+                              <input aria-label="Part d’influence transférée si le pays est annexé" type="number" min={0} max={100} value={getSphereInfluencePct().annexed ?? 100} onChange={(e) => updateSphereInfluencePct({ annexed: Math.max(0, Math.min(100, Number(e.target.value) || 0)) })} className={inputClassNarrow} style={inputStyle} />
+                              <span className="text-xs text-[var(--foreground-muted)]">%</span>
+                            </div>,
+                          ],
+                        },
+                      ]}
+                    />
                     <SphereRulePreview values={getSphereInfluencePct()} />
                   </div>
                 </CollapsibleBlock>
@@ -2756,108 +2840,137 @@ export function ReglesForm({
                 </p>
                 {ideologyConfigRule && (
                 <>
-                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                  <div>
-                    <label className="mb-1 block text-xs text-[var(--foreground-muted)]">
-                      <FormLabel label="Vitesse du changement quotidien" tooltip="Une faible valeur rend les idéologies plus stables. Une forte valeur accélère les bascules." />
-                    </label>
-                    <input
-                      aria-label="Lissage idéologique quotidien"
-                      type="number"
-                      step="0.01"
-                      value={getIdeologyConfigValue().daily_step}
-                      onChange={(e) => updateIdeologyConfig({ daily_step: Number(e.target.value) || DEFAULT_IDEOLOGY_CONFIG.daily_step })}
-                      className="w-full rounded border px-2 py-1.5 text-sm font-mono"
-                      style={{ borderColor: "var(--border)", background: "var(--background)" }}
-                    />
-                  </div>
-                  <div>
-                    <label className="mb-1 block text-xs text-[var(--foreground-muted)]">
-                      <FormLabel label="Poids voisins" tooltip="Mesure à quel point l'idéologie des pays voisins tire un pays dans une direction." />
-                    </label>
-                    <input
-                      aria-label="Poids idéologique des voisins"
-                      type="number"
-                      step="0.01"
-                      value={getIdeologyConfigValue().neighbor_pull_weight}
-                      onChange={(e) => updateIdeologyConfig({ neighbor_pull_weight: Number(e.target.value) || DEFAULT_IDEOLOGY_CONFIG.neighbor_pull_weight })}
-                      className="w-full rounded border px-2 py-1.5 text-sm font-mono"
-                      style={{ borderColor: "var(--border)", background: "var(--background)" }}
-                    />
-                  </div>
-                  <div>
-                    <label className="mb-1 block text-xs text-[var(--foreground-muted)]">
-                      <FormLabel label="Poids effets" tooltip="Mesure à quel point les effets idéologiques ajoutés par l'administration comptent dans la dérive." />
-                    </label>
-                    <input
-                      aria-label="Poids des effets idéologiques"
-                      type="number"
-                      step="0.01"
-                      value={getIdeologyConfigValue().effect_pull_weight}
-                      onChange={(e) => updateIdeologyConfig({ effect_pull_weight: Number(e.target.value) || DEFAULT_IDEOLOGY_CONFIG.effect_pull_weight })}
-                      className="w-full rounded border px-2 py-1.5 text-sm font-mono"
-                      style={{ borderColor: "var(--border)", background: "var(--background)" }}
-                    />
-                  </div>
-                </div>
-                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                  <div>
-                    <label className="mb-1 block text-xs text-[var(--foreground-muted)]">
-                      <FormLabel label="Poids relation" tooltip="Augmente ou réduit l'influence idéologique d'un voisin selon que la relation bilatérale est bonne ou mauvaise." />
-                    </label>
-                    <input
-                      aria-label="Poids idéologique des relations"
-                      type="number"
-                      step="0.01"
-                      value={getIdeologyConfigValue().relation_pull_weight}
-                      onChange={(e) => updateIdeologyConfig({ relation_pull_weight: Number(e.target.value) || DEFAULT_IDEOLOGY_CONFIG.relation_pull_weight })}
-                      className="w-full rounded border px-2 py-1.5 text-sm font-mono"
-                      style={{ borderColor: "var(--border)", background: "var(--background)" }}
-                    />
-                  </div>
-                  <div>
-                    <label className="mb-1 block text-xs text-[var(--foreground-muted)]">
-                      <FormLabel label="Poids influence" tooltip="Donne davantage de poids idéologique aux voisins les plus influents sur la scène internationale." />
-                    </label>
-                    <input
-                      aria-label="Poids idéologique de l’influence"
-                      type="number"
-                      step="0.01"
-                      value={getIdeologyConfigValue().influence_pull_weight}
-                      onChange={(e) => updateIdeologyConfig({ influence_pull_weight: Number(e.target.value) || DEFAULT_IDEOLOGY_CONFIG.influence_pull_weight })}
-                      className="w-full rounded border px-2 py-1.5 text-sm font-mono"
-                      style={{ borderColor: "var(--border)", background: "var(--background)" }}
-                    />
-                  </div>
-                  <div>
-                    <label className="mb-1 block text-xs text-[var(--foreground-muted)]">
-                      <FormLabel label="Poids contrôle" tooltip="Renforce l'empreinte idéologique d'un voisin quand il contrôle ou annexe une part du pays concerné." />
-                    </label>
-                    <input
-                      aria-label="Poids idéologique du contrôle"
-                      type="number"
-                      step="0.01"
-                      value={getIdeologyConfigValue().control_pull_weight}
-                      onChange={(e) => updateIdeologyConfig({ control_pull_weight: Number(e.target.value) || DEFAULT_IDEOLOGY_CONFIG.control_pull_weight })}
-                      className="w-full rounded border px-2 py-1.5 text-sm font-mono"
-                      style={{ borderColor: "var(--border)", background: "var(--background)" }}
-                    />
-                  </div>
-                  <div>
-                    <label className="mb-1 block text-xs text-[var(--foreground-muted)]">
-                      <FormLabel label="Force des impulsions" tooltip="Amplifie les chocs idéologiques brusques par rapport aux influences lentes et progressives." />
-                    </label>
-                    <input
-                      aria-label="Force des impulsions idéologiques"
-                      type="number"
-                      step="0.1"
-                      value={getIdeologyConfigValue().snap_strength}
-                      onChange={(e) => updateIdeologyConfig({ snap_strength: Number(e.target.value) || DEFAULT_IDEOLOGY_CONFIG.snap_strength })}
-                      className="w-full rounded border px-2 py-1.5 text-sm font-mono"
-                      style={{ borderColor: "var(--border)", background: "var(--background)" }}
-                    />
-                  </div>
-                </div>
+                <AdminParameterTable
+                  label="Calcul quotidien de l’idéologie"
+                  columns={["Coefficient"]}
+                  rows={[
+                    {
+                      key: "daily-step",
+                      title: "Vitesse quotidienne",
+                      description: "Part du déplacement calculé qui est réellement appliquée chaque jour.",
+                      cells: [
+                        <input
+                          key="daily-step"
+                          aria-label="Vitesse quotidienne de l’idéologie"
+                          type="number"
+                          step="0.01"
+                          value={getIdeologyConfigValue().daily_step}
+                          onChange={(e) => updateIdeologyConfig({ daily_step: Number(e.target.value) || DEFAULT_IDEOLOGY_CONFIG.daily_step })}
+                          className={inputClassNarrow}
+                          style={inputStyle}
+                        />,
+                      ],
+                    },
+                    {
+                      key: "neighbor-pull",
+                      title: "Pression des pays voisins",
+                      description: "Force de base avec laquelle les idéologies voisines attirent le pays.",
+                      cells: [
+                        <input
+                          key="neighbor-pull"
+                          aria-label="Pression idéologique des pays voisins"
+                          type="number"
+                          step="0.01"
+                          value={getIdeologyConfigValue().neighbor_pull_weight}
+                          onChange={(e) => updateIdeologyConfig({ neighbor_pull_weight: Number(e.target.value) || DEFAULT_IDEOLOGY_CONFIG.neighbor_pull_weight })}
+                          className={inputClassNarrow}
+                          style={inputStyle}
+                        />,
+                      ],
+                    },
+                    {
+                      key: "effect-pull",
+                      title: "Effets idéologiques actifs",
+                      description: "Importance des lois, avantages et autres effets qui poussent une idéologie.",
+                      cells: [
+                        <input
+                          key="effect-pull"
+                          aria-label="Poids des effets idéologiques actifs"
+                          type="number"
+                          step="0.01"
+                          value={getIdeologyConfigValue().effect_pull_weight}
+                          onChange={(e) => updateIdeologyConfig({ effect_pull_weight: Number(e.target.value) || DEFAULT_IDEOLOGY_CONFIG.effect_pull_weight })}
+                          className={inputClassNarrow}
+                          style={inputStyle}
+                        />,
+                      ],
+                    },
+                  ]}
+                />
+                <AdminParameterTable
+                  label="Modificateurs du déplacement idéologique"
+                  columns={["Coefficient"]}
+                  rows={[
+                    {
+                      key: "relation-pull",
+                      title: "Relations diplomatiques",
+                      description: "Une bonne relation renforce l’attraction d’un voisin ; une mauvaise la réduit.",
+                      cells: [
+                        <input
+                          key="relation-pull"
+                          aria-label="Poids des relations diplomatiques"
+                          type="number"
+                          step="0.01"
+                          value={getIdeologyConfigValue().relation_pull_weight}
+                          onChange={(e) => updateIdeologyConfig({ relation_pull_weight: Number(e.target.value) || DEFAULT_IDEOLOGY_CONFIG.relation_pull_weight })}
+                          className={inputClassNarrow}
+                          style={inputStyle}
+                        />,
+                      ],
+                    },
+                    {
+                      key: "influence-pull",
+                      title: "Influence internationale",
+                      description: "Les voisins influents pèsent davantage dans le déplacement.",
+                      cells: [
+                        <input
+                          key="influence-pull"
+                          aria-label="Poids de l’influence internationale"
+                          type="number"
+                          step="0.01"
+                          value={getIdeologyConfigValue().influence_pull_weight}
+                          onChange={(e) => updateIdeologyConfig({ influence_pull_weight: Number(e.target.value) || DEFAULT_IDEOLOGY_CONFIG.influence_pull_weight })}
+                          className={inputClassNarrow}
+                          style={inputStyle}
+                        />,
+                      ],
+                    },
+                    {
+                      key: "control-pull",
+                      title: "Contrôle territorial",
+                      description: "L’occupation et l’annexion renforcent l’empreinte idéologique du pays dominant.",
+                      cells: [
+                        <input
+                          key="control-pull"
+                          aria-label="Poids du contrôle territorial"
+                          type="number"
+                          step="0.01"
+                          value={getIdeologyConfigValue().control_pull_weight}
+                          onChange={(e) => updateIdeologyConfig({ control_pull_weight: Number(e.target.value) || DEFAULT_IDEOLOGY_CONFIG.control_pull_weight })}
+                          className={inputClassNarrow}
+                          style={inputStyle}
+                        />,
+                      ],
+                    },
+                    {
+                      key: "snap-strength",
+                      title: "Impulsions ponctuelles",
+                      description: "Amplifie les chocs brusques par rapport aux influences progressives.",
+                      cells: [
+                        <input
+                          key="snap-strength"
+                          aria-label="Force des impulsions idéologiques"
+                          type="number"
+                          step="0.1"
+                          value={getIdeologyConfigValue().snap_strength}
+                          onChange={(e) => updateIdeologyConfig({ snap_strength: Number(e.target.value) || DEFAULT_IDEOLOGY_CONFIG.snap_strength })}
+                          className={inputClassNarrow}
+                          style={inputStyle}
+                        />,
+                      ],
+                    },
+                  ]}
+                />
                 <IdeologyRulePreview
                   config={getIdeologyConfigValue()}
                   sphere={getSphereInfluencePct()}
@@ -2991,83 +3104,92 @@ export function ReglesForm({
                 </p>
 
                 {aiEventsConfigRule && (
-                  <div className="rounded border p-4 space-y-4" style={{ borderColor: "var(--border-muted)", background: "var(--background-elevated)" }}>
-                    <h4 className="text-sm font-semibold text-[var(--foreground)]">
-                      <TitleWithInfo
-                        title="Paramètres Events IA"
-                        tooltip={
-                          <TooltipBody
-                            text={<strong>Détermine comment le système génère les actions automatiques des pays IA.</strong>}
-                            points={[
-                              "quand elles sont créées",
-                              "combien d'actions partent à chaque passage",
-                              "quels types d'actions et quelles cibles sont autorisés",
-                            ]}
-                          />
-                        }
-                        className="inline-flex items-center gap-2"
-                      />
-                    </h4>
-                    <div className="grid gap-4 sm:grid-cols-2">
-                      <div>
-                        <label className="mb-1 block text-xs text-[var(--foreground-muted)]">
-                          <FormLabel label="Délai entre deux générations (heures)" tooltip="Temps minimum entre deux créations automatiques d’événements pour les pays sans joueur." />
-                        </label>
-                        <input
-                          aria-label="Intervalle des événements IA en heures"
-                          type="number"
-                          min={0.01}
-                          max={168}
-                          step={0.001}
-                          value={getAiEventsConfig().interval_hours ?? 1}
-                          onChange={(e) => updateAiEventsConfig({ interval_hours: Math.max(0.01, Number(e.target.value) || 0.01) })}
-                          className="w-full rounded border px-2 py-1.5 text-sm"
-                          style={{ borderColor: "var(--border)" }}
-                        />
-                      </div>
-                      <div>
-                        <label className="mb-1 block text-xs text-[var(--foreground-muted)]">
-                          <FormLabel label="Actions IA majeures par passage" tooltip="Nombre d'actions que le système peut créer pour les grandes IA à chaque passage." />
-                        </label>
-                        <input
-                          aria-label="Nombre d’actions IA majeures par passage"
-                          type="number"
-                          min={0}
-                          value={getAiEventsConfig().count_major_per_run ?? 0}
-                          onChange={(e) => updateAiEventsConfig({ count_major_per_run: Math.max(0, Number(e.target.value) || 0) })}
-                          className="w-full rounded border px-2 py-1.5 text-sm"
-                          style={{ borderColor: "var(--border)" }}
-                        />
-                      </div>
-                      <div>
-                        <label className="mb-1 block text-xs text-[var(--foreground-muted)]">
-                          <FormLabel label="Actions IA mineures par passage" tooltip="Nombre d'actions que le système peut créer pour les petites IA à chaque passage." />
-                        </label>
-                        <input
-                          aria-label="Nombre d’actions IA mineures par passage"
-                          type="number"
-                          min={0}
-                          value={getAiEventsConfig().count_minor_per_run ?? 0}
-                          onChange={(e) => updateAiEventsConfig({ count_minor_per_run: Math.max(0, Number(e.target.value) || 0) })}
-                          className="w-full rounded border px-2 py-1.5 text-sm"
-                          style={{ borderColor: "var(--border)" }}
-                        />
-                      </div>
-                      <div>
-                        <label className="mb-1 block text-xs text-[var(--foreground-muted)]">
-                          <FormLabel label="Amplitude temps (minutes)" tooltip="Décale légèrement l'heure exacte des actions IA autour de l'heure théorique pour éviter un déclenchement trop mécanique." />
-                        </label>
-                        <input
-                          aria-label="Amplitude temporelle des événements IA"
-                          type="number"
-                          min={0}
-                          value={getAiEventsConfig().trigger_amplitude_minutes ?? 0}
-                          onChange={(e) => updateAiEventsConfig({ trigger_amplitude_minutes: Math.max(0, Number(e.target.value) || 0) })}
-                          className="w-full rounded border px-2 py-1.5 text-sm"
-                          style={{ borderColor: "var(--border)" }}
-                        />
-                      </div>
-                    </div>
+                  <div className="space-y-4">
+                    <h4 className="text-sm font-semibold text-[var(--foreground)]">Génération des événements IA</h4>
+                    <AdminParameterTable
+                      label="Cadence et volume des événements IA"
+                      columns={["Valeur"]}
+                      rows={[
+                        {
+                          key: "interval",
+                          title: "Délai entre deux passages",
+                          description: "Temps minimum avant que le système tente de créer de nouveaux événements.",
+                          cells: [
+                            <div key="interval" className="flex items-center gap-2">
+                              <input
+                                aria-label="Délai entre deux passages des événements IA"
+                                type="number"
+                                min={0.01}
+                                max={168}
+                                step={0.001}
+                                value={getAiEventsConfig().interval_hours ?? 1}
+                                onChange={(e) => updateAiEventsConfig({ interval_hours: Math.max(0.01, Number(e.target.value) || 0.01) })}
+                                className={inputClassNarrow}
+                                style={inputStyle}
+                              />
+                              <span className="text-xs text-[var(--foreground-muted)]">heures</span>
+                            </div>,
+                          ],
+                        },
+                        {
+                          key: "major-count",
+                          title: "Grandes puissances IA",
+                          description: "Nombre d’actions majeures créées à chaque passage.",
+                          cells: [
+                            <div key="major-count" className="flex items-center gap-2">
+                              <input
+                                aria-label="Actions des grandes puissances IA par passage"
+                                type="number"
+                                min={0}
+                                value={getAiEventsConfig().count_major_per_run ?? 0}
+                                onChange={(e) => updateAiEventsConfig({ count_major_per_run: Math.max(0, Number(e.target.value) || 0) })}
+                                className={inputClassNarrow}
+                                style={inputStyle}
+                              />
+                              <span className="text-xs text-[var(--foreground-muted)]">actions</span>
+                            </div>,
+                          ],
+                        },
+                        {
+                          key: "minor-count",
+                          title: "Puissances secondaires IA",
+                          description: "Nombre d’actions mineures créées à chaque passage.",
+                          cells: [
+                            <div key="minor-count" className="flex items-center gap-2">
+                              <input
+                                aria-label="Actions des puissances secondaires IA par passage"
+                                type="number"
+                                min={0}
+                                value={getAiEventsConfig().count_minor_per_run ?? 0}
+                                onChange={(e) => updateAiEventsConfig({ count_minor_per_run: Math.max(0, Number(e.target.value) || 0) })}
+                                className={inputClassNarrow}
+                                style={inputStyle}
+                              />
+                              <span className="text-xs text-[var(--foreground-muted)]">actions</span>
+                            </div>,
+                          ],
+                        },
+                        {
+                          key: "amplitude",
+                          title: "Décalage aléatoire",
+                          description: "Évite que toutes les actions partent exactement à l’heure théorique.",
+                          cells: [
+                            <div key="amplitude" className="flex items-center gap-2">
+                              <input
+                                aria-label="Décalage aléatoire des événements IA"
+                                type="number"
+                                min={0}
+                                value={getAiEventsConfig().trigger_amplitude_minutes ?? 0}
+                                onChange={(e) => updateAiEventsConfig({ trigger_amplitude_minutes: Math.max(0, Number(e.target.value) || 0) })}
+                                className={inputClassNarrow}
+                                style={inputStyle}
+                              />
+                              <span className="text-xs text-[var(--foreground-muted)]">minutes</span>
+                            </div>,
+                          ],
+                        },
+                      ]}
+                    />
                     <div>
                       <span className="mb-1 block text-xs text-[var(--foreground-muted)]">
                         <TitleWithInfo title="Actions autorisées (IA majeures)" tooltip="Liste des types d'actions que les IA majeures ont le droit de générer automatiquement." className="inline-flex items-center gap-1.5" />
@@ -3295,76 +3417,96 @@ export function ReglesForm({
               variant="section"
             >
               <div className="p-4 space-y-4">
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <div>
-                    <label className="mb-1 block text-xs text-[var(--foreground-muted)]">
-                      <FormLabel label="Mode de diminution" tooltip="Détermine comment le renseignement baisse chaque jour sans nouvelle action d’espionnage." />
-                    </label>
-                    <select
-                      aria-label="Mode de diminution du renseignement"
-                      value={intelDecayMode}
-                      onChange={(e) => updateIntelConfig({ decay_mode: e.target.value as "flat" | "pct" | "both" })}
-                      className="w-full rounded border py-1.5 px-2 text-sm"
-                      style={{ borderColor: "var(--border)", background: "var(--background)" }}
-                    >
-                      <option value="flat">Même nombre de points chaque jour</option>
-                      <option value="pct">Pourcentage du niveau restant</option>
-                      <option value="both">Points fixes, puis pourcentage</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="mb-1 block text-xs text-[var(--foreground-muted)]">
-                      <FormLabel label="Gain maximal d’un espionnage (points)" tooltip="Points gagnés avec un impact de 100/100. Avec un impact de 70/100, l’action rapporte 70 % de cette valeur." />
-                    </label>
-                    <input
-                      aria-label="Gain maximal de renseignement après un espionnage"
-                      type="number"
-                      min={0}
-                      max={100}
-                      value={getIntelConfig().espionage_intel_gain_base ?? 50}
-                      onChange={(e) => updateIntelConfig({ espionage_intel_gain_base: Math.max(0, Math.min(100, Number(e.target.value) || 0)) })}
-                      className="w-full rounded border py-1.5 px-2 text-sm font-mono"
-                      style={{ borderColor: "var(--border)", background: "var(--background)" }}
-                    />
-                  </div>
-                </div>
-                <div className="grid gap-4 sm:grid-cols-2">
-                  {intelDecayMode !== "pct" && (
-                  <div>
-                    <label className="mb-1 block text-xs text-[var(--foreground-muted)]">
-                      <FormLabel label="Points perdus chaque jour" tooltip="Ce nombre est retiré chaque jour, quel que soit le niveau de renseignement restant." />
-                    </label>
-                    <input
-                      aria-label="Points de renseignement perdus chaque jour"
-                      type="number"
-                      min={0}
-                      step={0.5}
-                      value={getIntelConfig().decay_flat_per_day ?? 2}
-                      onChange={(e) => updateIntelConfig({ decay_flat_per_day: Math.max(0, Number(e.target.value) || 0) })}
-                      className="w-full rounded border py-1.5 px-2 text-sm font-mono"
-                      style={{ borderColor: "var(--border)", background: "var(--background)" }}
-                    />
-                  </div>
-                  )}
-                  {intelDecayMode !== "flat" && (
-                  <div>
-                    <label className="mb-1 block text-xs text-[var(--foreground-muted)]">
-                      <FormLabel label="Part du niveau restant perdue chaque jour (%)" tooltip="Le pourcentage est recalculé sur le niveau restant. À 5 %, 100 devient 95, puis 90,25." />
-                    </label>
-                    <input
-                      aria-label="Part du renseignement restant perdue chaque jour"
-                      type="number"
-                      min={0}
-                      max={100}
-                      step={0.5}
-                      value={getIntelConfig().decay_pct_per_day ?? 5}
-                      onChange={(e) => updateIntelConfig({ decay_pct_per_day: Math.max(0, Math.min(100, Number(e.target.value) || 0)) })}
-                      className="w-full rounded border py-1.5 px-2 text-sm font-mono"
-                      style={{ borderColor: "var(--border)", background: "var(--background)" }}
-                    />
-                  </div>
-                  )}
-                </div>
+                <AdminParameterTable
+                  label="Diminution et gain du renseignement"
+                  columns={["Réglage"]}
+                  rows={[
+                    {
+                      key: "decay-mode",
+                      title: "Diminution quotidienne",
+                      description: "Choisit comment le niveau baisse chaque jour sans nouvel espionnage.",
+                      cells: [
+                        <select
+                          key="decay-mode"
+                          aria-label="Mode de diminution du renseignement"
+                          value={intelDecayMode}
+                          onChange={(e) => updateIntelConfig({ decay_mode: e.target.value as "flat" | "pct" | "both" })}
+                          className={`${inputClass} max-w-md`}
+                          style={inputStyle}
+                        >
+                          <option value="flat">Retirer le même nombre de points</option>
+                          <option value="pct">Retirer une part du niveau restant</option>
+                          <option value="both">Retirer les points, puis le pourcentage</option>
+                        </select>,
+                      ],
+                    },
+                    ...(intelDecayMode !== "pct"
+                      ? [{
+                          key: "flat-decay",
+                          title: "Perte fixe",
+                          description: "Nombre de points retirés chaque jour, quel que soit le niveau restant.",
+                          cells: [
+                            <div key="flat-decay" className="flex items-center gap-2">
+                              <input
+                                aria-label="Points de renseignement perdus chaque jour"
+                                type="number"
+                                min={0}
+                                step={0.5}
+                                value={getIntelConfig().decay_flat_per_day ?? 2}
+                                onChange={(e) => updateIntelConfig({ decay_flat_per_day: Math.max(0, Number(e.target.value) || 0) })}
+                                className={inputClassNarrow}
+                                style={inputStyle}
+                              />
+                              <span className="text-xs text-[var(--foreground-muted)]">points par jour</span>
+                            </div>,
+                          ],
+                        }]
+                      : []),
+                    ...(intelDecayMode !== "flat"
+                      ? [{
+                          key: "percent-decay",
+                          title: "Perte proportionnelle",
+                          description: "Part recalculée sur le niveau restant : à 5 %, 100 devient 95, puis 90,25.",
+                          cells: [
+                            <div key="percent-decay" className="flex items-center gap-2">
+                              <input
+                                aria-label="Part du renseignement restant perdue chaque jour"
+                                type="number"
+                                min={0}
+                                max={100}
+                                step={0.5}
+                                value={getIntelConfig().decay_pct_per_day ?? 5}
+                                onChange={(e) => updateIntelConfig({ decay_pct_per_day: Math.max(0, Math.min(100, Number(e.target.value) || 0)) })}
+                                className={inputClassNarrow}
+                                style={inputStyle}
+                              />
+                              <span className="text-xs text-[var(--foreground-muted)]">% par jour</span>
+                            </div>,
+                          ],
+                        }]
+                      : []),
+                    {
+                      key: "espionage-gain",
+                      title: "Gain d’un espionnage parfait",
+                      description: "Un impact de 70/100 donne 70 % de cette valeur.",
+                      cells: [
+                        <div key="espionage-gain" className="flex items-center gap-2">
+                          <input
+                            aria-label="Gain maximal de renseignement après un espionnage"
+                            type="number"
+                            min={0}
+                            max={100}
+                            value={getIntelConfig().espionage_intel_gain_base ?? 50}
+                            onChange={(e) => updateIntelConfig({ espionage_intel_gain_base: Math.max(0, Math.min(100, Number(e.target.value) || 0)) })}
+                            className={inputClassNarrow}
+                            style={inputStyle}
+                          />
+                          <span className="text-xs text-[var(--foreground-muted)]">points</span>
+                        </div>,
+                      ],
+                    },
+                  ]}
+                />
                 <IntelRulePreview config={intelOverview} />
               </div>
             </CollapsibleBlock>

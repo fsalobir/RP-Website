@@ -1,6 +1,66 @@
 "use client";
 
-import type { ReactNode } from "react";
+import type { CSSProperties, ReactNode } from "react";
+
+export function AdminParameterTable({
+  label,
+  columns,
+  rows,
+}: {
+  label: string;
+  columns: string[];
+  rows: Array<{
+    key: string;
+    title: ReactNode;
+    description?: ReactNode;
+    cells: ReactNode[];
+  }>;
+}) {
+  const style = {
+    "--admin-parameter-columns": `minmax(13rem, 1.45fr) repeat(${columns.length}, minmax(8rem, 1fr))`,
+    borderColor: "var(--border)",
+    background: "var(--background-elevated)",
+  } as CSSProperties;
+
+  return (
+    <div role="table" aria-label={label} className="overflow-hidden rounded-xl border" style={style}>
+      <div
+        role="row"
+        className="hidden border-b px-4 py-2.5 text-xs font-medium text-[var(--foreground-muted)] lg:grid lg:gap-5 lg:[grid-template-columns:var(--admin-parameter-columns)]"
+        style={{ borderColor: "var(--border-muted)", background: "var(--background)" }}
+      >
+        <span role="columnheader">Thème</span>
+        {columns.map((column) => (
+          <span key={column} role="columnheader">{column}</span>
+        ))}
+      </div>
+      <div role="rowgroup" className="divide-y divide-[var(--border-muted)]">
+        {rows.map((row) => (
+          <div
+            key={row.key}
+            role="row"
+            className="grid gap-x-5 gap-y-3 px-4 py-4 sm:grid-cols-2 lg:items-center lg:[grid-template-columns:var(--admin-parameter-columns)]"
+          >
+            <div role="rowheader" className="min-w-0 sm:col-span-2 lg:col-span-1">
+              <p className="text-sm font-medium text-[var(--foreground)]">{row.title}</p>
+              {row.description ? (
+                <p className="mt-0.5 text-xs leading-relaxed text-[var(--foreground-muted)]">{row.description}</p>
+              ) : null}
+            </div>
+            {columns.map((column, index) => (
+              <div key={column} role="cell" className="min-w-0">
+                <span className="mb-1.5 block text-xs font-medium text-[var(--foreground-muted)] lg:hidden">
+                  {column}
+                </span>
+                {row.cells[index] ?? <span className="text-sm text-[var(--foreground-muted)]">—</span>}
+              </div>
+            ))}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 export function AdminSettingsGuide({
   purpose,
