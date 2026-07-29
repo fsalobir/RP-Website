@@ -399,7 +399,7 @@ export function CountryTabMilitary({
                                         </div>
                                       </td>
                                       <td className="w-[20%] py-0.5 px-2 align-middle text-center">
-                                        <span className={`inline-block max-w-full truncate text-xs font-medium ${glassTextClass}`} title={row.unit.name_fr}>
+                                        <span className={`inline-block max-w-full break-words text-xs font-medium leading-tight ${glassTextClass}`}>
                                           {row.unit.name_fr}
                                         </span>
                                       </td>
@@ -826,7 +826,7 @@ function FoggedUnitView({
                   </div>
                 </td>
                 <td className="py-0.5 px-2 align-middle text-center">
-                  <span className={`inline-block max-w-full truncate text-sm font-medium ${textClass}`} title={u.unitName}>
+                  <span className={`inline-block max-w-full break-words text-sm font-medium leading-tight ${textClass}`}>
                     {u.unitName}
                   </span>
                 </td>

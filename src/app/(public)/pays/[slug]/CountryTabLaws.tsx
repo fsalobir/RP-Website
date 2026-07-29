@@ -17,6 +17,14 @@ import { BUDGET_MINISTRY_LABELS } from "@/lib/ruleParameters";
 import { formatNumber } from "@/lib/format";
 import { setLawScoreImmediate, setLawTarget } from "./actions";
 
+const LAW_ICONS: Record<string, string> = {
+  mobilisation: "🛡️",
+  auto_industry: "🚙",
+  air_industry: "✈️",
+  naval_industry: "⚓",
+  research: "🔬",
+};
+
 function resolveTargetLabel(
   effectKind: string,
   target: string | null,
@@ -59,16 +67,16 @@ function EffectLine({
   const isNegative = !isNeutral && !isPositive;
 
   return (
-    <li className="flex items-baseline gap-1.5 text-xs leading-relaxed">
+    <li className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-start gap-x-2 text-xs leading-relaxed">
       <span
-        className="inline-block w-1.5 h-1.5 rounded-full shrink-0 mt-[5px]"
+        className="mt-[5px] inline-block h-1.5 w-1.5 shrink-0 rounded-full"
         style={{ background: isPositive ? "var(--accent)" : isNegative ? "var(--danger)" : "var(--foreground-muted)" }}
       />
-      <span className={glassMutedClass}>
+      <span className={`min-w-0 break-words ${glassMutedClass}`}>
         {label}{targetStr ? ` — ${targetStr}` : ""}
       </span>
       <span
-        className="font-semibold ml-auto shrink-0"
+        className="shrink-0 text-right font-semibold"
         style={{ color: isPositive ? "var(--accent)" : isNegative ? "var(--danger)" : "#ffffff" }}
       >
         {valStr}
@@ -180,6 +188,7 @@ function LawCard({
   const rightSummary = inTransition
     ? `${targetLabel} // ${formatNumber(daysToTarget)} jour(s) restants`
     : currentLabel;
+  const icon = LAW_ICONS[def.lawKey] ?? "⚖️";
 
   return (
     <div
@@ -191,47 +200,38 @@ function LawCard({
       <button
         type="button"
         onClick={() => setExpanded((e) => !e)}
-        className={`relative min-h-11 w-full text-left transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--accent)] ${expanded ? "px-5 py-4 border-b" : "px-3"}`}
+        className={`relative min-h-11 w-full px-3 py-3 text-left transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--accent)] sm:px-4 ${expanded ? "border-b" : ""}`}
         style={expanded ? { borderColor: "rgba(255,255,255,0.22)" } : undefined}
         aria-expanded={expanded}
       >
-        {expanded ? (
-          <div className="grid gap-1 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:gap-3">
-            <span className="flex min-w-0 items-center gap-1.5 leading-tight">
-              <span className={`truncate text-lg font-bold ${glassTextClass}`}>{def.title_fr}</span>
-              <span className={`shrink-0 text-xs ${glassMutedClass}`} aria-hidden>
-                ▾
-              </span>
-            </span>
-            <span
-              className={`shrink-0 text-left text-sm font-bold leading-tight sm:whitespace-nowrap sm:text-right ${glassTextClass}`}
-              title={rightSummary}
-            >
-              {rightSummary}
-            </span>
-          </div>
-        ) : (
-          <>
-            <div className="flex h-full min-w-0 items-center gap-1.5 pr-[45%]">
-              <span className={`truncate text-sm font-bold ${glassTextClass}`}>{def.title_fr}</span>
-              <span className={`shrink-0 text-xs ${glassMutedClass}`} aria-hidden>
-                ▾
-              </span>
-            </div>
-            <span
-              className={`absolute right-3 top-1/2 -translate-y-1/2 text-right text-xs font-bold leading-tight ${glassTextClass}`}
-              style={{ maxWidth: "42%" }}
-              title={rightSummary}
-            >
-              <span className="block truncate whitespace-nowrap">{rightSummary}</span>
-            </span>
-          </>
-        )}
+        <span className="grid grid-cols-[2.25rem_minmax(0,1fr)_auto] items-center gap-x-3">
+          <span
+            aria-hidden
+            className="row-span-2 flex h-9 w-9 items-center justify-center rounded-lg border border-white/15 bg-black/20 text-lg"
+          >
+            {icon}
+          </span>
+          <span className={`min-w-0 text-sm font-bold leading-snug sm:text-base ${glassTextClass}`}>
+            {def.title_fr}
+          </span>
+          <span
+            aria-hidden
+            className={`text-xs transition-transform duration-200 ease-out ${glassMutedClass}`}
+            style={{ transform: expanded ? "rotate(180deg)" : "rotate(0deg)" }}
+          >
+            ▾
+          </span>
+          <span className={`col-span-2 col-start-2 mt-0.5 min-w-0 break-words text-xs leading-snug ${glassMutedClass}`}>
+            {rightSummary}
+          </span>
+        </span>
       </button>
 
       <div
         className={`overflow-hidden transition-[max-height,opacity] duration-300 ease-in-out ${expanded ? "opacity-100" : "opacity-0"}`}
         style={{ maxHeight: expanded ? "2000px" : "0px" }}
+        inert={!expanded}
+        aria-hidden={!expanded}
       >
         <div className="relative px-3 pb-5 pt-3 sm:px-5">
           <div
@@ -271,15 +271,15 @@ function LawCard({
                     borderRadius: levelEffects.length > 0 ? "0.375rem 0.375rem 0 0" : "0.375rem",
                   }}
                 >
-                  <span className="flex-1 font-semibold text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.5)]">{level.label}</span>
+                  <span className="min-w-0 flex-1 break-words font-semibold text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.5)]">{level.label}</span>
                   {isCurrent && (
-                    <span className="text-xs px-1.5 py-0.5 rounded" style={{ background: "var(--accent)", color: "#0f1419" }}>
+                    <span className="shrink-0 self-start rounded px-1.5 py-0.5 text-xs" style={{ background: "var(--accent)", color: "#0f1419" }}>
                       Actuel
                     </span>
                   )}
                   {isTarget && !isCurrent && !isAdmin && (
                     <span
-                      className="text-xs px-1.5 py-0.5 rounded text-white/95"
+                      className="shrink-0 self-start rounded px-1.5 py-0.5 text-xs text-white/95"
                       style={{ background: "rgba(255,255,255,0.18)", border: "1px solid rgba(255,255,255,0.28)" }}
                     >
                       Cible

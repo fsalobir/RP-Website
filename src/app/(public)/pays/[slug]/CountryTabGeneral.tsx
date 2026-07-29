@@ -190,7 +190,7 @@ function SpherePieChart({
                   <img src={s.flag_url} alt="" width={16} height={11} className="inline-block h-[11px] w-4 rounded object-cover align-middle" />
                 </Link>
               ) : null}
-              <Link href={`/pays/${s.slug}`} className="truncate text-[var(--foreground-muted)] hover:text-[var(--accent)] hover:underline">
+              <Link href={`/pays/${s.slug}`} className="min-w-0 break-words text-[var(--foreground-muted)] hover:text-[var(--accent)] hover:underline">
                 {s.name}
               </Link>
             </li>
@@ -791,7 +791,7 @@ export function CountryTabGeneral({
                       {ideologySummary.breakdown.neighborContributors.map((neighbor) => (
                         <div
                           key={neighbor.countryId}
-                          className={`flex items-center justify-between gap-3 rounded border px-2 py-2 ${glassBorderClass}`}
+                          className={`grid gap-2 rounded border px-2 py-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center ${glassBorderClass}`}
                           style={{ background: "rgba(255,255,255,0.06)" }}
                         >
                           <div className="flex min-w-0 items-center gap-2">
@@ -801,11 +801,11 @@ export function CountryTabGeneral({
                             ) : (
                               <div className={`h-4 w-6 rounded border ${glassBorderClass}`} />
                             )}
-                            <Link href={`/pays/${neighbor.slug}`} className="truncate text-[var(--accent)] hover:underline">
+                            <Link href={`/pays/${neighbor.slug}`} className="min-w-0 break-words text-[var(--accent)] hover:underline">
                               {neighbor.name}
                             </Link>
                           </div>
-                          <div className={`text-right text-xs ${glassMutedClass}`}>
+                          <div className={`text-left text-xs sm:text-right ${glassMutedClass}`}>
                             <div className={glassTextClass}>
                               Influence {getInfluenceIntensity(neighbor.value, strongestNeighborInfluence)} vers le {IDEOLOGY_LABELS[neighbor.ideology]}
                             </div>
