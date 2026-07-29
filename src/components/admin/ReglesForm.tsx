@@ -1435,33 +1435,18 @@ export function ReglesForm({
   const worldAdvance = Number(worldDateAdvanceRule?.value ?? 1);
   const worldPaused = cronPausedRule?.value === true || String(cronPausedRule?.value) === "true";
   const aiOverview = getAiEventsConfig();
+  const aiMajorCount = aiOverview.count_major_per_run ?? 0;
+  const aiMinorCount = aiOverview.count_minor_per_run ?? 0;
   const intelOverview = getIntelConfig();
   const intelDecayMode = intelOverview.decay_mode ?? "flat";
-  const configuredMinistries = BUDGET_MINISTRY_KEYS.filter((key) => rulesByKey.has(key)).length;
-  const configuredLaws = LAW_DEFINITIONS.filter(
-    (definition) => getLawConfigRule(definition) && getLawEffectsRule(definition)
-  ).length;
-  const intelligenceModeLabel = {
-    flat: "perte fixe",
-    pct: "perte proportionnelle",
-    both: "perte fixe puis proportionnelle",
-  }[intelDecayMode];
   const overviewRows = [
     {
       label: "Monde",
       value: `${worldPaused ? "Mises à jour en pause" : "Mises à jour actives"} · ${MOIS_LABELS[worldMonth - 1]} ${worldYear} · +${worldAdvance} mois/jour`,
     },
     {
-      label: "Évolution",
-      value: `${getGlobalGrowthEffects().length} effet${getGlobalGrowthEffects().length > 1 ? "s" : ""} commun${getGlobalGrowthEffects().length > 1 ? "s" : ""} · ${configuredMinistries} ministères · ${configuredLaws} lois`,
-    },
-    {
       label: "Pays IA",
-      value: `Toutes les ${aiOverview.interval_hours ?? 1} h · ${aiOverview.count_major_per_run ?? 0} action(s) majeure(s) et ${aiOverview.count_minor_per_run ?? 0} mineure(s) par passage`,
-    },
-    {
-      label: "Renseignement",
-      value: `${intelligenceModeLabel} · gain maximal d’un espionnage : +${intelOverview.espionage_intel_gain_base ?? 50} points`,
+      value: `Toutes les ${aiOverview.interval_hours ?? 1} h · ${aiMajorCount} action${aiMajorCount === 1 ? "" : "s"} majeure${aiMajorCount === 1 ? "" : "s"} et ${aiMinorCount} mineure${aiMinorCount === 1 ? "" : "s"} par passage`,
     },
   ];
 
