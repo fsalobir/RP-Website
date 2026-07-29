@@ -1,4 +1,12 @@
-type PublicPageIcon = "world" | "map" | "ranking" | "ideology";
+export type PublicPageIcon =
+  | "world"
+  | "map"
+  | "ranking"
+  | "ideology"
+  | "rules"
+  | "budget"
+  | "law"
+  | "relations";
 
 const iconPaths: Record<PublicPageIcon, React.ReactNode> = {
   world: (
@@ -26,7 +34,57 @@ const iconPaths: Record<PublicPageIcon, React.ReactNode> = {
       <circle cx="12" cy="12" r="1.5" />
     </>
   ),
+  rules: (
+    <>
+      <path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H11v16H6.5A2.5 2.5 0 0 0 4 21V5.5Z" />
+      <path d="M20 5.5A2.5 2.5 0 0 0 17.5 3H13v16h4.5A2.5 2.5 0 0 1 20 21V5.5Z" />
+    </>
+  ),
+  budget: (
+    <>
+      <rect x="3" y="5" width="18" height="14" rx="2" />
+      <path d="M3 9h18M16 14h2" />
+    </>
+  ),
+  law: (
+    <>
+      <path d="M6 3h9l3 3v15H6V3Z" />
+      <path d="M15 3v4h4M9 12h6M9 16h6" />
+    </>
+  ),
+  relations: (
+    <>
+      <circle cx="5" cy="12" r="2.5" />
+      <circle cx="19" cy="6" r="2.5" />
+      <circle cx="19" cy="18" r="2.5" />
+      <path d="m7.3 11 9.4-4M7.3 13l9.4 4" />
+    </>
+  ),
 };
+
+export function PublicPageIconGlyph({
+  icon,
+  className = "h-6 w-6",
+}: {
+  icon: PublicPageIcon;
+  className?: string;
+}) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      className={className}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+      focusable="false"
+    >
+      {iconPaths[icon]}
+    </svg>
+  );
+}
 
 export function PublicPageHeader({
   title,
@@ -41,17 +99,7 @@ export function PublicPageHeader({
         className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-white/25 bg-black/25 shadow-[0_8px_24px_rgba(0,0,0,0.24)]"
         aria-hidden
       >
-        <svg
-          viewBox="0 0 24 24"
-          className="h-6 w-6 text-[var(--accent)]"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="1.8"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        >
-          {iconPaths[icon]}
-        </svg>
+        <PublicPageIconGlyph icon={icon} className="h-6 w-6 text-[var(--accent)]" />
       </span>
       <h1 className="text-balance text-2xl font-bold tracking-[-0.02em] drop-shadow-[0_2px_6px_rgba(0,0,0,0.65)] sm:text-3xl">
         {title}

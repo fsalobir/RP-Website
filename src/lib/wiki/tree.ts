@@ -1,4 +1,5 @@
 import type { WikiPageRow, WikiTreeNode } from "./types";
+import { matchesSearchText } from "@/lib/searchText";
 
 export function buildWikiTree(pages: WikiPageRow[]): WikiTreeNode[] {
   const byId = new Map<string, WikiTreeNode>();
@@ -71,32 +72,17 @@ export function findNodeWithSiblings(
 }
 
 export function filterWikiPagesByQuery(pages: WikiPageRow[], query: string): WikiPageRow[] {
-  const q = query.trim().toLowerCase();
-  if (!q) return pages;
-  const tokens = q.split(/\s+/).filter(Boolean);
-  return pages.filter((p) =>
-    tokens.every(
-      (t) =>
-        p.title.toLowerCase().includes(t) ||
-        p.search_text.toLowerCase().includes(t) ||
-        p.slug.toLowerCase().includes(t)
-    )
+  return pages.filter((page) =>
+    matchesSearchText(query, [page.title, page.search_text, page.slug])
   );
 }
 
 /** Racines qui ont au moins une page correspondante (elle-même ou un descendant). */
 export function filterTreeByQuery(tree: WikiTreeNode[], query: string): WikiTreeNode[] {
-  const q = query.trim().toLowerCase();
-  if (!q) return tree;
-  const tokens = q.split(/\s+/).filter(Boolean);
+  if (!query.trim()) return tree;
 
   const pageMatches = (p: WikiPageRow) =>
-    tokens.every(
-      (t) =>
-        p.title.toLowerCase().includes(t) ||
-        p.search_text.toLowerCase().includes(t) ||
-        p.slug.toLowerCase().includes(t)
-    );
+    matchesSearchText(query, [p.title, p.search_text, p.slug]);
 
   const filterNode = (node: WikiTreeNode): WikiTreeNode | null => {
     const childFiltered = node.children.map(filterNode).filter(Boolean) as WikiTreeNode[];

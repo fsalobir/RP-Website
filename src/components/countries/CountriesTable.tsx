@@ -5,6 +5,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { formatNumber, formatGdp, formatPopulation } from "@/lib/format";
 import { InfoTooltipWithWikiLink } from "@/components/ui/InfoTooltipWithWikiLink";
+import { matchesSearchText } from "@/lib/searchText";
 
 const flagLoader = ({ src }: { src: string }) => src;
 
@@ -182,14 +183,14 @@ export function CountriesTable({
   const sortedRows = useMemo(() => {
     if (adminLayout) {
       let list = [...rows];
-      const q = searchQuery.trim().toLowerCase();
-      if (q) {
+      if (searchQuery.trim()) {
         list = list.filter((row) => {
           const c = row.country;
-          const name = (c.name ?? "").toLowerCase();
-          const player = (playerNameByCountryId[c.id] ?? "").toLowerCase();
-          const continent = (continentLabelById[c.continent_id ?? ""] ?? "").toLowerCase();
-          return name.includes(q) || player.includes(q) || continent.includes(q);
+          return matchesSearchText(searchQuery, [
+            c.name ?? "",
+            playerNameByCountryId[c.id] ?? "",
+            continentLabelById[c.continent_id ?? ""] ?? "",
+          ]);
         });
       }
       return list.sort((a, b) => {
@@ -203,12 +204,9 @@ export function CountriesTable({
       list = list.filter((row) => assignedSet.has(row.country.id));
     }
     if (showSearch && searchQuery.trim()) {
-      const q = searchQuery.trim().toLowerCase();
       list = list.filter((row) => {
         const c = row.country;
-        const name = (c.name ?? "").toLowerCase();
-        const regime = (c.regime ?? "").toLowerCase();
-        return name.includes(q) || regime.includes(q);
+        return matchesSearchText(searchQuery, [c.name ?? "", c.regime ?? ""]);
       });
     }
     return list.sort((a, b) => {
@@ -256,6 +254,9 @@ export function CountriesTable({
             style={{ borderColor: "var(--border)" }}
             aria-label="Rechercher dans la liste des pays"
           />
+          <p className="mt-2 text-xs text-[var(--foreground-muted)] sm:hidden">
+            Faites glisser le tableau pour voir toutes les colonnes.
+          </p>
         </div>
         <div className="overflow-x-auto">
         <table className="w-full min-w-[500px] text-left text-sm">
@@ -406,6 +407,16 @@ export function CountriesTable({
                 </tr>
               );
             })}
+            {sortedRows.length === 0 && (
+              <tr>
+                <td
+                  colSpan={ADMIN_COLUMNS.length + Number(showAiStatusColumn) + Number(showModifierButton)}
+                  className="p-8 text-center text-[var(--foreground-muted)]"
+                >
+                  Aucun pays ne correspond à cette recherche.
+                </td>
+              </tr>
+            )}
           </tbody>
         </table>
         </div>
@@ -474,6 +485,9 @@ export function CountriesTable({
               </div>
             )}
           </div>
+          <p className={`mt-2 text-xs sm:hidden ${glassContext ? "text-white/65" : "text-[var(--foreground-muted)]"}`}>
+            Faites glisser le tableau pour voir toutes les colonnes.
+          </p>
         </div>
       )}
       <div className={showSearch ? "overflow-x-auto" : ""}>
@@ -638,6 +652,16 @@ export function CountriesTable({
             </tr>
           );
           })}
+          {sortedRows.length === 0 && (
+            <tr>
+              <td
+                colSpan={6 + Number(showAiStatusColumn) + Number(showModifierButton)}
+                className={`p-8 text-center ${glassContext ? "text-white/70" : "text-[var(--foreground-muted)]"}`}
+              >
+                Aucun pays ne correspond aux filtres choisis.
+              </td>
+            </tr>
+          )}
         </tbody>
       </table>
       </div>

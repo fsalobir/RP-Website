@@ -201,9 +201,13 @@ export function WikiClient({ initialPages }: { initialPages: WikiPageRow[] }) {
         <input
           id="wiki-search"
           type="search"
-          placeholder="Rechercher dans le wiki…"
+          placeholder="Rechercher un sujet ou une règle…"
           value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
+          onChange={(e) => {
+            const value = e.target.value;
+            setSearchQuery(value);
+            if (value.trim()) setMenuOpen(true);
+          }}
           className={glassInputClass}
           aria-label="Rechercher dans le wiki"
         />
@@ -213,11 +217,12 @@ export function WikiClient({ initialPages }: { initialPages: WikiPageRow[] }) {
         <button
           type="button"
           onClick={() => setMenuOpen((o) => !o)}
-          className="w-full rounded-xl border border-white/25 bg-white/10 px-4 py-3 text-left text-sm font-medium text-white hover:bg-white/15"
+          className="flex min-h-11 w-full items-center justify-between gap-3 rounded-xl border border-white/25 bg-white/10 px-4 py-3 text-left text-sm font-medium text-white hover:bg-white/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60"
           aria-expanded={menuOpen}
           aria-controls="wiki-nav-drawer"
         >
-          {menuOpen ? "Fermer le menu" : "Sections du wiki"}
+          <span>{menuOpen ? "Fermer les sections" : "Sections du wiki"}</span>
+          <DisclosureChevron open={menuOpen} />
         </button>
       </div>
 
@@ -242,7 +247,7 @@ export function WikiClient({ initialPages }: { initialPages: WikiPageRow[] }) {
           </nav>
         </aside>
 
-        <main className="min-w-0 w-full flex-1">
+        <section className="min-w-0 w-full flex-1" aria-label="Article du wiki">
           <div className={glassPanelClass}>
             <article
               id={displayPage?.slug ?? displaySlug}
@@ -264,7 +269,7 @@ export function WikiClient({ initialPages }: { initialPages: WikiPageRow[] }) {
               )}
             </article>
           </div>
-        </main>
+        </section>
       </div>
     </div>
   );

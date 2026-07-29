@@ -143,7 +143,7 @@ export function ClassementContent({ rows }: { rows: Row[] }) {
   const rankedGdp = useRanked(rows, "gdp");
 
   const tabButtonClass = (active: boolean) =>
-    `min-h-11 rounded-xl px-4 py-2.5 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70 ${
+    `min-h-11 rounded-xl px-3 py-2.5 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70 ${
       active ? "bg-white/25 text-white shadow-inner" : "text-white/90 hover:bg-white/15 hover:text-white"
     }`;
 
@@ -174,7 +174,7 @@ export function ClassementContent({ rows }: { rows: Row[] }) {
         >
           Économique
         </button>
-        <span className="ml-2 inline-flex items-center" onClick={(e) => e.stopPropagation()}>
+        <span className="ml-auto inline-flex items-center" onClick={(e) => e.stopPropagation()}>
           <InfoTooltipWithWikiLink
             text="Rangs des pays par influence totale (influence propre + bonus de sphère), puissance militaire ou indicateurs économiques. Les flèches indiquent l'évolution du rang."
             wikiSectionId="classement-metrics"
