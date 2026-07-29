@@ -211,7 +211,7 @@ export function CountryTabEtatMajor({
         <div className="absolute inset-0 overflow-hidden rounded-xl">
           <div
             className="absolute inset-0 bg-cover bg-center bg-no-repeat"
-            style={{ backgroundImage: "url(/images/site/bureau-design-bg.png)" }}
+            style={{ backgroundImage: "url(/images/site/bureau-design-bg.webp)" }}
             aria-hidden
           />
           <div className="absolute inset-0 bg-gradient-to-b from-black/22 via-black/10 to-black/26" />
@@ -246,10 +246,10 @@ export function CountryTabEtatMajor({
         style={{ ...panelStyle, isolation: "isolate" }}
       >
         <div className="absolute inset-0 overflow-hidden rounded-xl">
-          {/* A/B test : variante actuelle = recrutement-bg-alt.png ; originale = recrutement-bg.png */}
+          {/* A/B test : variante actuelle = recrutement-bg-alt.webp ; originale = recrutement-bg.png */}
           <div
             className="absolute inset-0 bg-cover bg-center bg-no-repeat"
-            style={{ backgroundImage: "url(/images/site/recrutement-bg-alt.png)" }}
+            style={{ backgroundImage: "url(/images/site/recrutement-bg-alt.webp)" }}
             aria-hidden
           />
           <div className="absolute inset-0 bg-gradient-to-b from-black/22 via-black/10 to-black/26" />
@@ -286,7 +286,7 @@ export function CountryTabEtatMajor({
         <div className="absolute inset-0 overflow-hidden rounded-xl">
           <div
             className="absolute inset-0 bg-cover bg-center bg-no-repeat"
-            style={{ backgroundImage: "url(/images/site/procuration-bg.png)" }}
+            style={{ backgroundImage: "url(/images/site/procuration-bg.webp)" }}
             aria-hidden
           />
           <div className="absolute inset-0 bg-gradient-to-b from-black/18 via-black/8 to-black/22" />
@@ -323,7 +323,7 @@ export function CountryTabEtatMajor({
         <div className="absolute inset-0 overflow-hidden rounded-xl">
           <div
             className="absolute inset-0 bg-cover bg-center bg-no-repeat"
-            style={{ backgroundImage: "url(/images/site/stock-strategique-bg.png)" }}
+            style={{ backgroundImage: "url(/images/site/stock-strategique-bg.webp)" }}
             aria-hidden
           />
           <div className="absolute inset-0 bg-gradient-to-b from-black/18 via-black/8 to-black/22" />

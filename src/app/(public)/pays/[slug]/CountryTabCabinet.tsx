@@ -181,11 +181,10 @@ export function CountryTabCabinet({
         {/* Fond : image pleine largeur et hauteur (cover, ancrée en haut) + overlay */}
         <div className="absolute inset-0 overflow-hidden rounded-2xl" aria-hidden>
           <div
-            className="absolute inset-0 bg-cover bg-no-repeat scale-105"
+            className="absolute inset-0 bg-cover bg-no-repeat"
             style={{
-              backgroundImage: "url(/images/site/rapport-cabinet-bg.png)",
+              backgroundImage: "url(/images/site/rapport-cabinet-bg.webp)",
               backgroundPosition: "top center",
-              filter: "blur(0.5px)",
             }}
           />
           <div className="absolute inset-0 bg-[var(--background-panel)]/85" />

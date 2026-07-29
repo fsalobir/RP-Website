@@ -241,11 +241,10 @@ export function CountryTabMilitary({
           <section className="relative overflow-hidden rounded-2xl border border-white/25" style={{ background: "transparent" }}>
             <div className="absolute inset-0 overflow-hidden rounded-2xl" aria-hidden>
               <div
-                className="absolute inset-0 bg-cover bg-no-repeat scale-105"
+                className="absolute inset-0 bg-cover bg-no-repeat"
                 style={{
-                  backgroundImage: "url(/images/site/renseignement-insuffisant-bg.png)",
+                  backgroundImage: "url(/images/site/renseignement-insuffisant-bg.webp)",
                   backgroundPosition: "top center",
-                  filter: "blur(0.5px)",
                 }}
               />
               <div className="absolute inset-0 bg-[var(--background-panel)]/75" />
@@ -566,17 +565,16 @@ export function CountryTabMilitary({
             )}
           </>
         );
-        const branchBg = branch === "mer" ? MER_BG : branch === "strategique" ? STRATEGIQUE_BG : null;
+        const branchBg = branch === "strategique" ? STRATEGIQUE_BG : null;
         return (
           <section key={branch} className="relative overflow-hidden rounded-2xl border border-white/25" style={{ background: "transparent" }}>
             <div className="absolute inset-0 overflow-hidden rounded-2xl" aria-hidden>
               {branchBg && (
                 <div
-                  className="absolute inset-0 bg-cover bg-no-repeat scale-105"
+                  className="absolute inset-0 bg-cover bg-no-repeat"
                   style={{
                     backgroundImage: `url(${branchBg})`,
                     backgroundPosition: "top center",
-                    filter: "blur(0.5px)",
                   }}
                 />
               )}
@@ -609,9 +607,8 @@ function getIntelMessage(level: number): string {
   return msg;
 }
 
-const RENSEIGNEMENT_BG = "/images/site/renseignement-insuffisant-bg.png";
-const MER_BG = "/images/site/mer-bg.png";
-const STRATEGIQUE_BG = "/images/site/strategique-bg.png";
+const RENSEIGNEMENT_BG = "/images/site/renseignement-insuffisant-bg.webp";
+const STRATEGIQUE_BG = "/images/site/strategique-bg.webp";
 
 function IntelGauge({
   level,
@@ -662,11 +659,10 @@ function IntelGauge({
       <section className="relative overflow-hidden rounded-2xl border border-white/25" style={{ background: "transparent" }}>
         <div className="absolute inset-0 overflow-hidden rounded-2xl" aria-hidden>
           <div
-            className="absolute inset-0 bg-cover bg-no-repeat scale-105"
+            className="absolute inset-0 bg-cover bg-no-repeat"
             style={{
               backgroundImage: `url(${backgroundImage})`,
               backgroundPosition: "top center",
-              filter: "blur(0.5px)",
             }}
           />
           <div className="absolute inset-0 bg-[var(--background-panel)]/75" />
@@ -754,11 +750,10 @@ function FoggedBranchView({
       <section className="relative overflow-hidden rounded-2xl border border-white/25" style={{ background: "transparent" }}>
         <div className="absolute inset-0 overflow-hidden rounded-2xl" aria-hidden>
           <div
-            className="absolute inset-0 bg-cover bg-no-repeat scale-105"
+            className="absolute inset-0 bg-cover bg-no-repeat"
             style={{
               backgroundImage: `url(${backgroundImage})`,
               backgroundPosition: "top center",
-              filter: "blur(0.5px)",
             }}
           />
           <div className="absolute inset-0 bg-[var(--background-panel)]/75" />
@@ -852,11 +847,10 @@ function FoggedUnitView({
         <section key={key} className="relative overflow-hidden rounded-2xl border border-white/25" style={{ background: "transparent" }}>
           <div className="absolute inset-0 overflow-hidden rounded-2xl" aria-hidden>
             <div
-              className="absolute inset-0 bg-cover bg-no-repeat scale-105"
+              className="absolute inset-0 bg-cover bg-no-repeat"
               style={{
                 backgroundImage: `url(${backgroundImage})`,
                 backgroundPosition: "top center",
-                filter: "blur(0.5px)",
               }}
             />
             <div className="absolute inset-0 bg-[var(--background-panel)]/75" />

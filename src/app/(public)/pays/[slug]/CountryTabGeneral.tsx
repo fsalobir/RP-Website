@@ -373,6 +373,7 @@ export function CountryTabGeneral({
   const glassMutedClass = "text-white/90 drop-shadow-[0_1px_2px_rgba(0,0,0,0.4)]";
   const glassBorderClass = "border-white/25";
   const glassTextClass = "text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.5)]";
+  const briefingSurfaceStyle = { background: "rgba(12,20,32,0.88)" };
   const activeIdeologyEffects = resolvedEffects.filter((e) => e.source === "ideology");
   const activePerkEffects = resolvedEffects.filter((e) => e.source === "perk");
   const activeLawEffects = useMemo(() => {
@@ -413,18 +414,17 @@ export function CountryTabGeneral({
       <section className={`relative overflow-hidden rounded-2xl ${panelClass}`} style={{ ...panelStyle, background: "transparent" }}>
         <div className="absolute inset-0 overflow-hidden rounded-2xl" aria-hidden>
           <div
-            className="absolute inset-0 bg-cover bg-no-repeat scale-105"
+            className="absolute inset-0 bg-cover bg-no-repeat"
             style={{
-              backgroundImage: "url(/images/site/generalites-bg.png)",
+              backgroundImage: "url(/images/site/generalites-bg.webp)",
               backgroundPosition: "top center",
-              filter: "blur(0.5px)",
             }}
           />
           <div className="absolute inset-0 bg-[var(--background-panel)]/85" />
         </div>
         <div className="relative z-10 space-y-5 p-4 sm:space-y-6 sm:p-6">
         <h2 className={`text-xl font-semibold sm:text-2xl ${glassTextClass}`}>Situation générale</h2>
-        <div className={`rounded-xl border p-4 ${glassBorderClass}`} style={{ background: "rgba(255,255,255,0.12)", backdropFilter: "blur(12px)" }}>
+        <div className={`rounded-xl border p-4 ${glassBorderClass}`} style={briefingSurfaceStyle}>
           <h3 className={`mb-4 text-sm font-semibold ${glassTextClass}`}>Indicateurs</h3>
           <dl className="grid gap-4 sm:grid-cols-3">
             <div className="text-center">
@@ -469,16 +469,16 @@ export function CountryTabGeneral({
           )}
         </div>
         {hardPowerByBranch != null && (
-          <div className={`rounded-xl border p-4 ${glassBorderClass}`} style={{ background: "rgba(255,255,255,0.12)", backdropFilter: "blur(12px)" }}>
+          <div className={`rounded-xl border p-4 ${glassBorderClass}`} style={briefingSurfaceStyle}>
             <h3 className={`mb-4 text-sm font-semibold ${glassTextClass}`}>Hard Power</h3>
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="grid gap-x-4 gap-y-2 sm:grid-cols-2 lg:grid-cols-4">
               {[
                 { key: "terre" as const, label: "Terrestre", value: hardPowerByBranch.terre },
                 { key: "air" as const, label: "Aérien", value: hardPowerByBranch.air },
                 { key: "mer" as const, label: "Naval", value: hardPowerByBranch.mer },
                 { key: "strategique" as const, label: "Stratégique", value: hardPowerByBranch.strategique },
               ].map((item) => (
-                <div key={item.label} className={`rounded border px-3 py-3 text-center ${glassBorderClass}`} style={{ background: "rgba(255,255,255,0.08)" }}>
+                <div key={item.label} className="px-3 py-2 text-center">
                   <div className={`text-xs ${glassMutedClass}`}>
                     {item.label}
                     {rankHardPowerByType[item.key] > 0 && ` — ${rankEmoji(rankHardPowerByType[item.key]) ? `${rankEmoji(rankHardPowerByType[item.key])} ` : ""}#${rankHardPowerByType[item.key]}`}
@@ -487,7 +487,7 @@ export function CountryTabGeneral({
                 </div>
               ))}
             </div>
-            <div className={`mt-4 rounded border px-3 py-2 text-center ${glassBorderClass}`} style={{ background: "rgba(255,255,255,0.10)" }}>
+            <div className="mt-3 border-t border-white/20 px-3 pt-3 text-center">
               <span className={`text-xs uppercase tracking-wide ${glassMutedClass}`}>
                 Total
                 {rankHardPower > 0 && ` — ${rankEmoji(rankHardPower) ? `${rankEmoji(rankHardPower)} ` : ""}#${rankHardPower}`}
@@ -497,7 +497,7 @@ export function CountryTabGeneral({
           </div>
         )}
         {ideologySummary && (
-          <div className={`rounded-xl border p-4 text-sm ${glassBorderClass}`} style={{ background: "rgba(255,255,255,0.12)", backdropFilter: "blur(12px)" }}>
+          <div className={`rounded-xl border p-4 text-sm ${glassBorderClass}`} style={briefingSurfaceStyle}>
             <h3 className={`mb-3 text-sm font-semibold ${glassTextClass}`}>Idéologie</h3>
             {ideologyRanking[0] && (
               <div className="rounded border px-3 py-4 text-center" style={{ background: "rgba(255,255,255,0.08)", borderColor: "rgba(255,255,255,0.25)" }}>
@@ -926,11 +926,10 @@ export function CountryTabGeneral({
       <section className={`relative overflow-hidden rounded-2xl ${panelClass}`} style={{ ...panelStyle, background: "transparent" }}>
         <div className="absolute inset-0 overflow-hidden rounded-2xl" aria-hidden>
           <div
-            className="absolute inset-0 bg-cover bg-no-repeat scale-105"
+            className="absolute inset-0 bg-cover bg-no-repeat"
             style={{
-              backgroundImage: "url(/images/site/stats-bg.png)",
+              backgroundImage: "url(/images/site/stats-bg.webp)",
               backgroundPosition: "top center",
-              filter: "blur(0.5px)",
             }}
           />
           <div className="absolute inset-0 bg-[var(--background-panel)]/85" />
@@ -946,7 +945,7 @@ export function CountryTabGeneral({
               <div
                 key={label}
                 className={`flex min-w-0 flex-col items-center gap-1 rounded-xl border px-4 py-4 ${glassBorderClass}`}
-                style={{ background: "rgba(255,255,255,0.12)", backdropFilter: "blur(12px)" }}
+                style={briefingSurfaceStyle}
               >
                 <span className={`text-center text-sm font-semibold ${glassMutedClass}`}>
                   {emoji} {label}
@@ -960,7 +959,7 @@ export function CountryTabGeneral({
 
           <div
             className={`mx-auto max-w-4xl rounded-xl border p-4 sm:p-6 ${glassBorderClass}`}
-            style={{ background: "rgba(255,255,255,0.12)", backdropFilter: "blur(12px)" }}
+            style={briefingSurfaceStyle}
           >
             <div className="max-w-2xl mx-auto">
               <span className={`mb-2 block text-center text-sm font-semibold ${glassTextClass}`}>
@@ -1054,11 +1053,10 @@ export function CountryTabGeneral({
           <section className={`relative overflow-hidden rounded-2xl ${panelClass}`} style={{ ...panelStyle, background: "transparent" }}>
             <div className="absolute inset-0 overflow-hidden rounded-2xl" aria-hidden>
               <div
-                className="absolute inset-0 bg-cover bg-no-repeat scale-105"
+                className="absolute inset-0 bg-cover bg-no-repeat"
                 style={{
-                  backgroundImage: "url(/images/site/sphere-bg.png)",
+                  backgroundImage: "url(/images/site/sphere-bg.webp)",
                   backgroundPosition: "top center",
-                  filter: "blur(0.5px)",
                 }}
               />
               <div className="absolute inset-0 bg-[var(--background-panel)]/85" />
@@ -1069,13 +1067,13 @@ export function CountryTabGeneral({
               </h2>
               <div
                 className={`mb-4 flex flex-wrap justify-center gap-6 rounded-xl border p-4 sm:gap-10 sm:p-6 ${glassBorderClass}`}
-                style={{ background: "rgba(255,255,255,0.12)", backdropFilter: "blur(12px)" }}
+                style={briefingSurfaceStyle}
               >
                 <SpherePieChart slices={slicesPop} total={sphereData.totalPopulation} title="Population" showLegend={false} formatValue={formatNumber} glassContext />
                 <SpherePieChart slices={slicesGdp} total={sphereData.totalGdp} title="PIB" showLegend={false} formatValue={(v) => formatGdp(v)} glassContext />
                 <SpherePieChart slices={slicesInfluence} total={sphereData.totalInfluence} title="Influence" showLegend={false} formatValue={formatNumber} glassContext />
               </div>
-              <div className={`mb-6 rounded-xl border p-3 ${glassBorderClass}`} style={{ background: "rgba(255,255,255,0.12)", backdropFilter: "blur(12px)" }}>
+              <div className={`mb-6 rounded-xl border p-3 ${glassBorderClass}`} style={briefingSurfaceStyle}>
                 <p className={`mb-2 text-xs font-semibold ${glassMutedClass}`}>Légende</p>
                 <ul className="flex flex-wrap gap-x-4 gap-y-1 text-xs">
                   {canonicalOrder.map((item) => (
@@ -1102,7 +1100,7 @@ export function CountryTabGeneral({
                 </ul>
               </div>
               {sphereData.countries.length > 0 && (
-                <div className={`overflow-x-auto rounded-xl border ${glassBorderClass}`} style={{ background: "rgba(255,255,255,0.12)", backdropFilter: "blur(12px)" }}>
+                <div className={`overflow-x-auto rounded-xl border ${glassBorderClass}`} style={briefingSurfaceStyle}>
                   <table className="w-full min-w-[420px] text-left text-sm">
                     <thead>
                       <tr className={`border-b ${glassBorderClass}`}>

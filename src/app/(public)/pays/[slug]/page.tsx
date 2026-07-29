@@ -660,11 +660,10 @@ export default async function CountryPage({
     <div className="relative min-h-screen">
       <div className="fixed inset-0 overflow-hidden" aria-hidden>
         <div
-          className="absolute inset-0 bg-cover bg-no-repeat scale-105"
+          className="absolute inset-0 bg-cover bg-no-repeat"
           style={{
-            backgroundImage: "url(/images/site/fiche-pays-bg.png)",
+            backgroundImage: "url(/images/site/fiche-pays-bg.webp)",
             backgroundPosition: "top center",
-            filter: "blur(0.5px)",
           }}
         />
         <div className="absolute inset-0 bg-[var(--background-panel)]/75" />
