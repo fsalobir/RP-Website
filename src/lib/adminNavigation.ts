@@ -1,14 +1,34 @@
 import { matchesSearchText } from "@/lib/searchText";
 
-export type AdminNavigationGroupId = "world" | "simulation" | "content" | "access";
-export type AdminCountKey = "countries" | "roster" | "rules" | "players" | "perks";
+export type AdminNavigationGroupId = "decide" | "world" | "system" | "publish" | "access";
+export type AdminCountKey =
+  | "countries"
+  | "roster"
+  | "rules"
+  | "players"
+  | "perks"
+  | "requests"
+  | "aiEvents";
+export type AdminNavigationIconId =
+  | "countries"
+  | "roster"
+  | "players"
+  | "rules"
+  | "actions"
+  | "requests"
+  | "ai"
+  | "relations"
+  | "discord"
+  | "perks"
+  | "wiki"
+  | "player";
 
 export type AdminNavigationItem = {
   href: string;
   label: string;
   description: string;
   group: AdminNavigationGroupId;
-  icon: string;
+  icon: AdminNavigationIconId;
   keywords: string[];
   countKey?: AdminCountKey;
   countSingular?: string;
@@ -19,9 +39,10 @@ export const ADMIN_NAVIGATION_GROUPS: ReadonlyArray<{
   id: AdminNavigationGroupId;
   label: string;
 }> = [
+  { id: "decide", label: "Décider" },
   { id: "world", label: "Monde" },
-  { id: "simulation", label: "Simulation" },
-  { id: "content", label: "Contenu" },
+  { id: "system", label: "Système de jeu" },
+  { id: "publish", label: "Publier" },
   { id: "access", label: "Accès" },
 ];
 
@@ -29,9 +50,9 @@ export const ADMIN_NAVIGATION_ITEMS: readonly AdminNavigationItem[] = [
   {
     href: "/admin/pays",
     label: "Pays",
-    description: "Modifier les données, budgets, lois et paramètres de chaque nation.",
+    description: "Gérer les nations, leurs données et leur statut dans la partie.",
     group: "world",
-    icon: "🌍",
+    icon: "countries",
     keywords: ["nations", "population", "pib", "budget", "lois", "militaire"],
     countKey: "countries",
     countSingular: "pays",
@@ -40,9 +61,9 @@ export const ADMIN_NAVIGATION_ITEMS: readonly AdminNavigationItem[] = [
   {
     href: "/admin/roster",
     label: "Unités militaires",
-    description: "Définir les modèles d’unités, leurs niveaux, leur puissance et leur coût.",
-    group: "world",
-    icon: "🛡️",
+    description: "Définir les unités, leurs niveaux, leur puissance et leur coût.",
+    group: "system",
+    icon: "roster",
     keywords: ["unités", "armée", "templates", "effectifs", "militaire"],
     countKey: "roster",
     countSingular: "modèle",
@@ -51,9 +72,9 @@ export const ADMIN_NAVIGATION_ITEMS: readonly AdminNavigationItem[] = [
   {
     href: "/admin/joueurs",
     label: "Joueurs",
-    description: "Créer les comptes et attribuer un pays à chaque joueur.",
+    description: "Créer les accès et attribuer les pays.",
     group: "world",
-    icon: "👥",
+    icon: "players",
     keywords: ["comptes", "utilisateurs", "assigner", "attribution"],
     countKey: "players",
     countSingular: "joueur",
@@ -62,10 +83,10 @@ export const ADMIN_NAVIGATION_ITEMS: readonly AdminNavigationItem[] = [
   {
     href: "/admin/regles",
     label: "Règles de simulation",
-    description: "Régler l’évolution quotidienne du monde et les calculs automatiques.",
-    group: "simulation",
-    icon: "⚙️",
-    keywords: ["paramètres", "croissance", "cron", "idéologie", "influence", "espionnage"],
+    description: "Régler l’évolution du monde, les lois, l’idéologie et le renseignement.",
+    group: "system",
+    icon: "rules",
+    keywords: ["paramètres", "croissance", "passage", "idéologie", "influence", "espionnage"],
     countKey: "rules",
     countSingular: "paramètre",
     countPlural: "paramètres",
@@ -73,49 +94,55 @@ export const ADMIN_NAVIGATION_ITEMS: readonly AdminNavigationItem[] = [
   {
     href: "/admin/actions-etat",
     label: "Actions d’État",
-    description: "Définir les actions disponibles, leur coût et leurs effets.",
-    group: "simulation",
-    icon: "🎯",
+    description: "Définir les actions disponibles, leur coût et leur résultat.",
+    group: "system",
+    icon: "actions",
     keywords: ["demandes", "jets", "dés", "coûts", "effets", "diplomatie"],
   },
   {
     href: "/admin/demandes",
     label: "Demandes des joueurs",
-    description: "Examiner les actions envoyées par les joueurs et décider de leur suite.",
-    group: "simulation",
-    icon: "📥",
+    description: "Examiner les actions reçues et appliquer une décision.",
+    group: "decide",
+    icon: "requests",
     keywords: ["tickets", "valider", "accepter", "refuser", "actions"],
+    countKey: "requests",
+    countSingular: "à examiner",
+    countPlural: "à examiner",
   },
   {
     href: "/admin/event-ia",
     label: "Événements IA",
-    description: "Créer ou valider les actions produites pour les pays sans joueur.",
-    group: "simulation",
-    icon: "🤖",
-    keywords: ["event", "automatique", "génération", "majeure", "mineure"],
+    description: "Examiner ou créer les actions des pays sans joueur.",
+    group: "decide",
+    icon: "ai",
+    keywords: ["événement", "automatique", "génération", "majeure", "mineure"],
+    countKey: "aiEvents",
+    countSingular: "à examiner",
+    countPlural: "à examiner",
   },
   {
-    href: "/admin/matrice-diplomatique",
+    href: "/admin/regles?domaine=diplomatie",
     label: "Relations diplomatiques",
-    description: "Voir et modifier les relations entre les pays.",
-    group: "simulation",
-    icon: "🤝",
+    description: "Comparer et modifier les relations entre les pays.",
+    group: "world",
+    icon: "relations",
     keywords: ["matrice", "diplomatie", "relations", "alliés", "hostilité"],
   },
   {
     href: "/admin/bot-discord",
     label: "Publications Discord",
-    description: "Choisir quels événements sont publiés et dans quels salons.",
-    group: "simulation",
-    icon: "📡",
+    description: "Choisir les événements publiés et leurs salons.",
+    group: "publish",
+    icon: "discord",
     keywords: ["bot", "messages", "dispatch", "templates", "canaux", "salons"],
   },
   {
     href: "/admin/avantages",
     label: "Avantages",
-    description: "Créer les bonus débloqués selon les statistiques d’un pays.",
-    group: "content",
-    icon: "⭐",
+    description: "Créer les bonus débloqués par les pays.",
+    group: "system",
+    icon: "perks",
     keywords: ["perks", "bonus", "effets", "conditions", "statistiques"],
     countKey: "perks",
     countSingular: "avantage",
@@ -124,17 +151,17 @@ export const ADMIN_NAVIGATION_ITEMS: readonly AdminNavigationItem[] = [
   {
     href: "/admin/wiki",
     label: "Wiki",
-    description: "Rédiger et organiser l’aide visible par les joueurs.",
-    group: "content",
-    icon: "📖",
+    description: "Rédiger et organiser l’aide des joueurs.",
+    group: "publish",
+    icon: "wiki",
     keywords: ["documentation", "guides", "pages", "aide", "éditeur"],
   },
   {
     href: "/",
     label: "Voir le site joueur",
-    description: "Ouvrir le site tel qu’il est présenté aux joueurs.",
+    description: "Contrôler la partie telle qu’elle apparaît aux joueurs.",
     group: "access",
-    icon: "👁️",
+    icon: "player",
     keywords: ["public", "accueil", "joueur", "site"],
   },
 ];

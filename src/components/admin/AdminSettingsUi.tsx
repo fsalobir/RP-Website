@@ -2,6 +2,85 @@
 
 import type { CSSProperties, ReactNode } from "react";
 
+export type AdminSectionNavItem = {
+  id: string;
+  label: string;
+  description?: string;
+  count?: number;
+};
+
+export function AdminAnchorNav({
+  label,
+  items,
+}: {
+  label: string;
+  items: Array<{ href: `#${string}`; label: string }>;
+}) {
+  return (
+    <nav aria-label={label} className="flex gap-1 overflow-x-auto border-y py-1" style={{ borderColor: "var(--border)" }}>
+      {items.map((item) => (
+        <a
+          key={item.href}
+          href={item.href}
+          className="inline-flex min-h-10 min-w-max items-center rounded-lg px-3 text-sm font-medium text-[var(--foreground-muted)] transition-colors hover:bg-[var(--background-elevated)] hover:text-[var(--foreground)]"
+        >
+          {item.label}
+        </a>
+      ))}
+    </nav>
+  );
+}
+
+export function AdminSectionNav({
+  label,
+  items,
+  activeId,
+  onSelect,
+}: {
+  label: string;
+  items: AdminSectionNavItem[];
+  activeId: string;
+  onSelect: (id: string) => void;
+}) {
+  return (
+    <nav aria-label={label} className="lg:sticky lg:top-20 lg:self-start">
+      <div
+        className="admin-horizontal-nav flex gap-1 overflow-x-auto rounded-xl border p-1 lg:block lg:space-y-1 lg:overflow-visible"
+        style={{ background: "var(--background-elevated)", borderColor: "var(--border)" }}
+      >
+        {items.map((item) => {
+          const active = item.id === activeId;
+          return (
+            <button
+              key={item.id}
+              type="button"
+              onClick={() => onSelect(item.id)}
+              aria-current={active ? "true" : undefined}
+              className={`min-h-11 min-w-max rounded-lg px-3 py-2 text-left transition-colors lg:block lg:w-full lg:min-w-0 ${
+                active
+                  ? "bg-[var(--background-panel)] text-[var(--foreground)]"
+                  : "text-[var(--foreground-muted)] hover:bg-[var(--background-panel)] hover:text-[var(--foreground)]"
+              }`}
+            >
+              <span className="flex items-center justify-between gap-3">
+                <span className="text-sm font-semibold">{item.label}</span>
+                {typeof item.count === "number" ? (
+                  <span className="hidden text-xs tabular-nums text-[var(--foreground-muted)] lg:inline">{item.count}</span>
+                ) : null}
+              </span>
+              {item.description ? (
+                <span className="mt-0.5 hidden text-xs leading-snug text-[var(--foreground-muted)] lg:block">
+                  {item.description}
+                </span>
+              ) : null}
+            </button>
+          );
+        })}
+      </div>
+    </nav>
+  );
+}
+
 export function AdminParameterTable({
   label,
   columns,
@@ -138,6 +217,8 @@ export function AdminSaveBar({
   error,
   success,
   noun = "réglage",
+  reviewItems = [],
+  saveLabel = "Enregistrer",
 }: {
   dirtyCount: number;
   saving: boolean;
@@ -146,6 +227,8 @@ export function AdminSaveBar({
   error?: string | null;
   success?: string | null;
   noun?: string;
+  reviewItems?: Array<{ key: string; label: string; detail?: string }>;
+  saveLabel?: string;
 }) {
   const plural = dirtyCount > 1 ? "s" : "";
   return (
@@ -153,6 +236,33 @@ export function AdminSaveBar({
       className="sticky bottom-2 z-40 rounded-xl border px-3 py-2 shadow-[0_12px_28px_rgba(0,0,0,0.32)]"
       style={{ background: "var(--background-elevated)", borderColor: "var(--border)" }}
     >
+      {dirtyCount > 0 && reviewItems.length > 0 ? (
+        <details className="group mb-2 border-b pb-2" style={{ borderColor: "var(--border-muted)" }}>
+          <summary className="flex min-h-9 cursor-pointer list-none items-center justify-between gap-3 text-sm font-medium text-[var(--foreground)] [&::-webkit-details-marker]:hidden">
+            <span>Vérifier les changements</span>
+            <svg
+              aria-hidden
+              className="h-4 w-4 text-[var(--foreground-muted)] transition-transform group-open:rotate-180"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+            >
+              <path d="m6 9 6 6 6-6" />
+            </svg>
+          </summary>
+          <ul className="max-h-44 space-y-1 overflow-y-auto pb-1 pr-1">
+            {reviewItems.map((item) => (
+              <li key={item.key} className="flex flex-col rounded-lg bg-[var(--background-panel)] px-3 py-2 sm:flex-row sm:items-baseline sm:justify-between sm:gap-4">
+                <span className="text-sm font-medium text-[var(--foreground)]">{item.label}</span>
+                {item.detail ? (
+                  <span className="text-xs leading-snug text-[var(--foreground-muted)] sm:text-right">{item.detail}</span>
+                ) : null}
+              </li>
+            ))}
+          </ul>
+        </details>
+      ) : null}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="min-w-0">
           <p className="text-sm font-medium text-[var(--foreground)]">
@@ -184,7 +294,7 @@ export function AdminSaveBar({
             disabled={dirtyCount === 0 || saving}
             className="min-h-11 flex-1 rounded-lg bg-[var(--accent)] px-3 text-sm font-semibold text-[#0f1419] transition-colors hover:bg-[var(--accent-hover)] disabled:cursor-not-allowed disabled:opacity-50 sm:flex-none"
           >
-            {saving ? "Enregistrement…" : "Enregistrer"}
+            {saving ? "Enregistrement…" : saveLabel}
           </button>
         </div>
       </div>

@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { replacePlaceholders, getPreviewVars } from "@/lib/discord-format";
-import { AdminSettingsGuide } from "@/components/admin/AdminSettingsUi";
+import { AdminAnchorNav, AdminSettingsGuide } from "@/components/admin/AdminSettingsUi";
 import { matchesSearchText } from "@/lib/searchText";
 import {
   setDispatchTypeEnabled,
@@ -137,6 +137,15 @@ export function BotDiscordForm({
         check="Ouvrez l’aperçu du message et vérifiez le salon choisi avant de quitter la page."
         warning="Les identifiants de salon sont enregistrés quand vous quittez le champ."
       />
+      <AdminAnchorNav
+        label="Sections des publications Discord"
+        items={[
+          { href: "#discord-status", label: "Connexion" },
+          { href: "#discord-channels", label: "Salons" },
+          { href: "#discord-events", label: "Événements" },
+          { href: "#discord-templates", label: "Messages" },
+        ]}
+      />
       <div className="max-w-xl">
         <label htmlFor="discord-settings-search" className="mb-1 block text-sm font-medium text-[var(--foreground)]">
           Rechercher une action ou un modèle
@@ -154,13 +163,22 @@ export function BotDiscordForm({
       {settingsError && <p role="alert" className="text-sm text-[var(--danger)]">{settingsError}</p>}
       {success && <p aria-live="polite" className="text-sm text-[var(--accent)]">{success}</p>}
       <section
-        className="rounded-xl border p-4"
-        style={{ borderColor: "var(--border)", background: "var(--background-panel)" }}
+        id="discord-status"
+        className="scroll-mt-20 border-t py-4"
+        style={{ borderColor: "var(--border)" }}
       >
         <h2 className="mb-2 text-lg font-semibold text-[var(--foreground)]">Configuration générale</h2>
         <p className="mb-2 text-sm text-[var(--foreground-muted)]">
-          Connexion à Discord : {tokenConfigured ? "prête" : "à configurer sur Vercel (DISCORD_BOT_TOKEN)"}
+          Connexion à Discord : {tokenConfigured ? "prête" : "à configurer"}
         </p>
+        {!tokenConfigured ? (
+          <details className="mb-2 text-sm text-[var(--foreground-muted)]">
+            <summary className="cursor-pointer font-medium text-[var(--foreground)]">Voir la configuration technique</summary>
+            <p className="mt-2">
+              Ajoutez le secret <code>DISCORD_BOT_TOKEN</code> dans l’environnement du site.
+            </p>
+          </details>
+        ) : null}
         <a
           href="https://discord.com/developers/applications"
           target="_blank"
@@ -172,8 +190,9 @@ export function BotDiscordForm({
       </section>
 
       <section
-        className="rounded-xl border p-4"
-        style={{ borderColor: "var(--border)", background: "var(--background-panel)" }}
+        id="discord-channels"
+        className="scroll-mt-20 border-t py-4"
+        style={{ borderColor: "var(--border)" }}
       >
         <h2 className="mb-2 text-lg font-semibold text-[var(--foreground)]">Salons par continent</h2>
         <p className="mb-3 text-sm leading-snug text-[var(--foreground-muted)]">
@@ -252,8 +271,9 @@ export function BotDiscordForm({
       </section>
 
       <section
-        className="rounded-xl border p-4"
-        style={{ borderColor: "var(--border)", background: "var(--background-panel)" }}
+        id="discord-events"
+        className="scroll-mt-20 border-t py-4"
+        style={{ borderColor: "var(--border)" }}
       >
         <h2 className="mb-2 text-lg font-semibold text-[var(--foreground)]">Événements publiés</h2>
         <p className="mb-3 text-sm text-[var(--foreground-muted)]">
@@ -314,8 +334,9 @@ export function BotDiscordForm({
       </section>
 
       <section
-        className="rounded-xl border p-4"
-        style={{ borderColor: "var(--border)", background: "var(--background-panel)" }}
+        id="discord-templates"
+        className="scroll-mt-20 border-t py-4"
+        style={{ borderColor: "var(--border)" }}
       >
         <h2 className="mb-2 text-lg font-semibold text-[var(--foreground)]">Modèles de messages</h2>
         <p className="mb-3 text-sm leading-snug text-[var(--foreground-muted)]">

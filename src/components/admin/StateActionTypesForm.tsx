@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { updateStateActionTypes } from "@/app/admin/actions-etat/actions";
-import { AdminSaveBar, AdminSettingsGuide } from "@/components/admin/AdminSettingsUi";
+import { AdminSaveBar, AdminSectionNav, AdminSettingsGuide } from "@/components/admin/AdminSettingsUi";
 import { DisclosureChevron } from "@/components/ui/DisclosureChevron";
 import {
   actionRequiresTarget,
@@ -31,11 +31,13 @@ const ACTION_GROUPS = [
   {
     id: "interne",
     label: "Actions internes",
+    description: "Développement et défense du pays",
     keys: ["demande_up", "investissements", "effort_fortifications"],
   },
   {
     id: "diplomatie",
     label: "Diplomatie",
+    description: "Relations, accords et influence",
     keys: [
       "ouverture_diplomatique",
       "accord_commercial_politique",
@@ -48,11 +50,13 @@ const ACTION_GROUPS = [
   {
     id: "militaire",
     label: "Conflits",
+    description: "Escarmouches, conflits et guerres",
     keys: ["escarmouche_militaire", "conflit_arme", "guerre_ouverte"],
   },
   {
     id: "secret",
     label: "Opérations secrètes",
+    description: "Espionnage et sabotage",
     keys: ["espionnage", "sabotage"],
   },
 ] as const;
@@ -174,6 +178,24 @@ function buildPatch(type: StateActionType, edit: EditState): Record<string, unkn
 
 function editsEqual(a: EditState, b: EditState): boolean {
   return JSON.stringify(a) === JSON.stringify(b);
+}
+
+function describeEditChanges(before: EditState, after: EditState): string {
+  const changes: string[] = [];
+  if (before.cost !== after.cost) changes.push(`coût ${before.cost} → ${after.cost} PA`);
+  if (before.impactMaximum !== after.impactMaximum) {
+    changes.push(`impact ${before.impactMaximum} → ${after.impactMaximum}`);
+  }
+  if (before.minRelationRequired !== after.minRelationRequired) {
+    changes.push(`relation ${formatSigned(before.minRelationRequired)} → ${formatSigned(after.minRelationRequired)}`);
+  }
+
+  const advancedBefore = { ...before, cost: 0, impactMaximum: 0, minRelationRequired: 0 };
+  const advancedAfter = { ...after, cost: 0, impactMaximum: 0, minRelationRequired: 0 };
+  if (JSON.stringify(advancedBefore) !== JSON.stringify(advancedAfter)) {
+    changes.push("calcul avancé modifié");
+  }
+  return changes.join(" · ");
 }
 
 function validateEdit(type: StateActionType, edit: EditState): string | null {
@@ -304,8 +326,8 @@ function formatSigned(value: number): string {
 function ActionPreview({ type, edit }: { type: StateActionType; edit: EditState }) {
   const [roll, setRoll] = useState(60);
   const [relation, setRelation] = useState(0);
-  const [emitterInfluence, setEmitterInfluence] = useState(100);
-  const [targetInfluence, setTargetInfluence] = useState(100);
+  const [emitterInfluence, setEmitterInfluence] = useState(1000);
+  const [targetInfluence, setTargetInfluence] = useState(1000);
   const isInfluence = type.key === "prise_influence";
   const hasImpact =
     isInfluence ||
@@ -340,7 +362,7 @@ function ActionPreview({ type, edit }: { type: StateActionType; edit: EditState 
     >
       <h3 className="text-sm font-semibold text-[var(--foreground)]">Aperçu côté joueur</h3>
       <p className="mt-1 text-xs leading-relaxed text-[var(--foreground-muted)]">
-        Exemple illustratif. Il ne modifie aucune donnée.
+        Scénario de référence. Il ne modifie aucune donnée.
       </p>
 
       <div className="mt-3">
@@ -403,12 +425,12 @@ function ActionPreview({ type, edit }: { type: StateActionType; edit: EditState 
               </div>
               <dl className="space-y-2 border-y py-3 text-sm" style={{ borderColor: "var(--border-muted)" }}>
                 <div className="flex justify-between gap-3">
-                  <dt className="text-[var(--foreground-muted)]">Effet de la relation</dt>
-                  <dd className="font-medium text-[var(--foreground)]">{formatSigned(relationModifier)}</dd>
+                  <dt className="text-[var(--foreground-muted)]">Bonus ou malus de relation</dt>
+                  <dd className="font-medium text-[var(--foreground)]">{formatSigned(relationModifier)} au jet</dd>
                 </div>
                 <div className="flex justify-between gap-3">
-                  <dt className="text-[var(--foreground-muted)]">Influence émetteur ÷ cible ({ratio.toFixed(2)})</dt>
-                  <dd className="font-medium text-[var(--foreground)]">{formatSigned(balanceModifier)}</dd>
+                  <dt className="text-[var(--foreground-muted)]">Rapport de force ({ratio.toFixed(2)}×)</dt>
+                  <dd className="font-medium text-[var(--foreground)]">{formatSigned(balanceModifier)} au jet</dd>
                 </div>
                 <div className="flex justify-between gap-3">
                   <dt className="text-[var(--foreground-muted)]">Jet final</dt>
@@ -503,7 +525,7 @@ function TypeRow({
       <div className="grid">
         <div className="min-h-0 overflow-hidden">
           <div className="border-t p-3" style={{ borderColor: "var(--border-muted)" }}>
-            <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_18rem]">
+            <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-4 lg:grid-cols-[minmax(0,1fr)_18rem]">
               <div className="min-w-0">
                 <div className="flex items-start justify-between gap-3">
                   <div>
@@ -720,6 +742,7 @@ export function StateActionTypesForm({ types }: { types: StateActionType[] }) {
   const [success, setSuccess] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(() => types[0]?.id ?? null);
   const [query, setQuery] = useState("");
+  const [activeGroupId, setActiveGroupId] = useState<string>(ACTION_GROUPS[0].id);
 
   const dirtyTypes = types.filter((type) => {
     const edit = edits[type.id] ?? initEditForType(type);
@@ -799,8 +822,37 @@ export function StateActionTypesForm({ types }: { types: StateActionType[] }) {
 
   const groupsToRender = [
     ...visibleGroups,
-    ...(otherTypes.length > 0 ? [{ id: "autres", label: "Autres actions", keys: [], types: otherTypes }] : []),
+    ...(otherTypes.length > 0
+      ? [{ id: "autres", label: "Autres actions", description: "Actions non classées", keys: [], types: otherTypes }]
+      : []),
   ];
+  const groupNavigationItems = [
+    ...ACTION_GROUPS.map((group) => ({
+      id: group.id,
+      label: group.label,
+      description: group.description,
+      count: types.filter((type) => group.keys.some((key) => key === type.key)).length,
+    })),
+    ...(types.some((type) => !knownKeys.has(type.key))
+      ? [{
+          id: "autres",
+          label: "Autres actions",
+          description: "Actions non classées",
+          count: types.filter((type) => !knownKeys.has(type.key)).length,
+        }]
+      : []),
+  ];
+  const displayedGroups = query
+    ? groupsToRender
+    : groupsToRender.filter((group) => group.id === activeGroupId);
+  const reviewItems = dirtyTypes.map((type) => ({
+    key: type.id,
+    label: type.label_fr,
+    detail: describeEditChanges(
+      savedEdits[type.id] ?? initialEdits[type.id],
+      edits[type.id] ?? initialEdits[type.id]
+    ),
+  }));
 
   return (
     <div className="space-y-4">
@@ -812,14 +864,13 @@ export function StateActionTypesForm({ types }: { types: StateActionType[] }) {
       />
 
       <section
-        className="rounded-xl border p-3"
-        style={{ background: "var(--background-panel)", borderColor: "var(--border)" }}
+        className="min-w-0"
       >
-        <div className="flex flex-wrap items-end justify-between gap-3">
+        <div className="flex flex-wrap items-end justify-between gap-3 border-b pb-3" style={{ borderColor: "var(--border)" }}>
           <div>
             <h2 className="text-lg font-semibold text-[var(--foreground)]">Paramètres des actions</h2>
             <p className="mt-1 text-sm text-[var(--foreground-muted)]">
-              {types.length} action{types.length > 1 ? "s" : ""}, regroupées par usage.
+              Comparez les actions d’un même usage, puis ouvrez celle que vous voulez régler.
             </p>
           </div>
           <label className="w-full sm:max-w-sm">
@@ -835,36 +886,51 @@ export function StateActionTypesForm({ types }: { types: StateActionType[] }) {
           </label>
         </div>
 
-        <div className="mt-4 space-y-5">
-          {groupsToRender.map((group) => (
-            <section key={group.id} aria-labelledby={`action-group-${group.id}`}>
-              <h3 id={`action-group-${group.id}`} className="mb-3 text-sm font-semibold text-[var(--foreground)]">
-                {group.label}
-              </h3>
-              <ul className="space-y-2">
-                {group.types.map((type) => (
-                  <TypeRow
-                    key={type.id}
-                    type={type}
-                    edit={edits[type.id] ?? initialEdits[type.id]}
-                    baseline={savedEdits[type.id] ?? initialEdits[type.id]}
-                    onEditChange={(update) => setEdit(type.id, update)}
-                    onReset={() => {
-                      setEdit(type.id, savedEdits[type.id] ?? initialEdits[type.id]);
-                    }}
-                    expanded={expandedId === type.id}
-                    onToggle={() => setExpandedId((current) => current === type.id ? null : type.id)}
-                  />
-                ))}
-              </ul>
-            </section>
-          ))}
+        <div className="mt-4 grid min-w-0 grid-cols-[minmax(0,1fr)] gap-4 lg:grid-cols-[13rem_minmax(0,1fr)]">
+          <AdminSectionNav
+            label="Familles d’actions"
+            items={groupNavigationItems}
+            activeId={activeGroupId}
+            onSelect={(id) => {
+              setActiveGroupId(id);
+              const nextGroup = groupsToRender.find((group) => group.id === id);
+              setExpandedId(nextGroup?.types[0]?.id ?? null);
+            }}
+          />
+          <div className="min-w-0 space-y-5">
+            {displayedGroups.map((group) => (
+              <section key={group.id} aria-labelledby={`action-group-${group.id}`}>
+                <div className="mb-3">
+                  <h3 id={`action-group-${group.id}`} className="text-base font-semibold text-[var(--foreground)]">
+                    {group.label}
+                  </h3>
+                  <p className="mt-0.5 text-sm text-[var(--foreground-muted)]">{group.description}</p>
+                </div>
+                <ul className="space-y-2">
+                  {group.types.map((type) => (
+                    <TypeRow
+                      key={type.id}
+                      type={type}
+                      edit={edits[type.id] ?? initialEdits[type.id]}
+                      baseline={savedEdits[type.id] ?? initialEdits[type.id]}
+                      onEditChange={(update) => setEdit(type.id, update)}
+                      onReset={() => {
+                        setEdit(type.id, savedEdits[type.id] ?? initialEdits[type.id]);
+                      }}
+                      expanded={expandedId === type.id}
+                      onToggle={() => setExpandedId((current) => current === type.id ? null : type.id)}
+                    />
+                  ))}
+                </ul>
+              </section>
+            ))}
 
-          {groupsToRender.length === 0 ? (
-            <p className="rounded-lg border px-4 py-8 text-center text-sm text-[var(--foreground-muted)]" style={{ borderColor: "var(--border-muted)" }}>
-              Aucune action ne correspond à cette recherche.
-            </p>
-          ) : null}
+            {displayedGroups.length === 0 ? (
+              <p className="border-y px-4 py-8 text-center text-sm text-[var(--foreground-muted)]" style={{ borderColor: "var(--border-muted)" }}>
+                Aucune action ne correspond à cette recherche.
+              </p>
+            ) : null}
+          </div>
         </div>
       </section>
 
@@ -876,6 +942,8 @@ export function StateActionTypesForm({ types }: { types: StateActionType[] }) {
         error={error}
         success={success}
         noun="action"
+        reviewItems={reviewItems}
+        saveLabel="Appliquer aux prochaines demandes"
       />
     </div>
   );

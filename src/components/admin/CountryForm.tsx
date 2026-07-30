@@ -5,7 +5,7 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
 import type { Country } from "@/types/database";
-import { AdminSettingsGuide } from "@/components/admin/AdminSettingsUi";
+import { AdminAnchorNav, AdminSettingsGuide } from "@/components/admin/AdminSettingsUi";
 import { formatGdp, formatNumber } from "@/lib/format";
 
 function slugify(s: string) {
@@ -128,8 +128,8 @@ export function CountryForm({
     setSaving(false);
   }
 
-  const panelClass = "rounded-lg border p-4";
-  const panelStyle = { background: "var(--background-panel)", borderColor: "var(--border)" };
+  const panelClass = "scroll-mt-20 border-t py-4";
+  const panelStyle = { borderColor: "var(--border)" };
   const inputClass =
     "min-h-11 w-full rounded border bg-[var(--background)] px-3 py-2 text-[var(--foreground)] focus:border-[var(--accent)] focus:outline-none focus:ring-2 focus:ring-[var(--accent)]";
   const inputStyle = { borderColor: "var(--border)" };
@@ -141,8 +141,17 @@ export function CountryForm({
         impact="Le nom, le régime, le drapeau, la population et le PIB sont visibles par les joueurs. Les statistiques influencent aussi les jets et la simulation."
         check="Vérifiez le drapeau, l’adresse de la page et les bornes des quatre statistiques dans l’aperçu."
       />
+      <AdminAnchorNav
+        label="Sections de la fiche pays"
+        items={[
+          { href: "#country-identity", label: "Identité" },
+          { href: "#country-capabilities", label: "Capacités" },
+          { href: "#country-economy", label: "Population et économie" },
+          { href: "#country-preview", label: "Aperçu joueur" },
+        ]}
+      />
 
-      <section className={panelClass} style={panelStyle}>
+      <section id="country-identity" className={panelClass} style={panelStyle}>
         <h2 className="text-lg font-semibold text-[var(--foreground)]">Identité</h2>
         <p className="mb-3 mt-1 text-sm leading-snug text-[var(--foreground-muted)]">
           Informations affichées sur la fiche pays et dans les listes.
@@ -251,7 +260,7 @@ export function CountryForm({
         </div>
       </section>
 
-      <section className={panelClass} style={panelStyle}>
+      <section id="country-capabilities" className={panelClass} style={panelStyle}>
         <h2 className="text-lg font-semibold text-[var(--foreground)]">Capacités du pays</h2>
         <p className="mb-3 mt-1 text-sm leading-snug text-[var(--foreground-muted)]">
           Ces quatre valeurs servent aux jets, aux effets et à plusieurs calculs de puissance.
@@ -292,7 +301,7 @@ export function CountryForm({
         </div>
       </section>
 
-      <section className={panelClass} style={panelStyle}>
+      <section id="country-economy" className={panelClass} style={panelStyle}>
         <h2 className="text-lg font-semibold text-[var(--foreground)]">Population et économie</h2>
         <p className="mb-3 mt-1 text-sm leading-snug text-[var(--foreground-muted)]">
           Valeurs de départ utilisées par les classements, l’influence et la croissance quotidienne.
@@ -326,7 +335,7 @@ export function CountryForm({
         </div>
       </section>
 
-      <section className={panelClass} style={panelStyle} aria-labelledby="country-preview-title">
+      <section id="country-preview" className={panelClass} style={panelStyle} aria-labelledby="country-preview-title">
         <h2 id="country-preview-title" className="text-lg font-semibold text-[var(--foreground)]">
           Aperçu de la fiche
         </h2>

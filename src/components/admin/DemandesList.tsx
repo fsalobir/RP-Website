@@ -34,6 +34,7 @@ import type { AdminEffectAdded } from "@/types/database";
 import { formatNumber } from "@/lib/format";
 import { normalizePair } from "@/lib/relations";
 import { getRelationLabel, getRelationColor } from "@/lib/relationScale";
+import { matchesAdminListFilters, normalizeAdminSearch } from "@/lib/adminListFilters";
 import {
   ACTION_KEYS_REQUIRING_IMPACT_ROLL,
   actionRequiresTargetAcceptance,
@@ -135,15 +136,6 @@ const panelStyle = { background: "var(--background-panel)", borderColor: "var(--
 const effectKindsForDemandes = ALL_EFFECT_KIND_IDS.filter((k) => k !== "state_actions_grant");
 const REQUESTS_PER_PAGE = 10;
 
-function normalizeSearchValue(value: string): string {
-  return value
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, " ")
-    .trim();
-}
-
 function getStatusLabel(status: string): string {
   if (status === "pending") return "en attente";
   if (status === "pending_target") return "en attente de la cible";
@@ -158,6 +150,7 @@ export function DemandesList({ requests, rosterUnitIds, rosterUnits = [], target
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
   const [currentPage, setCurrentPage] = useState(1);
 
   const sortedRequests = useMemo(() => {
@@ -171,13 +164,12 @@ export function DemandesList({ requests, rosterUnitIds, rosterUnits = [], target
   }, [requests]);
 
   const filteredRequests = useMemo(() => {
-    const tokens = normalizeSearchValue(searchQuery).split(" ").filter(Boolean);
-    if (tokens.length === 0) return sortedRequests;
+    const tokens = normalizeAdminSearch(searchQuery).split(" ").filter(Boolean);
 
     return sortedRequests.filter((request) => {
       const targetId = typeof request.payload?.target_country_id === "string" ? request.payload.target_country_id : null;
       const targetCountry = targetId ? targetCountriesById[targetId] : null;
-      const haystack = normalizeSearchValue([
+      const haystack = normalizeAdminSearch([
         request.state_action_types?.label_fr ?? "",
         request.state_action_types?.key ?? "",
         request.country?.name ?? "",
@@ -187,9 +179,9 @@ export function DemandesList({ requests, rosterUnitIds, rosterUnits = [], target
         getStatusLabel(request.status),
       ].join(" "));
 
-      return tokens.every((token) => haystack.includes(token));
+      return matchesAdminListFilters(request.status, statusFilter, haystack, tokens);
     });
-  }, [searchQuery, sortedRequests, targetCountriesById]);
+  }, [searchQuery, sortedRequests, statusFilter, targetCountriesById]);
 
   const totalPages = Math.max(1, Math.ceil(filteredRequests.length / REQUESTS_PER_PAGE));
 
@@ -211,6 +203,19 @@ export function DemandesList({ requests, rosterUnitIds, rosterUnits = [], target
   function handleRefresh() {
     setError(null);
     router.refresh();
+  }
+
+  function toggleRequest(id: string) {
+    if (selectedId === id) {
+      setSelectedId(null);
+      return;
+    }
+    setSelectedId(id);
+    requestAnimationFrame(() => {
+      const detail = document.getElementById("request-detail");
+      detail?.scrollIntoView({ block: "start", behavior: "smooth" });
+      detail?.focus({ preventScroll: true });
+    });
   }
 
   return (
@@ -247,20 +252,40 @@ export function DemandesList({ requests, rosterUnitIds, rosterUnits = [], target
               Les demandes en attente restent toujours en tête. Affichage par pages de 10.
             </p>
           </div>
-          <div className="w-full max-w-xl">
-            <label htmlFor="request-search" className="mb-1 block text-sm text-[var(--foreground-muted)]">Rechercher</label>
-            <input
-              id="request-search"
-              type="text"
-              value={searchQuery}
-              onChange={(e) => {
-                setSearchQuery(e.target.value);
-                setCurrentPage(1);
-              }}
-              placeholder="Prise d’influence, Russie…"
-              className="w-full rounded border bg-[var(--background)] px-3 py-2 text-sm text-[var(--foreground)]"
-              style={{ borderColor: "var(--border)" }}
-            />
+          <div className="grid w-full max-w-2xl gap-2 sm:grid-cols-[minmax(0,1fr)_12rem]">
+            <label>
+              <span className="mb-1 block text-sm text-[var(--foreground-muted)]">Rechercher</span>
+              <input
+                id="request-search"
+                type="search"
+                value={searchQuery}
+                onChange={(e) => {
+                  setSearchQuery(e.target.value);
+                  setCurrentPage(1);
+                }}
+                placeholder="Action ou pays…"
+                className="w-full rounded border bg-[var(--background)] px-3 py-2 text-sm text-[var(--foreground)]"
+                style={{ borderColor: "var(--border)" }}
+              />
+            </label>
+            <label>
+              <span className="mb-1 block text-sm text-[var(--foreground-muted)]">Statut</span>
+              <select
+                value={statusFilter}
+                onChange={(event) => {
+                  setStatusFilter(event.target.value);
+                  setCurrentPage(1);
+                }}
+                className="w-full rounded border bg-[var(--background)] px-3 py-2 text-sm text-[var(--foreground)]"
+                style={{ borderColor: "var(--border)" }}
+              >
+                <option value="all">Tous</option>
+                <option value="pending">À décider</option>
+                <option value="pending_target">Attente de la cible</option>
+                <option value="accepted">Acceptées</option>
+                <option value="refused">Refusées</option>
+              </select>
+            </label>
           </div>
         </div>
         <div className="mb-4 flex flex-wrap items-center justify-between gap-2 text-sm text-[var(--foreground-muted)]">
@@ -272,8 +297,8 @@ export function DemandesList({ requests, rosterUnitIds, rosterUnits = [], target
             {error}
           </p>
         )}
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
+        <div className="overflow-visible md:overflow-x-auto">
+          <table className="admin-responsive-table w-full text-sm">
             <thead>
               <tr style={{ borderColor: "var(--border)" }}>
                 <th className="border-b p-2 text-left font-medium text-[var(--foreground-muted)]">Date</th>
@@ -281,6 +306,7 @@ export function DemandesList({ requests, rosterUnitIds, rosterUnits = [], target
                 <th className="border-b p-2 text-left font-medium text-[var(--foreground-muted)]">Pays</th>
                 <th className="border-b p-2 text-left font-medium text-[var(--foreground-muted)]">Cible</th>
                 <th className="border-b p-2 text-left font-medium text-[var(--foreground-muted)]">Statut</th>
+                <th className="border-b p-2 text-right font-medium text-[var(--foreground-muted)]">Action</th>
               </tr>
             </thead>
             <tbody>
@@ -291,26 +317,19 @@ export function DemandesList({ requests, rosterUnitIds, rosterUnits = [], target
                 return (
                   <tr
                     key={r.id}
-                    onClick={() => setSelectedId(selectedId === r.id ? null : r.id)}
-                    onKeyDown={(event) => {
-                      if (event.key !== "Enter" && event.key !== " ") return;
-                      event.preventDefault();
-                      setSelectedId(selectedId === r.id ? null : r.id);
-                    }}
-                    tabIndex={0}
-                    className="cursor-pointer transition-colors hover:bg-[var(--background)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--accent)] focus-visible:outline-offset-[-2px]"
+                    className="transition-colors"
                     style={{
                       borderColor: "var(--border)",
                       background: isSelected ? "var(--background-elevated)" : undefined,
                     }}
                   >
-                    <td className="border-b p-2 text-[var(--foreground)]">
+                    <td data-label="Date" className="border-b p-2 text-[var(--foreground)]">
                       {new Date(r.created_at).toLocaleString("fr-FR")}
                     </td>
-                    <td className="border-b p-2 text-[var(--foreground)]">
+                    <td data-label="Action" className="border-b p-2 text-[var(--foreground)]">
                       {r.state_action_types?.label_fr ?? r.action_type_id}
                     </td>
-                    <td className="border-b p-2 text-[var(--foreground)]">
+                    <td data-label="Pays" className="border-b p-2 text-[var(--foreground)]">
                       <span title={r.country?.name ?? r.country_id} className="inline-flex items-center gap-1.5">
                         {r.country?.flag_url ? (
                           <img
@@ -322,22 +341,20 @@ export function DemandesList({ requests, rosterUnitIds, rosterUnits = [], target
                         ) : (
                           <span className="text-[var(--foreground-muted)]">{r.country?.name ?? r.country_id}</span>
                         )}
-                        {r.country?.flag_url && (
-                          <span className="sr-only">{r.country.name}</span>
-                        )}
+                        {r.country?.flag_url ? <span>{r.country.name}</span> : null}
                       </span>
                     </td>
-                    <td className="border-b p-2 text-[var(--foreground)]">
+                    <td data-label="Cible" className="border-b p-2 text-[var(--foreground)]">
                       {targetCountry ? (
                         targetCountry.flag_url ? (
-                          <span title={targetCountry.name} className="inline-flex">
+                          <span title={targetCountry.name} className="inline-flex items-center gap-1.5">
                             <img
                               src={targetCountry.flag_url}
                               alt=""
                               className="h-6 w-9 rounded object-cover shrink-0"
                               title={targetCountry.name}
                             />
-                            <span className="sr-only">{targetCountry.name}</span>
+                            <span>{targetCountry.name}</span>
                           </span>
                         ) : (
                           <span title={targetCountry.name} className="text-[var(--foreground-muted)]">
@@ -348,8 +365,19 @@ export function DemandesList({ requests, rosterUnitIds, rosterUnits = [], target
                         <span className="text-[var(--foreground-muted)]">—</span>
                       )}
                     </td>
-                    <td className="border-b p-2">
+                    <td data-label="Statut" className="border-b p-2">
                       <StatusBadge status={r.status} />
+                    </td>
+                    <td data-label="" data-action className="border-b p-2 text-right">
+                      <button
+                        type="button"
+                        onClick={() => toggleRequest(r.id)}
+                        aria-expanded={isSelected}
+                        className="rounded-lg border px-3 py-1.5 text-sm font-medium text-[var(--foreground)] hover:bg-[var(--background)]"
+                        style={{ borderColor: "var(--border)" }}
+                      >
+                        {isSelected ? "Masquer" : "Examiner"}
+                      </button>
                     </td>
                   </tr>
                 );
@@ -457,6 +485,7 @@ function RequestDetail({
   const [refund, setRefund] = useState(false);
   const [refusalMsg, setRefusalMsg] = useState("");
   const [loading, setLoading] = useState<"accept" | "refuse" | "effect" | null>(null);
+  const [decisionToConfirm, setDecisionToConfirm] = useState<"accept" | "refuse" | null>(null);
   const effectsList = normalizeAdminEffectsAdded(request.admin_effect_added);
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
   const [effectForm, setEffectForm] = useState<AdminEffectAdded | null>(null);
@@ -651,7 +680,12 @@ function RequestDetail({
   }
 
   return (
-    <section className={panelClass} style={panelStyle}>
+    <section
+      id="request-detail"
+      tabIndex={-1}
+      className={`${panelClass} scroll-mt-20 focus:outline-none`}
+      style={panelStyle}
+    >
       <div className="mb-4 flex items-center justify-between">
         <h2 className="text-lg font-semibold text-[var(--foreground)]">
           {request.state_action_types?.label_fr ?? "Détail de la demande"}
@@ -978,48 +1012,135 @@ function RequestDetail({
             <div className="flex flex-wrap items-center gap-2">
               <button
                 type="button"
-                onClick={handleAccept}
+                onClick={() => setDecisionToConfirm("accept")}
                 disabled={
                   !isAdminActionable ||
                   loading !== null ||
                   (ACTION_KEYS_REQUIRING_IMPACT_ROLL.has(request.state_action_types?.key ?? "") &&
                     !request.dice_results?.impact_roll)
                 }
-                className="rounded bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
+                className="rounded-lg bg-[var(--accent)] px-4 py-2 text-sm font-semibold text-[#0f1419] hover:bg-[var(--accent-hover)] disabled:opacity-50"
               >
-                {loading === "accept" ? "En cours…" : "Accepter"}
+                Préparer l’acceptation
               </button>
               <button
                 type="button"
-                onClick={handleRefuse}
+                onClick={() => setDecisionToConfirm("refuse")}
                 disabled={loading !== null}
-                className="rounded bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-50"
+                className="rounded-lg border px-4 py-2 text-sm font-semibold text-[var(--danger)] hover:bg-[color-mix(in_srgb,var(--danger)_10%,transparent)] disabled:opacity-50"
+                style={{ borderColor: "color-mix(in srgb, var(--danger) 45%, transparent)" }}
               >
-                {loading === "refuse" ? "En cours…" : "Refuser"}
+                Préparer le refus
               </button>
             </div>
-            <div className="w-px shrink-0 self-stretch bg-[var(--border)]" aria-hidden />
-            <div className="flex flex-1 flex-wrap items-center gap-4">
-              <label className="flex items-center gap-2 text-sm">
-                <input
-                  type="checkbox"
-                  checked={refund}
-                  onChange={(e) => setRefund(e.target.checked)}
-                />
-                Rembourser les actions d&apos;État
-              </label>
-              <input
-                aria-label="Message explicatif du refus"
-                type="text"
-                placeholder="Message explicatif (refus)"
-                value={refusalMsg}
-                onChange={(e) => setRefusalMsg(e.target.value.slice(0, 500))}
-                className="min-w-[200px] max-w-md flex-1 rounded border bg-[var(--background)] px-3 py-1.5 text-sm"
-                style={{ borderColor: "var(--border)" }}
-                maxLength={500}
-              />
-            </div>
+            {decisionToConfirm === "refuse" ? (
+              <>
+                <div className="w-px shrink-0 self-stretch bg-[var(--border)]" aria-hidden />
+                <div className="flex flex-1 flex-wrap items-center gap-4">
+                  <label className="flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={refund}
+                      onChange={(e) => setRefund(e.target.checked)}
+                    />
+                    Rembourser les actions d&apos;État
+                  </label>
+                  <input
+                    aria-label="Message explicatif du refus"
+                    type="text"
+                    placeholder="Message au joueur (recommandé)"
+                    value={refusalMsg}
+                    onChange={(e) => setRefusalMsg(e.target.value.slice(0, 500))}
+                    className="min-w-[200px] max-w-md flex-1 rounded border bg-[var(--background)] px-3 py-1.5 text-sm"
+                    style={{ borderColor: "var(--border)" }}
+                    maxLength={500}
+                  />
+                </div>
+              </>
+            ) : null}
           </div>
+          {decisionToConfirm ? (
+            <div
+              className="rounded-xl border p-3"
+              style={{ borderColor: "var(--border)", background: "var(--background)" }}
+              aria-live="polite"
+            >
+              <h3 className="font-semibold text-[var(--foreground)]">
+                {decisionToConfirm === "accept" ? "Confirmer l’acceptation" : "Confirmer le refus"}
+              </h3>
+              <dl className="mt-2 grid gap-x-4 gap-y-2 text-sm sm:grid-cols-2">
+                <div>
+                  <dt className="text-[var(--foreground-muted)]">Action</dt>
+                  <dd className="font-medium text-[var(--foreground)]">
+                    {request.state_action_types?.label_fr ?? request.action_type_id}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-[var(--foreground-muted)]">Pays concernés</dt>
+                  <dd className="font-medium text-[var(--foreground)]">
+                    {request.country?.name ?? request.country_id}
+                    {targetCountry ? ` → ${targetCountry.name}` : ""}
+                  </dd>
+                </div>
+                {decisionToConfirm === "accept" ? (
+                  <>
+                    <div>
+                      <dt className="text-[var(--foreground-muted)]">Résultat utilisé</dt>
+                      <dd className="font-medium text-[var(--foreground)]">
+                        {request.dice_results?.impact_roll
+                          ? `${request.dice_results.impact_roll.total}/100 au jet d’impact`
+                          : request.dice_results?.success_roll
+                            ? `${request.dice_results.success_roll.total}/100 au jet de réussite`
+                            : "Aucun jet requis"}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt className="text-[var(--foreground-muted)]">Effets ajoutés par l’admin</dt>
+                      <dd className="font-medium text-[var(--foreground)]">
+                        {effectsList.length}
+                      </dd>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div>
+                      <dt className="text-[var(--foreground-muted)]">Remboursement</dt>
+                      <dd className="font-medium text-[var(--foreground)]">{refund ? "Oui" : "Non"}</dd>
+                    </div>
+                    <div>
+                      <dt className="text-[var(--foreground-muted)]">Message au joueur</dt>
+                      <dd className="font-medium text-[var(--foreground)]">
+                        {refusalMsg.trim() || "Aucun message"}
+                      </dd>
+                    </div>
+                  </>
+                )}
+              </dl>
+              <div className="mt-3 flex flex-wrap justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setDecisionToConfirm(null)}
+                  disabled={loading !== null}
+                  className="rounded-lg border px-3 py-2 text-sm font-medium text-[var(--foreground)]"
+                  style={{ borderColor: "var(--border)" }}
+                >
+                  Revenir
+                </button>
+                <button
+                  type="button"
+                  onClick={decisionToConfirm === "accept" ? handleAccept : handleRefuse}
+                  disabled={loading !== null}
+                  className="rounded-lg bg-[var(--accent)] px-3 py-2 text-sm font-semibold text-[#0f1419] disabled:opacity-50"
+                >
+                  {loading
+                    ? "Application…"
+                    : decisionToConfirm === "accept"
+                      ? "Appliquer les conséquences"
+                      : "Confirmer le refus"}
+                </button>
+              </div>
+            </div>
+          ) : null}
         </div>
       )}
     </section>
@@ -1272,7 +1393,7 @@ function EffectFormInline({
           type="button"
           onClick={onSave}
           disabled={saving || !effect.name}
-          className="rounded bg-[var(--accent)] px-3 py-1.5 text-sm text-white disabled:opacity-50"
+          className="rounded bg-[var(--accent)] px-3 py-1.5 text-sm font-semibold text-[#0f1419] disabled:opacity-50"
         >
           {saving ? "Enregistrement…" : "Enregistrer l'effet"}
         </button>

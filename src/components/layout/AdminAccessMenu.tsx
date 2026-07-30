@@ -6,6 +6,7 @@ import {
   ADMIN_NAVIGATION_GROUPS,
   filterAdminNavigation,
 } from "@/lib/adminNavigation";
+import { AdminNavigationIcon } from "@/components/admin/AdminNavigationIcon";
 
 export function AdminAccessMenu() {
   const [query, setQuery] = useState("");
@@ -26,8 +27,12 @@ export function AdminAccessMenu() {
       className="shrink-0"
     >
       <summary className="inline-flex min-h-11 cursor-pointer list-none items-center gap-2 rounded-lg border px-3 text-sm font-medium text-[var(--foreground)] transition-colors hover:bg-[var(--background-panel)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] [&::-webkit-details-marker]:hidden">
-        <span aria-hidden>⌕</span>
-        <span>Accès rapide</span>
+        <svg aria-hidden className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <circle cx="11" cy="11" r="7" />
+          <path d="m20 20-4-4" />
+        </svg>
+        <span className="sm:hidden">Pages</span>
+        <span className="hidden sm:inline">Toutes les pages</span>
         <span aria-hidden className="text-xs text-[var(--foreground-muted)]">▾</span>
       </summary>
       <div
@@ -63,7 +68,9 @@ export function AdminAccessMenu() {
                       onClick={closeMenu}
                       className="flex min-h-11 items-center gap-2 rounded-lg px-2 py-1.5 transition-colors hover:bg-[var(--background-panel)] focus-visible:bg-[var(--background-panel)]"
                     >
-                      <span aria-hidden className="w-7 shrink-0 text-center">{item.icon}</span>
+                      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[var(--background-panel)] text-[var(--foreground-muted)]">
+                        <AdminNavigationIcon name={item.icon} className="h-4 w-4" />
+                      </span>
                       <span className="min-w-0">
                         <span className="block text-sm font-medium text-[var(--foreground)]">{item.label}</span>
                         <span className="block text-xs leading-snug text-[var(--foreground-muted)]">{item.description}</span>

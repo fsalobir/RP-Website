@@ -62,6 +62,18 @@ body {
   z-index: 100000;
 }
 
+.admin-dialog::backdrop {
+  background: rgb(0 0 0 / 0.72);
+}
+
+.admin-horizontal-nav {
+  scrollbar-width: none;
+}
+
+.admin-horizontal-nav::-webkit-scrollbar {
+  display: none;
+}
+
 /* Panneaux type dashboard */
 .panel {
   background: var(--background-panel);
@@ -250,5 +262,58 @@ body {
 @media (max-width: 639px) {
   .admin-settings-form :where(input, select, textarea) {
     font-size: 1rem;
+  }
+}
+
+@media (max-width: 767px) {
+  .admin-responsive-table,
+  .admin-responsive-table tbody,
+  .admin-responsive-table tr,
+  .admin-responsive-table td {
+    display: block;
+    width: 100%;
+  }
+
+  .admin-responsive-table thead {
+    display: none;
+  }
+
+  .admin-responsive-table tbody tr {
+    padding: 0.625rem 0.75rem;
+    border: 1px solid var(--border);
+    border-radius: 0.75rem;
+    background: var(--background-elevated);
+  }
+
+  .admin-responsive-table tbody tr + tr {
+    margin-top: 0.625rem;
+  }
+
+  .admin-responsive-table td {
+    display: grid;
+    grid-template-columns: minmax(6.5rem, 38%) minmax(0, 1fr);
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.4rem 0;
+    border: 0;
+  }
+
+  .admin-responsive-table td::before {
+    content: attr(data-label);
+    color: var(--foreground-muted);
+    font-size: 0.75rem;
+    font-weight: 600;
+  }
+
+  .admin-responsive-table td[data-action] {
+    display: flex;
+    justify-content: flex-end;
+    padding-top: 0.65rem;
+    border-top: 1px solid var(--border-muted);
+    margin-top: 0.25rem;
+  }
+
+  .admin-responsive-table td[data-action]::before {
+    content: none;
   }
 }

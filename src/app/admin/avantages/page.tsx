@@ -14,9 +14,9 @@ export default async function AdminAvantagesPage() {
   const rosterUnits = rosterRes.data ?? [];
 
   return (
-    <div className="mx-auto max-w-6xl px-4 py-6">
+    <div className="mx-auto max-w-7xl px-4 py-6">
       <h1 className="text-2xl font-bold text-[var(--foreground)]">Avantages</h1>
-      <p className="mt-1 text-[var(--foreground-muted)]">
+      <p className="mt-1 max-w-[72ch] text-sm leading-relaxed text-[var(--foreground-muted)]">
         Créez les avantages, leurs conditions de déblocage et leurs effets sur un pays.
       </p>
       <div className="mt-5">

@@ -57,14 +57,14 @@ export default async function AdminPaysEditPage({
   const continents = continentsRes.data ?? [];
 
   return (
-    <div className="mx-auto max-w-6xl px-4 py-6">
+    <div className="mx-auto max-w-7xl px-4 py-6">
       <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold text-[var(--foreground)]">
             Modifier {country.name}
           </h1>
-          <p className="mt-1 text-[var(--foreground-muted)]">
-            Généralités, société, macros, militaire, contrôle et avantages.
+          <p className="mt-1 max-w-[72ch] text-sm leading-relaxed text-[var(--foreground-muted)]">
+            Modifiez les données visibles du pays, puis ses lois et ses relations de contrôle.
           </p>
         </div>
         <Link

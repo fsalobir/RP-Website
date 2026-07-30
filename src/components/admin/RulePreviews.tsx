@@ -383,12 +383,22 @@ export function IdeologyRulePreview({
   sphere?: SphereInfluencePct;
 }) {
   const selected = IDEOLOGY_IDS[0];
-  const neutralScores = Object.fromEntries(IDEOLOGY_IDS.map((id) => [ideologyColumnName(id), 100 / 6]));
-  const neighborScores = Object.fromEntries(IDEOLOGY_IDS.map((id) => [ideologyColumnName(id), id === selected ? 100 : 0]));
+  const targetScores = Object.fromEntries(IDEOLOGY_IDS.map((id) => [
+    ideologyColumnName(id),
+    id === selected ? 34 : id === "french_republicanism" || id === "nilotique_cultism" ? 33 : 0,
+  ]));
+  const favorableNeighborScores = Object.fromEntries(IDEOLOGY_IDS.map((id) => [
+    ideologyColumnName(id),
+    id === selected ? 50 : id === "french_republicanism" || id === "nilotique_cultism" ? 25 : 0,
+  ]));
+  const balancingNeighborScores = Object.fromEntries(IDEOLOGY_IDS.map((id) => [
+    ideologyColumnName(id),
+    id === selected ? 20 : id === "french_republicanism" || id === "nilotique_cultism" ? 40 : 0,
+  ]));
   const countries = [
     {
       id: "target",
-      name: "Pays neutre",
+      name: "Pays observé",
       slug: "target",
       flag_url: null,
       regime: null,
@@ -398,12 +408,12 @@ export function IdeologyRulePreview({
       stability: 0,
       gdp: 1,
       population: 1,
-      ...neutralScores,
+      ...targetScores,
     } as unknown as IdeologyCountryInput,
     {
-      id: "neighbor",
-      name: "Voisin dominant",
-      slug: "neighbor",
+      id: "favorable-neighbor",
+      name: "Voisin favorable",
+      slug: "favorable-neighbor",
       flag_url: null,
       regime: null,
       militarism: 5,
@@ -412,24 +422,44 @@ export function IdeologyRulePreview({
       stability: 0,
       gdp: 1,
       population: 1,
-      ...neighborScores,
+      ...favorableNeighborScores,
+    } as unknown as IdeologyCountryInput,
+    {
+      id: "balancing-neighbor",
+      name: "Voisin modéré",
+      slug: "balancing-neighbor",
+      flag_url: null,
+      regime: null,
+      militarism: 5,
+      industry: 5,
+      science: 5,
+      stability: 0,
+      gdp: 1,
+      population: 1,
+      ...balancingNeighborScores,
     } as unknown as IdeologyCountryInput,
   ];
   const drift = createZeroScores();
   const snap = createZeroScores();
-  drift[selected] = 10;
-  snap[selected] = 1;
+  drift[selected] = 2;
   const result = computeWorldIdeologies({
     countries,
     config,
-    relationMap: new Map([[relationKey("target", "neighbor"), 50]]),
-    influenceByCountry: new Map([["target", 50], ["neighbor", 100]]),
-    neighborIdsByCountry: new Map([["target", ["neighbor"]]]),
-    controlRows: [{ country_id: "target", controller_country_id: "neighbor", share_pct: 100, is_annexed: false }],
+    relationMap: new Map([
+      [relationKey("target", "favorable-neighbor"), 25],
+      [relationKey("target", "balancing-neighbor"), 0],
+    ]),
+    influenceByCountry: new Map([
+      ["target", 1000],
+      ["favorable-neighbor", 1500],
+      ["balancing-neighbor", 800],
+    ]),
+    neighborIdsByCountry: new Map([["target", ["favorable-neighbor", "balancing-neighbor"]]]),
+    controlRows: [{ country_id: "target", controller_country_id: "favorable-neighbor", share_pct: 25, is_annexed: false }],
     effectsByCountry: new Map([["target", { drift, snap }]]),
     sphereInfluencePct: sphere,
   }).get("target");
-  const before = 100 / 6;
+  const before = 34;
   const after = result?.scores[selected] ?? before;
   const delta = after - before;
   const speedLabel = Math.abs(delta) >= 10 ? "très rapide" : Math.abs(delta) >= 3 ? "rapide" : "modéré";
@@ -437,7 +467,7 @@ export function IdeologyRulePreview({
   return (
     <PreviewFrame
       title="Test de dérive en un jour"
-      description="Cas volontairement fort : voisin deux fois plus influent, relation +50, occupation et effet actif poussent tous dans le même sens."
+      description="Scénario de référence : pays à 34 %, deux voisins aux profils différents, influences de 800 à 1.500, relation +25 et contrôle à 25 %."
     >
       <div className="grid gap-4 sm:grid-cols-[11rem_minmax(0,1fr)] sm:items-center">
         <div>
@@ -544,7 +574,7 @@ export function AiRulePreview({ config }: { config: AiConfig }) {
       title="Projection sur vingt-quatre heures"
       description="Estimation à rythme constant. Le déclenchement réel peut varier dans la plage aléatoire configurée."
     >
-      <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_18rem] lg:items-center">
+      <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-5 lg:grid-cols-[minmax(0,1fr)_18rem] lg:items-center">
         <div>
           <div className="flex min-h-12 items-center gap-1 overflow-hidden rounded-lg bg-[var(--background)] px-3">
             {Array.from({ length: Math.min(passages, 48) }, (_, index) => (

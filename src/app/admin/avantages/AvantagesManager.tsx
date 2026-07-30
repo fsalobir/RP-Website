@@ -38,7 +38,7 @@ import {
   type PerkEffectInput,
   type PerkRequirementInput,
 } from "./actions";
-import { AdminImpactPreview, AdminSettingsGuide } from "@/components/admin/AdminSettingsUi";
+import { AdminAnchorNav, AdminImpactPreview, AdminSettingsGuide } from "@/components/admin/AdminSettingsUi";
 import { matchesSearchText } from "@/lib/searchText";
 
 const inputClass = "w-full rounded border py-1.5 px-2 text-sm text-[var(--foreground)]";
@@ -331,7 +331,14 @@ export function AvantagesManager({
         impact="La modification d’un avantage existant change immédiatement son affichage et ses effets pour les pays concernés."
         check="Vérifiez l’aperçu, puis lisez les conditions et effets comme le ferait un joueur avant d’enregistrer."
       />
-      <section>
+      <AdminAnchorNav
+        label="Sections des avantages"
+        items={[
+          { href: "#perk-categories", label: "Catégories" },
+          { href: "#perk-list", label: "Avantages" },
+        ]}
+      />
+      <section id="perk-categories" className="scroll-mt-20">
         <h2 className="mb-2 text-lg font-semibold text-[var(--foreground)]">Catégories</h2>
         <ul className="space-y-2">
           {categories.map((cat) => (
@@ -417,7 +424,7 @@ export function AvantagesManager({
         )}
       </section>
 
-      <section>
+      <section id="perk-list" className="scroll-mt-20 border-t pt-4" style={{ borderColor: "var(--border)" }}>
         <h2 className="mb-2 text-lg font-semibold text-[var(--foreground)]">Avantages</h2>
         <div className="mb-3 max-w-xl">
           <label htmlFor="perk-search" className="mb-1 block text-sm font-medium text-[var(--foreground)]">

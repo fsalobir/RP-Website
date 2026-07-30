@@ -53,8 +53,8 @@ export function JoueursManager({
       />
 
       <section
-        className="rounded-xl border p-4"
-        style={{ borderColor: "var(--border)", background: "var(--background-panel)" }}
+        className="border-t py-4"
+        style={{ borderColor: "var(--border)" }}
       >
         <h2 className="text-lg font-semibold text-[var(--foreground)]">
           Créer un joueur
@@ -145,8 +145,8 @@ export function JoueursManager({
       </section>
 
       <section
-        className="rounded-xl border p-4"
-        style={{ borderColor: "var(--border)", background: "var(--background-panel)" }}
+        className="border-t py-4"
+        style={{ borderColor: "var(--border)" }}
       >
         <div className="mb-3 flex flex-wrap items-end justify-between gap-3">
           <div>

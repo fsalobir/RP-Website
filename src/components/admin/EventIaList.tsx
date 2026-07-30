@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AdminSettingsGuide } from "@/components/admin/AdminSettingsUi";
 import {
@@ -17,6 +17,7 @@ import { getDefaultImpactMaximum, getStateActionImpactPreviewLabel } from "@/lib
 import { normalizeAdminEffectsAdded, formatAdminEffectLabel } from "@/lib/countryEffects";
 import { normalizePair } from "@/lib/relations";
 import { getRelationLabel, getRelationColor } from "@/lib/relationScale";
+import { matchesAdminListFilters, normalizeAdminSearch } from "@/lib/adminListFilters";
 
 type DiceRollResultRow = {
   roll: number;
@@ -111,15 +112,6 @@ const panelClass = "rounded-lg border p-4";
 const panelStyle = { background: "var(--background-panel)", borderColor: "var(--border)" };
 const EVENTS_PER_PAGE = 10;
 
-function normalizeSearchValue(value: string): string {
-  return value
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, " ")
-    .trim();
-}
-
 function getStatusLabel(status: string): string {
   if (status === "pending") return "en attente";
   if (status === "accepted") return "accepté";
@@ -143,6 +135,7 @@ export function EventIaList({
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const createDialogRef = useRef<HTMLDialogElement>(null);
   const [createTypeId, setCreateTypeId] = useState<string>(actionTypesForAi[0]?.id ?? "");
   const [createEmitterId, setCreateEmitterId] = useState<string>(aiCountries[0]?.id ?? "");
   const [createTargetId, setCreateTargetId] = useState<string>(allCountries[0]?.id ?? "");
@@ -151,7 +144,15 @@ export function EventIaList({
   const [processDueLoading, setProcessDueLoading] = useState(false);
   const [clearLoading, setClearLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
   const [currentPage, setCurrentPage] = useState(1);
+
+  useEffect(() => {
+    const dialog = createDialogRef.current;
+    if (!dialog) return;
+    if (showCreateModal && !dialog.open) dialog.showModal();
+    if (!showCreateModal && dialog.open) dialog.close();
+  }, [showCreateModal]);
 
   const sortedEvents = useMemo(() => {
     return [...events].sort((a, b) => {
@@ -163,13 +164,12 @@ export function EventIaList({
   }, [events]);
 
   const filteredEvents = useMemo(() => {
-    const tokens = normalizeSearchValue(searchQuery).split(" ").filter(Boolean);
-    if (tokens.length === 0) return sortedEvents;
+    const tokens = normalizeAdminSearch(searchQuery).split(" ").filter(Boolean);
 
     return sortedEvents.filter((event) => {
       const targetId = typeof event.payload?.target_country_id === "string" ? event.payload.target_country_id : null;
       const targetCountry = targetId ? targetCountriesById[targetId] : null;
-      const haystack = normalizeSearchValue([
+      const haystack = normalizeAdminSearch([
         event.state_action_types?.label_fr ?? "",
         event.state_action_types?.key ?? "",
         event.country?.name ?? "",
@@ -179,9 +179,9 @@ export function EventIaList({
         getStatusLabel(event.status),
       ].join(" "));
 
-      return tokens.every((token) => haystack.includes(token));
+      return matchesAdminListFilters(event.status, statusFilter, haystack, tokens);
     });
-  }, [searchQuery, sortedEvents, targetCountriesById]);
+  }, [searchQuery, sortedEvents, statusFilter, targetCountriesById]);
 
   const totalPages = Math.max(1, Math.ceil(filteredEvents.length / EVENTS_PER_PAGE));
 
@@ -203,6 +203,19 @@ export function EventIaList({
   function handleRefresh() {
     setError(null);
     router.refresh();
+  }
+
+  function toggleEvent(id: string) {
+    if (selectedId === id) {
+      setSelectedId(null);
+      return;
+    }
+    setSelectedId(id);
+    requestAnimationFrame(() => {
+      const detail = document.getElementById("ai-event-detail");
+      detail?.scrollIntoView({ block: "start", behavior: "smooth" });
+      detail?.focus({ preventScroll: true });
+    });
   }
 
   async function handleCreate() {
@@ -415,20 +428,39 @@ export function EventIaList({
               </button>
             </div>
           </div>
-          <div className="w-full max-w-xl">
-            <label htmlFor="ai-event-search" className="mb-1 block text-sm text-[var(--foreground-muted)]">Rechercher</label>
-            <input
-              id="ai-event-search"
-              type="text"
-              value={searchQuery}
-              onChange={(e) => {
-                setSearchQuery(e.target.value);
-                setCurrentPage(1);
-              }}
-              placeholder="Guerre, Russie…"
-              className="w-full rounded border bg-[var(--background)] px-3 py-2 text-sm text-[var(--foreground)]"
-              style={{ borderColor: "var(--border)" }}
-            />
+          <div className="grid w-full max-w-2xl gap-2 sm:grid-cols-[minmax(0,1fr)_12rem]">
+            <label>
+              <span className="mb-1 block text-sm text-[var(--foreground-muted)]">Rechercher</span>
+              <input
+                id="ai-event-search"
+                type="search"
+                value={searchQuery}
+                onChange={(e) => {
+                  setSearchQuery(e.target.value);
+                  setCurrentPage(1);
+                }}
+                placeholder="Action ou pays…"
+                className="w-full rounded border bg-[var(--background)] px-3 py-2 text-sm text-[var(--foreground)]"
+                style={{ borderColor: "var(--border)" }}
+              />
+            </label>
+            <label>
+              <span className="mb-1 block text-sm text-[var(--foreground-muted)]">Statut</span>
+              <select
+                value={statusFilter}
+                onChange={(event) => {
+                  setStatusFilter(event.target.value);
+                  setCurrentPage(1);
+                }}
+                className="w-full rounded border bg-[var(--background)] px-3 py-2 text-sm text-[var(--foreground)]"
+                style={{ borderColor: "var(--border)" }}
+              >
+                <option value="all">Tous</option>
+                <option value="pending">À examiner</option>
+                <option value="accepted">Acceptés</option>
+                <option value="refused">Refusés</option>
+              </select>
+            </label>
           </div>
         </div>
         <div className="mb-4 flex flex-wrap items-center justify-between gap-2 text-sm text-[var(--foreground-muted)]">
@@ -440,8 +472,8 @@ export function EventIaList({
             {error}
           </p>
         )}
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
+        <div className="overflow-visible md:overflow-x-auto">
+          <table className="admin-responsive-table w-full text-sm">
             <thead>
               <tr style={{ borderColor: "var(--border)" }}>
                 <th className="border-b p-2 text-left font-medium text-[var(--foreground-muted)]">Date</th>
@@ -451,6 +483,7 @@ export function EventIaList({
                 <th className="border-b p-2 text-left font-medium text-[var(--foreground-muted)]">Statut</th>
                 <th className="border-b p-2 text-left font-medium text-[var(--foreground-muted)]">Déclenchement prévu</th>
                 <th className="border-b p-2 text-left font-medium text-[var(--foreground-muted)]">Origine</th>
+                <th className="border-b p-2 text-right font-medium text-[var(--foreground-muted)]">Action</th>
               </tr>
             </thead>
             <tbody>
@@ -461,26 +494,19 @@ export function EventIaList({
                 return (
                   <tr
                     key={r.id}
-                    onClick={() => setSelectedId(selectedId === r.id ? null : r.id)}
-                    onKeyDown={(event) => {
-                      if (event.key !== "Enter" && event.key !== " ") return;
-                      event.preventDefault();
-                      setSelectedId(selectedId === r.id ? null : r.id);
-                    }}
-                    tabIndex={0}
-                    className="cursor-pointer transition-colors hover:bg-[var(--background)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--accent)] focus-visible:outline-offset-[-2px]"
+                    className="transition-colors"
                     style={{
                       borderColor: "var(--border)",
                       background: isSelected ? "var(--background-elevated)" : undefined,
                     }}
                   >
-                    <td className="border-b p-2 text-[var(--foreground)]">
+                    <td data-label="Date" className="border-b p-2 text-[var(--foreground)]">
                       {new Date(r.created_at).toLocaleString("fr-FR")}
                     </td>
-                    <td className="border-b p-2 text-[var(--foreground)]">
+                    <td data-label="Action" className="border-b p-2 text-[var(--foreground)]">
                       {r.state_action_types?.label_fr ?? r.action_type_id}
                     </td>
-                    <td className="border-b p-2 text-[var(--foreground)]">
+                    <td data-label="Émetteur" className="border-b p-2 text-[var(--foreground)]">
                       <span title={r.country?.name ?? r.country_id} className="inline-flex items-center gap-1.5">
                         {r.country?.flag_url ? (
                           <img
@@ -492,20 +518,20 @@ export function EventIaList({
                         ) : (
                           <span className="text-[var(--foreground-muted)]">{r.country?.name ?? r.country_id}</span>
                         )}
-                        {r.country?.flag_url && <span className="sr-only">{r.country.name}</span>}
+                        {r.country?.flag_url ? <span>{r.country.name}</span> : null}
                       </span>
                     </td>
-                    <td className="border-b p-2 text-[var(--foreground)]">
+                    <td data-label="Cible" className="border-b p-2 text-[var(--foreground)]">
                       {targetCountry ? (
                         targetCountry.flag_url ? (
-                          <span title={targetCountry.name} className="inline-flex">
+                          <span title={targetCountry.name} className="inline-flex items-center gap-1.5">
                             <img
                               src={targetCountry.flag_url}
                               alt=""
                               className="h-6 w-9 rounded object-cover shrink-0"
                               title={targetCountry.name}
                             />
-                            <span className="sr-only">{targetCountry.name}</span>
+                            <span>{targetCountry.name}</span>
                           </span>
                         ) : (
                           <span className="text-[var(--foreground-muted)]">{targetCountry.name}</span>
@@ -514,16 +540,27 @@ export function EventIaList({
                         <span className="text-[var(--foreground-muted)]">—</span>
                       )}
                     </td>
-                    <td className="border-b p-2">
+                    <td data-label="Statut" className="border-b p-2">
                       <StatusBadge status={r.status} />
                     </td>
-                    <td className="border-b p-2 text-[var(--foreground)]">
+                    <td data-label="Déclenchement" className="border-b p-2 text-[var(--foreground)]">
                       {r.scheduled_trigger_at
                         ? new Date(r.scheduled_trigger_at).toLocaleString("fr-FR")
                         : "—"}
                     </td>
-                    <td className="border-b p-2 text-[var(--foreground-muted)]">
+                    <td data-label="Origine" className="border-b p-2 text-[var(--foreground-muted)]">
                       {r.source === "cron" ? "Automatique" : r.source === "manual" ? "Manuel" : "—"}
+                    </td>
+                    <td data-label="" data-action className="border-b p-2 text-right">
+                      <button
+                        type="button"
+                        onClick={() => toggleEvent(r.id)}
+                        aria-expanded={isSelected}
+                        className="rounded-lg border px-3 py-1.5 text-sm font-medium text-[var(--foreground)] hover:bg-[var(--background)]"
+                        style={{ borderColor: "var(--border)" }}
+                      >
+                        {isSelected ? "Masquer" : "Examiner"}
+                      </button>
                     </td>
                   </tr>
                 );
@@ -564,100 +601,99 @@ export function EventIaList({
         )}
       </section>
 
-      {showCreateModal && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
-          onClick={() => !createLoading && setShowCreateModal(false)}
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="create-event-title"
-        >
-          <div
-            className="max-h-[calc(100dvh-2rem)] w-full max-w-md overflow-y-auto rounded-xl border p-4 shadow-xl"
-            style={{ background: "var(--background-panel)", borderColor: "var(--border)" }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <h3 id="create-event-title" className="mb-4 text-lg font-semibold text-[var(--foreground)]">
-              Générer un event IA
-            </h3>
-            <div className="space-y-4">
-              <div>
-                <label htmlFor="create-event-type" className="mb-1 block text-xs text-[var(--foreground-muted)]">Type d&apos;action</label>
-                <select
-                  id="create-event-type"
-                  value={createTypeId}
-                  onChange={(e) => setCreateTypeId(e.target.value)}
-                  className="w-full rounded border px-2 py-1.5 text-sm"
-                  style={{ borderColor: "var(--border)" }}
-                >
-                  {actionTypesForAi.map((t) => (
-                    <option key={t.id} value={t.id}>
-                      {t.label_fr}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label htmlFor="create-event-emitter" className="mb-1 block text-xs text-[var(--foreground-muted)]">Pays émetteur (IA)</label>
-                <select
-                  id="create-event-emitter"
-                  value={createEmitterId}
-                  onChange={(e) => setCreateEmitterId(e.target.value)}
-                  className="w-full rounded border px-2 py-1.5 text-sm"
-                  style={{ borderColor: "var(--border)" }}
-                >
-                  {aiCountries.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label htmlFor="create-event-target" className="mb-1 block text-xs text-[var(--foreground-muted)]">Pays cible</label>
-                <select
-                  id="create-event-target"
-                  value={createTargetId}
-                  onChange={(e) => setCreateTargetId(e.target.value)}
-                  className="w-full rounded border px-2 py-1.5 text-sm"
-                  style={{ borderColor: "var(--border)" }}
-                >
-                  {allCountries
-                    .filter((c) => c.id !== createEmitterId)
-                    .map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.name}
-                      </option>
-                    ))}
-                </select>
-              </div>
-              {error && (
-                <p role="alert" className="rounded border border-red-500/50 bg-red-500/10 px-3 py-2 text-sm text-red-400">
-                  {error}
-                </p>
-              )}
-            </div>
-            <div className="mt-6 grid grid-cols-2 gap-2">
-              <button
-                type="button"
-                onClick={() => !createLoading && setShowCreateModal(false)}
-                className="rounded border px-3 py-1.5 text-sm"
-                style={{ borderColor: "var(--border)" }}
-              >
-                Annuler
-              </button>
-              <button
-                type="button"
-                onClick={handleCreate}
-                disabled={createLoading}
-                className="rounded bg-[var(--accent)] px-3 py-1.5 text-sm font-medium text-white disabled:opacity-50"
-              >
-                {createLoading ? "Création…" : "Créer"}
-              </button>
-            </div>
+      <dialog
+        ref={createDialogRef}
+        aria-labelledby="create-event-title"
+        onClose={() => setShowCreateModal(false)}
+        onCancel={(event) => {
+          if (createLoading) event.preventDefault();
+        }}
+        className="admin-dialog m-auto max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] max-w-md overflow-y-auto rounded-xl border p-4 text-[var(--foreground)] shadow-[0_24px_64px_rgba(0,0,0,0.5)]"
+        style={{ background: "var(--background-panel)", borderColor: "var(--border)" }}
+      >
+        <h3 id="create-event-title" className="mb-1 text-lg font-semibold text-[var(--foreground)]">
+          Créer un événement IA
+        </h3>
+        <p className="mb-4 text-sm text-[var(--foreground-muted)]">
+          Choisissez l’action, le pays émetteur et sa cible.
+        </p>
+        <div className="space-y-4">
+          <div>
+            <label htmlFor="create-event-type" className="mb-1 block text-xs text-[var(--foreground-muted)]">Type d&apos;action</label>
+            <select
+              autoFocus
+              id="create-event-type"
+              value={createTypeId}
+              onChange={(e) => setCreateTypeId(e.target.value)}
+              className="w-full rounded border bg-[var(--background)] px-2 py-1.5 text-sm"
+              style={{ borderColor: "var(--border)" }}
+            >
+              {actionTypesForAi.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.label_fr}
+                </option>
+              ))}
+            </select>
           </div>
+          <div>
+            <label htmlFor="create-event-emitter" className="mb-1 block text-xs text-[var(--foreground-muted)]">Pays émetteur (IA)</label>
+            <select
+              id="create-event-emitter"
+              value={createEmitterId}
+              onChange={(e) => setCreateEmitterId(e.target.value)}
+              className="w-full rounded border bg-[var(--background)] px-2 py-1.5 text-sm"
+              style={{ borderColor: "var(--border)" }}
+            >
+              {aiCountries.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label htmlFor="create-event-target" className="mb-1 block text-xs text-[var(--foreground-muted)]">Pays cible</label>
+            <select
+              id="create-event-target"
+              value={createTargetId}
+              onChange={(e) => setCreateTargetId(e.target.value)}
+              className="w-full rounded border bg-[var(--background)] px-2 py-1.5 text-sm"
+              style={{ borderColor: "var(--border)" }}
+            >
+              {allCountries
+                .filter((c) => c.id !== createEmitterId)
+                .map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+            </select>
+          </div>
+          {error ? (
+            <p role="alert" className="rounded border border-red-500/50 bg-red-500/10 px-3 py-2 text-sm text-red-300">
+              {error}
+            </p>
+          ) : null}
         </div>
-      )}
+        <div className="mt-6 grid grid-cols-2 gap-2">
+          <button
+            type="button"
+            onClick={() => !createLoading && setShowCreateModal(false)}
+            className="rounded-lg border px-3 py-1.5 text-sm"
+            style={{ borderColor: "var(--border)" }}
+          >
+            Annuler
+          </button>
+          <button
+            type="button"
+            onClick={handleCreate}
+            disabled={createLoading}
+            className="rounded-lg bg-[var(--accent)] px-3 py-1.5 text-sm font-semibold text-[#0f1419] disabled:opacity-50"
+          >
+            {createLoading ? "Création…" : "Créer l’événement"}
+          </button>
+        </div>
+      </dialog>
 
     </div>
   );
@@ -707,6 +743,7 @@ function EventDetail({
   const [refusalMsg, setRefusalMsg] = useState("");
   const [scheduleWithAmplitude, setScheduleWithAmplitude] = useState(false);
   const [loading, setLoading] = useState<"accept" | "refuse" | null>(null);
+  const [decisionToConfirm, setDecisionToConfirm] = useState<"accept" | "refuse" | null>(null);
   const [diceLoading, setDiceLoading] = useState<"success" | "impact" | null>(null);
   const [adminModifierStr, setAdminModifierStr] = useState("0");
   const [adminModifierLabel, setAdminModifierLabel] = useState("");
@@ -751,7 +788,12 @@ function EventDetail({
   }
 
   return (
-    <section className={panelClass} style={panelStyle}>
+    <section
+      id="ai-event-detail"
+      tabIndex={-1}
+      className={`${panelClass} scroll-mt-20 focus:outline-none`}
+      style={panelStyle}
+    >
       <div className="mb-4 flex items-center justify-between">
         <h2 className="text-lg font-semibold text-[var(--foreground)]">
           {event.state_action_types?.label_fr ?? "Détail de l'événement IA"}
@@ -1025,30 +1067,33 @@ function EventDetail({
             <div className="flex flex-wrap items-center gap-2">
               <button
                 type="button"
-                onClick={handleAccept}
+                onClick={() => setDecisionToConfirm("accept")}
                 disabled={loading !== null || !canAccept}
-                className="rounded bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
+                className="rounded-lg bg-[var(--accent)] px-4 py-2 text-sm font-semibold text-[#0f1419] hover:bg-[var(--accent-hover)] disabled:opacity-50"
               >
-                {loading === "accept" ? "En cours…" : "Accepter"}
+                Préparer l’acceptation
               </button>
               <button
                 type="button"
-                onClick={handleRefuse}
+                onClick={() => setDecisionToConfirm("refuse")}
                 disabled={loading !== null}
-                className="rounded bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-50"
+                className="rounded-lg border px-4 py-2 text-sm font-semibold text-[var(--danger)] hover:bg-[color-mix(in_srgb,var(--danger)_10%,transparent)] disabled:opacity-50"
+                style={{ borderColor: "color-mix(in srgb, var(--danger) 45%, transparent)" }}
               >
-                {loading === "refuse" ? "En cours…" : "Refuser"}
+                Préparer le refus
               </button>
             </div>
-            <div className="flex flex-wrap items-center gap-4">
+            {decisionToConfirm === "accept" ? (
               <label className="flex items-center gap-2 text-sm">
                 <input
                   type="checkbox"
                   checked={scheduleWithAmplitude}
                   onChange={(e) => setScheduleWithAmplitude(e.target.checked)}
                 />
-                Décaler l’application dans la plage prévue par les règles
+                Appliquer dans la plage de temps prévue par les règles
               </label>
+            ) : null}
+            {decisionToConfirm === "refuse" ? (
               <input
                 type="text"
                 aria-label="Message de refus"
@@ -1059,8 +1104,82 @@ function EventDetail({
                 style={{ borderColor: "var(--border)" }}
                 maxLength={500}
               />
-            </div>
+            ) : null}
           </div>
+          {decisionToConfirm ? (
+            <div
+              className="rounded-xl border p-3"
+              style={{ borderColor: "var(--border)", background: "var(--background)" }}
+              aria-live="polite"
+            >
+              <h3 className="font-semibold text-[var(--foreground)]">
+                {decisionToConfirm === "accept" ? "Confirmer l’acceptation" : "Confirmer le refus"}
+              </h3>
+              <dl className="mt-2 grid gap-x-4 gap-y-2 text-sm sm:grid-cols-2">
+                <div>
+                  <dt className="text-[var(--foreground-muted)]">Action</dt>
+                  <dd className="font-medium text-[var(--foreground)]">
+                    {event.state_action_types?.label_fr ?? event.action_type_id}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-[var(--foreground-muted)]">Pays concernés</dt>
+                  <dd className="font-medium text-[var(--foreground)]">
+                    {event.country?.name ?? event.country_id}
+                    {targetCountry ? ` → ${targetCountry.name}` : ""}
+                  </dd>
+                </div>
+                {decisionToConfirm === "accept" ? (
+                  <>
+                    <div>
+                      <dt className="text-[var(--foreground-muted)]">Résultat utilisé</dt>
+                      <dd className="font-medium text-[var(--foreground)]">
+                        {event.dice_results?.impact_roll
+                          ? `${event.dice_results.impact_roll.total}/100 au jet d’impact`
+                          : event.dice_results?.success_roll
+                            ? `${event.dice_results.success_roll.total}/100 au jet de réussite`
+                            : "Aucun jet requis"}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt className="text-[var(--foreground-muted)]">Application</dt>
+                      <dd className="font-medium text-[var(--foreground)]">
+                        {scheduleWithAmplitude ? "Décalée selon les règles" : "Immédiate"}
+                      </dd>
+                    </div>
+                  </>
+                ) : (
+                  <div className="sm:col-span-2">
+                    <dt className="text-[var(--foreground-muted)]">Message</dt>
+                    <dd className="font-medium text-[var(--foreground)]">{refusalMsg.trim() || "Aucun message"}</dd>
+                  </div>
+                )}
+              </dl>
+              <div className="mt-3 flex flex-wrap justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setDecisionToConfirm(null)}
+                  disabled={loading !== null}
+                  className="rounded-lg border px-3 py-2 text-sm font-medium text-[var(--foreground)]"
+                  style={{ borderColor: "var(--border)" }}
+                >
+                  Revenir
+                </button>
+                <button
+                  type="button"
+                  onClick={decisionToConfirm === "accept" ? handleAccept : handleRefuse}
+                  disabled={loading !== null}
+                  className="rounded-lg bg-[var(--accent)] px-3 py-2 text-sm font-semibold text-[#0f1419] disabled:opacity-50"
+                >
+                  {loading
+                    ? "Application…"
+                    : decisionToConfirm === "accept"
+                      ? "Appliquer les conséquences"
+                      : "Confirmer le refus"}
+                </button>
+              </div>
+            </div>
+          ) : null}
         </div>
       )}
     </section>

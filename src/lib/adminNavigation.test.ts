@@ -8,7 +8,7 @@ describe("filterAdminNavigation", () => {
 
   it("combine plusieurs mots-clés", () => {
     expect(filterAdminNavigation("relations pays").map((item) => item.href)).toContain(
-      "/admin/matrice-diplomatique"
+      "/admin/regles?domaine=diplomatie"
     );
   });
 });

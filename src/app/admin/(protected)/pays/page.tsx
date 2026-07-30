@@ -40,13 +40,13 @@ export default async function AdminPaysListPage() {
   const countryIdsWithPlayer = (countryPlayers ?? []).map((p) => (p as { country_id: string }).country_id);
 
   return (
-    <div className="mx-auto max-w-6xl px-4 py-6">
+    <div className="mx-auto max-w-7xl px-4 py-6">
       <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold text-[var(--foreground)]">
             Pays
           </h1>
-          <p className="mt-1 text-[var(--foreground-muted)]">
+          <p className="mt-1 max-w-[72ch] text-sm leading-relaxed text-[var(--foreground-muted)]">
             Recherchez un pays, puis ouvrez sa fiche ou modifiez son statut directement.
           </p>
         </div>

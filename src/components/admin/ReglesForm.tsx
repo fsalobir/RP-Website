@@ -7,7 +7,7 @@ import {
   saveRuleParameters,
   type VoisinageEntry,
 } from "@/app/admin/regles/actions";
-import { AdminParameterTable, AdminSaveBar, AdminSettingsGuide } from "@/components/admin/AdminSettingsUi";
+import { AdminParameterTable, AdminSaveBar, AdminSectionNav } from "@/components/admin/AdminSettingsUi";
 import {
   AiRulePreview,
   BudgetWorldGapPreview,
@@ -396,6 +396,34 @@ const RULE_SECTION_META: Record<string, { description: string; impact: string }>
   },
 };
 
+type RuleDomainId = "global" | "laws" | "diplomacy" | "ideology" | "ai" | "intelligence";
+
+const RULE_DOMAINS: Array<{
+  id: RuleDomainId;
+  label: string;
+  description: string;
+  sectionId: keyof typeof RULE_SECTION_META;
+}> = [
+  { id: "global", label: "Monde", description: "Rythme, date et effets communs", sectionId: "rules-global" },
+  { id: "laws", label: "Lois", description: "Budgets, ministères et armée", sectionId: "rules-laws" },
+  { id: "diplomacy", label: "Diplomatie", description: "Relations, influence et contrôle", sectionId: "rules-diplomacy" },
+  { id: "ideology", label: "Idéologie", description: "Alignements et dérive quotidienne", sectionId: "rules-ideology" },
+  { id: "ai", label: "Pays IA", description: "Rythme et cibles automatiques", sectionId: "rules-ai" },
+  { id: "intelligence", label: "Renseignement", description: "Espionnage et perte d’information", sectionId: "rules-intelligence" },
+];
+
+function formatRuleReviewValue(key: string, value: unknown): string {
+  if (key === "world_date" && value && typeof value === "object") {
+    const date = value as { month?: number; year?: number };
+    const month = Math.max(1, Math.min(12, Number(date.month ?? 1)));
+    return `${MOIS_LABELS[month - 1]} ${Number(date.year ?? 2025)}`;
+  }
+  if (typeof value === "boolean") return value ? "Activé" : "Désactivé";
+  if (typeof value === "number") return value.toLocaleString("fr-FR");
+  if (typeof value === "string" && value.length <= 40) return value;
+  return "Configuration modifiée";
+}
+
 function CollapsibleBlock({
   id,
   title,
@@ -407,6 +435,8 @@ function CollapsibleBlock({
   onToggle,
   children,
   variant = "default",
+  hidden = false,
+  bare = false,
 }: {
   id?: string;
   title: string;
@@ -418,6 +448,8 @@ function CollapsibleBlock({
   onToggle: () => void;
   children: React.ReactNode;
   variant?: "default" | "section";
+  hidden?: boolean;
+  bare?: boolean;
 }) {
   const isSection = variant === "section";
   const meta = id ? RULE_SECTION_META[id] : undefined;
@@ -426,13 +458,13 @@ function CollapsibleBlock({
   return (
     <div
       id={id}
-      className={`${isSection ? "rounded-lg border-2" : "border-b"} scroll-mt-36`}
+      className={`${hidden ? "hidden " : ""}${bare ? "" : isSection ? "rounded-lg border-2" : "border-b"} scroll-mt-36`}
       style={{
-        borderColor: isSection ? "var(--border)" : "var(--border-muted)",
-        background: isSection ? "var(--background-panel)" : undefined,
+        borderColor: bare ? undefined : isSection ? "var(--border)" : "var(--border-muted)",
+        background: bare ? undefined : isSection ? "var(--background-panel)" : undefined,
       }}
     >
-      <div
+      {!bare ? <div
         className={`flex items-stretch ${isSection ? "px-2" : "px-1"}`}
         style={{ background: "var(--background-elevated)" }}
       >
@@ -471,12 +503,12 @@ function CollapsibleBlock({
             />
           </div>
         ) : null}
-      </div>
-      {open && (
+      </div> : null}
+      {(open || bare) && (
       <div className="grid">
         <div className="min-h-0 overflow-hidden">
           <div
-            className={isSection ? "border-t py-1" : "divide-y"}
+            className={bare ? "" : isSection ? "border-t py-1" : "divide-y"}
             style={{ borderColor: "var(--border-muted)" }}
           >
             {children}
@@ -516,12 +548,14 @@ export function ReglesForm({
   countries: countriesForMatrice,
   relationMap: relationMapForMatrice,
   stateActionTypesForAi = [],
+  initialDomain = "global",
 }: {
   rules: RuleParameter[];
   rosterUnits?: { id: string; name_fr: string; branch?: string; sub_type?: string | null }[];
   countries?: CountryForMatrice[];
   relationMap?: Record<string, number>;
   stateActionTypesForAi?: { id: string; key: string; label_fr: string }[];
+  initialDomain?: string;
 }) {
   const [items, setItems] = useState(rules);
   const [savedItems, setSavedItems] = useState(rules);
@@ -573,6 +607,11 @@ export function ReglesForm({
   const [intelOpen, setIntelOpen] = useState(false);
   const [etatMajorOpen, setEtatMajorOpen] = useState(false);
   const [ruleSearch, setRuleSearch] = useState("");
+  const [activeRuleDomain, setActiveRuleDomain] = useState<RuleDomainId>(() =>
+    RULE_DOMAINS.some((domain) => domain.id === initialDomain)
+      ? initialDomain as RuleDomainId
+      : "global"
+  );
 
   const ruleSearchResults = [
     {
@@ -688,6 +727,19 @@ export function ReglesForm({
   );
 
   function openRuleSearchResult(result: (typeof ruleSearchResults)[number]) {
+    const domain =
+      result.targetId === "rules-ideology"
+        ? "ideology"
+        : result.targetId === "rules-ai"
+          ? "ai"
+          : result.targetId === "rules-intelligence"
+            ? "intelligence"
+            : ["rules-relations", "rules-influence", "rules-control"].includes(result.targetId)
+              ? "diplomacy"
+              : ["rules-budgets", "rules-military-staff", "rules-laws"].includes(result.targetId)
+                ? "laws"
+                : "global";
+    setActiveRuleDomain(domain);
     result.open();
     requestAnimationFrame(() => {
       const target = document.getElementById(result.targetId);
@@ -700,6 +752,23 @@ export function ReglesForm({
     const savedById = new Map(savedItems.map((row) => [row.id, row.value]));
     return items.filter((row) => JSON.stringify(row.value) !== JSON.stringify(savedById.get(row.id)));
   }, [items, savedItems]);
+
+  const ruleReviewItems = useMemo(() => {
+    const savedById = new Map(savedItems.map((row) => [row.id, row.value]));
+    return dirtyItems.map((row) => {
+      const before = savedById.get(row.id);
+      const beforeLabel = formatRuleReviewValue(row.key, before);
+      const afterLabel = formatRuleReviewValue(row.key, row.value);
+      return {
+        key: row.id,
+        label: getRuleLabel(row.key),
+        detail:
+          beforeLabel === "Configuration modifiée" || afterLabel === "Configuration modifiée"
+            ? "Valeurs internes modifiées"
+            : `${beforeLabel} → ${afterLabel}`,
+      };
+    });
+  }, [dirtyItems, savedItems]);
 
   const updateValue = (id: string, value: unknown) => {
     setError(null);
@@ -1449,6 +1518,8 @@ export function ReglesForm({
       value: `Toutes les ${aiOverview.interval_hours ?? 1} h · ${aiMajorCount} action${aiMajorCount === 1 ? "" : "s"} majeure${aiMajorCount === 1 ? "" : "s"} et ${aiMinorCount} mineure${aiMinorCount === 1 ? "" : "s"} par passage`,
     },
   ];
+  const activeDomain = RULE_DOMAINS.find((domain) => domain.id === activeRuleDomain) ?? RULE_DOMAINS[0];
+  const activeDomainMeta = RULE_SECTION_META[activeDomain.sectionId];
 
   return (
     <div className="admin-settings-form space-y-4">
@@ -1461,32 +1532,29 @@ export function ReglesForm({
         </p>
       </div>
 
-      <AdminSettingsGuide
-        purpose="Chaque groupe relie un réglage à son effet en jeu."
-        impact="La plupart des changements prennent effet au prochain passage quotidien. La date, les jets et certaines valeurs diplomatiques peuvent agir plus tôt."
-        check="Contrôlez les seuils dans leur ordre, les minimums face aux maximums et les exemples affichés avant d’enregistrer."
-        warning="L’enregistrement applique tout le lot en une seule fois. En cas d’erreur, aucun réglage du lot n’est modifié."
-      />
-
       <section
         aria-labelledby="rules-overview-title"
-        className="rounded-xl border px-3 py-3"
-        style={{ background: "var(--background-panel)", borderColor: "var(--border)" }}
+        className="border-y"
+        style={{ borderColor: "var(--border)" }}
       >
-        <h2 id="rules-overview-title" className="text-base font-semibold text-[var(--foreground)]">
+        <h2 id="rules-overview-title" className="sr-only">
           Situation générale
         </h2>
-        <dl className="mt-2 divide-y" style={{ borderColor: "var(--border-muted)" }}>
+        <dl className="grid sm:grid-cols-2">
           {overviewRows.map((row) => (
-            <div key={row.label} className="grid gap-1 py-2 text-sm sm:grid-cols-[7rem_1fr] sm:gap-3">
-              <dt className="font-medium text-[var(--foreground)]">{row.label}</dt>
-              <dd className="leading-relaxed text-[var(--foreground-muted)]">{row.value}</dd>
+            <div
+              key={row.label}
+              className="border-t py-3 first:border-t-0 sm:border-l sm:border-t-0 sm:px-4 sm:first:border-l-0 sm:first:pl-0"
+              style={{ borderColor: "var(--border)" }}
+            >
+              <dt className="text-xs font-medium uppercase tracking-[0.08em] text-[var(--foreground-muted)]">{row.label}</dt>
+              <dd className="mt-1 text-sm font-medium leading-relaxed text-[var(--foreground)]">{row.value}</dd>
             </div>
           ))}
         </dl>
       </section>
 
-      <div className="max-w-3xl rounded-xl border p-3" style={{ borderColor: "var(--border)", background: "var(--background-panel)" }}>
+      <div className="max-w-3xl">
         <label htmlFor="rule-setting-search" className="mb-1 block text-sm font-medium text-[var(--foreground)]">
           Trouver un réglage
         </label>
@@ -1536,10 +1604,31 @@ export function ReglesForm({
           <p className="text-[var(--foreground-muted)]">Aucun paramètre. Ajoutez-en via SQL (table rule_parameters).</p>
         </div>
       ) : (
-        <div
-          className="flex flex-col gap-2 overflow-hidden rounded-lg border p-2"
-          style={{ background: "var(--background-panel)", borderColor: "var(--border)" }}
-        >
+        <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-4 lg:grid-cols-[13rem_minmax(0,1fr)]">
+          <AdminSectionNav
+            label="Domaines de règles"
+            items={RULE_DOMAINS}
+            activeId={activeRuleDomain}
+            onSelect={(id) => setActiveRuleDomain(id as RuleDomainId)}
+          />
+          <section id="rules-workspace" className="min-w-0" aria-labelledby="rules-workspace-title">
+            <header className="mb-3 flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <h2 id="rules-workspace-title" className="text-lg font-semibold text-[var(--foreground)]">
+                  {activeDomain.label}
+                </h2>
+                <p className="mt-1 max-w-[72ch] text-sm leading-snug text-[var(--foreground-muted)]">
+                  {activeDomainMeta.description}
+                </p>
+              </div>
+              <span className="rounded-full border px-2.5 py-1 text-xs font-medium text-[var(--foreground-muted)]" style={{ borderColor: "var(--border)" }}>
+                Impact : {activeDomainMeta.impact}
+              </span>
+            </header>
+            <div
+              className="flex min-w-0 flex-col gap-2 overflow-hidden rounded-xl border p-2"
+              style={{ background: "var(--background-panel)", borderColor: "var(--border)" }}
+            >
           {items.length > 0 && (
             <CollapsibleBlock
               id="rules-global"
@@ -1548,6 +1637,8 @@ export function ReglesForm({
               open={effetsGlobauxOpen}
               onToggle={() => setEffetsGlobauxOpen((o) => !o)}
               variant="section"
+              hidden={activeRuleDomain !== "global"}
+              bare
             >
               {globalGrowthEffectsRule && (
             <CollapsibleBlock
@@ -1928,6 +2019,8 @@ export function ReglesForm({
             open={loisOpen}
             onToggle={() => setLoisOpen((o) => !o)}
             variant="section"
+            hidden={activeRuleDomain !== "laws"}
+            bare
           >
           <CollapsibleBlock
             id="rules-budgets"
@@ -2563,6 +2656,8 @@ export function ReglesForm({
               open={diplomatieOpen}
               onToggle={() => setDiplomatieOpen((o) => !o)}
               variant="section"
+              hidden={activeRuleDomain !== "diplomacy"}
+              bare
             >
               <CollapsibleBlock
                 id="rules-relations"
@@ -2730,7 +2825,7 @@ export function ReglesForm({
                       <p className="mt-1 max-w-[72ch] text-xs leading-relaxed text-[var(--foreground-muted)]">
                         Cette correction rapproche les contributions des pays sans créer une nouvelle source d’influence. Un pays à la moyenne reste toujours à ×1,00. À 0 %, les écarts restent bruts ; à 100 %, la correction est maximale.
                       </p>
-                      <div className="mt-3 grid gap-5 lg:grid-cols-3">
+                      <div className="mt-3 grid min-w-0 grid-cols-[minmax(0,1fr)] gap-5 lg:grid-cols-3">
                         <InfluenceWorldGapControl
                           id="influence-gap-gdp"
                           label="PIB"
@@ -2830,6 +2925,8 @@ export function ReglesForm({
               open={ideologyOpen}
               onToggle={() => setIdeologyOpen((o) => !o)}
               variant="section"
+              hidden={activeRuleDomain !== "ideology"}
+              bare
             >
               <div className="p-3 space-y-4">
                 <p className="text-xs text-[var(--foreground-muted)]">
@@ -2984,8 +3081,20 @@ export function ReglesForm({
                 </>
                 )}
                 {ideologyEffectsRule && (
-                  <div className="space-y-4">
-                    <h4 className="text-sm font-medium text-[var(--foreground)]">Effets par idéologie (valeur à 100 %)</h4>
+                  <details className="group border-t pt-2" style={{ borderColor: "var(--border-muted)" }}>
+                    <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 rounded-lg px-2 text-sm font-semibold text-[var(--foreground)] hover:bg-[var(--background-elevated)] [&::-webkit-details-marker]:hidden">
+                      <span>
+                        Effets par idéologie
+                        <span className="ml-2 font-normal text-[var(--foreground-muted)]">
+                          {IDEOLOGY_IDS.reduce((sum, ideologyId) => sum + getIdeologyEffectsForIdeology(ideologyId).length, 0)} configurés
+                        </span>
+                      </span>
+                      <span aria-hidden className="text-[var(--foreground-muted)] transition-transform group-open:rotate-180">⌄</span>
+                    </summary>
+                    <div className="space-y-4 pt-3">
+                      <p className="text-xs text-[var(--foreground-muted)]">
+                        Valeurs atteintes lorsqu’un pays est aligné à 100 % sur l’idéologie.
+                      </p>
                     {IDEOLOGY_IDS.map((ideologyId) => {
                       const list = getIdeologyEffectsForIdeology(ideologyId);
                       const formOpenForThis = ideologyEffectFormOpen && ideologyEffectFormIdeologyId === ideologyId;
@@ -3088,7 +3197,8 @@ export function ReglesForm({
                         </div>
                       );
                     })}
-                  </div>
+                    </div>
+                  </details>
                 )}
               </div>
             </CollapsibleBlock>
@@ -3103,6 +3213,8 @@ export function ReglesForm({
               open={aiOpen}
               onToggle={() => setAiOpen((o) => !o)}
               variant="section"
+              hidden={activeRuleDomain !== "ai"}
+              bare
             >
               <div className="p-3 space-y-4">
                 <p className="text-xs text-[var(--foreground-muted)]">
@@ -3421,6 +3533,8 @@ export function ReglesForm({
               open={intelOpen}
               onToggle={() => setIntelOpen((o) => !o)}
               variant="section"
+              hidden={activeRuleDomain !== "intelligence"}
+              bare
             >
               <div className="p-4 space-y-4">
                 <AdminParameterTable
@@ -3518,6 +3632,8 @@ export function ReglesForm({
             </CollapsibleBlock>
           )}
 
+            </div>
+          </section>
         </div>
       )}
 
@@ -3529,6 +3645,8 @@ export function ReglesForm({
           onReset={resetAll}
           error={error}
           success={success}
+          reviewItems={ruleReviewItems}
+          saveLabel="Appliquer les règles"
         />
       ) : null}
     </div>
