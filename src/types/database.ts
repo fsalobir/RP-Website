@@ -44,6 +44,7 @@ export interface RuleParameter {
   key: string
   value: unknown
   description: string | null
+  updated_at: string
 }
 
 export interface MilitaryUnitType {

@@ -33,10 +33,11 @@ import {
   type CountryLawRow,
 } from "@/lib/laws";
 import { getTickBreakdown } from "@/lib/tickBreakdown";
-import { saveMilitaryUnit } from "./actions";
+import { saveMilitaryUnits } from "./actions";
 import type { RosterRowByBranch } from "./countryTabsTypes";
 import type { FoggedRoster } from "@/lib/intelFog";
 import type { InfluenceResult } from "@/lib/influence";
+import { useUnsavedChangesGuard } from "@/hooks/useUnsavedChangesGuard";
 import { computeHardPowerByCountry, type HardPowerByBranch } from "@/lib/hardPower";
 import { CountryTabGeneral } from "./CountryTabGeneral";
 import { CountryTabMilitary } from "./CountryTabMilitary";
@@ -50,7 +51,7 @@ import { CountryTabEtatMajor } from "./CountryTabEtatMajor";
 /** Subset of CountryEtatMajorFocus used by the page (only the 4 focus roster ids). */
 export type EtatMajorFocusForTabs = Pick<
   import("@/types/database").CountryEtatMajorFocus,
-  "design_roster_unit_id" | "recrutement_roster_unit_id" | "procuration_roster_unit_id" | "stock_roster_unit_id"
+  "design_roster_unit_id" | "recrutement_roster_unit_id" | "procuration_roster_unit_id" | "stock_roster_unit_id" | "updated_at"
 > | null;
 
 const BUDGET_MINISTRIES = [
@@ -84,6 +85,17 @@ function getDefaultPcts(): Record<BudgetPctKey, number> {
     pct_procuration_militaire: 0,
   };
 }
+
+export type CountryWorkspaceTab =
+  | "general"
+  | "military"
+  | "etat_major"
+  | "perks"
+  | "budget"
+  | "laws"
+  | "cabinet"
+  | "state_actions"
+  | "debug";
 
 export function CountryTabs({
   country,
@@ -131,6 +143,8 @@ export function CountryTabs({
   foggedRoster = null,
   etatMajorFocus = null,
   canAdjustIntelForTesting = false,
+  initialTab = "general",
+  embedded = false,
 }: {
   country: Country;
   macros: { key: string; value: number }[];
@@ -228,16 +242,24 @@ export function CountryTabs({
   foggedRoster?: FoggedRoster | null;
   etatMajorFocus?: EtatMajorFocusForTabs;
   canAdjustIntelForTesting?: boolean;
+  initialTab?: CountryWorkspaceTab;
+  embedded?: boolean;
 }) {
   const canEditCountry = isAdmin || isPlayerForThisCountry;
   const canSeeCabinetAndBudget = isAdmin || isPlayerForThisCountry;
   const rankEmoji = (r: number) => (r === 1 ? "👑" : r === 2 ? "🥈" : r === 3 ? "🥉" : null);
   const router = useRouter();
-  const [tab, setTab] = useState<"general" | "military" | "etat_major" | "perks" | "budget" | "laws" | "cabinet" | "state_actions" | "debug">("general");
+  const [tab, setTab] = useState<CountryWorkspaceTab>(initialTab);
   const [budgetFraction, setBudgetFraction] = useState(DEFAULT_BUDGET_FRACTION);
   const [pcts, setPcts] = useState<Record<BudgetPctKey, number>>(getDefaultPcts);
   const [budgetSaving, setBudgetSaving] = useState(false);
   const [budgetError, setBudgetError] = useState<string | null>(null);
+  const [budgetRecordId, setBudgetRecordId] = useState<string | null>(budget?.id ?? null);
+  const [budgetVersion, setBudgetVersion] = useState<string | null>(budget?.updated_at ?? null);
+  const [budgetBaseline, setBudgetBaseline] = useState<{
+    fraction: number;
+    pcts: Record<BudgetPctKey, number>;
+  } | null>(null);
   const [effectsFormOpen, setEffectsFormOpen] = useState(false);
   const [editingEffect, setEditingEffect] = useState<CountryEffect | null>(null);
   const [effectName, setEffectName] = useState("");
@@ -249,6 +271,8 @@ export function CountryTabs({
   const [effectSaving, setEffectSaving] = useState(false);
   const [effectError, setEffectError] = useState<string | null>(null);
   const [militaryEdit, setMilitaryEdit] = useState<Record<string, { current_level: number; extra_count: number }>>({});
+  const [militaryBaseline, setMilitaryBaseline] = useState<Record<string, { current_level: number; extra_count: number }>>({});
+  const [militaryVersions, setMilitaryVersions] = useState<Record<string, string | null>>({});
   const militaryEditInitialized = useRef(false);
   const [localHardPowerByBranch, setLocalHardPowerByBranch] = useState<HardPowerByBranch | null>(null);
   const [militarySavingAll, setMilitarySavingAll] = useState(false);
@@ -509,6 +533,14 @@ export function CountryTabs({
     }
     if (Object.keys(next).length && !militaryEditInitialized.current) {
       setMilitaryEdit(next);
+      setMilitaryBaseline(next);
+      setMilitaryVersions(
+        Object.fromEntries(
+          rosterByBranch.terre
+            .concat(rosterByBranch.air, rosterByBranch.mer, rosterByBranch.strategique)
+            .map((row) => [row.unit.id, row.countryState?.updated_at ?? null])
+        )
+      );
       militaryEditInitialized.current = true;
     }
   }, [rosterByBranch]);
@@ -576,8 +608,19 @@ export function CountryTabs({
   }, [generalFlagFile]);
 
   useEffect(() => {
-    if (!budget) return;
-    setBudgetFraction(Number(budget.budget_fraction) || DEFAULT_BUDGET_FRACTION);
+    if (!budget) {
+      const defaults = getDefaultPcts();
+      setBudgetRecordId(null);
+      setBudgetVersion(null);
+      setBudgetFraction(DEFAULT_BUDGET_FRACTION);
+      setPcts(defaults);
+      setBudgetBaseline({ fraction: DEFAULT_BUDGET_FRACTION, pcts: defaults });
+      return;
+    }
+    const nextFraction = Number(budget.budget_fraction) || DEFAULT_BUDGET_FRACTION;
+    setBudgetRecordId(budget.id);
+    setBudgetVersion(budget.updated_at);
+    setBudgetFraction(nextFraction);
     const forcedMinPctsInit = getForcedMinPcts(resolvedEffects);
     const raw: Record<string, number> = {
       pct_etat: Number(budget.pct_etat) || 0,
@@ -595,8 +638,33 @@ export function CountryTabs({
       const minVal = forcedMinPctsInit[m.key] ?? 0;
       raw[m.key] = Math.max(raw[m.key], minVal);
     });
-    setPcts(raw);
-  }, [budget?.id, resolvedEffects]);
+    const nextPcts = raw as Record<BudgetPctKey, number>;
+    setPcts(nextPcts);
+    setBudgetBaseline({ fraction: nextFraction, pcts: nextPcts });
+  }, [budget, resolvedEffects]);
+
+  const budgetDirty =
+    canEditCountry &&
+    budgetBaseline !== null &&
+    (
+      budgetFraction !== budgetBaseline.fraction ||
+      JSON.stringify(pcts) !== JSON.stringify(budgetBaseline.pcts)
+    );
+  const militaryDirty =
+    canEditCountry && JSON.stringify(militaryEdit) !== JSON.stringify(militaryBaseline);
+  const generalDirty =
+    generalEditMode &&
+    (
+      generalName !== (country.name ?? "") ||
+      generalRegime !== (country.regime ?? "") ||
+      generalFlagUrl !== (country.flag_url ?? "") ||
+      generalFlagFile !== null
+    );
+  useUnsavedChangesGuard(
+    (budgetDirty && !budgetSaving) ||
+    (militaryDirty && !militarySavingAll) ||
+    (generalDirty && !generalSaving)
+  );
 
   const totalPct = BUDGET_MINISTRIES.reduce((s, m) => s + pcts[m.key], 0);
   const totalPctDisplay = Math.round(totalPct * 10) / 10;
@@ -644,6 +712,7 @@ export function CountryTabs({
     setGeneralSaving(true);
     const supabase = createClient();
     let flagUrl: string | null = generalFlagUrl.trim() || null;
+    let uploadedFlagPath: string | null = null;
     if (generalFlagFile) {
       const ext = generalFlagFile.name.split(".").pop()?.toLowerCase() || "jpg";
       const path = `${crypto.randomUUID()}.${ext}`;
@@ -656,20 +725,30 @@ export function CountryTabs({
         setGeneralSaving(false);
         return;
       }
+      uploadedFlagPath = path;
       const { data: urlData } = supabase.storage.from("flags").getPublicUrl(path);
       flagUrl = urlData.publicUrl;
     }
-    const { error } = await supabase
+    const { data: updated, error } = await supabase
       .from("countries")
       .update({
         name: generalName.trim() || country.name,
         regime: generalRegime.trim() || null,
         flag_url: flagUrl,
       })
-      .eq("id", country.id);
-    if (error) setGeneralError(error.message);
+      .eq("id", country.id)
+      .eq("updated_at", country.updated_at)
+      .select("id")
+      .maybeSingle();
+    if (error || !updated) {
+      if (uploadedFlagPath) await supabase.storage.from("flags").remove([uploadedFlagPath]);
+      setGeneralError(
+        error?.message ??
+          "Un autre administrateur a modifié ce pays. Rechargez la page avant de recommencer."
+      );
+    }
     setGeneralSaving(false);
-    if (!error) {
+    if (!error && updated) {
       setGeneralFlagFile(null);
       setGeneralFlagPreview(null);
       setGeneralEditMode(false);
@@ -702,9 +781,21 @@ export function CountryTabs({
     if (!confirm("Supprimer cet effet ?")) return;
     setEffectError(null);
     const supabase = createClient();
-    const { error } = await supabase.from("country_effects").delete().eq("id", e.id);
+    const { data, error } = await supabase
+      .from("country_effects")
+      .delete()
+      .eq("id", e.id)
+      .eq("updated_at", e.updated_at)
+      .select("id")
+      .maybeSingle();
     if (error) {
       setEffectError(error.message || "La suppression a échoué.");
+      return;
+    }
+    if (!data) {
+      setEffectError(
+        "Un autre administrateur a modifié cet effet. Rechargez la page avant de le supprimer."
+      );
       return;
     }
     router.refresh();
@@ -761,8 +852,17 @@ export function CountryTabs({
     };
     let err: string | null = null;
     if (editingEffect) {
-      const { error } = await supabase.from("country_effects").update(row).eq("id", editingEffect.id);
+      const { data, error } = await supabase
+        .from("country_effects")
+        .update(row)
+        .eq("id", editingEffect.id)
+        .eq("updated_at", editingEffect.updated_at)
+        .select("id")
+        .maybeSingle();
       if (error) err = error.message;
+      else if (!data) {
+        err = "Un autre administrateur a modifié cet effet. Rechargez la page avant de recommencer.";
+      }
     } else {
       const { error } = await supabase.from("country_effects").insert({ ...row, country_id: country.id });
       if (error) err = error.message;
@@ -857,22 +957,38 @@ export function CountryTabs({
     setMilitarySavingAll(true);
     const slug = country.slug ?? "";
     const allRows = rosterByBranch.terre.concat(rosterByBranch.air, rosterByBranch.mer, rosterByBranch.strategique);
-    for (const row of allRows) {
+    const changedRows = allRows.flatMap((row) => {
       const edit = militaryEdit[row.unit.id] ?? {
         current_level: Math.max(0, row.countryState?.current_level ?? 0),
         extra_count: Math.max(0, row.countryState?.extra_count ?? 0),
       };
-      const prevLevel = Math.max(0, row.countryState?.current_level ?? 0);
-      const prevExtra = Math.max(0, row.countryState?.extra_count ?? 0);
-      if (edit.current_level === prevLevel && edit.extra_count === prevExtra) continue;
-      const result = await saveMilitaryUnit(country.id, slug, row.unit.id, edit.current_level, edit.extra_count);
-      if (result.error) {
-        setMilitaryError(result.error);
-        setMilitarySavingAll(false);
-        return;
-      }
+      const baseline = militaryBaseline[row.unit.id] ?? {
+        current_level: Math.max(0, row.countryState?.current_level ?? 0),
+        extra_count: Math.max(0, row.countryState?.extra_count ?? 0),
+      };
+      const prevLevel = baseline.current_level;
+      const prevExtra = baseline.extra_count;
+      if (edit.current_level === prevLevel && edit.extra_count === prevExtra) return [];
+      return [{
+        roster_unit_id: row.unit.id,
+        current_level: edit.current_level,
+        extra_count: edit.extra_count,
+        expected_updated_at: militaryVersions[row.unit.id] ?? null,
+      }];
+    });
+    const result = await saveMilitaryUnits(country.id, slug, changedRows);
+    if (result.error) {
+      setMilitaryError(result.error);
+      setMilitarySavingAll(false);
+      return;
     }
+    setMilitaryVersions((previous) => ({
+      ...previous,
+      ...(result.updatedAtByRosterId ?? {}),
+    }));
+    setMilitaryBaseline(militaryEdit);
     setMilitarySavingAll(false);
+    router.refresh();
   };
 
   const handleSaveBudget = async () => {
@@ -883,18 +999,43 @@ export function CountryTabs({
     setBudgetError(null);
     setBudgetSaving(true);
     const supabase = createClient();
-    if (budget?.id) {
+    if (budgetRecordId) {
       const toUpdate: Record<string, unknown> = { ...pcts, updated_at: new Date().toISOString() };
       if (isAdmin) toUpdate.budget_fraction = budgetFraction;
-      const { error } = await supabase.from("country_budget").update(toUpdate).eq("id", budget.id);
-      if (error) setBudgetError(error.message);
+      let query = supabase.from("country_budget").update(toUpdate).eq("id", budgetRecordId);
+      if (budgetVersion) query = query.eq("updated_at", budgetVersion);
+      const { data: updated, error } = await query.select("id, updated_at").maybeSingle();
+      if (error) {
+        setBudgetError(error.message);
+      } else if (!updated) {
+        setBudgetError("Un autre administrateur a modifié ce budget. Rechargez la page avant de recommencer.");
+      } else {
+        setBudgetVersion(updated.updated_at);
+        setBudgetBaseline({ fraction: budgetFraction, pcts: { ...pcts } });
+        router.refresh();
+      }
     } else {
-      const { error } = await supabase.from("country_budget").insert({
-        country_id: country.id,
-        budget_fraction: isAdmin ? budgetFraction : DEFAULT_BUDGET_FRACTION,
-        ...pcts,
-      });
-      if (error) setBudgetError(error.message);
+      const { data: inserted, error } = await supabase
+        .from("country_budget")
+        .insert({
+          country_id: country.id,
+          budget_fraction: isAdmin ? budgetFraction : DEFAULT_BUDGET_FRACTION,
+          ...pcts,
+        })
+        .select("id, updated_at")
+        .single();
+      if (error) {
+        setBudgetError(
+          error.code === "23505"
+            ? "Un autre administrateur vient de créer ce budget. Rechargez la page."
+            : error.message
+        );
+      } else {
+        setBudgetRecordId(inserted.id);
+        setBudgetVersion(inserted.updated_at);
+        setBudgetBaseline({ fraction: budgetFraction, pcts: { ...pcts } });
+        router.refresh();
+      }
     }
     setBudgetSaving(false);
   };
@@ -908,7 +1049,9 @@ export function CountryTabs({
 
   return (
     <div className="country-interface">
-      <div
+      {!embedded && (
+        <>
+          <div
         className={`mb-4 flex flex-wrap items-center gap-4 p-4 sm:mb-8 sm:gap-6 sm:p-6 ${glassPanelClass}`}
         style={glassPanelStyle}
       >
@@ -1162,7 +1305,9 @@ export function CountryTabs({
             Diagnostic
           </button>
         )}
-      </nav>
+          </nav>
+        </>
+      )}
 
       {tab === "general" && (
         <CountryTabGeneral

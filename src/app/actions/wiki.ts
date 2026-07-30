@@ -33,7 +33,8 @@ export async function saveWikiPageAction(input: {
   id: string;
   title: string;
   content: JSONContent;
-}): Promise<{ ok: true } | { ok: false; error: string }> {
+  expected_updated_at: string;
+}): Promise<{ ok: true; updated_at: string } | { ok: false; error: string }> {
   const auth = await getCachedAuth();
   if (!auth.user || !auth.isAdmin) {
     return { ok: false, error: "Accès refusé." };
@@ -44,22 +45,31 @@ export async function saveWikiPageAction(input: {
     supabase
   );
   const search_text = buildSearchText(input.title, contentPlain);
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from("wiki_pages")
     .update({
       title: input.title,
       content: contentPlain as unknown as Record<string, unknown>,
       search_text,
     })
-    .eq("id", input.id);
+    .eq("id", input.id)
+    .eq("updated_at", input.expected_updated_at)
+    .select("updated_at")
+    .maybeSingle();
 
   if (error) {
     console.error("[wiki] save", error);
     return { ok: false, error: error.message };
   }
+  if (!data) {
+    return {
+      ok: false,
+      error: "Un autre administrateur a modifié cette page. Rechargez-la avant de recommencer.",
+    };
+  }
   revalidatePath("/wiki");
   revalidatePath("/admin/wiki");
-  return { ok: true };
+  return { ok: true, updated_at: data.updated_at };
 }
 
 export async function createWikiPageAction(input: {
@@ -114,15 +124,30 @@ export async function createWikiPageAction(input: {
   return { ok: true, id: data.id };
 }
 
-export async function deleteWikiPageAction(id: string): Promise<{ ok: true } | { ok: false; error: string }> {
+export async function deleteWikiPageAction(
+  id: string,
+  expectedUpdatedAt: string
+): Promise<{ ok: true } | { ok: false; error: string }> {
   const auth = await getCachedAuth();
   if (!auth.user || !auth.isAdmin) {
     return { ok: false, error: "Accès refusé." };
   }
   const supabase = await createClient();
-  const { error } = await supabase.from("wiki_pages").delete().eq("id", id);
+  const { data, error } = await supabase
+    .from("wiki_pages")
+    .delete()
+    .eq("id", id)
+    .eq("updated_at", expectedUpdatedAt)
+    .select("id")
+    .maybeSingle();
   if (error) {
     return { ok: false, error: error.message };
+  }
+  if (!data) {
+    return {
+      ok: false,
+      error: "Un autre administrateur a modifié cette page. Rechargez-la avant de la supprimer.",
+    };
   }
   revalidatePath("/wiki");
   revalidatePath("/admin/wiki");
@@ -131,15 +156,27 @@ export async function deleteWikiPageAction(id: string): Promise<{ ok: true } | {
 
 export async function moveWikiPageAction(
   id: string,
-  direction: "up" | "down"
+  direction: "up" | "down",
+  expectedUpdatedAt: string
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const auth = await getCachedAuth();
   if (!auth.user || !auth.isAdmin) {
     return { ok: false, error: "Accès refusé." };
   }
   const supabase = await createClient();
-  const { data: row, error: e1 } = await supabase.from("wiki_pages").select("*").eq("id", id).single();
-  if (e1 || !row) return { ok: false, error: "Page introuvable." };
+  const { data: row, error: e1 } = await supabase
+    .from("wiki_pages")
+    .select("*")
+    .eq("id", id)
+    .eq("updated_at", expectedUpdatedAt)
+    .maybeSingle();
+  if (e1) return { ok: false, error: e1.message };
+  if (!row) {
+    return {
+      ok: false,
+      error: "Un autre administrateur a modifié cette page. Rechargez-la avant de la déplacer.",
+    };
+  }
 
   const parentId = row.parent_id;
   let sibQ = supabase.from("wiki_pages").select("id,sort_order").order("sort_order", { ascending: true });

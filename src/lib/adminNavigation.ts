@@ -21,6 +21,7 @@ export type AdminNavigationIconId =
   | "discord"
   | "perks"
   | "wiki"
+  | "history"
   | "player";
 
 export type AdminNavigationItem = {
@@ -147,6 +148,14 @@ export const ADMIN_NAVIGATION_ITEMS: readonly AdminNavigationItem[] = [
     group: "publish",
     icon: "wiki",
     keywords: ["documentation", "guides", "pages", "aide", "éditeur"],
+  },
+  {
+    href: "/admin/historique",
+    label: "Historique",
+    description: "Voir qui a modifié les réglages et restaurer une valeur précédente.",
+    group: "system",
+    icon: "history",
+    keywords: ["journal", "modifications", "restaurer", "annuler", "administrateurs"],
   },
   {
     href: "/",

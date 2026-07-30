@@ -3,7 +3,7 @@ import { createClient, createAnonClientForCache, createServiceRoleClient } from 
 import { getCachedAuth } from "@/lib/auth-server";
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { CountryTabs } from "./CountryTabs";
+import { CountryTabs, type CountryWorkspaceTab } from "./CountryTabs";
 import type { RosterRowByBranch } from "./countryTabsTypes";
 import { computeHardPowerByCountry } from "@/lib/hardPower";
 import { buildResolvedEffectsByCountryForMilitary, type PerkDefLite } from "@/lib/militaryResolvedEffects";
@@ -102,14 +102,14 @@ async function fetchCountryPagePublicData(slug: string) {
     supabase.from("countries").select("id, population, gdp, militarism, industry, science, stability, ai_status"),
     supabase.from("country_control").select("country_id, share_pct, is_annexed").eq("controller_country_id", country.id),
     supabase.from("country_control").select("country_id, controller_country_id, share_pct, is_annexed"),
-    supabase.from("country_laws").select("law_key, score, target_score").eq("country_id", country.id),
+    supabase.from("country_laws").select("law_key, score, target_score, updated_at").eq("country_id", country.id),
     supabase.from("country_laws").select("country_id, law_key, score, target_score"),
     supabase.from("country_effects").select("country_id, effect_kind, effect_target, value, duration_remaining, duration_kind").or("duration_remaining.gt.0,duration_kind.eq.permanent"),
     supabase.from("country_military_units").select("*").eq("country_id", country.id),
     supabase.from("country_military_units").select("country_id, roster_unit_id, current_level, extra_count"),
     supabase
       .from("country_etat_major_focus")
-      .select("design_roster_unit_id, recrutement_roster_unit_id, procuration_roster_unit_id, stock_roster_unit_id")
+      .select("design_roster_unit_id, recrutement_roster_unit_id, procuration_roster_unit_id, stock_roster_unit_id, updated_at")
       .eq("country_id", country.id)
       .maybeSingle(),
   ]);
@@ -147,6 +147,18 @@ export default async function CountryPage({
   params: Promise<{ slug: string }>;
 }) {
   const { slug } = await params;
+  return <CountryWorkspace slug={slug} />;
+}
+
+export async function CountryWorkspace({
+  slug,
+  initialTab = "general",
+  embedded = false,
+}: {
+  slug: string;
+  initialTab?: CountryWorkspaceTab;
+  embedded?: boolean;
+}) {
   const cachedGlobals = await getCachedCountryPageGlobals();
   // Données mutables par joueur/admin (effets actifs, avantages débloqués, budget, etc.) :
   // on évite unstable_cache ici pour refléter immédiatement les changements après router.refresh().
@@ -249,7 +261,7 @@ export default async function CountryPage({
   const macros = publicData.macrosRes?.data ?? [];
   const limits = publicData.limitsRes?.data ?? [];
   const countryMilitaryUnits = (Array.isArray(publicData.countryMilitaryUnitsRes?.data) ? publicData.countryMilitaryUnitsRes?.data : []) as CountryMilitaryUnit[];
-  const etatMajorFocus = publicData.etatMajorFocusRes?.data as { design_roster_unit_id: string | null; recrutement_roster_unit_id: string | null; procuration_roster_unit_id: string | null; stock_roster_unit_id: string | null } | null;
+  const etatMajorFocus = publicData.etatMajorFocusRes?.data as { design_roster_unit_id: string | null; recrutement_roster_unit_id: string | null; procuration_roster_unit_id: string | null; stock_roster_unit_id: string | null; updated_at: string } | null;
   const unlockedPerkIds = new Set((publicData.countryPerksRes?.data ?? []).map((p) => p.perk_id));
 
   const activePerkIds = new Set<string>();
@@ -459,11 +471,12 @@ export default async function CountryPage({
     };
   }
 
-  const countryLawRows: CountryLawRow[] = ((Array.isArray(publicData.countryLawsRes?.data) ? publicData.countryLawsRes?.data : []) as Array<{ law_key: string; score: number; target_score: number }>).map((r) => ({
+  const countryLawRows: CountryLawRow[] = ((Array.isArray(publicData.countryLawsRes?.data) ? publicData.countryLawsRes?.data : []) as Array<{ law_key: string; score: number; target_score: number; updated_at: string }>).map((r) => ({
     country_id: country.id,
     law_key: r.law_key,
     score: Number(r.score ?? 0),
     target_score: Number(r.target_score ?? 0),
+    updated_at: r.updated_at,
   }));
 
   const perkActivationContext = {
@@ -664,27 +677,32 @@ export default async function CountryPage({
   }
 
   return (
-    <div className="relative min-h-screen">
-      <div className="fixed inset-0 overflow-hidden" aria-hidden>
-        <div
-          className="absolute inset-0 bg-cover bg-no-repeat"
-          style={{
-            backgroundImage: "url(/images/site/fiche-pays-bg.webp)",
-            backgroundPosition: "top center",
-          }}
-        />
-        <div className="absolute inset-0 bg-[var(--background-panel)]/75" />
-      </div>
-      <div className="relative z-10 mx-auto max-w-6xl px-4 py-4 sm:py-8 lg:py-10">
-        <Link
-          href={backHref}
-          className="mb-4 inline-flex min-h-11 items-center rounded-xl border border-white/25 px-4 text-sm text-white/90 transition-colors hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] sm:mb-6"
-          style={{ background: "rgba(255,255,255,0.12)", backdropFilter: "blur(12px)" }}
-        >
-          ← Retour aux nations
-        </Link>
+    <div className={embedded ? "" : "relative min-h-screen"}>
+      {!embedded && (
+        <div className="fixed inset-0 overflow-hidden" aria-hidden>
+          <div
+            className="absolute inset-0 bg-cover bg-no-repeat"
+            style={{
+              backgroundImage: "url(/images/site/fiche-pays-bg.webp)",
+              backgroundPosition: "top center",
+            }}
+          />
+          <div className="absolute inset-0 bg-[var(--background-panel)]/75" />
+        </div>
+      )}
+      <div className={embedded ? "" : "relative z-10 mx-auto max-w-6xl px-4 py-4 sm:py-8 lg:py-10"}>
+        {!embedded && (
+          <Link
+            href={backHref}
+            className="mb-4 inline-flex min-h-11 items-center rounded-xl border border-white/25 px-4 text-sm text-white/90 transition-colors hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] sm:mb-6"
+            style={{ background: "rgba(255,255,255,0.12)", backdropFilter: "blur(12px)" }}
+          >
+            ← Retour aux nations
+          </Link>
+        )}
 
         <CountryTabs
+        key={`${country.id}:${initialTab}:${embedded ? "admin" : "public"}`}
         country={country}
         macros={macros}
         limits={limits}
@@ -735,6 +753,8 @@ export default async function CountryPage({
           influence: Math.round(sphereData.totalInfluence),
         }}
         canAdjustIntelForTesting={!isAdmin && !!auth.playerCountryId && !isPlayerForThisCountry}
+        initialTab={initialTab}
+        embedded={embedded}
       />
       </div>
     </div>

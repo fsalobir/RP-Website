@@ -151,6 +151,7 @@ export type CountryLawRow = {
   law_key: string;
   score: number;
   target_score: number;
+  updated_at?: string;
 };
 
 export type LawConfig = {

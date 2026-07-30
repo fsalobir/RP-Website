@@ -245,6 +245,7 @@ export function RosterEditor({
 
       const isNew = unit.id.startsWith("new_");
       let unitId = unit.id;
+      let persistedUnit: UnitRow;
 
       if (isNew) {
         const { data, error: err } = await supabase
@@ -254,6 +255,7 @@ export function RosterEditor({
           .single();
         if (err) throw new Error(err.message);
         unitId = data.id as string;
+        persistedUnit = data as UnitRow;
 
         setUnits((prev) =>
           prev.map((u) => (u.id === unit.id ? { ...u, id: unitId } : u)),
@@ -264,11 +266,21 @@ export function RosterEditor({
           ),
         );
       } else {
-        const { error: err } = await supabase
+        const expectedUpdatedAt = savedUnits.find((row) => row.id === unit.id)?.updated_at ?? "";
+        const { data, error: err } = await supabase
           .from("military_roster_units")
           .update(clean)
-          .eq("id", unit.id);
+          .eq("id", unit.id)
+          .eq("updated_at", expectedUpdatedAt)
+          .select("*")
+          .maybeSingle();
         if (err) throw new Error(err.message);
+        if (!data) {
+          throw new Error(
+            "Un autre administrateur a modifié cette unité. Rechargez la page avant de recommencer.",
+          );
+        }
+        persistedUnit = data as UnitRow;
       }
 
       const unitLevels = (levelsByUnitId.get(unit.id) ?? [])
@@ -315,7 +327,7 @@ export function RosterEditor({
         .eq("unit_id", unitId)
         .order("level");
       if (reloadErr) throw new Error(reloadErr.message);
-      const savedUnit = { ...unit, ...clean, id: unitId };
+      const savedUnit = { ...unit, ...persistedUnit, ...clean, id: unitId };
       const reloadedLevels = newLevels as LevelRow[];
       setUnits((prev) =>
         prev.map((row) =>
@@ -353,11 +365,20 @@ export function RosterEditor({
     try {
       const supabase = createClient();
       if (!unit.id.startsWith("new_")) {
-        const { error: err } = await supabase
+        const expectedUpdatedAt = savedUnits.find((row) => row.id === unit.id)?.updated_at ?? "";
+        const { data, error: err } = await supabase
           .from("military_roster_units")
           .delete()
-          .eq("id", unit.id);
+          .eq("id", unit.id)
+          .eq("updated_at", expectedUpdatedAt)
+          .select("id")
+          .maybeSingle();
         if (err) throw new Error(err.message);
+        if (!data) {
+          throw new Error(
+            "Un autre administrateur a modifié cette unité. Rechargez la page avant de la supprimer.",
+          );
+        }
       }
       setUnits((prev) => prev.filter((u) => u.id !== unit.id));
       setLevels((prev) => prev.filter((l) => l.unit_id !== unit.id));

@@ -165,8 +165,8 @@ function LawCard({
     setError(null);
     try {
       const result = isAdmin
-        ? await setLawScoreImmediate(countryId, def.lawKey, threshold)
-        : await setLawTarget(countryId, def.lawKey, threshold);
+        ? await setLawScoreImmediate(countryId, def.lawKey, threshold, lawRow?.updated_at ?? null)
+        : await setLawTarget(countryId, def.lawKey, threshold, lawRow?.updated_at ?? null);
       if (result.error) {
         setError(result.error);
         pendingTarget.current = null;

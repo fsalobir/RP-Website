@@ -31,7 +31,7 @@ export async function createPerkCategory(formData: FormData) {
   return { error: null, data };
 }
 
-export async function updatePerkCategory(id: string, formData: FormData) {
+export async function updatePerkCategory(id: string, expectedUpdatedAt: string, formData: FormData) {
   const supabase = await createClient();
   const name_fr = (formData.get("name_fr") as string)?.trim();
   const sort_order = Number(formData.get("sort_order")) || 0;
@@ -40,17 +40,30 @@ export async function updatePerkCategory(id: string, formData: FormData) {
     .from("perk_categories")
     .update({ name_fr, sort_order })
     .eq("id", id)
+    .eq("updated_at", expectedUpdatedAt)
     .select("*")
-    .single();
+    .maybeSingle();
   if (error) return { error: error.message };
+  if (!data) {
+    return { error: "Un autre administrateur a modifié cette catégorie. Rechargez la page avant de recommencer." };
+  }
   revalidatePath("/admin/avantages");
   return { error: null, data };
 }
 
-export async function deletePerkCategory(id: string) {
+export async function deletePerkCategory(id: string, expectedUpdatedAt: string) {
   const supabase = await createClient();
-  const { error } = await supabase.from("perk_categories").delete().eq("id", id);
+  const { data, error } = await supabase
+    .from("perk_categories")
+    .delete()
+    .eq("id", id)
+    .eq("updated_at", expectedUpdatedAt)
+    .select("id")
+    .maybeSingle();
   if (error) return { error: error.message };
+  if (!data) {
+    return { error: "Un autre administrateur a modifié cette catégorie. Rechargez la page avant de la supprimer." };
+  }
   revalidatePath("/admin/avantages");
   return { error: null };
 }
@@ -117,6 +130,7 @@ export async function createPerk(
 
 export async function updatePerk(
   id: string,
+  expectedUpdatedAt: string,
   formData: FormData,
   effects: PerkEffectInput[],
   requirements: PerkRequirementInput[] = []
@@ -129,7 +143,7 @@ export async function updatePerk(
   const icon_size = formData.get("icon_size") !== "" && formData.get("icon_size") !== null ? Number(formData.get("icon_size")) : null;
   const sort_order = Number(formData.get("sort_order")) || 0;
   if (!name_fr) return { error: "Titre requis." };
-  const { error: updateError } = await supabase
+  const { data: updatedPerk, error: updateError } = await supabase
     .from("perks")
     .update({
       name_fr,
@@ -139,8 +153,14 @@ export async function updatePerk(
       icon_size: icon_size != null && icon_size >= 16 && icon_size <= 256 ? icon_size : 48,
       sort_order,
     })
-    .eq("id", id);
+    .eq("id", id)
+    .eq("updated_at", expectedUpdatedAt)
+    .select("id")
+    .maybeSingle();
   if (updateError) return { error: updateError.message };
+  if (!updatedPerk) {
+    return { error: "Un autre administrateur a modifié cet avantage. Rechargez la page avant de recommencer." };
+  }
   const { error: deleteEffectsError } = await supabase.from("perk_effects").delete().eq("perk_id", id);
   if (deleteEffectsError) return { error: deleteEffectsError.message };
   if (effects.length > 0) {
@@ -175,10 +195,19 @@ export async function updatePerk(
   return { error: null };
 }
 
-export async function deletePerk(id: string) {
+export async function deletePerk(id: string, expectedUpdatedAt: string) {
   const supabase = await createClient();
-  const { error } = await supabase.from("perks").delete().eq("id", id);
+  const { data, error } = await supabase
+    .from("perks")
+    .delete()
+    .eq("id", id)
+    .eq("updated_at", expectedUpdatedAt)
+    .select("id")
+    .maybeSingle();
   if (error) return { error: error.message };
+  if (!data) {
+    return { error: "Un autre administrateur a modifié cet avantage. Rechargez la page avant de le supprimer." };
+  }
   revalidatePath("/admin/avantages");
   revalidateTag("country-page-globals", "max");
   return { error: null };

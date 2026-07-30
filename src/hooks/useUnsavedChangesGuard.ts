@@ -3,10 +3,18 @@
 import { useEffect } from "react";
 
 const DEFAULT_MESSAGE = "Des modifications ne sont pas enregistrées. Quitter cette page ?";
+const activeMessages = new Set<string>();
+
+export function confirmUnsavedNavigation(): boolean {
+  if (activeMessages.size === 0) return true;
+  const messages = Array.from(activeMessages);
+  return window.confirm(messages[messages.length - 1] ?? DEFAULT_MESSAGE);
+}
 
 export function useUnsavedChangesGuard(isDirty: boolean, message = DEFAULT_MESSAGE) {
   useEffect(() => {
     if (!isDirty) return;
+    activeMessages.add(message);
     let navigationConfirmed = false;
 
     const handleBeforeUnload = (event: BeforeUnloadEvent) => {
@@ -40,7 +48,7 @@ export function useUnsavedChangesGuard(isDirty: boolean, message = DEFAULT_MESSA
         return;
       }
 
-      if (!window.confirm(message)) {
+      if (!confirmUnsavedNavigation()) {
         event.preventDefault();
         event.stopImmediatePropagation();
       } else {
@@ -57,7 +65,7 @@ export function useUnsavedChangesGuard(isDirty: boolean, message = DEFAULT_MESSA
 
     const handlePopState = () => {
       if (navigationConfirmed) return;
-      if (window.confirm(message)) {
+      if (confirmUnsavedNavigation()) {
         navigationConfirmed = true;
         window.history.back();
       } else {
@@ -69,6 +77,7 @@ export function useUnsavedChangesGuard(isDirty: boolean, message = DEFAULT_MESSA
     window.addEventListener("popstate", handlePopState);
     document.addEventListener("click", handleLinkClick, true);
     return () => {
+      activeMessages.delete(message);
       window.removeEventListener("beforeunload", handleBeforeUnload);
       window.removeEventListener("popstate", handlePopState);
       document.removeEventListener("click", handleLinkClick, true);

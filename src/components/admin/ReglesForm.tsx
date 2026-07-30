@@ -859,11 +859,22 @@ export function ReglesForm({
     }
     setSaving(true);
     try {
-      const result = await saveRuleParameters(dirtyItems);
+      const savedById = new Map(savedItems.map((row) => [row.id, row]));
+      const result = await saveRuleParameters(
+        dirtyItems.map((row) => ({
+          ...row,
+          expected_updated_at: savedById.get(row.id)?.updated_at ?? "",
+        }))
+      );
       if (result.error) {
         setError(`${result.error} Aucun changement de ce lot n’a été appliqué.`);
       } else {
-        setSavedItems(items);
+        const saved = items.map((row) => ({
+          ...row,
+          updated_at: result.updatedAtById?.[row.id] ?? row.updated_at,
+        }));
+        setItems(saved);
+        setSavedItems(saved);
         setSuccess(`${dirtyItems.length} réglage${dirtyItems.length > 1 ? "s" : ""} enregistré${dirtyItems.length > 1 ? "s" : ""}.`);
       }
     } catch (e) {

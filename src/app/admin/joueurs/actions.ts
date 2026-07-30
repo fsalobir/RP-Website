@@ -120,21 +120,14 @@ export async function addStateActions(country_id: string, amount: number = 25) {
   const { data: adminRow } = await supabase.from("admins").select("id").eq("user_id", user.id).single();
   if (!adminRow) return { error: "Réservé aux admins." };
 
-  const { data: row } = await supabase
-    .from("country_state_action_balance")
-    .select("balance")
-    .eq("country_id", country_id)
-    .maybeSingle();
-  const current = (row?.balance ?? 0) as number;
-  const { error } = await supabase
-    .from("country_state_action_balance")
-    .upsert(
-      { country_id, balance: current + amount, updated_at: new Date().toISOString() },
-      { onConflict: "country_id" }
-    );
+  const { error } = await supabase.rpc("admin_add_state_actions", {
+    p_country_id: country_id,
+    p_amount: amount,
+  });
   if (error) return { error: error.message };
 
   revalidatePath("/admin/joueurs");
+  revalidatePath(`/admin/pays/${country_id}`);
   revalidatePath("/pays");
   return { error: null };
 }

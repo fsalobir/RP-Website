@@ -107,6 +107,14 @@ export function AdminNavigationIcon({
       </svg>
     );
   }
+  if (name === "history") {
+    return (
+      <svg {...common}>
+        <path d="M4 12a8 8 0 1 0 2.3-5.7L4 8.5" />
+        <path d="M4 4v4.5h4.5M12 7.5V12l3 2" />
+      </svg>
+    );
+  }
   return (
     <svg {...common}>
       <path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z" />

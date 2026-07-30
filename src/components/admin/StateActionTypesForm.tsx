@@ -729,6 +729,9 @@ export function StateActionTypesForm({ types }: { types: StateActionType[] }) {
   );
   const [edits, setEdits] = useState<Record<string, EditState>>(initialEdits);
   const [savedEdits, setSavedEdits] = useState<Record<string, EditState>>(initialEdits);
+  const [savedVersions, setSavedVersions] = useState<Record<string, string>>(
+    () => Object.fromEntries(types.map((type) => [type.id, type.updated_at]))
+  );
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
@@ -796,6 +799,7 @@ export function StateActionTypesForm({ types }: { types: StateActionType[] }) {
           cost: edits[type.id].cost,
           params_schema: buildPatch(type, edits[type.id]),
           sort_order: type.sort_order,
+          expected_updated_at: savedVersions[type.id] ?? "",
         }))
       );
 
@@ -804,6 +808,10 @@ export function StateActionTypesForm({ types }: { types: StateActionType[] }) {
         return;
       }
       setSavedEdits(edits);
+      setSavedVersions((previous) => ({
+        ...previous,
+        ...(result.updatedAtById ?? {}),
+      }));
       setSuccess(`${dirtyTypes.length} action${dirtyTypes.length > 1 ? "s" : ""} mise${dirtyTypes.length > 1 ? "s" : ""} à jour.`);
     } catch {
       setError("Les actions n’ont pas pu être enregistrées. Vérifiez la connexion puis réessayez.");

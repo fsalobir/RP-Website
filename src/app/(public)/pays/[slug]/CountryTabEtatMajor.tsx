@@ -47,7 +47,7 @@ type CountryTabEtatMajorProps = {
   countryId: string;
   countrySlug: string;
   country: Country;
-  etatMajorFocus: { design_roster_unit_id: string | null; recrutement_roster_unit_id: string | null; procuration_roster_unit_id: string | null; stock_roster_unit_id: string | null } | null;
+  etatMajorFocus: { design_roster_unit_id: string | null; recrutement_roster_unit_id: string | null; procuration_roster_unit_id: string | null; stock_roster_unit_id: string | null; updated_at: string } | null;
   rosterByBranch: Record<MilitaryBranch, RosterRowByBranch[]>;
   ruleParametersByKey: Record<string, { value: unknown }>;
   resolvedEffects: ResolvedEffect[];
@@ -169,7 +169,12 @@ export function CountryTabEtatMajor({
     if (!canEditCountry) return;
     setSavingSection(section);
     setError(null);
-    const result = await saveEtatMajorFocus(countryId, countrySlug, payload);
+    const result = await saveEtatMajorFocus(
+      countryId,
+      countrySlug,
+      payload,
+      etatMajorFocus?.updated_at ?? null
+    );
     if (result?.error) {
       setError(result.error);
       setSavingSection(null);

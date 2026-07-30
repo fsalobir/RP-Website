@@ -8,17 +8,23 @@ type RuleParameterUpdate = {
   key: string;
   value: unknown;
   description: string | null;
+  expected_updated_at: string;
 };
 
-export async function saveRuleParameters(rows: RuleParameterUpdate[]): Promise<{ error?: string }> {
+export async function saveRuleParameters(rows: RuleParameterUpdate[]): Promise<{
+  error?: string;
+  updatedAtById?: Record<string, string>;
+}> {
   if (rows.length === 0) return {};
   if (rows.length > 250) return { error: "Trop de réglages envoyés en une fois." };
-  if (rows.some((row) => !row.id || !row.key)) return { error: "Un réglage est incomplet." };
+  if (rows.some((row) => !row.id || !row.key || !row.expected_updated_at)) {
+    return { error: "Un réglage est incomplet. Rechargez la page." };
+  }
 
   const supabase = await createClient();
-  const { error } = await supabase
-    .from("rule_parameters")
-    .upsert(rows, { onConflict: "id" });
+  const { data, error } = await supabase.rpc("admin_save_rule_parameters", {
+    p_rows: rows,
+  });
 
   if (error) return { error: error.message };
   revalidateTag("country-page-globals", "max");
@@ -26,7 +32,13 @@ export async function saveRuleParameters(rows: RuleParameterUpdate[]): Promise<{
   revalidatePath("/classement");
   revalidatePath("/");
   revalidatePath("/ideologie");
-  return {};
+  const updatedAtById = Object.fromEntries(
+    ((data ?? []) as Array<{ result_id: string; result_updated_at: string }>).map((row) => [
+      row.result_id,
+      row.result_updated_at,
+    ])
+  );
+  return { updatedAtById };
 }
 
 /**

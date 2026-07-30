@@ -10,6 +10,7 @@ type ControlRow = {
   controller_name: string;
   share_pct: number;
   is_annexed: boolean;
+  updated_at: string;
 };
 
 function deriveStatus(controls: ControlRow[]): "Souverain" | "Contesté" | "Occupé" | "Annexé" {
@@ -93,7 +94,8 @@ export function ControlAdminBlock({
         row.id,
         countryId,
         Number(editSharePct) || 0,
-        editIsAnnexed
+        editIsAnnexed,
+        row.updated_at
       );
       if (result.error) {
         setError(result.error);
@@ -109,13 +111,14 @@ export function ControlAdminBlock({
     }
   }
 
-  async function handleDelete(controlId: string, controllerName: string) {
+  async function handleDelete(row: ControlRow) {
+    const { id: controlId, controller_name: controllerName, updated_at: expectedUpdatedAt } = row;
     if (!confirm(`Supprimer le contrôle exercé par ${controllerName} ?`)) return;
     setError(null);
     setSuccess(null);
     setSaving(true);
     try {
-      const result = await deleteCountryControl(controlId, countryId);
+      const result = await deleteCountryControl(controlId, countryId, expectedUpdatedAt);
       if (result.error) {
         setError(result.error);
         return;
@@ -216,7 +219,7 @@ export function ControlAdminBlock({
                 </button>
                 <button
                   type="button"
-                  onClick={() => handleDelete(row.id, row.controller_name)}
+                  onClick={() => handleDelete(row)}
                   disabled={saving}
                   className="min-h-11 rounded-lg px-2 text-sm text-[var(--danger)] hover:bg-[var(--background-elevated)] disabled:opacity-50"
                 >

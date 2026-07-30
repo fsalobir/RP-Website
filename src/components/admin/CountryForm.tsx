@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
 import type { Country } from "@/types/database";
 import { formatGdp, formatNumber } from "@/lib/format";
+import { useUnsavedChangesGuard } from "@/hooks/useUnsavedChangesGuard";
 
 function slugify(s: string) {
   return s
@@ -123,6 +124,24 @@ export function CountryForm({
   const [error, setError] = useState<string | null>(null);
   const [flagFile, setFlagFile] = useState<File | null>(null);
   const flagInputRef = useRef<HTMLInputElement>(null);
+  const initialForm = useMemo(
+    () => ({
+      name: country?.name ?? defaultCountry.name ?? "",
+      slug: country?.slug ?? defaultCountry.slug ?? "",
+      regime: country?.regime ?? defaultCountry.regime ?? "",
+      flag_url: country?.flag_url ?? defaultCountry.flag_url ?? "",
+      continent_id: country?.continent_id ?? "",
+      militarism: country?.militarism ?? defaultCountry.militarism ?? 5,
+      industry: country?.industry ?? defaultCountry.industry ?? 5,
+      science: country?.science ?? defaultCountry.science ?? 5,
+      stability: country?.stability ?? defaultCountry.stability ?? 0,
+      population: country?.population ?? defaultCountry.population ?? 0,
+      gdp: country?.gdp ?? defaultCountry.gdp ?? 0,
+    }),
+    [country]
+  );
+  const isDirty = flagFile !== null || JSON.stringify(form) !== JSON.stringify(initialForm);
+  useUnsavedChangesGuard(isDirty && !saving);
   const flagPreviewUrl = useMemo(() => {
     if (!flagFile) return null;
     return URL.createObjectURL(flagFile);
@@ -176,10 +195,22 @@ export function CountryForm({
       gdp: Number(form.gdp),
     };
     if (isEdit && country) {
-      const { error: err } = await supabase.from("countries").update(row).eq("id", country.id);
+      const { data: updated, error: err } = await supabase
+        .from("countries")
+        .update(row)
+        .eq("id", country.id)
+        .eq("updated_at", country.updated_at)
+        .select("id")
+        .maybeSingle();
       if (err) {
         if (uploadedFlagPath) await supabase.storage.from("flags").remove([uploadedFlagPath]);
         setError(err.message);
+        setSaving(false);
+        return;
+      }
+      if (!updated) {
+        if (uploadedFlagPath) await supabase.storage.from("flags").remove([uploadedFlagPath]);
+        setError("Un autre administrateur a modifié ce pays. Rechargez la page avant de recommencer.");
         setSaving(false);
         return;
       }
@@ -376,8 +407,8 @@ export function CountryForm({
               id="country-population"
               type="number"
               min={0}
-              step="any"
-              value={Number(form.population) / 1_000_000}
+              step={0.01}
+              value={Math.round((Number(form.population) / 1_000_000) * 100) / 100}
               onChange={(e) => update("population", (e.target.valueAsNumber || 0) * 1_000_000)}
               className={inputClass}
               style={inputStyle}
@@ -389,8 +420,8 @@ export function CountryForm({
               id="country-gdp"
               type="number"
               min={0}
-              step="any"
-              value={Number(form.gdp) / 1_000_000_000}
+              step={0.01}
+              value={Math.round((Number(form.gdp) / 1_000_000_000) * 100) / 100}
               onChange={(e) => update("gdp", (e.target.valueAsNumber || 0) * 1_000_000_000)}
               className={inputClass}
               style={inputStyle}

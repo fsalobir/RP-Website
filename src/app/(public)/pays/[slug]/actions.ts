@@ -4,7 +4,12 @@ import { createClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
 import { ALL_LAW_KEYS } from "@/lib/laws";
 
-export async function setLawTarget(countryId: string, lawKey: string, targetScore: number) {
+export async function setLawTarget(
+  countryId: string,
+  lawKey: string,
+  targetScore: number,
+  expectedUpdatedAt: string | null = null
+) {
   if (!ALL_LAW_KEYS.includes(lawKey)) return { error: "Loi inconnue." };
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -17,17 +22,29 @@ export async function setLawTarget(countryId: string, lawKey: string, targetScor
 
   if (!adminRow && !playerRow) return { error: "Vous ne pouvez modifier que le pays qui vous est assigné." };
 
-  const { data: existing } = await supabase.from("country_laws").select("score").eq("country_id", countryId).eq("law_key", lawKey).maybeSingle();
-  const { error } = await supabase.from("country_laws").upsert(
-    {
-      country_id: countryId,
-      law_key: lawKey,
-      score: existing?.score ?? 0,
-      target_score: target,
-      updated_at: new Date().toISOString(),
-    },
-    { onConflict: "country_id,law_key" }
-  );
+  const { data: existing } = await supabase
+    .from("country_laws")
+    .select("score, updated_at")
+    .eq("country_id", countryId)
+    .eq("law_key", lawKey)
+    .maybeSingle();
+  if (existing && existing.updated_at !== expectedUpdatedAt) {
+    return { error: "Un autre administrateur a modifié cette loi. Rechargez la page." };
+  }
+  const { error } = existing
+    ? await supabase
+        .from("country_laws")
+        .update({ target_score: target, updated_at: new Date().toISOString() })
+        .eq("country_id", countryId)
+        .eq("law_key", lawKey)
+        .eq("updated_at", expectedUpdatedAt)
+    : await supabase.from("country_laws").insert({
+        country_id: countryId,
+        law_key: lawKey,
+        score: 0,
+        target_score: target,
+        updated_at: new Date().toISOString(),
+      });
 
   if (error) return { error: error.message };
 
@@ -36,7 +53,12 @@ export async function setLawTarget(countryId: string, lawKey: string, targetScor
 }
 
 /** Admin uniquement : applique immédiatement le score et la cible (même valeur). Outil de debug sur la fiche pays. */
-export async function setLawScoreImmediate(countryId: string, lawKey: string, score: number) {
+export async function setLawScoreImmediate(
+  countryId: string,
+  lawKey: string,
+  score: number,
+  expectedUpdatedAt: string | null = null
+) {
   if (!ALL_LAW_KEYS.includes(lawKey)) return { error: "Loi inconnue." };
   const supabase = await createClient();
   const {
@@ -49,16 +71,33 @@ export async function setLawScoreImmediate(countryId: string, lawKey: string, sc
 
   const clamped = Math.max(0, Math.min(500, Math.round(score)));
 
-  const { error } = await supabase.from("country_laws").upsert(
-    {
-      country_id: countryId,
-      law_key: lawKey,
-      score: clamped,
-      target_score: clamped,
-      updated_at: new Date().toISOString(),
-    },
-    { onConflict: "country_id,law_key" }
-  );
+  const { data: existing } = await supabase
+    .from("country_laws")
+    .select("updated_at")
+    .eq("country_id", countryId)
+    .eq("law_key", lawKey)
+    .maybeSingle();
+  if (existing && existing.updated_at !== expectedUpdatedAt) {
+    return { error: "Un autre administrateur a modifié cette loi. Rechargez la page." };
+  }
+  const { error } = existing
+    ? await supabase
+        .from("country_laws")
+        .update({
+          score: clamped,
+          target_score: clamped,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("country_id", countryId)
+        .eq("law_key", lawKey)
+        .eq("updated_at", expectedUpdatedAt)
+    : await supabase.from("country_laws").insert({
+        country_id: countryId,
+        law_key: lawKey,
+        score: clamped,
+        target_score: clamped,
+        updated_at: new Date().toISOString(),
+      });
 
   if (error) return { error: error.message };
 
@@ -71,37 +110,37 @@ export async function setMobilisationTarget(countryId: string, targetScore: numb
   return setLawTarget(countryId, "mobilisation", targetScore);
 }
 
-export async function saveMilitaryUnit(
+export async function saveMilitaryUnits(
   countryId: string,
   slug: string,
-  rosterUnitId: string,
-  currentLevel: number,
-  extraCount: number
+  rows: Array<{
+    roster_unit_id: string;
+    current_level: number;
+    extra_count: number;
+    expected_updated_at: string | null;
+  }>
 ) {
+  if (rows.length === 0) return { updatedAtByRosterId: {} as Record<string, string> };
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Non connecté." };
 
-  const { data: adminRow } = await supabase.from("admins").select("id").eq("user_id", user.id).single();
-  const { data: playerRow } = await supabase.from("country_players").select("country_id").eq("user_id", user.id).eq("country_id", countryId).maybeSingle();
-  if (!adminRow && !playerRow) return { error: "Vous ne pouvez modifier que le pays qui vous est assigné." };
-
-  const { error } = await supabase
-    .from("country_military_units")
-    .upsert(
-      {
-        country_id: countryId,
-        roster_unit_id: rosterUnitId,
-        current_level: currentLevel,
-        extra_count: extraCount,
-      },
-      { onConflict: "country_id,roster_unit_id" }
-    );
+  const { data, error } = await supabase.rpc("save_country_military_units_guarded", {
+    p_country_id: countryId,
+    p_rows: rows,
+  });
 
   if (error) return { error: error.message };
 
   revalidatePath(`/pays/${slug}`, "page");
-  return {};
+  return {
+    updatedAtByRosterId: Object.fromEntries(
+      ((data ?? []) as Array<{ result_roster_unit_id: string; result_updated_at: string }>).map((row) => [
+        row.result_roster_unit_id,
+        row.result_updated_at,
+      ])
+    ),
+  };
 }
 
 export async function getCountryMilitaryUnits(countryId: string) {
@@ -170,7 +209,12 @@ export type EtatMajorFocusPayload = {
   stock_roster_unit_id: string | null;
 };
 
-export async function saveEtatMajorFocus(countryId: string, slug: string, focus: EtatMajorFocusPayload) {
+export async function saveEtatMajorFocus(
+  countryId: string,
+  slug: string,
+  focus: EtatMajorFocusPayload,
+  expectedUpdatedAt: string | null = null
+) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Non connecté." };
@@ -179,19 +223,32 @@ export async function saveEtatMajorFocus(countryId: string, slug: string, focus:
   const { data: playerRow } = await supabase.from("country_players").select("country_id").eq("user_id", user.id).eq("country_id", countryId).maybeSingle();
   if (!adminRow && !playerRow) return { error: "Vous ne pouvez modifier que le pays qui vous est assigné." };
 
-  const { error } = await supabase
+  const { data: existing } = await supabase
     .from("country_etat_major_focus")
-    .upsert(
-      {
+    .select("updated_at")
+    .eq("country_id", countryId)
+    .maybeSingle();
+  if (existing && existing.updated_at !== expectedUpdatedAt) {
+    return { error: "Un autre administrateur a modifié l’état-major. Rechargez la page." };
+  }
+
+  const payload = {
+    design_roster_unit_id: focus.design_roster_unit_id || null,
+    recrutement_roster_unit_id: focus.recrutement_roster_unit_id || null,
+    procuration_roster_unit_id: focus.procuration_roster_unit_id || null,
+    stock_roster_unit_id: focus.stock_roster_unit_id || null,
+    updated_at: new Date().toISOString(),
+  };
+  const { error } = existing
+    ? await supabase
+        .from("country_etat_major_focus")
+        .update(payload)
+        .eq("country_id", countryId)
+        .eq("updated_at", expectedUpdatedAt)
+    : await supabase.from("country_etat_major_focus").insert({
         country_id: countryId,
-        design_roster_unit_id: focus.design_roster_unit_id || null,
-        recrutement_roster_unit_id: focus.recrutement_roster_unit_id || null,
-        procuration_roster_unit_id: focus.procuration_roster_unit_id || null,
-        stock_roster_unit_id: focus.stock_roster_unit_id || null,
-        updated_at: new Date().toISOString(),
-      },
-      { onConflict: "country_id" }
-    );
+        ...payload,
+      });
 
   if (error) return { error: error.message };
 

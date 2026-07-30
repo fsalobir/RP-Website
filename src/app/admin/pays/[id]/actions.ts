@@ -21,17 +21,20 @@ export async function upsertCountryControl(
   }
   const pct = rawPct;
   if (countryId === controllerCountryId) return { error: "Un pays ne peut pas se contrôler lui-même." };
-  const { error } = await supabase.from("country_control").upsert(
-    {
-      country_id: countryId,
-      controller_country_id: controllerCountryId,
-      share_pct: pct,
-      is_annexed: !!isAnnexed,
-      updated_at: new Date().toISOString(),
-    },
-    { onConflict: "country_id,controller_country_id" }
-  );
-  if (error) return { error: error.message };
+  const { error } = await supabase.from("country_control").insert({
+    country_id: countryId,
+    controller_country_id: controllerCountryId,
+    share_pct: pct,
+    is_annexed: !!isAnnexed,
+  });
+  if (error) {
+    return {
+      error:
+        error.code === "23505"
+          ? "Ce contrôle a déjà été ajouté par un autre administrateur. Rechargez la page."
+          : error.message,
+    };
+  }
   revalidatePath(`/admin/pays/${countryId}`);
   revalidatePath("/admin/pays");
   revalidatePath("/");
@@ -42,7 +45,8 @@ export async function updateCountryControl(
   controlId: string,
   countryId: string,
   sharePct: number,
-  isAnnexed: boolean
+  isAnnexed: boolean,
+  expectedUpdatedAt: string
 ): Promise<{ error?: string }> {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -55,27 +59,47 @@ export async function updateCountryControl(
     return { error: "La part de contrôle doit être comprise entre 0 et 100 %." };
   }
   const pct = rawPct;
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from("country_control")
-    .update({ share_pct: pct, is_annexed: !!isAnnexed, updated_at: new Date().toISOString() })
+    .update({ share_pct: pct, is_annexed: !!isAnnexed })
     .eq("id", controlId)
-    .eq("country_id", countryId);
+    .eq("country_id", countryId)
+    .eq("updated_at", expectedUpdatedAt)
+    .select("id")
+    .maybeSingle();
   if (error) return { error: error.message };
+  if (!data) {
+    return { error: "Un autre administrateur a modifié ce contrôle. Rechargez la page avant de recommencer." };
+  }
   revalidatePath(`/admin/pays/${countryId}`);
   revalidatePath("/admin/pays");
   revalidatePath("/");
   return {};
 }
 
-export async function deleteCountryControl(controlId: string, countryId: string): Promise<{ error?: string }> {
+export async function deleteCountryControl(
+  controlId: string,
+  countryId: string,
+  expectedUpdatedAt: string
+): Promise<{ error?: string }> {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Non connecté." };
   const { data: adminRow } = await supabase.from("admins").select("id").eq("user_id", user.id).single();
   if (!adminRow) return { error: "Réservé aux admins." };
 
-  const { error } = await supabase.from("country_control").delete().eq("id", controlId);
+  const { data, error } = await supabase
+    .from("country_control")
+    .delete()
+    .eq("id", controlId)
+    .eq("country_id", countryId)
+    .eq("updated_at", expectedUpdatedAt)
+    .select("id")
+    .maybeSingle();
   if (error) return { error: error.message };
+  if (!data) {
+    return { error: "Un autre administrateur a modifié ce contrôle. Rechargez la page avant de le supprimer." };
+  }
   revalidatePath(`/admin/pays/${countryId}`);
   revalidatePath("/admin/pays");
   revalidatePath("/");

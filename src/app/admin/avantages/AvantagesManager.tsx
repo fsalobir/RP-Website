@@ -181,7 +181,11 @@ export function AvantagesManager({
     formData.set("sort_order", String(categorySortOrder));
     try {
       const result = editingCategoryId
-        ? await updatePerkCategory(editingCategoryId, formData)
+        ? await updatePerkCategory(
+            editingCategoryId,
+            categories.find((category) => category.id === editingCategoryId)?.updated_at ?? "",
+            formData
+          )
         : await createPerkCategory(formData);
       if (result.error) {
         setCategoryError(result.error);
@@ -211,7 +215,10 @@ export function AvantagesManager({
     setOperationNotice(null);
     setSaving(true);
     try {
-      const result = await deletePerkCategory(id);
+      const result = await deletePerkCategory(
+        id,
+        categories.find((category) => category.id === id)?.updated_at ?? ""
+      );
       if (result.error) {
         setOperationNotice({ type: "error", message: result.error });
         return;
@@ -326,7 +333,13 @@ export function AvantagesManager({
       formData.set("sort_order", String(Math.max(1, perkSortOrder)));
       persistenceStarted = true;
       const result = editingPerkId
-        ? await updatePerk(editingPerkId, formData, perkEffects, perkRequirements)
+        ? await updatePerk(
+            editingPerkId,
+            perks.find((perk) => perk.id === editingPerkId)?.updated_at ?? "",
+            formData,
+            perkEffects,
+            perkRequirements
+          )
         : await createPerk(formData, perkEffects, perkRequirements);
       if (result.error) {
         setPerkError(`${result.error} L’enregistrement a pu être partiel : rechargez la page avant de réessayer.`);
@@ -352,7 +365,10 @@ export function AvantagesManager({
     setOperationNotice(null);
     setSaving(true);
     try {
-      const result = await deletePerk(id);
+      const result = await deletePerk(
+        id,
+        perks.find((perk) => perk.id === id)?.updated_at ?? ""
+      );
       if (result.error) {
         setOperationNotice({ type: "error", message: result.error });
         return;

@@ -220,6 +220,7 @@ export function WikiAdminClient({ initialPages }: { initialPages: WikiPageRow[] 
         id: selectedPage.id,
         title: savedTitle,
         content,
+        expected_updated_at: selectedPage.updated_at ?? "",
       });
       if (!res.ok) {
         setError(res.error);
@@ -229,6 +230,13 @@ export function WikiAdminClient({ initialPages }: { initialPages: WikiPageRow[] 
         title.trim() !== savedTitle ||
         JSON.stringify(editor.getJSON()) !== JSON.stringify(content);
       setDirtyState(changedDuringSave);
+      setPages((current) =>
+        current.map((page) =>
+          page.id === selectedPage.id
+            ? { ...page, title: savedTitle, content, updated_at: res.updated_at }
+            : page
+        )
+      );
       setMsg(
         changedDuringSave
           ? "Version précédente publiée. De nouvelles modifications restent à enregistrer."
@@ -284,7 +292,10 @@ export function WikiAdminClient({ initialPages }: { initialPages: WikiPageRow[] 
     setMsg(null);
     setError(null);
     try {
-      const res = await deleteWikiPageAction(selectedPage.id);
+      const res = await deleteWikiPageAction(
+        selectedPage.id,
+        selectedPage.updated_at ?? ""
+      );
       if (!res.ok) {
         setError(res.error);
         return;
@@ -309,7 +320,11 @@ export function WikiAdminClient({ initialPages }: { initialPages: WikiPageRow[] 
       setMsg(null);
       setError(null);
       try {
-        const result = await moveWikiPageAction(selectedPage.id, dir);
+        const result = await moveWikiPageAction(
+          selectedPage.id,
+          dir,
+          selectedPage.updated_at ?? ""
+        );
         if (!result.ok) {
           setError(result.error);
           return;
