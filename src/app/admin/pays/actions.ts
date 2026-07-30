@@ -198,7 +198,9 @@ export async function runDailyCountryUpdate(): Promise<{ error?: string }> {
   if (!adminRow) return { error: "Réservé aux admins." };
 
   const serviceSupabase = createServiceRoleClient();
-  const { error } = await serviceSupabase.rpc("run_daily_country_update");
+  const { error } = await serviceSupabase.rpc("run_daily_country_update", {
+    p_force: true,
+  });
 
   if (error) return { error: error.message };
   await persistWorldIdeologies(serviceSupabase);
@@ -434,7 +436,7 @@ export async function updateCountryAiStatus(
     .select("country_id")
     .eq("country_id", countryId)
     .maybeSingle();
-  if (playerRow) return { error: "Ce pays est joué par un joueur, le statut IA ne peut pas être modifié." };
+  if (playerRow) return { error: "Ce pays est contrôlé par un joueur : son rôle automatique ne peut pas être modifié." };
 
   const value = aiStatus === "major" || aiStatus === "minor" ? aiStatus : null;
   const { error } = await supabase

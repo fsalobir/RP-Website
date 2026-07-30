@@ -1,11 +1,10 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
 import type { Country } from "@/types/database";
-import { AdminAnchorNav, AdminSettingsGuide } from "@/components/admin/AdminSettingsUi";
 import { formatGdp, formatNumber } from "@/lib/format";
 
 function slugify(s: string) {
@@ -32,6 +31,72 @@ const defaultCountry: Partial<Country> = {
 
 type Continent = { id: string; slug: string; label_fr: string };
 
+function CountryPreview({
+  name,
+  regime,
+  flagUrl,
+  population,
+  gdp,
+  militarism,
+  industry,
+  science,
+  stability,
+}: {
+  name: string;
+  regime: string;
+  flagUrl: string | null;
+  population: number;
+  gdp: number;
+  militarism: number;
+  industry: number;
+  science: number;
+  stability: number;
+}) {
+  return (
+    <div className="overflow-hidden rounded-xl border bg-[var(--background-panel)]" style={{ borderColor: "var(--border)" }}>
+      <div className="flex items-center gap-3 border-b p-3" style={{ borderColor: "var(--border-muted)" }}>
+        <div className="flex h-12 w-16 shrink-0 items-center justify-center overflow-hidden rounded bg-[var(--background)]">
+          {flagUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={flagUrl} alt="" className="h-full w-full object-contain" />
+          ) : (
+            <span className="text-[10px] text-[var(--foreground-muted)]">Sans drapeau</span>
+          )}
+        </div>
+        <div className="min-w-0">
+          <p className="truncate font-semibold text-[var(--foreground)]">{name || "Nom du pays"}</p>
+          <p className="truncate text-xs text-[var(--foreground-muted)]">{regime || "Régime non renseigné"}</p>
+        </div>
+      </div>
+      <dl className="grid grid-cols-2 text-sm">
+        <div className="border-b border-r p-3" style={{ borderColor: "var(--border-muted)" }}>
+          <dt className="text-xs text-[var(--foreground-muted)]">Population</dt>
+          <dd className="mt-1 font-semibold text-[var(--foreground)]">{formatNumber(population || 0)}</dd>
+        </div>
+        <div className="border-b p-3" style={{ borderColor: "var(--border-muted)" }}>
+          <dt className="text-xs text-[var(--foreground-muted)]">PIB</dt>
+          <dd className="mt-1 font-semibold text-[var(--foreground)]">{formatGdp(gdp || 0)}</dd>
+        </div>
+        {[
+          ["Militarisme", militarism],
+          ["Industrie", industry],
+          ["Science", science],
+          ["Stabilité", stability],
+        ].map(([label, value], index) => (
+          <div
+            key={label}
+            className={`p-3 ${index % 2 === 0 ? "border-r" : ""} ${index < 2 ? "border-b" : ""}`}
+            style={{ borderColor: "var(--border-muted)" }}
+          >
+            <dt className="text-xs text-[var(--foreground-muted)]">{label}</dt>
+            <dd className="mt-1 font-semibold text-[var(--foreground)]">{value}</dd>
+          </div>
+        ))}
+      </dl>
+    </div>
+  );
+}
+
 export function CountryForm({
   country,
   continents = [],
@@ -57,6 +122,7 @@ export function CountryForm({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [flagFile, setFlagFile] = useState<File | null>(null);
+  const flagInputRef = useRef<HTMLInputElement>(null);
   const flagPreviewUrl = useMemo(() => {
     if (!flagFile) return null;
     return URL.createObjectURL(flagFile);
@@ -79,6 +145,7 @@ export function CountryForm({
     setSaving(true);
     const supabase = createClient();
     let flagUrl: string | null = form.flag_url || null;
+    let uploadedFlagPath: string | null = null;
     if (flagFile) {
       const ext = flagFile.name.split(".").pop()?.toLowerCase() || "jpg";
       const path = `${crypto.randomUUID()}.${ext}`;
@@ -91,6 +158,7 @@ export function CountryForm({
         setSaving(false);
         return;
       }
+      uploadedFlagPath = path;
       const { data: urlData } = supabase.storage.from("flags").getPublicUrl(path);
       flagUrl = urlData.publicUrl;
     }
@@ -110,6 +178,7 @@ export function CountryForm({
     if (isEdit && country) {
       const { error: err } = await supabase.from("countries").update(row).eq("id", country.id);
       if (err) {
+        if (uploadedFlagPath) await supabase.storage.from("flags").remove([uploadedFlagPath]);
         setError(err.message);
         setSaving(false);
         return;
@@ -118,6 +187,7 @@ export function CountryForm({
     } else {
       const { data, error: err } = await supabase.from("countries").insert(row).select("id").single();
       if (err) {
+        if (uploadedFlagPath) await supabase.storage.from("flags").remove([uploadedFlagPath]);
         setError(err.message);
         setSaving(false);
         return;
@@ -128,37 +198,40 @@ export function CountryForm({
     setSaving(false);
   }
 
-  const panelClass = "scroll-mt-20 border-t py-4";
-  const panelStyle = { borderColor: "var(--border)" };
   const inputClass =
-    "min-h-11 w-full rounded border bg-[var(--background)] px-3 py-2 text-[var(--foreground)] focus:border-[var(--accent)] focus:outline-none focus:ring-2 focus:ring-[var(--accent)]";
+    "min-h-11 w-full rounded-lg border bg-[var(--background)] px-3 py-2 text-[var(--foreground)] focus:border-[var(--accent)] focus:outline-none focus:ring-2 focus:ring-[var(--accent)]";
   const inputStyle = { borderColor: "var(--border)" };
+  const preview = (
+    <CountryPreview
+      name={form.name}
+      regime={form.regime}
+      flagUrl={flagPreviewUrl ?? form.flag_url ?? null}
+      population={Number(form.population) || 0}
+      gdp={Number(form.gdp) || 0}
+      militarism={Number(form.militarism)}
+      industry={Number(form.industry)}
+      science={Number(form.science)}
+      stability={Number(form.stability)}
+    />
+  );
 
   return (
-    <form onSubmit={handleSubmit} className="admin-settings-form space-y-5">
-      <AdminSettingsGuide
-        purpose="Cette fiche définit l’identité publique et les valeurs de départ du pays."
-        impact="Le nom, le régime, le drapeau, la population et le PIB sont visibles par les joueurs. Les statistiques influencent aussi les jets et la simulation."
-        check="Vérifiez le drapeau, l’adresse de la page et les bornes des quatre statistiques dans l’aperçu."
-      />
-      <AdminAnchorNav
-        label="Sections de la fiche pays"
-        items={[
-          { href: "#country-identity", label: "Identité" },
-          { href: "#country-capabilities", label: "Capacités" },
-          { href: "#country-economy", label: "Population et économie" },
-          { href: "#country-preview", label: "Aperçu joueur" },
-        ]}
-      />
-
-      <section id="country-identity" className={panelClass} style={panelStyle}>
-        <h2 className="text-lg font-semibold text-[var(--foreground)]">Identité</h2>
-        <p className="mb-3 mt-1 text-sm leading-snug text-[var(--foreground-muted)]">
-          Informations affichées sur la fiche pays et dans les listes.
+    <form onSubmit={handleSubmit} className="admin-settings-form">
+      {error && (
+        <p className="mb-4 rounded-lg border border-red-500/40 bg-red-500/10 px-3 py-2 text-sm text-[var(--danger)]" role="alert">
+          {error}
         </p>
+      )}
+      <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,1fr)_18rem]">
+        <div className="min-w-0 border-y" style={{ borderColor: "var(--border)" }}>
+      <section id="country-identity" className="scroll-mt-20 grid gap-4 py-5 lg:grid-cols-[11rem_minmax(0,1fr)]">
+        <div>
+          <h2 className="text-base font-semibold text-[var(--foreground)]">Identité</h2>
+          <p className="mt-1 text-xs leading-snug text-[var(--foreground-muted)]">Visible par tous les joueurs.</p>
+        </div>
         <div className="grid gap-3 sm:grid-cols-2">
           <div>
-            <label htmlFor="country-name" className="mb-1 block text-sm text-[var(--foreground-muted)]">Nom</label>
+            <label htmlFor="country-name" className="mb-1 block text-sm text-[var(--foreground-muted)]">Nom du pays</label>
             <input
               id="country-name"
               type="text"
@@ -181,7 +254,7 @@ export function CountryForm({
               aria-describedby="country-slug-help"
             />
             <p id="country-slug-help" className="mt-1 text-xs text-[var(--foreground-muted)]">
-              Utilisée après « /pays/ ». Elle est créée automatiquement pour un nouveau pays.
+              /pays/{form.slug || slugify(form.name) || "adresse"}
             </p>
           </div>
           <div>
@@ -193,7 +266,7 @@ export function CountryForm({
               onChange={(e) => update("regime", e.target.value)}
               className={inputClass}
               style={inputStyle}
-              placeholder="République, Monarchie…"
+              placeholder="République, monarchie…"
             />
           </div>
           {continents.length > 0 && (
@@ -206,7 +279,7 @@ export function CountryForm({
                 className={inputClass}
                 style={inputStyle}
               >
-                <option value="">—</option>
+                <option value="">— Non renseigné —</option>
                 {continents.map((c) => (
                   <option key={c.id} value={c.id}>{c.label_fr}</option>
                 ))}
@@ -215,8 +288,9 @@ export function CountryForm({
           )}
           <div>
             <label className="mb-1 block text-sm text-[var(--foreground-muted)]">Drapeau</label>
-            <div className="space-y-2">
+            <div className="flex min-h-11 flex-wrap items-center gap-2">
               <input
+                ref={flagInputRef}
                 type="file"
                 accept="image/jpeg,image/png,image/gif,image/webp"
                 onChange={(e) => {
@@ -232,40 +306,29 @@ export function CountryForm({
                 className="hidden"
                 id="admin-country-flag-upload"
               />
-              <label
-                htmlFor="admin-country-flag-upload"
+              <button
+                type="button"
+                onClick={() => flagInputRef.current?.click()}
                 className="inline-flex min-h-11 cursor-pointer items-center rounded border border-[var(--border)] bg-[var(--accent)] px-3 py-1.5 text-sm font-medium text-[#0f1419] hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
               >
-                Choisir un drapeau
-              </label>
+                {form.flag_url || flagFile ? "Remplacer le drapeau" : "Choisir un drapeau"}
+              </button>
               {flagFile && (
-                <p className="text-xs text-[var(--foreground-muted)]">
-                  Fichier sélectionné : {flagFile.name}
+                <p className="max-w-48 truncate text-xs text-[var(--foreground-muted)]" title={flagFile.name}>
+                  {flagFile.name}
                 </p>
-              )}
-              {(form.flag_url || flagPreviewUrl) && (
-                <div className="mt-2">
-                  <span className="text-xs text-[var(--foreground-muted)]">Aperçu : </span>
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={flagPreviewUrl ?? form.flag_url ?? ""}
-                    alt={`Drapeau de ${form.name || "ce pays"}`}
-                    className="mt-1 h-12 w-16 rounded border bg-[var(--background)] object-contain"
-                    style={{ borderColor: "var(--border)" }}
-                  />
-                </div>
               )}
             </div>
           </div>
         </div>
       </section>
 
-      <section id="country-capabilities" className={panelClass} style={panelStyle}>
-        <h2 className="text-lg font-semibold text-[var(--foreground)]">Capacités du pays</h2>
-        <p className="mb-3 mt-1 text-sm leading-snug text-[var(--foreground-muted)]">
-          Ces quatre valeurs servent aux jets, aux effets et à plusieurs calculs de puissance.
-        </p>
-        <div className="grid gap-3 sm:grid-cols-4">
+      <section id="country-capabilities" className="scroll-mt-20 grid gap-4 border-t py-5 lg:grid-cols-[11rem_minmax(0,1fr)]" style={{ borderColor: "var(--border)" }}>
+        <div>
+          <h2 className="text-base font-semibold text-[var(--foreground)]">Capacités</h2>
+          <p className="mt-1 text-xs leading-snug text-[var(--foreground-muted)]">Valeurs utilisées par les jets.</p>
+        </div>
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           {(["militarism", "industry", "science"] as const).map((key) => (
             <div key={key}>
               <label htmlFor={`country-${key}`} className="mb-1 block text-sm text-[var(--foreground-muted)]">
@@ -301,87 +364,82 @@ export function CountryForm({
         </div>
       </section>
 
-      <section id="country-economy" className={panelClass} style={panelStyle}>
-        <h2 className="text-lg font-semibold text-[var(--foreground)]">Population et économie</h2>
-        <p className="mb-3 mt-1 text-sm leading-snug text-[var(--foreground-muted)]">
-          Valeurs de départ utilisées par les classements, l’influence et la croissance quotidienne.
-        </p>
+      <section id="country-economy" className="scroll-mt-20 grid gap-4 border-t py-5 lg:grid-cols-[11rem_minmax(0,1fr)]" style={{ borderColor: "var(--border)" }}>
+        <div>
+          <h2 className="text-base font-semibold text-[var(--foreground)]">Démographie</h2>
+          <p className="mt-1 text-xs leading-snug text-[var(--foreground-muted)]">Base de l’influence et de la croissance.</p>
+        </div>
         <div className="grid gap-3 sm:grid-cols-2">
           <div>
-            <label htmlFor="country-population" className="mb-1 block text-sm text-[var(--foreground-muted)]">Population</label>
+            <label htmlFor="country-population" className="mb-1 block text-sm text-[var(--foreground-muted)]">Population (millions d’habitants)</label>
             <input
               id="country-population"
               type="number"
               min={0}
-              value={form.population}
-              onChange={(e) => update("population", e.target.valueAsNumber ?? 0)}
+              step="any"
+              value={Number(form.population) / 1_000_000}
+              onChange={(e) => update("population", (e.target.valueAsNumber || 0) * 1_000_000)}
               className={inputClass}
               style={inputStyle}
             />
           </div>
           <div>
-            <label htmlFor="country-gdp" className="mb-1 block text-sm text-[var(--foreground-muted)]">PIB</label>
+            <label htmlFor="country-gdp" className="mb-1 block text-sm text-[var(--foreground-muted)]">PIB (milliards)</label>
             <input
               id="country-gdp"
               type="number"
               min={0}
-              step={0.01}
-              value={form.gdp}
-              onChange={(e) => update("gdp", e.target.valueAsNumber ?? 0)}
+              step="any"
+              value={Number(form.gdp) / 1_000_000_000}
+              onChange={(e) => update("gdp", (e.target.valueAsNumber || 0) * 1_000_000_000)}
               className={inputClass}
               style={inputStyle}
             />
           </div>
         </div>
       </section>
+        </div>
 
-      <section id="country-preview" className={panelClass} style={panelStyle} aria-labelledby="country-preview-title">
-        <h2 id="country-preview-title" className="text-lg font-semibold text-[var(--foreground)]">
-          Aperçu de la fiche
-        </h2>
-        <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center">
-          <div
-            className="flex h-20 w-28 shrink-0 items-center justify-center overflow-hidden rounded-lg border bg-[var(--background)]"
+        <aside className="sticky top-5 hidden space-y-3 xl:block">
+          <h2 className="text-sm font-semibold text-[var(--foreground)]">Aperçu joueur</h2>
+          {preview}
+          <button
+            type="submit"
+            disabled={saving}
+            className="btn-primary inline-flex min-h-11 w-full items-center justify-center rounded-lg px-4 py-2 disabled:opacity-50"
+            style={{ background: "var(--accent)", color: "#0f1419", fontWeight: 700 }}
+          >
+            {saving ? "Enregistrement…" : isEdit ? "Enregistrer le pays" : "Créer le pays"}
+          </button>
+          <Link
+            href="/admin/pays"
+            className="inline-flex min-h-11 w-full items-center justify-center rounded-lg border px-4 py-2 text-sm text-[var(--foreground-muted)] hover:bg-[var(--background-elevated)] hover:text-[var(--foreground)]"
             style={{ borderColor: "var(--border)" }}
           >
-            {flagPreviewUrl || form.flag_url ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={flagPreviewUrl ?? form.flag_url}
-                alt=""
-                className="h-full w-full object-contain"
-              />
-            ) : (
-              <span className="text-xs text-[var(--foreground-muted)]">Sans drapeau</span>
-            )}
-          </div>
-          <div className="min-w-0">
-            <p className="break-words text-xl font-semibold text-[var(--foreground)]">
-              {form.name || "Nom du pays"}
-            </p>
-            <p className="mt-1 text-sm text-[var(--foreground-muted)]">
-              {form.regime || "Régime non renseigné"}
-            </p>
-            <p className="mt-3 text-sm text-[var(--foreground)]">
-              {formatNumber(Number(form.population) || 0)} habitants · PIB {formatGdp(Number(form.gdp) || 0)}
-            </p>
-          </div>
-        </div>
-      </section>
+            Annuler
+          </Link>
+        </aside>
+      </div>
 
-      {error && <p className="text-[var(--danger)]" role="alert">{error}</p>}
-      <div className="flex flex-wrap gap-2">
+      <details className="mt-4 border-y xl:hidden" style={{ borderColor: "var(--border)" }}>
+        <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between py-2 text-sm font-semibold text-[var(--foreground)]">
+          Aperçu joueur <span aria-hidden>⌄</span>
+        </summary>
+        <div className="pb-3">{preview}</div>
+      </details>
+
+      <div className="sticky bottom-2 z-10 mt-4 flex gap-2 rounded-xl border bg-[var(--background-panel)] p-2 shadow-[0_12px_30px_rgba(0,0,0,0.45)] xl:hidden" style={{ borderColor: "var(--border)" }}>
         <button
           type="submit"
           disabled={saving}
-          className="btn-primary inline-flex min-h-11 items-center rounded py-2 px-4 disabled:opacity-50"
-          style={{ background: "var(--accent)", color: "#0f1419", fontWeight: 600 }}
+          className="btn-primary inline-flex min-h-11 flex-1 items-center justify-center rounded-lg px-4 py-2 disabled:opacity-50"
+          style={{ background: "var(--accent)", color: "#0f1419", fontWeight: 700 }}
         >
-          {saving ? "Enregistrement…" : "Enregistrer"}
+          {saving ? "Enregistrement…" : isEdit ? "Enregistrer" : "Créer"}
         </button>
         <Link
           href="/admin/pays"
-          className="inline-flex min-h-11 items-center rounded border py-2 px-4 text-[var(--foreground-muted)] hover:bg-[var(--background-elevated)]"
+          className="inline-flex min-h-11 items-center justify-center rounded-lg border px-4 py-2 text-sm text-[var(--foreground-muted)]"
           style={{ borderColor: "var(--border)" }}
         >
           Annuler

@@ -8,7 +8,8 @@ Document de conception des scénarios de tests **mathématiques et logiques** du
   - Effets (types + empilement + sources) : `src/lib/countryEffects.ts`
   - Influence : `src/lib/influence.ts`, Hard Power : `src/lib/hardPower.ts`
   - Idéologie (hexagone) : `src/lib/ideology.ts`
-  - Dés & actions d’État : `src/lib/stateActionDice.ts`, `src/lib/stateActionConsequences.ts`
+  - Pipeline RP et D100 : `src/lib/rpPipeline.ts`, `supabase/migrations/160_rp_magnum_pipeline.sql`
+  - Conséquences des actions joueurs : `src/lib/stateActionConsequences.ts`
   - Avantages : `src/lib/perkRequirements.ts`
 
 ---
@@ -492,57 +493,23 @@ Document de conception des scénarios de tests **mathématiques et logiques** du
 
 ---
 
-## 9) Mécanique : Jets de dés (succès/impact)
+## 9) Mécanique : jet D100 du pipeline RP
 
-### Scénario 9.1 — Jet d100 borné + modif admin + clamp 1..100
-- **Source** : `stateActionDice.ts/computeAiEventDiceRoll()`
-- **État initial**
-  - RNG : `Math.random() = 0` ⇒ roll=1
-  - Admin modifiers : +10
-  - Aucun modif stat (ranges 0..0)
-- **Résultat attendu**
-  - totalModifier=10
-  - total = clamp(1,100, 1+10)=11
-
-### Scénario 9.2 — Stat modifier : interpolation linéaire + arrondi
-- **Source** : `stateActionDice.ts/computeStatModifierBreakdown()`
-- **État initial**
-  - Range config militarism : min=-10, max=20
-  - Stat militarism=0 ⇒ t=0 ⇒ modifier=-10
-  - Stat militarism=10 ⇒ t=1 ⇒ modifier=20
-  - Stat militarism=5 ⇒ t=0.5 ⇒ modifier=round(-10 + 0.5×30) = round(5)=5
-- **Résultat attendu** : valeurs ci-dessus.
-
-### Scénario 9.3 — `stat_bonus` désactive une stat (non prise en compte)
-- **Source** : `stateActionDice.ts` (`statBonusEnabled`)
-- **État initial**
-  - rangesRow inclut science avec bonus non nul
-  - `paramsSchema.stat_bonus = { science: false }`
-- **Résultat attendu**
-  - `stat_modifiers` n’inclut pas `science`, et `totalModifier` ne somme pas science.
-
-### Scénario 9.4 — Spécifique `prise_influence` : relationModifier
-- **Source** : `stateActionDice.ts` (branch `actionKey === "prise_influence"`)
-- **État initial**
-  - relation = -40
-  - `amplitude_relations = 30`
-- **Résultat attendu**
-  - relationModifier = round((-40/100)×30) = round(-12) = -12
-
-### Scénario 9.5 — Spécifique `prise_influence` : influenceModifier piecewise (ratio)
-- **Source** : `stateActionDice.ts`
-- **État initial**
-  - ratio = emitterInfluence/targetInfluence
-  - paramètres : `ratio_equilibre=1`, `ratio_min=0.5`, `ratio_max=2`, `malus_max=20`, `bonus_max=20`
+### Scénario 9.1 — Frontières exactes
+- **Source** : `rpPipeline.ts/getD100Outcome()` et `rp_d100_outcome()`
 - **Résultats attendus**
-  - **Cas A** : ratio=0.4 (<=0.5) ⇒ influenceModifier = -20
-  - **Cas B** : ratio=0.75 (entre 0.5 et 1) ⇒
-    - influenceModifier = round((-20×(1-0.75)) / (1-0.5)) = round((-20×0.25)/0.5)=round(-10)=-10
-  - **Cas C** : ratio=1.5 (entre 1 et 2) ⇒
-    - influenceModifier = round((20×(1.5-1)) / (2-1)) = round(10)=10
-  - **Cas D** : ratio=3 (>=2) ⇒ influenceModifier = +20
-- **Cas limites**
-  - `targetInfluence=0` ⇒ ratio=0 ⇒ malus max.
+  - 1 ⇒ échec critique
+  - 2–24 ⇒ échec majeur
+  - 25–49 ⇒ échec mineur
+  - 50–74 ⇒ succès mineur
+  - 75–99 ⇒ succès majeur
+  - 100 ⇒ succès critique
+  - 0, 101 ou nombre non entier ⇒ rejeté.
+
+### Scénario 9.2 — Jet automatique ou MJ
+- **Automatique** : un entier uniforme entre 1 et 100 est enregistré avant la rédaction.
+- **MJ** : l’action attend sans article jusqu’à la saisie d’un entier valide.
+- **Modification après exécution** : le nouvel article est approuvé avant l’annulation et la réapplication atomiques des conséquences.
 
 ---
 

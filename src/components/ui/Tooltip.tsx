@@ -14,6 +14,8 @@ type TooltipProps = {
   interactive?: boolean;
   /** Nom annoncé par les lecteurs d’écran pour le déclencheur. */
   label?: string;
+  /** Affiche l’aide directement sur un libellé, sans imposer le bouton carré de l’icône. */
+  triggerVariant?: "icon" | "text";
 };
 
 /**
@@ -31,6 +33,7 @@ export function Tooltip({
   closeDelay = DEFAULT_CLOSE_DELAY,
   interactive = false,
   label = "Afficher l’explication",
+  triggerVariant = "icon",
 }: TooltipProps) {
   const [open, setOpen] = useState(false);
   const tooltipId = useId();
@@ -178,7 +181,11 @@ export function Tooltip({
   return (
     <span
       ref={wrapperRef}
-      className="inline-flex min-h-11 min-w-11 cursor-help items-center justify-center rounded-md align-middle focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
+      className={
+        triggerVariant === "text"
+          ? "inline cursor-help rounded-sm decoration-dotted underline decoration-[var(--foreground-muted)] underline-offset-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
+          : "inline-flex min-h-11 min-w-11 cursor-help items-center justify-center rounded-md align-middle focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
+      }
       role="button"
       tabIndex={0}
       aria-label={label}
@@ -192,6 +199,10 @@ export function Tooltip({
         if (event.key === "Escape") requestClose();
       }}
       onClick={(e) => {
+        if (triggerVariant === "text") {
+          openTooltip();
+          return;
+        }
         e.preventDefault();
         e.stopPropagation();
         clearCloseTimeout();

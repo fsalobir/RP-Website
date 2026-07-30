@@ -34,6 +34,18 @@ export default async function AdminDashboardPage() {
       .eq("status", "pending"),
   ]);
 
+  const loadError = [
+    countriesRes,
+    rulesRes,
+    rosterRes,
+    playersRes,
+    perksRes,
+    worldRes,
+    pendingRequestsRes,
+    pendingAiEventsRes,
+  ].find((result) => result.error)?.error;
+  if (loadError) throw new Error(`Impossible de charger le tableau de bord : ${loadError.message}`);
+
   const worldValues = new Map(
     (worldRes.data ?? []).map((row) => [row.key, row.value])
   );

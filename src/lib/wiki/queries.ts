@@ -25,7 +25,9 @@ function parseContent(raw: unknown, supabase: SupabaseClient): JSONContent {
   );
 }
 
-export async function fetchWikiPages(): Promise<WikiPageRow[]> {
+export async function fetchWikiPages({
+  throwOnError = false,
+}: { throwOnError?: boolean } = {}): Promise<WikiPageRow[]> {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("wiki_pages")
@@ -33,10 +35,10 @@ export async function fetchWikiPages(): Promise<WikiPageRow[]> {
     .order("parent_id", { ascending: true, nullsFirst: true })
     .order("sort_order", { ascending: true });
 
-  if (error) {
-    console.error("[wiki] fetchWikiPages", error.message);
-    return [];
+  if (error && throwOnError) {
+    throw new Error(`Impossible de charger le wiki : ${error.message}`);
   }
+  if (error) return [];
 
   const rows = (data ?? []).map((row) => {
     const content = parseContent(row.content, supabase);

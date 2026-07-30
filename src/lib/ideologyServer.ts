@@ -139,21 +139,40 @@ export async function fetchWorldIdeologyState(supabase: SupabaseClient): Promise
 }
 
 export async function persistWorldIdeologies(supabase: SupabaseClient): Promise<void> {
-  const { ideologyByCountry } = await fetchWorldIdeologyState(supabase);
-  for (const [countryId, ideology] of ideologyByCountry.entries()) {
-    const breakdown = {
-      dominant: ideology.dominant,
-      center_distance: ideology.centerDistance,
-      neighbors: ideology.breakdown.neighbors,
-      neighbor_contributors: ideology.breakdown.neighborContributors,
-      effects: ideology.breakdown.effects,
-    };
-    const updatePayload: Record<string, number | object> = { ideology_breakdown: breakdown };
-    for (const id of IDEOLOGY_IDS) {
-      updatePayload[ideologyColumnName(id)] = Number(ideology.scores[id].toFixed(4));
-      updatePayload[ideologyColumnName(id, "ideology_drift")] = Number(ideology.drift[id].toFixed(4));
-    }
-    const { error } = await supabase.from("countries").update(updatePayload).eq("id", countryId);
+  const { data: token, error: beginError } = await supabase.rpc("begin_rp_ideology_persistence");
+  if (beginError || typeof token !== "string") {
+    throw beginError ?? new Error("Verrou idéologique indisponible.");
+  }
+
+  let finished = false;
+  try {
+    const { ideologyByCountry } = await fetchWorldIdeologyState(supabase);
+    const rows = [...ideologyByCountry.entries()].map(([countryId, ideology]) => {
+      const row: Record<string, string | number | object> = {
+        country_id: countryId,
+        ideology_breakdown: {
+          dominant: ideology.dominant,
+          center_distance: ideology.centerDistance,
+          neighbors: ideology.breakdown.neighbors,
+          neighbor_contributors: ideology.breakdown.neighborContributors,
+          effects: ideology.breakdown.effects,
+        },
+      };
+      for (const id of IDEOLOGY_IDS) {
+        row[ideologyColumnName(id)] = Number(ideology.scores[id].toFixed(4));
+        row[ideologyColumnName(id, "ideology_drift")] = Number(ideology.drift[id].toFixed(4));
+      }
+      return row;
+    });
+    const { error } = await supabase.rpc("finish_rp_ideology_persistence", {
+      p_token: token,
+      p_rows: rows,
+    });
     if (error) throw error;
+    finished = true;
+  } finally {
+    if (!finished) {
+      await supabase.rpc("abort_rp_ideology_persistence", { p_token: token });
+    }
   }
 }

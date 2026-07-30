@@ -30,7 +30,7 @@ export const REQUIREMENT_KIND_META: Record<
   [REQUIREMENT_KIND_STAT]: {
     label: "Statistique",
     needsTarget: true,
-    targetLabel: "Stat",
+    targetLabel: "Statistique",
     targetOptions: [
       { value: "militarism", label: "Militarisme" },
       { value: "industry", label: "Industrie" },
@@ -158,23 +158,28 @@ export function getRequirementValueHelper(kind: string): {
 } {
   if (kind === REQUIREMENT_KIND_GDP) {
     return {
-      valueLabel: "PIB min (Bn)",
+      valueLabel: "PIB minimal (en milliards)",
       valueStep: 0.1,
       displayToStored: (d) => d * 1_000_000_000,
       storedToDisplay: (s) => s / 1_000_000_000,
     };
   }
   if (kind === REQUIREMENT_KIND_POPULATION) {
-    return { valueLabel: "Population min", valueStep: 1_000_000, displayToStored: (d) => d, storedToDisplay: (s) => s };
+    return {
+      valueLabel: "Population minimale (en millions)",
+      valueStep: 0.1,
+      displayToStored: (d) => d * 1_000_000,
+      storedToDisplay: (s) => s / 1_000_000,
+    };
   }
   if (kind === REQUIREMENT_KIND_STAT) {
-    return { valueLabel: "Seuil (0–10 ou -3–3)", valueStep: 1, displayToStored: (d) => d, storedToDisplay: (s) => s };
+    return { valueLabel: "Valeur minimale", valueStep: 1, displayToStored: (d) => d, storedToDisplay: (s) => s };
   }
   if (kind === REQUIREMENT_KIND_INFLUENCE) {
-    return { valueLabel: "Influence min", valueStep: 1, displayToStored: (d) => d, storedToDisplay: (s) => s };
+    return { valueLabel: "Influence minimale", valueStep: 1, displayToStored: (d) => d, storedToDisplay: (s) => s };
   }
   if (kind === REQUIREMENT_KIND_LAW_LEVEL) {
-    return { valueLabel: "Niveau min (1–5)", valueStep: 1, displayToStored: (d) => d, storedToDisplay: (s) => s };
+    return { valueLabel: "Palier minimal (1–5)", valueStep: 1, displayToStored: (d) => d, storedToDisplay: (s) => s };
   }
   return { valueLabel: "Valeur", valueStep: 1, displayToStored: (d) => d, storedToDisplay: (s) => s };
 }

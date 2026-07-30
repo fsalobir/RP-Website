@@ -5,16 +5,12 @@ import { ResetStatsButton } from "../../pays/ResetStatsButton";
 import { AdvanceDayButton } from "../../pays/AdvanceDayButton";
 import { RandomizeBudgetsButton } from "../../pays/RandomizeBudgetsButton";
 import { RandomizeIdeologiesButton } from "../../pays/RandomizeIdeologiesButton";
+import { WorldActionLock } from "../../pays/WorldActionLock";
 import { updateCountryAiStatus, updateCountryContinent } from "../../pays/actions";
-import { AdminSettingsGuide } from "@/components/admin/AdminSettingsUi";
 
 export default async function AdminPaysListPage() {
   const supabase = await createClient();
-  const [
-    { data: countries },
-    { data: countryPlayers },
-    { data: continents },
-  ] = await Promise.all([
+  const [countriesRes, countryPlayersRes, continentsRes] = await Promise.all([
     supabase
       .from("countries")
       .select("id, name, slug, flag_url, regime, population, gdp, militarism, industry, science, stability, ai_status, continent_id")
@@ -22,6 +18,11 @@ export default async function AdminPaysListPage() {
     supabase.from("country_players").select("country_id, name").order("country_id"),
     supabase.from("continents").select("id, slug, label_fr").order("sort_order"),
   ]);
+  const loadError = [countriesRes, countryPlayersRes, continentsRes].find((result) => result.error)?.error;
+  if (loadError) throw new Error(`Impossible de charger les pays : ${loadError.message}`);
+  const countries = countriesRes.data;
+  const countryPlayers = countryPlayersRes.data;
+  const continents = continentsRes.data;
 
   const playerNameByCountryId: Record<string, string> = {};
   for (const p of countryPlayers ?? []) {
@@ -40,45 +41,34 @@ export default async function AdminPaysListPage() {
   const countryIdsWithPlayer = (countryPlayers ?? []).map((p) => (p as { country_id: string }).country_id);
 
   return (
-    <div className="mx-auto max-w-7xl px-4 py-6">
-      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-[var(--foreground)]">
-            Pays
-          </h1>
-          <p className="mt-1 max-w-[72ch] text-sm leading-relaxed text-[var(--foreground-muted)]">
-            Recherchez un pays, puis ouvrez sa fiche ou modifiez son statut directement.
-          </p>
-        </div>
-        <div className="flex flex-col items-start gap-3 sm:items-end">
-          <Link
-            href="/admin/pays/nouveau"
-            className="btn-primary inline-flex min-h-11 items-center rounded px-4 py-2"
-            style={{ background: "var(--accent)", color: "#0f1419", fontWeight: 600 }}
-          >
-            Nouveau pays
-          </Link>
-        </div>
-      </div>
-      <AdminSettingsGuide
-        purpose="Le continent et le statut IA sont enregistrés dès leur modification."
-        impact="Le continent change le contexte régional. Le statut IA détermine si le pays peut recevoir des événements automatiques."
-        check="Recherchez le pays, vérifiez son joueur éventuel, puis ouvrez sa fiche pour les réglages détaillés."
-      />
-      <details className="my-4 rounded-xl border" style={{ borderColor: "var(--border)", background: "var(--background-panel)" }}>
-        <summary className="min-h-11 cursor-pointer px-3 py-2 font-medium text-[var(--foreground)]">
-          Actions sur l’ensemble du monde
-          <span className="ml-2 text-sm font-normal text-[var(--warning)]">à utiliser avec prudence</span>
+    <div className="mx-auto max-w-[100rem] px-4 py-5 sm:px-6">
+      <header className="flex flex-wrap items-center justify-between gap-3 border-b pb-4" style={{ borderColor: "var(--border)" }}>
+        <h1 className="text-2xl font-bold text-[var(--foreground)]">Pays</h1>
+        <Link
+          href="/admin/pays/nouveau"
+          className="btn-primary inline-flex min-h-11 items-center rounded-lg px-4 py-2"
+          style={{ background: "var(--accent)", color: "#0f1419", fontWeight: 700 }}
+        >
+          + Nouveau pays
+        </Link>
+      </header>
+
+      <details className="group border-b" style={{ borderColor: "var(--border)" }}>
+        <summary className="flex min-h-12 cursor-pointer list-none items-center justify-between gap-3 py-2 text-sm font-semibold text-[var(--foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]">
+          <span>Actions sur tous les pays</span>
+          <span className="flex items-center gap-2 font-normal text-[var(--foreground-muted)]">
+            4 commandes sensibles
+            <span aria-hidden className="transition-transform group-open:rotate-180">⌄</span>
+          </span>
         </summary>
-        <div className="border-t p-4" style={{ borderColor: "var(--border-muted)" }}>
-          <p className="mb-3 max-w-2xl text-sm leading-snug text-[var(--foreground-muted)]">
-            Ces commandes modifient tous les pays ou font avancer la simulation. Chaque action demande une confirmation.
-          </p>
-          <div className="flex flex-wrap items-start gap-3">
-            <AdvanceDayButton />
-            <RandomizeBudgetsButton />
-            <RandomizeIdeologiesButton />
-            <ResetStatsButton />
+        <div className="border-t py-3" style={{ borderColor: "var(--border-muted)" }}>
+          <div className="flex flex-wrap items-start gap-2">
+            <WorldActionLock>
+              <AdvanceDayButton />
+              <RandomizeBudgetsButton />
+              <RandomizeIdeologiesButton />
+              <ResetStatsButton />
+            </WorldActionLock>
           </div>
         </div>
       </details>
@@ -97,16 +87,19 @@ export default async function AdminPaysListPage() {
           </Link>
         </div>
       ) : (
-        <CountriesTable
-          rows={rows}
-          showAiStatusColumn
-          updateAiStatusAction={updateCountryAiStatus}
-          countryIdsWithPlayer={countryIdsWithPlayer}
-          adminLayout
-          playerNameByCountryId={playerNameByCountryId}
-          continents={continents ?? []}
-          updateCountryContinentAction={updateCountryContinent}
-        />
+        <div className="mt-4">
+          <CountriesTable
+            rows={rows}
+            showAiStatusColumn
+            showModifierButton
+            updateAiStatusAction={updateCountryAiStatus}
+            countryIdsWithPlayer={countryIdsWithPlayer}
+            adminLayout
+            playerNameByCountryId={playerNameByCountryId}
+            continents={continents ?? []}
+            updateCountryContinentAction={updateCountryContinent}
+          />
+        </div>
       )}
     </div>
   );

@@ -2,8 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { updateStateActionTypes } from "@/app/admin/actions-etat/actions";
-import { AdminSaveBar, AdminSectionNav, AdminSettingsGuide } from "@/components/admin/AdminSettingsUi";
-import { DisclosureChevron } from "@/components/ui/DisclosureChevron";
+import { AdminSaveBar, AdminSectionNav } from "@/components/admin/AdminSettingsUi";
 import {
   actionRequiresTarget,
   actionRequiresTargetAcceptance,
@@ -18,6 +17,7 @@ import {
   type PowerBalanceConfig,
 } from "@/lib/stateActionModifiers";
 import { matchesSearchText } from "@/lib/searchText";
+import { useUnsavedChangesGuard } from "@/hooks/useUnsavedChangesGuard";
 import type { StateActionType } from "@/types/database";
 
 const STAT_BONUS_KEYS = [
@@ -62,20 +62,20 @@ const ACTION_GROUPS = [
 ] as const;
 
 const ACTION_DESCRIPTIONS: Record<string, string> = {
-  demande_up: "Le joueur demande au MJ d’améliorer ses effectifs ou son niveau technologique.",
+  demande_up: "Le joueur demande à l’administration d’améliorer ses effectifs ou son niveau technologique.",
   investissements: "Le joueur engage une action de développement intérieur.",
   effort_fortifications: "Le joueur renforce les défenses de son pays.",
   ouverture_diplomatique: "Une réussite améliore la relation bilatérale avec le pays ciblé.",
-  accord_commercial_politique: "La cible doit accepter l’accord avant la décision finale du MJ.",
-  cooperation_militaire: "La cible doit accepter la coopération avant la décision finale du MJ.",
-  alliance: "La cible doit accepter l’alliance avant la décision finale du MJ.",
+  accord_commercial_politique: "La cible doit accepter l’accord avant la décision finale de l’administration.",
+  cooperation_militaire: "La cible doit accepter la coopération avant la décision finale de l’administration.",
+  alliance: "La cible doit accepter l’alliance avant la décision finale de l’administration.",
   insulte_diplomatique: "Une réussite dégrade la relation bilatérale avec le pays ciblé.",
   prise_influence: "Une réussite augmente l’influence de l’émetteur sur le pays ciblé.",
   escarmouche_militaire: "Action hostile limitée, disponible selon la relation entre les deux pays.",
   conflit_arme: "Conflit important, réservé aux relations fortement dégradées.",
   guerre_ouverte: "Niveau maximal d’hostilité et conséquences majeures.",
   espionnage: "Opération secrète qui peut révéler des informations sur le pays ciblé.",
-  sabotage: "Opération secrète dont les conséquences sont décidées par le MJ.",
+  sabotage: "Opération secrète dont les conséquences sont décidées par l’administration.",
 };
 
 type PowerBalanceEdit = {
@@ -182,9 +182,9 @@ function editsEqual(a: EditState, b: EditState): boolean {
 
 function describeEditChanges(before: EditState, after: EditState): string {
   const changes: string[] = [];
-  if (before.cost !== after.cost) changes.push(`coût ${before.cost} → ${after.cost} PA`);
+  if (before.cost !== after.cost) changes.push(`coût ${before.cost} → ${after.cost} points d’action`);
   if (before.impactMaximum !== after.impactMaximum) {
-    changes.push(`impact ${before.impactMaximum} → ${after.impactMaximum}`);
+    changes.push(`conséquence maximale ${before.impactMaximum} → ${after.impactMaximum}`);
   }
   if (before.minRelationRequired !== after.minRelationRequired) {
     changes.push(`relation ${formatSigned(before.minRelationRequired)} → ${formatSigned(after.minRelationRequired)}`);
@@ -209,7 +209,7 @@ function validateEdit(type: StateActionType, edit: EditState): string | null {
     type.key === "ouverture_diplomatique" ||
     isMilitaryStateActionKey(type.key);
   if (hasImpact && (!Number.isFinite(edit.impactMaximum) || edit.impactMaximum < 0 || edit.impactMaximum > 100)) {
-    return `${type.label_fr} : l’impact maximal doit rester entre 0 et 100.`;
+    return `${type.label_fr} : la conséquence maximale doit rester entre 0 et 100.`;
   }
   if (
     isMilitaryStateActionKey(type.key) &&
@@ -224,7 +224,7 @@ function validateEdit(type: StateActionType, edit: EditState): string | null {
       edit.amplitudeRelations < 0 ||
       edit.amplitudeRelations > 100
     ) {
-      return "Prise d’influence : le poids de la relation doit rester entre 0 et 100.";
+      return "Prise d’influence : l’effet maximal de la relation sur le jet doit rester entre 0 et 100.";
     }
     if (
       balance.ratioMin < 0 ||
@@ -267,9 +267,12 @@ function NumberField({
   hint?: string;
 }) {
   return (
-    <label htmlFor={id} className="block min-w-0">
-      <span className="block text-sm font-medium text-[var(--foreground)]">{label}</span>
-      <span className="mt-0.5 block text-xs leading-snug text-[var(--foreground-muted)]">{help}</span>
+    <label htmlFor={id} className="grid min-w-0 gap-2 border-b py-2 sm:grid-cols-[minmax(0,1fr)_8rem] sm:items-center" style={{ borderColor: "var(--border-muted)" }}>
+      <span className="min-w-0">
+        <span className="block text-sm font-medium text-[var(--foreground)]">{label}</span>
+        <span id={`${id}-help`} className="mt-0.5 block text-xs leading-snug text-[var(--foreground-muted)]">{help}</span>
+        {hint ? <span className="mt-1 block text-xs leading-snug text-[var(--foreground-muted)]">{hint}</span> : null}
+      </span>
       <input
         id={id}
         type="number"
@@ -277,11 +280,11 @@ function NumberField({
         min={min}
         max={max}
         step={step}
+        aria-describedby={`${id}-help`}
         onChange={(event) => onChange(Number(event.target.value))}
-        className="mt-1.5 min-h-11 w-full rounded-lg border bg-[var(--background)] px-3 text-base text-[var(--foreground)] focus:border-[var(--accent)] focus:outline-none focus:ring-2 focus:ring-[var(--accent)]"
+        className="min-h-10 w-full rounded-lg border bg-[var(--background)] px-3 text-base font-medium text-[var(--foreground)] focus:border-[var(--accent)] focus:outline-none focus:ring-2 focus:ring-[var(--accent)]"
         style={{ borderColor: "var(--border)" }}
       />
-      {hint ? <span className="mt-1 block text-xs leading-snug text-[var(--foreground-muted)]">{hint}</span> : null}
     </label>
   );
 }
@@ -297,13 +300,16 @@ function StatBonusCheckboxes({
 }) {
   return (
     <fieldset>
-      <legend className="mb-2 text-sm font-medium text-[var(--foreground)]">{label}</legend>
-      <div className="grid gap-2 sm:grid-cols-2">
+      <legend className="text-sm font-medium text-[var(--foreground)]">{label}</legend>
+      <div className="mt-2 flex flex-wrap gap-2">
         {STAT_BONUS_KEYS.map(({ key, label: statLabel }) => (
           <label
             key={key}
-            className="flex min-h-11 cursor-pointer items-center gap-3 rounded-lg border px-3 text-sm text-[var(--foreground)]"
-            style={{ borderColor: "var(--border-muted)" }}
+            className="flex min-h-10 cursor-pointer items-center gap-2 rounded-lg border px-3 text-sm text-[var(--foreground)]"
+            style={{
+              borderColor: statBonus[key] !== false ? "var(--accent)" : "var(--border-muted)",
+              background: statBonus[key] !== false ? "var(--background-elevated)" : "transparent",
+            }}
           >
             <input
               type="checkbox"
@@ -360,9 +366,9 @@ function ActionPreview({ type, edit }: { type: StateActionType; edit: EditState 
       className="border-t pt-4 lg:border-l lg:border-t-0 lg:pl-4 lg:pt-0"
       style={{ borderColor: "var(--border-muted)" }}
     >
-      <h3 className="text-sm font-semibold text-[var(--foreground)]">Aperçu côté joueur</h3>
+      <h3 className="text-sm font-semibold text-[var(--foreground)]">Exemple de résultat</h3>
       <p className="mt-1 text-xs leading-relaxed text-[var(--foreground-muted)]">
-        Scénario de référence. Il ne modifie aucune donnée.
+        Modifiez les valeurs proposées pour voir la conséquence. Cet exemple n’est pas enregistré.
       </p>
 
       <div className="mt-3">
@@ -375,7 +381,7 @@ function ActionPreview({ type, edit }: { type: StateActionType; edit: EditState 
       {hasImpact ? (
         <>
           <label className="mt-5 block text-sm text-[var(--foreground)]">
-            Jet de départ : <strong>{roll}/100</strong>
+            Jet de conséquence de l’exemple : <strong>{roll}/100</strong>
             <input
               type="range"
               min={1}
@@ -401,7 +407,7 @@ function ActionPreview({ type, edit }: { type: StateActionType; edit: EditState 
               </label>
               <div className="grid grid-cols-2 gap-3">
                 <label className="text-xs text-[var(--foreground-muted)]">
-                  Influence émetteur
+                  Influence du pays émetteur
                   <input
                     type="number"
                     min={0}
@@ -412,7 +418,7 @@ function ActionPreview({ type, edit }: { type: StateActionType; edit: EditState 
                   />
                 </label>
                 <label className="text-xs text-[var(--foreground-muted)]">
-                  Influence cible
+                  Influence du pays cible
                   <input
                     type="number"
                     min={0.01}
@@ -429,7 +435,7 @@ function ActionPreview({ type, edit }: { type: StateActionType; edit: EditState 
                   <dd className="font-medium text-[var(--foreground)]">{formatSigned(relationModifier)} au jet</dd>
                 </div>
                 <div className="flex justify-between gap-3">
-                  <dt className="text-[var(--foreground-muted)]">Rapport de force ({ratio.toFixed(2)}×)</dt>
+                  <dt className="text-[var(--foreground-muted)]">Rapport d’influence : émetteur ÷ cible ({ratio.toFixed(2)}×)</dt>
                   <dd className="font-medium text-[var(--foreground)]">{formatSigned(balanceModifier)} au jet</dd>
                 </div>
                 <div className="flex justify-between gap-3">
@@ -455,10 +461,10 @@ function ActionPreview({ type, edit }: { type: StateActionType; edit: EditState 
       ) : (
         <div className="mt-5 border-t pt-4" style={{ borderColor: "var(--border-muted)" }}>
           <p className="text-sm leading-relaxed text-[var(--foreground)]">
-            {ACTION_DESCRIPTIONS[type.key] ?? "Le MJ contrôle la résolution et les conséquences de cette action."}
+            {ACTION_DESCRIPTIONS[type.key] ?? "L’administration décide du résultat et des conséquences de cette action."}
           </p>
           {actionRequiresTargetAcceptance(type.key, type.params_schema) ? (
-            <p className="mt-3 text-xs text-[var(--accent)]">La cible doit accepter avant la validation du MJ.</p>
+            <p className="mt-3 text-xs text-[var(--accent)]">La cible doit accepter avant la décision de l’administration.</p>
           ) : actionRequiresTarget(type.key) ? (
             <p className="mt-3 text-xs text-[var(--foreground-muted)]">Le joueur doit choisir un pays cible.</p>
           ) : null}
@@ -474,16 +480,12 @@ function TypeRow({
   baseline,
   onEditChange,
   onReset,
-  expanded,
-  onToggle,
 }: {
   type: StateActionType;
   edit: EditState;
   baseline: EditState;
   onEditChange: (update: Partial<EditState>) => void;
   onReset: () => void;
-  expanded: boolean;
-  onToggle: () => void;
 }) {
   const isDiplo = type.key === "insulte_diplomatique" || type.key === "ouverture_diplomatique";
   const isDemandeUp = type.key === "demande_up";
@@ -492,17 +494,11 @@ function TypeRow({
   const dirty = !editsEqual(edit, baseline);
 
   return (
-    <li
+    <section
       className="overflow-hidden rounded-xl border"
       style={{ borderColor: dirty ? "var(--accent)" : "var(--border)", background: "var(--background-panel)" }}
     >
-      <button
-        type="button"
-        onClick={onToggle}
-        aria-expanded={expanded}
-            className="flex min-h-14 w-full items-center gap-3 px-3 py-2 text-left transition-colors hover:bg-[var(--background-elevated)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--accent)]"
-      >
-        <DisclosureChevron open={expanded} direction="right" className="shrink-0 text-[var(--foreground-muted)]" />
+      <header className="flex min-h-14 items-center gap-3 border-b px-3 py-2" style={{ borderColor: "var(--border-muted)" }}>
         <span className="min-w-0 flex-1">
           <span className="flex flex-wrap items-center gap-2">
             <span className="font-semibold text-[var(--foreground)]">{type.label_fr}</span>
@@ -513,38 +509,32 @@ function TypeRow({
             ) : null}
           </span>
           <span className="mt-0.5 block text-xs leading-snug text-[var(--foreground-muted)] sm:text-sm">
-            {ACTION_DESCRIPTIONS[type.key] ?? "Action dont la résolution finale reste contrôlée par le MJ."}
+            {ACTION_DESCRIPTIONS[type.key] ?? "L’administration décide du résultat final de cette action."}
           </span>
         </span>
         <span className="hidden shrink-0 text-sm text-[var(--foreground-muted)] sm:block">
-          {edit.cost} PA
+          {edit.cost} point{edit.cost > 1 ? "s" : ""} d’action
         </span>
-      </button>
+      </header>
 
-      {expanded && (
       <div className="grid">
         <div className="min-h-0 overflow-hidden">
-          <div className="border-t p-3" style={{ borderColor: "var(--border-muted)" }}>
+          <div className="p-3">
             <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-4 lg:grid-cols-[minmax(0,1fr)_18rem]">
               <div className="min-w-0">
                 <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <h3 className="text-base font-semibold text-[var(--foreground)]">Réglages essentiels</h3>
-                    <p className="mt-1 text-sm text-[var(--foreground-muted)]">
-                      Ce que le joueur paie, voit et peut déclencher.
-                    </p>
-                  </div>
+                  <h3 className="text-sm font-semibold text-[var(--foreground)]">Paramètres</h3>
                   <button
                     type="button"
                     onClick={onReset}
                     disabled={!dirty}
                     className="min-h-11 shrink-0 rounded-lg px-3 text-sm text-[var(--foreground-muted)] hover:bg-[var(--background-elevated)] disabled:opacity-40"
                   >
-                    Réinitialiser
+                    Rétablir
                   </button>
                 </div>
 
-                <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                <div className="mt-2">
                   <NumberField
                     id={`action-${type.id}-cost`}
                     label="Coût en points d’action"
@@ -557,11 +547,17 @@ function TypeRow({
                   {(isDiplo || isPriseInfluence || isMilitary) ? (
                     <NumberField
                       id={`action-${type.id}-impact`}
-                      label={isPriseInfluence ? "Gain maximal d’influence (%)" : "Variation maximale"}
+                      label={
+                        isPriseInfluence
+                          ? "Gain maximal d’influence (%)"
+                          : type.key === "ouverture_diplomatique"
+                            ? "Gain maximal de relation (points)"
+                            : "Baisse maximale de relation (points)"
+                      }
                       help={
                         isPriseInfluence
-                          ? "Gain obtenu avec un jet final de 100 sur 100."
-                          : "Variation obtenue avec un jet final de 100 sur 100."
+                          ? "Gain obtenu avec un jet de conséquence de 100 sur 100."
+                          : "Variation obtenue avec un jet de conséquence de 100 sur 100."
                       }
                       value={edit.impactMaximum}
                       min={0}
@@ -584,18 +580,24 @@ function TypeRow({
                 </div>
 
                 {isDemandeUp ? (
-                  <div className="mt-4 grid gap-4 sm:grid-cols-2">
-                    <StatBonusCheckboxes
-                      label="Pour une hausse d’effectifs"
-                      statBonus={edit.statBonusUpNombre}
-                      onChange={(statBonusUpNombre) => onEditChange({ statBonusUpNombre })}
-                    />
-                    <StatBonusCheckboxes
-                      label="Pour une hausse technologique"
-                      statBonus={edit.statBonusUpTech}
-                      onChange={(statBonusUpTech) => onEditChange({ statBonusUpTech })}
-                    />
-                  </div>
+                  <details className="mt-4 border-t pt-3" style={{ borderColor: "var(--border-muted)" }}>
+                    <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between text-sm font-semibold text-[var(--foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] [&::-webkit-details-marker]:hidden">
+                      Statistiques des demandes d’amélioration
+                      <span aria-hidden className="text-[var(--foreground-muted)]">▾</span>
+                    </summary>
+                    <div className="grid gap-4 pt-3 sm:grid-cols-2">
+                      <StatBonusCheckboxes
+                        label="Hausse d’effectifs"
+                        statBonus={edit.statBonusUpNombre}
+                        onChange={(statBonusUpNombre) => onEditChange({ statBonusUpNombre })}
+                      />
+                      <StatBonusCheckboxes
+                        label="Hausse technologique"
+                        statBonus={edit.statBonusUpTech}
+                        onChange={(statBonusUpTech) => onEditChange({ statBonusUpTech })}
+                      />
+                    </div>
+                  </details>
                 ) : null}
 
                 {isDiplo ? (
@@ -606,7 +608,7 @@ function TypeRow({
                     </summary>
                     <div className="pt-3">
                       <StatBonusCheckboxes
-                        label="Statistiques prises en compte"
+                        label="Statistiques qui modifient le jet"
                         statBonus={edit.statBonus}
                         onChange={(statBonus) => onEditChange({ statBonus })}
                       />
@@ -617,23 +619,34 @@ function TypeRow({
                 {isPriseInfluence ? (
                   <details className="mt-4 border-t pt-3" style={{ borderColor: "var(--border-muted)" }}>
                     <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between text-sm font-semibold text-[var(--foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] [&::-webkit-details-marker]:hidden">
-                      Réglages avancés du rapport de force
+                      Rapport d’influence
                       <span aria-hidden className="text-[var(--foreground-muted)]">▾</span>
                     </summary>
+                    <p className="pt-3 text-xs leading-snug text-[var(--foreground-muted)]">
+                      Le rapport divise l’influence de l’émetteur par celle de la cible : 2 signifie qu’il est deux fois plus influent.
+                    </p>
                     <div className="grid gap-3 pt-3 sm:grid-cols-2">
                       <NumberField
                         id={`action-${type.id}-relations-amplitude`}
-                        label="Poids de la relation"
-                        help="Amplitude du bonus ou du malus lié à la relation actuelle. Exemple : 20 transforme une relation de −50 en malus de −10."
+                        label="Effet maximal de la relation sur le jet"
+                        help="Nombre maximal de points ajoutés ou retirés au jet. Exemple : 20 transforme une relation de −50 en malus de −10."
                         value={edit.amplitudeRelations}
                         min={0}
                         max={100}
                         onChange={(amplitudeRelations) => onEditChange({ amplitudeRelations })}
                       />
                       <NumberField
+                        id={`action-${type.id}-influence-amplitude`}
+                        label="Amplitude d’influence (paramètre hérité)"
+                        help="Valeur conservée dans la configuration, mais non utilisée par le calcul actuel. Ne la modifiez que pour compatibilité."
+                        value={edit.amplitudeInfluence}
+                        min={0}
+                        onChange={(amplitudeInfluence) => onEditChange({ amplitudeInfluence })}
+                      />
+                      <NumberField
                         id={`action-${type.id}-balance-ratio`}
                         label="Rapport sans bonus ni malus"
-                        help="Rapport entre l’influence de l’émetteur et celle de la cible qui ne donne ni bonus ni malus."
+                        help="Influence de l’émetteur divisée par celle de la cible. À ce rapport, aucun bonus ni malus n’est appliqué."
                         value={edit.equilibreDesForces.ratioEquilibre}
                         min={0}
                         step={0.1}
@@ -646,7 +659,7 @@ function TypeRow({
                       <NumberField
                         id={`action-${type.id}-min-ratio`}
                         label="Rapport qui atteint le malus maximal"
-                        help="À ce rapport ou en dessous, le malus maximal est appliqué."
+                        help="Influence de l’émetteur divisée par celle de la cible. À ce rapport ou en dessous, le malus maximal est appliqué."
                         value={edit.equilibreDesForces.ratioMin}
                         min={0}
                         step={0.1}
@@ -672,7 +685,7 @@ function TypeRow({
                       <NumberField
                         id={`action-${type.id}-max-ratio`}
                         label="Rapport qui atteint le bonus maximal"
-                        help="À ce rapport ou au-dessus, le bonus maximal est appliqué."
+                        help="Influence de l’émetteur divisée par celle de la cible. À ce rapport ou au-dessus, le bonus maximal est appliqué."
                         value={edit.equilibreDesForces.ratioMax}
                         min={0}
                         step={0.1}
@@ -696,26 +709,6 @@ function TypeRow({
                         }
                       />
                     </div>
-                    <div
-                      className="mt-5 rounded-lg bg-[var(--background-elevated)] p-3 text-sm leading-relaxed text-[var(--foreground)]"
-                    >
-                      <p className="font-medium">Paramètre hérité sans effet actuel</p>
-                      <p className="mt-1 text-[var(--foreground-muted)]">
-                        Le « poids de l’influence » est encore stocké, mais aucun calcul du jeu ne l’utilise. Il reste visible pour ne pas masquer une donnée existante.
-                      </p>
-                      <label htmlFor={`action-${type.id}-legacy-influence`} className="mt-3 block text-xs text-[var(--foreground-muted)]">
-                        Poids de l’influence (hérité)
-                      </label>
-                      <input
-                        id={`action-${type.id}-legacy-influence`}
-                        type="number"
-                        min={0}
-                        value={edit.amplitudeInfluence}
-                        onChange={(event) => onEditChange({ amplitudeInfluence: Number(event.target.value) })}
-                        className="mt-1 min-h-11 w-full max-w-40 rounded-lg border bg-[var(--background)] px-3 text-base text-[var(--foreground)]"
-                        style={{ borderColor: "var(--border)" }}
-                      />
-                    </div>
                   </details>
                 ) : null}
               </div>
@@ -725,8 +718,7 @@ function TypeRow({
           </div>
         </div>
       </div>
-      )}
-    </li>
+    </section>
   );
 }
 
@@ -749,6 +741,7 @@ export function StateActionTypesForm({ types }: { types: StateActionType[] }) {
     const baseline = savedEdits[type.id] ?? initEditForType(type);
     return !editsEqual(edit, baseline);
   });
+  useUnsavedChangesGuard(dirtyTypes.length > 0);
 
   const visibleGroups = ACTION_GROUPS.map((group) => ({
     ...group,
@@ -794,24 +787,29 @@ export function StateActionTypesForm({ types }: { types: StateActionType[] }) {
     }
 
     setSaving(true);
-    const result = await updateStateActionTypes(
-      dirtyTypes.map((type) => ({
-        id: type.id,
-        key: type.key,
-        label_fr: type.label_fr,
-        cost: edits[type.id].cost,
-        params_schema: buildPatch(type, edits[type.id]),
-        sort_order: type.sort_order,
-      }))
-    );
-    setSaving(false);
+    try {
+      const result = await updateStateActionTypes(
+        dirtyTypes.map((type) => ({
+          id: type.id,
+          key: type.key,
+          label_fr: type.label_fr,
+          cost: edits[type.id].cost,
+          params_schema: buildPatch(type, edits[type.id]),
+          sort_order: type.sort_order,
+        }))
+      );
 
-    if (result.error) {
-      setError(`${result.error} Aucun changement de ce lot n’a été appliqué.`);
-      return;
+      if (result.error) {
+        setError(`${result.error} Aucun changement de ce lot n’a été appliqué.`);
+        return;
+      }
+      setSavedEdits(edits);
+      setSuccess(`${dirtyTypes.length} action${dirtyTypes.length > 1 ? "s" : ""} mise${dirtyTypes.length > 1 ? "s" : ""} à jour.`);
+    } catch {
+      setError("Les actions n’ont pas pu être enregistrées. Vérifiez la connexion puis réessayez.");
+    } finally {
+      setSaving(false);
     }
-    setSavedEdits(edits);
-    setSuccess(`${dirtyTypes.length} action${dirtyTypes.length > 1 ? "s" : ""} mise${dirtyTypes.length > 1 ? "s" : ""} à jour.`);
   }
 
   function resetAll() {
@@ -842,9 +840,10 @@ export function StateActionTypesForm({ types }: { types: StateActionType[] }) {
         }]
       : []),
   ];
-  const displayedGroups = query
-    ? groupsToRender
-    : groupsToRender.filter((group) => group.id === activeGroupId);
+  const activeTypes = query
+    ? groupsToRender.flatMap((group) => group.types)
+    : groupsToRender.find((group) => group.id === activeGroupId)?.types ?? [];
+  const selectedType = activeTypes.find((type) => type.id === expandedId) ?? activeTypes[0];
   const reviewItems = dirtyTypes.map((type) => ({
     key: type.id,
     label: type.label_fr,
@@ -856,24 +855,9 @@ export function StateActionTypesForm({ types }: { types: StateActionType[] }) {
 
   return (
     <div className="space-y-4">
-      <AdminSettingsGuide
-        purpose="Ces réglages définissent le coût, les conditions d’accès et l’ampleur maximale de chaque action."
-        impact="Le coût est visible avant l’envoi. Les seuils et valeurs maximales modifient ensuite les jets et leurs conséquences."
-        check="Testez au moins un cas faible, neutre et fort dans l’aperçu. Aucun exemple affiché ici n’est enregistré."
-        warning="Une modification s’applique aux prochaines demandes. Les demandes déjà résolues ne sont pas recalculées."
-      />
-
-      <section
-        className="min-w-0"
-      >
-        <div className="flex flex-wrap items-end justify-between gap-3 border-b pb-3" style={{ borderColor: "var(--border)" }}>
-          <div>
-            <h2 className="text-lg font-semibold text-[var(--foreground)]">Paramètres des actions</h2>
-            <p className="mt-1 text-sm text-[var(--foreground-muted)]">
-              Comparez les actions d’un même usage, puis ouvrez celle que vous voulez régler.
-            </p>
-          </div>
-          <label className="w-full sm:max-w-sm">
+      <section className="min-w-0">
+        <div className="border-y py-3" style={{ borderColor: "var(--border)" }}>
+          <label className="block w-full sm:max-w-md">
             <span className="sr-only">Rechercher une action</span>
             <input
               type="search"
@@ -886,7 +870,7 @@ export function StateActionTypesForm({ types }: { types: StateActionType[] }) {
           </label>
         </div>
 
-        <div className="mt-4 grid min-w-0 grid-cols-[minmax(0,1fr)] gap-4 lg:grid-cols-[13rem_minmax(0,1fr)]">
+        <div className="mt-4 grid min-w-0 grid-cols-[minmax(0,1fr)] gap-4 lg:grid-cols-[12rem_minmax(0,1fr)]">
           <AdminSectionNav
             label="Familles d’actions"
             items={groupNavigationItems}
@@ -897,39 +881,69 @@ export function StateActionTypesForm({ types }: { types: StateActionType[] }) {
               setExpandedId(nextGroup?.types[0]?.id ?? null);
             }}
           />
-          <div className="min-w-0 space-y-5">
-            {displayedGroups.map((group) => (
-              <section key={group.id} aria-labelledby={`action-group-${group.id}`}>
-                <div className="mb-3">
-                  <h3 id={`action-group-${group.id}`} className="text-base font-semibold text-[var(--foreground)]">
-                    {group.label}
-                  </h3>
-                  <p className="mt-0.5 text-sm text-[var(--foreground-muted)]">{group.description}</p>
+          <div className="grid min-w-0 gap-4 xl:grid-cols-[14rem_minmax(0,1fr)]">
+            {activeTypes.length > 0 ? (
+              <nav aria-label="Actions de la famille">
+                <label className="block xl:hidden">
+                  <span className="sr-only">Action à régler</span>
+                  <select
+                    value={selectedType?.id ?? ""}
+                    onChange={(event) => setExpandedId(event.target.value)}
+                    className="min-h-11 w-full rounded-lg border bg-[var(--background-panel)] px-3 text-sm font-semibold text-[var(--foreground)]"
+                    style={{ borderColor: "var(--border)" }}
+                  >
+                    {activeTypes.map((type) => {
+                      const edit = edits[type.id] ?? initialEdits[type.id];
+                      const dirty = !editsEqual(edit, savedEdits[type.id] ?? initialEdits[type.id]);
+                      return (
+                        <option key={type.id} value={type.id}>
+                          {type.label_fr}{dirty ? " • modifiée" : ` · coût ${edit.cost}`}
+                        </option>
+                      );
+                    })}
+                  </select>
+                </label>
+                <div className="hidden xl:flex xl:flex-col">
+                  {activeTypes.map((type) => {
+                    const edit = edits[type.id] ?? initialEdits[type.id];
+                    const active = type.id === selectedType?.id;
+                    const dirty = !editsEqual(edit, savedEdits[type.id] ?? initialEdits[type.id]);
+                    return (
+                      <button
+                        key={type.id}
+                        type="button"
+                        aria-current={active ? "page" : undefined}
+                        onClick={() => setExpandedId(type.id)}
+                        className="flex min-h-12 items-center justify-between gap-3 rounded-lg px-3 text-left text-sm transition-colors"
+                        style={{
+                          background: active ? "var(--background-elevated)" : "transparent",
+                          color: active ? "var(--foreground)" : "var(--foreground-muted)",
+                          boxShadow: active ? "inset 0 0 0 1px var(--border)" : undefined,
+                        }}
+                      >
+                        <span className="min-w-0 truncate font-medium">{type.label_fr}</span>
+                        <span className={dirty ? "text-[var(--accent)]" : "text-xs"}>{dirty ? "●" : edit.cost}</span>
+                      </button>
+                    );
+                  })}
                 </div>
-                <ul className="space-y-2">
-                  {group.types.map((type) => (
-                    <TypeRow
-                      key={type.id}
-                      type={type}
-                      edit={edits[type.id] ?? initialEdits[type.id]}
-                      baseline={savedEdits[type.id] ?? initialEdits[type.id]}
-                      onEditChange={(update) => setEdit(type.id, update)}
-                      onReset={() => {
-                        setEdit(type.id, savedEdits[type.id] ?? initialEdits[type.id]);
-                      }}
-                      expanded={expandedId === type.id}
-                      onToggle={() => setExpandedId((current) => current === type.id ? null : type.id)}
-                    />
-                  ))}
-                </ul>
-              </section>
-            ))}
+              </nav>
+            ) : null}
 
-            {displayedGroups.length === 0 ? (
+            {selectedType ? (
+              <TypeRow
+                key={selectedType.id}
+                type={selectedType}
+                edit={edits[selectedType.id] ?? initialEdits[selectedType.id]}
+                baseline={savedEdits[selectedType.id] ?? initialEdits[selectedType.id]}
+                onEditChange={(update) => setEdit(selectedType.id, update)}
+                onReset={() => setEdit(selectedType.id, savedEdits[selectedType.id] ?? initialEdits[selectedType.id])}
+              />
+            ) : (
               <p className="border-y px-4 py-8 text-center text-sm text-[var(--foreground-muted)]" style={{ borderColor: "var(--border-muted)" }}>
                 Aucune action ne correspond à cette recherche.
               </p>
-            ) : null}
+            )}
           </div>
         </div>
       </section>

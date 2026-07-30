@@ -15,7 +15,7 @@ describe("buildPublicRulesModel", () => {
     expect(model.budgets[0]).toMatchObject({
       title: "Ministère d'État",
       minPct: 25,
-      effects: ["Actions d'état"],
+      effects: ["Points d’action d’État"],
     });
     expect(model.laws[0]).toMatchObject({
       title: "Mobilisation",

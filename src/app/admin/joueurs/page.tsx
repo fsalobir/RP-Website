@@ -16,6 +16,8 @@ export default async function AdminJoueursPage() {
       .order("created_at", { ascending: false }),
     supabase.from("countries").select("id, name, slug").order("name"),
   ]);
+  const loadError = [playersRes, countriesRes].find((result) => result.error)?.error;
+  if (loadError) throw new Error(`Impossible de charger les joueurs : ${loadError.message}`);
 
   const players = (playersRes.data ?? []).map((p) => ({
     user_id: p.user_id,
@@ -32,14 +34,7 @@ export default async function AdminJoueursPage() {
   }));
 
   return (
-    <div className="mx-auto max-w-7xl px-4 py-6">
-      <h1 className="mb-1 text-2xl font-bold text-[var(--foreground)]">
-        Joueurs
-      </h1>
-      <p className="mb-5 max-w-[72ch] text-sm leading-relaxed text-[var(--foreground-muted)]">
-        Créez les accès et attribuez un pays. Chaque joueur ne voit que les outils autorisés pour son pays.
-      </p>
-
+    <div className="mx-auto max-w-7xl px-4 py-5">
       <JoueursManager
         players={playersWithCountry}
         countries={countries}

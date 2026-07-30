@@ -12,10 +12,10 @@ import {
 } from "@/lib/countryEffects";
 
 const IDEOLOGY_EFFECTS_KIND_LABEL_OVERRIDES: Record<string, string> = {
-  recrutement_bonus_percent: "Vitesse de Recrutement (%)",
-  design_bonus_percent: "Vitesse de Design (%)",
-  procuration_bonus_percent: "Vitesse de Procuration (%)",
-  budget_ministry_effect_multiplier: "Efficacité Ministère",
+  recrutement_bonus_percent: "Vitesse de recrutement",
+  design_bonus_percent: "Vitesse de conception",
+  procuration_bonus_percent: "Vitesse de procuration",
+  budget_ministry_effect_multiplier: "Hausse ou baisse des effets d’un ministère",
 };
 
 export function getIdeologyEffectsKindLabel(effectKind: string): string {
@@ -46,7 +46,7 @@ export function getIdeologyEffectKindOptionGroups(allowedKinds: readonly string[
 export function getIdeologyEffectFormValueHelper(effectKind: string) {
   const base = getEffectKindValueHelper(effectKind);
   if (effectKind === "budget_ministry_effect_multiplier") {
-    return { ...base, valueLabel: "% (+/-)" };
+    return { ...base, valueLabel: "Bonus ou malus (%)" };
   }
   return base;
 }

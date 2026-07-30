@@ -327,4 +327,6 @@ export interface AdminEffectAdded {
   duration_remaining: number
   /** "immediate" = appliqué une fois (Donner UP), sinon effet durable en country_effects */
   application?: "duration" | "immediate"
+  /** Pays qui reçoit l’effet dans une action RP. */
+  scope?: "emitter" | "target"
 }

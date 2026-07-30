@@ -6,9 +6,34 @@ import {
   getForcedMinPcts,
   getInfluenceModifiersFromEffects,
   getSubTypeLimitModifierPercent,
+  formatAdminEffectLabel,
 } from "@/lib/countryEffects";
 
 describe("PLAN_SCENARIOS_TEST — Section 2 (Effets)", () => {
+  it("décrit une conséquence admin avec un moment et une durée compréhensibles", () => {
+    expect(formatAdminEffectLabel({
+      name: "Soutien industriel",
+      effect_kind: "stat_delta",
+      effect_target: "industry",
+      value: 2,
+      application: "duration",
+      duration_kind: "days",
+      duration_remaining: 30,
+    })).toBe("Dans la durée, 30 jours — Soutien industriel · Industrie : +2 points");
+  });
+
+  it("ne répète pas le type quand le nom interne est identique", () => {
+    expect(formatAdminEffectLabel({
+      name: "Croissance quotidienne du PIB",
+      effect_kind: "gdp_growth_base",
+      effect_target: null,
+      value: 0,
+      application: "duration",
+      duration_kind: "days",
+      duration_remaining: 30,
+    })).toBe("Dans la durée, 30 jours — Croissance quotidienne du PIB : 0,00 %");
+  });
+
   it("Scénario 2.1 — getEffectsForCountry agrège country+law+global+perk+ai+ideology (6 effets)", () => {
     const ctx = {
       countryId: "c1",
@@ -50,7 +75,7 @@ describe("PLAN_SCENARIOS_TEST — Section 2 (Effets)", () => {
       expect.arrayContaining([
         "Test country effect",
         "Loi",
-        "Global",
+        "Règles communes",
         "Avantage : X",
         "IA",
         "Cultisme Satoiste",

@@ -97,7 +97,7 @@ export function getStateActionImpactPreviewLabel(
   if (actionKey === "insulte_diplomatique" || isMilitaryStateActionKey(actionKey)) return `−${impactValue}`;
   if (actionKey === "espionnage" && espionageIntelGainBase != null) {
     const gain = Math.round((espionageIntelGainBase * total) / 100);
-    return `+${gain} points d'intel`;
+    return `+${gain} points de renseignement`;
   }
   return null;
 }

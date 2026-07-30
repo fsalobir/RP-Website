@@ -14,7 +14,7 @@ Document de référence pour reprendre le projet. À mettre à jour après des c
 
 - Next.js (App Router), TypeScript, Tailwind.
 - Supabase : PostgreSQL, RLS, Auth, Storage.
-- **Automatisation :** jobs **pg_cron** (snapshots, tick pays, IA, etc.) décrits dans [supabase/CRON.md](supabase/CRON.md) ; Edge Function `process-ai-events-due` ([docs/process-due-edge-deploy.md](docs/process-due-edge-deploy.md)).
+- **Automatisation :** jobs **pg_cron** (snapshots, tick pays, actions RP et collecte Discord) décrits dans [supabase/CRON.md](supabase/CRON.md) ; worker Edge unique `rp-pipeline` ([docs/rp-pipeline-deploy.md](docs/rp-pipeline-deploy.md)).
 
 ## Public
 

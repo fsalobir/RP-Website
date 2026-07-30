@@ -13,7 +13,7 @@ export default defineConfig({
         "src/lib/countryEffects.ts",
         "src/lib/expectedNextTick.ts",
         "src/lib/tickBreakdown.ts",
-        "src/lib/stateActionDice.ts",
+        "src/lib/rpPipeline.ts",
         "src/lib/stateActionConsequences.ts",
       ],
     },

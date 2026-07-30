@@ -270,7 +270,7 @@ export async function acceptRequest(requestId: string): Promise<{ error?: string
   const diceResults = req.dice_results as DiceResults | null;
 
   if (ACTION_KEYS_REQUIRING_IMPACT_ROLL.has(key) && !diceResults?.impact_roll) {
-    return { error: "Un jet d'impact doit être réalisé avant d'accepter cette demande." };
+    return { error: "Lancez le jet de conséquence avant d’accepter cette demande." };
   }
 
   const applyErr = await applyStateActionConsequences({

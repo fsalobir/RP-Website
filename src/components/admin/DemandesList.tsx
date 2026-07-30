@@ -1,8 +1,8 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { AdminSettingsGuide } from "@/components/admin/AdminSettingsUi";
+import { AdminDialog } from "@/components/admin/AdminDialog";
 import {
   acceptRequest,
   refuseRequest,
@@ -16,6 +16,7 @@ import {
   getEffectKindOptionGroups,
   normalizeAdminEffectsAdded,
   formatAdminEffectLabel,
+  EFFECT_KIND_LABELS,
   DURATION_DAYS_MAX,
   EFFECT_KINDS_WITH_STAT_TARGET,
   EFFECT_KINDS_WITH_BUDGET_TARGET,
@@ -78,7 +79,7 @@ function formatRollFormula(rollResult: DiceRollResultRow, adminLabel?: string): 
     parts.push(`${rollResult.modifier >= 0 ? "+" : ""}${rollResult.modifier} (Mod.)`);
   }
   if (rollResult.admin_modifier != null && rollResult.admin_modifier !== 0) {
-    parts.push(`${rollResult.admin_modifier >= 0 ? "+" : ""}${rollResult.admin_modifier} (${adminLabel?.trim() || "Ajustement admin"})`);
+    parts.push(`${rollResult.admin_modifier >= 0 ? "+" : ""}${rollResult.admin_modifier} (${adminLabel?.trim() || "Correction manuelle"})`);
   }
   if (rollResult.relation_modifier != null && rollResult.relation_modifier !== 0) {
     parts.push(`${rollResult.relation_modifier >= 0 ? "+" : ""}${rollResult.relation_modifier} (Relations)`);
@@ -129,12 +130,227 @@ function getRelationFromMap(record: Record<string, number>, countryIdA: string, 
   return record[`${a}|${b}`] ?? 0;
 }
 
-const panelClass = "rounded-lg border p-4";
-const panelStyle = { background: "var(--background-panel)", borderColor: "var(--border)" };
-
 /** Liste complète des effets disponibles (actifs et one-shot) dans les demandes et ailleurs. Exclut state_actions_grant. */
 const effectKindsForDemandes = ALL_EFFECT_KIND_IDS.filter((k) => k !== "state_actions_grant");
 const REQUESTS_PER_PAGE = 10;
+
+const IMMEDIATE_EFFECT_KINDS = new Set([
+  "stat_delta",
+  "military_unit_extra",
+  "military_unit_tech_rate",
+  "relation_delta",
+  ...ALL_EFFECT_KIND_IDS.filter((kind) => kind.startsWith("ideology_snap_")),
+]);
+
+function normalizeEffectApplication(effect: AdminEffectAdded): AdminEffectAdded {
+  if (effect.effect_kind.startsWith("ideology_snap_")) {
+    return { ...effect, application: "immediate", duration_kind: "days", duration_remaining: 0 };
+  }
+  if (effect.application === "immediate" && !IMMEDIATE_EFFECT_KINDS.has(effect.effect_kind)) {
+    return { ...effect, application: "duration", duration_kind: "days", duration_remaining: 30 };
+  }
+  return effect;
+}
+
+function defaultAdminEffect(rosterUnitIds: Array<{ id: string }>): AdminEffectAdded {
+  const effectKind = effectKindsForDemandes[0];
+  return {
+    name: "",
+    effect_kind: effectKind,
+    effect_target: EFFECT_KINDS_WITH_STAT_TARGET.has(effectKind)
+      ? "militarism"
+      : EFFECT_KINDS_WITH_ROSTER_UNIT_TARGET.has(effectKind)
+        ? (rosterUnitIds[0]?.id ?? null)
+        : null,
+    effect_subtype: null,
+    value: 0,
+    duration_kind: "days",
+    duration_remaining: 30,
+    application: "duration",
+    scope: "emitter",
+  };
+}
+
+export function ManualEffectsFields({
+  countriesList,
+  rosterUnits,
+  initialEffects = [],
+  fixedCountryId,
+  fixedTargetCountryId,
+}: {
+  countriesList: Array<{ id: string; name: string }>;
+  rosterUnits: RosterUnitForSubType[];
+  initialEffects?: AdminEffectAdded[];
+  fixedCountryId?: string;
+  fixedTargetCountryId?: string | null;
+}) {
+  const rootRef = useRef<HTMLDivElement>(null);
+  const [countryId, setCountryId] = useState(fixedCountryId ?? "");
+  const [targetCountryId, setTargetCountryId] = useState(fixedTargetCountryId ?? "");
+  const [effects, setEffects] = useState(initialEffects);
+  const [draft, setDraft] = useState<AdminEffectAdded | null>(null);
+  const [editingIndex, setEditingIndex] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (fixedCountryId !== undefined || fixedTargetCountryId !== undefined) return;
+    const form = rootRef.current?.closest("form");
+    const country = form?.elements.namedItem("country_id");
+    const target = form?.elements.namedItem("target_country_id");
+    if (!(country instanceof HTMLSelectElement) || !(target instanceof HTMLSelectElement)) return;
+    const sync = () => {
+      setCountryId(country.value);
+      setTargetCountryId(target.value);
+    };
+    sync();
+    country.addEventListener("change", sync);
+    target.addEventListener("change", sync);
+    return () => {
+      country.removeEventListener("change", sync);
+      target.removeEventListener("change", sync);
+    };
+  }, [fixedCountryId, fixedTargetCountryId]);
+
+  const resolvedEffects = effects.map((effect) =>
+    effect.effect_kind === "relation_delta"
+      ? {
+        ...effect,
+        effect_target: effect.scope === "target"
+          ? countryId || null
+          : targetCountryId || null,
+      }
+      : effect
+  );
+
+  const relationCountryId = draft?.scope === "target" ? countryId : targetCountryId;
+  const visibleCountries = relationCountryId
+    ? countriesList.filter(({ id }) => id === relationCountryId)
+    : [];
+  const rosterUnitIds = rosterUnits.map(({ id, name_fr }) => ({ id, name_fr }));
+
+  function saveDraft() {
+    if (!draft) return;
+    const scoped = normalizeEffectApplication({
+      ...draft,
+      name: draft.name.trim() || EFFECT_KIND_LABELS[draft.effect_kind] || "Conséquence",
+      effect_target: draft.effect_kind === "relation_delta"
+        ? draft.scope === "target"
+          ? countryId || null
+          : targetCountryId || null
+        : draft.effect_target,
+      scope: draft.scope === "target" ? "target" : "emitter",
+    });
+    setEffects((current) =>
+      editingIndex === null
+        ? [...current, scoped]
+        : current.map((item, index) => index === editingIndex ? scoped : item)
+    );
+    setDraft(null);
+    setEditingIndex(null);
+  }
+
+  const affectedCountryName = (effect: AdminEffectAdded) =>
+    countriesList.find(({ id }) =>
+      id === (effect.scope === "target" ? targetCountryId : countryId)
+    )?.name;
+
+  return (
+    <div ref={rootRef} className="space-y-3 md:col-span-2 xl:col-span-4">
+      <input type="hidden" name="effects_json" value={JSON.stringify(resolvedEffects)} />
+      <div>
+        <p className="text-sm font-medium text-[var(--foreground)]">Conséquences mécaniques</p>
+        <p className="mt-1 text-xs leading-5 text-[var(--foreground-muted)]">
+          Facultatives. Elles ne seront appliquées qu’après validation de l’article.
+        </p>
+      </div>
+      {resolvedEffects.length > 0 && (
+        <ul className="space-y-2">
+          {resolvedEffects.map((effect, index) => (
+            <li key={`${effect.effect_kind}-${index}`} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 py-2">
+              <span className="text-xs text-[var(--foreground)]">
+                {affectedCountryName(effect) ? `${affectedCountryName(effect)} · ` : ""}
+                {formatAdminEffectLabel(effect, { rosterUnits: rosterUnitIds, countries: countriesList })}
+              </span>
+              <span className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDraft({ ...effect });
+                    setEditingIndex(index);
+                  }}
+                  className="text-xs font-semibold text-[var(--foreground-muted)] hover:text-[var(--foreground)]"
+                >
+                  Modifier
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setEffects((current) => current.filter((_, itemIndex) => itemIndex !== index))}
+                  className="text-xs font-semibold text-red-300 hover:text-red-200"
+                >
+                  Retirer
+                </button>
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+      {draft ? (
+        <div className="rounded-lg border border-[var(--border)] bg-[var(--background-panel)] p-3">
+          {targetCountryId && (
+            <label className="mb-3 block text-xs text-[var(--foreground-muted)]">
+              Pays affecté
+              <select
+                value={draft.scope === "target" ? "target" : "emitter"}
+                onChange={(event) => {
+                  const scope = event.target.value === "target" ? "target" : "emitter";
+                  setDraft({
+                    ...draft,
+                    scope,
+                    effect_target: draft.effect_kind === "relation_delta"
+                      ? scope === "target" ? countryId || null : targetCountryId
+                      : draft.effect_target,
+                  });
+                }}
+                className="mt-1 min-h-10 w-full rounded border border-[var(--border)] bg-[var(--background)] px-3 py-1.5 text-sm text-[var(--foreground)]"
+              >
+                <option value="emitter">
+                  {countriesList.find(({ id }) => id === countryId)?.name ?? "Pays émetteur"}
+                </option>
+                <option value="target">
+                  {countriesList.find(({ id }) => id === targetCountryId)?.name ?? "Pays cible"}
+                </option>
+              </select>
+            </label>
+          )}
+          <EffectForm
+            value={draft}
+            onChange={setDraft}
+            rosterUnitIds={rosterUnitIds}
+            rosterUnits={rosterUnits}
+            countriesList={visibleCountries}
+            requestCountryId={countryId}
+            onSave={saveDraft}
+            onCancel={() => {
+              setDraft(null);
+              setEditingIndex(null);
+            }}
+            saving={false}
+            editing={editingIndex !== null}
+          />
+        </div>
+      ) : effects.length < 16 ? (
+        <button
+          type="button"
+          onClick={() => setDraft(defaultAdminEffect(rosterUnitIds))}
+          className="rounded-lg border border-[var(--border)] px-3 py-1.5 text-xs font-semibold text-[var(--foreground)] hover:bg-[var(--background)]"
+        >
+          Ajouter une conséquence
+        </button>
+      ) : (
+        <p className="text-xs text-amber-200">Limite de 16 conséquences atteinte.</p>
+      )}
+    </div>
+  );
+}
 
 function getStatusLabel(status: string): string {
   if (status === "pending") return "en attente";
@@ -145,17 +361,50 @@ function getStatusLabel(status: string): string {
   return status;
 }
 
+function requestMatchesListFilters(
+  request: RequestRow,
+  searchQuery: string,
+  statusFilter: string,
+  targetCountriesById: NonNullable<Props["targetCountriesById"]>
+): boolean {
+  const tokens = normalizeAdminSearch(searchQuery).split(" ").filter(Boolean);
+  const targetId = typeof request.payload?.target_country_id === "string" ? request.payload.target_country_id : null;
+  const targetCountry = targetId ? targetCountriesById[targetId] : null;
+  const haystack = normalizeAdminSearch([
+    request.state_action_types?.label_fr ?? "",
+    request.state_action_types?.key ?? "",
+    request.country?.name ?? "",
+    targetCountry?.name ?? "",
+    typeof request.payload?.message === "string" ? request.payload.message : "",
+    request.refusal_message ?? "",
+    getStatusLabel(request.status),
+  ].join(" "));
+  return matchesAdminListFilters(request.status, statusFilter, haystack, tokens);
+}
+
 export function DemandesList({ requests, rosterUnitIds, rosterUnits = [], targetCountriesById = {}, influenceByCountryId = {}, relationMap = {}, countriesList = [], espionageIntelGainBase }: Props) {
   const router = useRouter();
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null | undefined>(undefined);
   const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
+  const [detailBusy, setDetailBusy] = useState(false);
+  const [detailHasDraft, setDetailHasDraft] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [currentPage, setCurrentPage] = useState(1);
+  const [isWideWorkspace, setIsWideWorkspace] = useState(false);
+
+  useEffect(() => {
+    const media = window.matchMedia("(min-width: 1280px)");
+    const update = () => setIsWideWorkspace(media.matches);
+    update();
+    media.addEventListener("change", update);
+    return () => media.removeEventListener("change", update);
+  }, []);
 
   const sortedRequests = useMemo(() => {
     return [...requests].sort((a, b) => {
-      const actionable = (s: string) => (s === "pending" || s === "pending_target" ? 0 : 1);
+      const actionable = (status: string) => (status === "pending" || status === "pending_target" ? 0 : 1);
       const statusA = actionable(a.status);
       const statusB = actionable(b.status);
       if (statusA !== statusB) return statusA - statusB;
@@ -164,38 +413,45 @@ export function DemandesList({ requests, rosterUnitIds, rosterUnits = [], target
   }, [requests]);
 
   const filteredRequests = useMemo(() => {
-    const tokens = normalizeAdminSearch(searchQuery).split(" ").filter(Boolean);
-
-    return sortedRequests.filter((request) => {
-      const targetId = typeof request.payload?.target_country_id === "string" ? request.payload.target_country_id : null;
-      const targetCountry = targetId ? targetCountriesById[targetId] : null;
-      const haystack = normalizeAdminSearch([
-        request.state_action_types?.label_fr ?? "",
-        request.state_action_types?.key ?? "",
-        request.country?.name ?? "",
-        targetCountry?.name ?? "",
-        typeof request.payload?.message === "string" ? request.payload.message : "",
-        request.refusal_message ?? "",
-        getStatusLabel(request.status),
-      ].join(" "));
-
-      return matchesAdminListFilters(request.status, statusFilter, haystack, tokens);
-    });
+    return sortedRequests.filter((request) =>
+      requestMatchesListFilters(request, searchQuery, statusFilter, targetCountriesById)
+    );
   }, [searchQuery, sortedRequests, statusFilter, targetCountriesById]);
 
   const totalPages = Math.max(1, Math.ceil(filteredRequests.length / REQUESTS_PER_PAGE));
-
   const effectivePage = Math.min(currentPage, totalPages);
-
   const paginatedRequests = useMemo(() => {
     const start = (effectivePage - 1) * REQUESTS_PER_PAGE;
     return filteredRequests.slice(start, start + REQUESTS_PER_PAGE);
   }, [effectivePage, filteredRequests]);
 
-  const selected = filteredRequests.find((r) => r.id === selectedId) ?? sortedRequests.find((r) => r.id === selectedId);
+  const activeSelectedId = selectedId === undefined && isWideWorkspace
+    ? (paginatedRequests[0]?.id ?? null)
+    : selectedId;
+  const selected = filteredRequests.find((request) => request.id === activeSelectedId)
+    ?? sortedRequests.find((request) => request.id === activeSelectedId);
+
+  const pendingCount = requests.filter((request) => request.status === "pending").length;
+  const waitingTargetCount = requests.filter((request) => request.status === "pending_target").length;
+  const resolvedCount = requests.length - pendingCount - waitingTargetCount;
+
+  function prepareFilterChange(nextSearch: string, nextStatus: string) {
+    if (
+      !selected
+      || requestMatchesListFilters(selected, nextSearch, nextStatus, targetCountriesById)
+    ) {
+      return true;
+    }
+    if (!canCloseDetail()) return false;
+    closeDetail();
+    return true;
+  }
 
   function handleSuccess() {
     setError(null);
+    setDetailBusy(false);
+    setDetailHasDraft(false);
+    setSuccess("Demande traitée. La liste a été mise à jour.");
     setSelectedId(null);
     router.refresh();
   }
@@ -205,217 +461,313 @@ export function DemandesList({ requests, rosterUnitIds, rosterUnits = [], target
     router.refresh();
   }
 
-  function toggleRequest(id: string) {
-    if (selectedId === id) {
-      setSelectedId(null);
-      return;
-    }
-    setSelectedId(id);
-    requestAnimationFrame(() => {
-      const detail = document.getElementById("request-detail");
-      detail?.scrollIntoView({ block: "start", behavior: "smooth" });
-      detail?.focus({ preventScroll: true });
-    });
+  function closeDetail() {
+    setDetailHasDraft(false);
+    setSelectedId(null);
   }
 
-  return (
-    <div className="admin-settings-form space-y-4">
-      <AdminSettingsGuide
-        purpose="Chaque demande réunit l’action du joueur, ses jets et les conséquences qui seront appliquées."
-        impact="Accepter applique les effets affichés. Refuser clôt la demande ; le remboursement dépend du choix indiqué dans le détail."
-        check="Vérifiez le pays, la cible, les jets et la liste finale des effets avant de décider."
-      />
-      {selected && (
-        <RequestDetail
-          request={selected}
-          rosterUnitIds={rosterUnitIds}
-          rosterUnits={rosterUnits}
-          targetCountriesById={targetCountriesById}
-          influenceByCountryId={influenceByCountryId}
-          relationMap={relationMap}
-          countriesList={countriesList}
-          espionageIntelGainBase={espionageIntelGainBase}
-          onClose={() => setSelectedId(null)}
-          onSuccess={handleSuccess}
-          onRefresh={handleRefresh}
-          onError={setError}
-        />
-      )}
+  function canCloseDetail() {
+    return !detailHasDraft
+      || confirm("Des modifications ne sont pas enregistrées. Fermer et les perdre ?");
+  }
 
-      <section className={panelClass} style={panelStyle}>
-        <div className="mb-3 flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
-          <div>
-            <h2 className="text-lg font-semibold text-[var(--foreground)]">
-              Demandes
-            </h2>
-            <p className="mt-1 text-sm text-[var(--foreground-muted)]">
-              Les demandes en attente restent toujours en tête. Affichage par pages de 10.
-            </p>
-          </div>
-          <div className="grid w-full max-w-2xl gap-2 sm:grid-cols-[minmax(0,1fr)_12rem]">
+  function requestCloseDetail() {
+    if (canCloseDetail()) closeDetail();
+  }
+
+  function toggleRequest(id: string) {
+    if (activeSelectedId === id) {
+      requestCloseDetail();
+      return;
+    }
+    if (
+      detailHasDraft
+      && !confirm("Des modifications ne sont pas enregistrées. Changer de demande et les perdre ?")
+    ) {
+      return;
+    }
+    setError(null);
+    setSuccess(null);
+    setDetailHasDraft(false);
+    setSelectedId(id);
+  }
+
+  const detailTitle = selected?.state_action_types?.label_fr ?? "Détail de la demande";
+  const detailDescription = selected
+    ? `${new Date(selected.created_at).toLocaleString("fr-FR")} · ${selected.country?.name ?? "Pays inconnu"}`
+    : undefined;
+  const detailBody = selected ? (
+    <>
+      {error ? (
+        <p role="alert" className="mb-4 rounded border border-red-500/50 bg-red-500/10 px-3 py-2 text-sm text-red-300">
+          {error}
+        </p>
+      ) : null}
+      <RequestDetail
+        key={selected.id}
+        request={selected}
+        error={error}
+        rosterUnitIds={rosterUnitIds}
+        rosterUnits={rosterUnits}
+        targetCountriesById={targetCountriesById}
+        influenceByCountryId={influenceByCountryId}
+        relationMap={relationMap}
+        countriesList={countriesList}
+        espionageIntelGainBase={espionageIntelGainBase}
+        onSuccess={handleSuccess}
+        onRefresh={handleRefresh}
+        onError={setError}
+        onBusyChange={setDetailBusy}
+        onDraftChange={setDetailHasDraft}
+      />
+    </>
+  ) : null;
+
+  return (
+    <div className="admin-settings-form">
+      {!isWideWorkspace ? (
+        <AdminDialog
+          id="request-detail"
+          open={selected != null}
+          onClose={closeDetail}
+          beforeClose={canCloseDetail}
+          title={detailTitle}
+          description={detailDescription}
+          busy={detailBusy}
+          size="lg"
+        >
+          {detailBody}
+        </AdminDialog>
+      ) : null}
+
+      <section
+        aria-label="Demandes des joueurs"
+        className="overflow-hidden rounded-xl border"
+        style={{ background: "var(--background-panel)", borderColor: "var(--border)" }}
+      >
+        <div
+          className="grid gap-3 border-b p-3 lg:grid-cols-[minmax(0,1fr)_minmax(24rem,2fr)] lg:items-end"
+          style={{ borderColor: "var(--border)" }}
+        >
+          <dl className="flex flex-wrap gap-2 text-xs">
+            <div className="rounded-full bg-amber-500/15 px-2.5 py-1 text-amber-300">
+              <dt className="inline">À décider </dt>
+              <dd className="inline font-bold">{pendingCount}</dd>
+            </div>
+            <div className="rounded-full bg-blue-500/15 px-2.5 py-1 text-blue-200">
+              <dt className="inline">Attente cible </dt>
+              <dd className="inline font-bold">{waitingTargetCount}</dd>
+            </div>
+            <div className="rounded-full bg-[var(--background-elevated)] px-2.5 py-1 text-[var(--foreground-muted)]">
+              <dt className="inline">Traitées </dt>
+              <dd className="inline font-bold text-[var(--foreground)]">{resolvedCount}</dd>
+            </div>
+          </dl>
+          <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_12rem]">
             <label>
-              <span className="mb-1 block text-sm text-[var(--foreground-muted)]">Rechercher</span>
+              <span className="sr-only">Rechercher une demande</span>
               <input
                 id="request-search"
                 type="search"
                 value={searchQuery}
-                onChange={(e) => {
-                  setSearchQuery(e.target.value);
+                onChange={(event) => {
+                  const nextSearch = event.target.value;
+                  if (!prepareFilterChange(nextSearch, statusFilter)) return;
+                  setSearchQuery(nextSearch);
                   setCurrentPage(1);
                 }}
-                placeholder="Action ou pays…"
-                className="w-full rounded border bg-[var(--background)] px-3 py-2 text-sm text-[var(--foreground)]"
+                placeholder="Rechercher une action ou un pays…"
+                className="min-h-10 w-full rounded-lg border bg-[var(--background)] px-3 py-2 text-sm text-[var(--foreground)]"
                 style={{ borderColor: "var(--border)" }}
               />
             </label>
             <label>
-              <span className="mb-1 block text-sm text-[var(--foreground-muted)]">Statut</span>
+              <span className="sr-only">Filtrer par statut</span>
               <select
                 value={statusFilter}
                 onChange={(event) => {
-                  setStatusFilter(event.target.value);
+                  const nextStatus = event.target.value;
+                  if (!prepareFilterChange(searchQuery, nextStatus)) return;
+                  setStatusFilter(nextStatus);
                   setCurrentPage(1);
                 }}
-                className="w-full rounded border bg-[var(--background)] px-3 py-2 text-sm text-[var(--foreground)]"
+                className="min-h-10 w-full rounded-lg border bg-[var(--background)] px-3 py-2 text-sm text-[var(--foreground)]"
                 style={{ borderColor: "var(--border)" }}
               >
-                <option value="all">Tous</option>
-                <option value="pending">À décider</option>
-                <option value="pending_target">Attente de la cible</option>
+                <option value="all">Tous les statuts</option>
+                <option value="pending">À décider ({pendingCount})</option>
+                <option value="pending_target">Attente de la cible ({waitingTargetCount})</option>
                 <option value="accepted">Acceptées</option>
                 <option value="refused">Refusées</option>
+                <option value="target_refused">Refusées par la cible</option>
               </select>
             </label>
           </div>
         </div>
-        <div className="mb-4 flex flex-wrap items-center justify-between gap-2 text-sm text-[var(--foreground-muted)]">
-          <span>{filteredRequests.length} demande{filteredRequests.length > 1 ? "s" : ""}</span>
-          <span>Page {effectivePage} / {totalPages}</span>
-        </div>
-        {error && (
-          <p role="alert" className="mb-4 rounded border border-red-500/50 bg-red-500/10 px-3 py-2 text-sm text-red-400">
-            {error}
+
+        {success ? (
+          <p role="status" className="border-b border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-200">
+            {success}
           </p>
-        )}
-        <div className="overflow-visible md:overflow-x-auto">
-          <table className="admin-responsive-table w-full text-sm">
-            <thead>
-              <tr style={{ borderColor: "var(--border)" }}>
-                <th className="border-b p-2 text-left font-medium text-[var(--foreground-muted)]">Date</th>
-                <th className="border-b p-2 text-left font-medium text-[var(--foreground-muted)]">Type</th>
-                <th className="border-b p-2 text-left font-medium text-[var(--foreground-muted)]">Pays</th>
-                <th className="border-b p-2 text-left font-medium text-[var(--foreground-muted)]">Cible</th>
-                <th className="border-b p-2 text-left font-medium text-[var(--foreground-muted)]">Statut</th>
-                <th className="border-b p-2 text-right font-medium text-[var(--foreground-muted)]">Action</th>
-              </tr>
-            </thead>
-            <tbody>
-              {paginatedRequests.map((r) => {
-                const targetId = typeof r.payload?.target_country_id === "string" ? r.payload.target_country_id : null;
+        ) : null}
+
+        <div className={isWideWorkspace ? "xl:grid xl:grid-cols-[minmax(24rem,0.9fr)_minmax(38rem,1.35fr)]" : ""}>
+          <div className={isWideWorkspace ? "min-w-0 xl:border-r" : ""} style={{ borderColor: "var(--border)" }}>
+            <div
+              className="flex items-center justify-between gap-3 border-b px-3 py-2 text-xs text-[var(--foreground-muted)]"
+              style={{ borderColor: "var(--border)" }}
+            >
+              <span>{filteredRequests.length} demande{filteredRequests.length > 1 ? "s" : ""}</span>
+              <span>Page {effectivePage} / {totalPages}</span>
+            </div>
+            <ul className="divide-y" style={{ borderColor: "var(--border)" }}>
+              {paginatedRequests.map((request) => {
+                const targetId = typeof request.payload?.target_country_id === "string"
+                  ? request.payload.target_country_id
+                  : null;
                 const targetCountry = targetId ? targetCountriesById[targetId] : null;
-                const isSelected = selectedId === r.id;
+                const isSelected = activeSelectedId === request.id;
                 return (
-                  <tr
-                    key={r.id}
-                    className="transition-colors"
-                    style={{
-                      borderColor: "var(--border)",
-                      background: isSelected ? "var(--background-elevated)" : undefined,
-                    }}
-                  >
-                    <td data-label="Date" className="border-b p-2 text-[var(--foreground)]">
-                      {new Date(r.created_at).toLocaleString("fr-FR")}
-                    </td>
-                    <td data-label="Action" className="border-b p-2 text-[var(--foreground)]">
-                      {r.state_action_types?.label_fr ?? r.action_type_id}
-                    </td>
-                    <td data-label="Pays" className="border-b p-2 text-[var(--foreground)]">
-                      <span title={r.country?.name ?? r.country_id} className="inline-flex items-center gap-1.5">
-                        {r.country?.flag_url ? (
-                          <img
-                            src={r.country.flag_url}
-                            alt=""
-                            className="h-6 w-9 rounded object-cover shrink-0"
-                            title={r.country.name}
-                          />
-                        ) : (
-                          <span className="text-[var(--foreground-muted)]">{r.country?.name ?? r.country_id}</span>
-                        )}
-                        {r.country?.flag_url ? <span>{r.country.name}</span> : null}
+                  <li key={request.id}>
+                    <button
+                      type="button"
+                      onClick={() => toggleRequest(request.id)}
+                      aria-pressed={isSelected}
+                      aria-controls={isWideWorkspace ? "request-workspace-detail" : "request-detail"}
+                      className={`group w-full px-3 py-3 text-left transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[var(--accent)] ${
+                        isSelected
+                          ? "bg-[var(--background-elevated)]"
+                          : "hover:bg-[color-mix(in_srgb,var(--background-elevated)_55%,transparent)]"
+                      }`}
+                    >
+                      <span className="flex items-start justify-between gap-3">
+                        <span className="min-w-0">
+                          <span className="block font-semibold text-[var(--foreground)]">
+                            {request.state_action_types?.label_fr ?? request.action_type_id}
+                          </span>
+                          <time className="mt-0.5 block text-xs text-[var(--foreground-muted)]" dateTime={request.created_at}>
+                            {new Date(request.created_at).toLocaleString("fr-FR")}
+                          </time>
+                        </span>
+                        <span
+                          aria-hidden
+                          className={`mt-0.5 text-lg transition-transform ${
+                            isSelected
+                              ? "text-[var(--accent)]"
+                              : "text-[var(--foreground-muted)] group-hover:translate-x-0.5"
+                          }`}
+                        >
+                          ›
+                        </span>
                       </span>
-                    </td>
-                    <td data-label="Cible" className="border-b p-2 text-[var(--foreground)]">
-                      {targetCountry ? (
-                        targetCountry.flag_url ? (
-                          <span title={targetCountry.name} className="inline-flex items-center gap-1.5">
-                            <img
-                              src={targetCountry.flag_url}
-                              alt=""
-                              className="h-6 w-9 rounded object-cover shrink-0"
-                              title={targetCountry.name}
-                            />
-                            <span>{targetCountry.name}</span>
+                      <span className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                        <span className="inline-flex min-w-0 flex-wrap items-center gap-1.5 text-sm text-[var(--foreground)]">
+                          <span className="inline-flex min-w-0 items-center gap-1.5">
+                            {request.country?.flag_url ? (
+                              <img src={request.country.flag_url} alt="" className="h-5 w-8 shrink-0 rounded object-cover" />
+                            ) : null}
+                            <span className="truncate">{request.country?.name ?? request.country_id}</span>
                           </span>
-                        ) : (
-                          <span title={targetCountry.name} className="text-[var(--foreground-muted)]">
-                            {targetCountry.name}
-                          </span>
-                        )
-                      ) : (
-                        <span className="text-[var(--foreground-muted)]">—</span>
-                      )}
-                    </td>
-                    <td data-label="Statut" className="border-b p-2">
-                      <StatusBadge status={r.status} />
-                    </td>
-                    <td data-label="" data-action className="border-b p-2 text-right">
-                      <button
-                        type="button"
-                        onClick={() => toggleRequest(r.id)}
-                        aria-expanded={isSelected}
-                        className="rounded-lg border px-3 py-1.5 text-sm font-medium text-[var(--foreground)] hover:bg-[var(--background)]"
-                        style={{ borderColor: "var(--border)" }}
-                      >
-                        {isSelected ? "Masquer" : "Examiner"}
-                      </button>
-                    </td>
-                  </tr>
+                          {targetCountry ? (
+                            <>
+                              <span aria-hidden className="text-[var(--foreground-muted)]">→</span>
+                              <span className="inline-flex min-w-0 items-center gap-1.5">
+                                {targetCountry.flag_url ? (
+                                  <img src={targetCountry.flag_url} alt="" className="h-5 w-8 shrink-0 rounded object-cover" />
+                                ) : null}
+                                <span className="truncate">{targetCountry.name}</span>
+                              </span>
+                            </>
+                          ) : null}
+                        </span>
+                        <span className="shrink-0"><StatusBadge status={request.status} /></span>
+                      </span>
+                    </button>
+                  </li>
                 );
               })}
-            </tbody>
-          </table>
-        </div>
-        {filteredRequests.length === 0 && (
-          <p className="mt-4 text-sm text-[var(--foreground-muted)]">Aucune demande.</p>
-        )}
-        {filteredRequests.length > REQUESTS_PER_PAGE && (
-          <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t pt-4" style={{ borderColor: "var(--border)" }}>
-            <span className="text-sm text-[var(--foreground-muted)]">
-              Affichage {Math.min((effectivePage - 1) * REQUESTS_PER_PAGE + 1, filteredRequests.length)}-
-              {Math.min(effectivePage * REQUESTS_PER_PAGE, filteredRequests.length)} sur {filteredRequests.length}
-            </span>
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
-                disabled={effectivePage === 1}
-                className="rounded border px-3 py-1.5 text-sm disabled:opacity-50"
-                style={{ borderColor: "var(--border)" }}
-              >
-                Précédent
-              </button>
-              <button
-                type="button"
-                onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
-                disabled={effectivePage === totalPages}
-                className="rounded border px-3 py-1.5 text-sm disabled:opacity-50"
-                style={{ borderColor: "var(--border)" }}
-              >
-                Suivant
-              </button>
-            </div>
+            </ul>
+
+            {filteredRequests.length === 0 ? (
+              <div className="flex min-h-40 flex-wrap items-center justify-center gap-3 p-4 text-sm text-[var(--foreground-muted)]">
+                <span>{requests.length === 0 ? "Aucune demande reçue." : "Aucun résultat."}</span>
+                {requests.length > 0 ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSearchQuery("");
+                      setStatusFilter("all");
+                      setCurrentPage(1);
+                    }}
+                    className="font-medium text-[var(--accent)] hover:underline"
+                  >
+                    Effacer les filtres
+                  </button>
+                ) : null}
+              </div>
+            ) : null}
+
+            {filteredRequests.length > REQUESTS_PER_PAGE ? (
+              <div className="flex flex-wrap items-center justify-between gap-3 border-t p-3" style={{ borderColor: "var(--border)" }}>
+                <span className="text-xs text-[var(--foreground-muted)]">
+                  {Math.min((effectivePage - 1) * REQUESTS_PER_PAGE + 1, filteredRequests.length)}-
+                  {Math.min(effectivePage * REQUESTS_PER_PAGE, filteredRequests.length)} sur {filteredRequests.length}
+                </span>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setCurrentPage(Math.max(1, effectivePage - 1))}
+                    disabled={effectivePage === 1}
+                    className="min-h-9 rounded-lg border px-3 py-1.5 text-sm disabled:opacity-50"
+                    style={{ borderColor: "var(--border)" }}
+                  >
+                    Précédent
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setCurrentPage(Math.min(totalPages, effectivePage + 1))}
+                    disabled={effectivePage === totalPages}
+                    className="min-h-9 rounded-lg border px-3 py-1.5 text-sm disabled:opacity-50"
+                    style={{ borderColor: "var(--border)" }}
+                  >
+                    Suivant
+                  </button>
+                </div>
+              </div>
+            ) : null}
           </div>
-        )}
+
+          {isWideWorkspace ? (
+            <aside id="request-workspace-detail" className="flex min-h-[34rem] min-w-0 flex-col">
+              {selected ? (
+                <>
+                  <header className="flex shrink-0 items-start justify-between gap-4 border-b px-4 py-3" style={{ borderColor: "var(--border)" }}>
+                    <div className="min-w-0">
+                      <h2 className="text-lg font-semibold text-[var(--foreground)]">{detailTitle}</h2>
+                      <p className="mt-0.5 text-sm text-[var(--foreground-muted)]">{detailDescription}</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={requestCloseDetail}
+                      disabled={detailBusy}
+                      aria-label="Fermer le détail"
+                      className="grid min-h-9 min-w-9 shrink-0 place-items-center rounded-lg text-xl text-[var(--foreground-muted)] hover:bg-[var(--background-elevated)] hover:text-[var(--foreground)] disabled:opacity-50"
+                    >
+                      <span aria-hidden>×</span>
+                    </button>
+                  </header>
+                  <div className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto p-4 xl:max-h-[calc(100dvh-13rem)]">
+                    {detailBody}
+                  </div>
+                </>
+              ) : (
+                <div className="grid min-h-[34rem] place-items-center p-8 text-center text-sm text-[var(--foreground-muted)]">
+                  <p>Sélectionnez une demande.</p>
+                </div>
+              )}
+            </aside>
+          ) : null}
+        </div>
       </section>
     </div>
   );
@@ -431,7 +783,7 @@ function StatusBadge({ status }: { status: string }) {
   if (status === "pending_target")
     return (
       <span className="inline-flex items-center gap-1 rounded bg-blue-500/20 px-2 py-0.5 text-blue-600 dark:text-blue-400">
-        <span aria-hidden>⏳</span> En attente acceptation cible
+        <span aria-hidden>⏳</span> En attente de la cible
       </span>
     );
   if (status === "target_refused")
@@ -457,6 +809,7 @@ function StatusBadge({ status }: { status: string }) {
 
 function RequestDetail({
   request,
+  error,
   rosterUnitIds,
   rosterUnits = [],
   targetCountriesById = {},
@@ -464,12 +817,14 @@ function RequestDetail({
   relationMap = {},
   countriesList = [],
   espionageIntelGainBase,
-  onClose,
   onSuccess,
   onRefresh,
   onError,
+  onBusyChange,
+  onDraftChange,
 }: {
   request: RequestRow;
+  error: string | null;
   rosterUnitIds: { id: string; name_fr: string }[];
   rosterUnits?: RosterUnitForSubType[];
   targetCountriesById?: Record<string, { name: string; flag_url: string | null; regime?: string | null }>;
@@ -477,21 +832,22 @@ function RequestDetail({
   relationMap?: Record<string, number>;
   countriesList?: Array<{ id: string; name: string }>;
   espionageIntelGainBase?: number;
-  onClose: () => void;
   onSuccess: () => void;
   onRefresh: () => void;
   onError: (s: string) => void;
+  onBusyChange: (busy: boolean) => void;
+  onDraftChange: (hasDraft: boolean) => void;
 }) {
   const [refund, setRefund] = useState(false);
   const [refusalMsg, setRefusalMsg] = useState("");
-  const [loading, setLoading] = useState<"accept" | "refuse" | "effect" | null>(null);
+  const [loading, setLoading] = useState<
+    "accept" | "refuse" | "effect" | "success-roll" | "impact-roll" | "remove-roll" | null
+  >(null);
   const [decisionToConfirm, setDecisionToConfirm] = useState<"accept" | "refuse" | null>(null);
   const effectsList = normalizeAdminEffectsAdded(request.admin_effect_added);
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
   const [effectForm, setEffectForm] = useState<AdminEffectAdded | null>(null);
   const [showEffectForm, setShowEffectForm] = useState(false);
-  const [effectFormIsUp, setEffectFormIsUp] = useState(false);
-  const [diceLoading, setDiceLoading] = useState<"success" | "impact" | null>(null);
   const [adminModifierStr, setAdminModifierStr] = useState("0");
   const [adminModifierLabel, setAdminModifierLabel] = useState("");
   const effectEntries = effectsList.map((effect, index) => ({ effect, index }));
@@ -499,6 +855,29 @@ function RequestDetail({
   const immediateEffectEntries = effectEntries.filter(({ effect }) => effect.application === "immediate");
 
   const effectLookups = { rosterUnits: rosterUnitIds, countries: countriesList };
+
+  useEffect(() => {
+    onBusyChange(loading !== null);
+  }, [loading, onBusyChange]);
+
+  useEffect(() => {
+    onDraftChange(
+      refund
+      || refusalMsg.length > 0
+      || decisionToConfirm !== null
+      || adminModifierStr !== "0"
+      || adminModifierLabel.length > 0
+      || showEffectForm
+    );
+  }, [
+    adminModifierLabel,
+    adminModifierStr,
+    decisionToConfirm,
+    onDraftChange,
+    refund,
+    refusalMsg,
+    showEffectForm,
+  ]);
 
   function parseModifierStr(s: string): number {
     const t = s.trim();
@@ -510,6 +889,25 @@ function RequestDetail({
     return n;
   }
 
+  async function runMutation(
+    kind: NonNullable<typeof loading>,
+    task: () => Promise<{ error?: string | null }>,
+    onDone: () => void
+  ) {
+    if (loading) return;
+    setLoading(kind);
+    onError("");
+    try {
+      const result = await task();
+      if (result.error) onError(result.error);
+      else onDone();
+    } catch {
+      onError("L’action n’a pas pu aboutir. Vérifiez la connexion puis réessayez.");
+    } finally {
+      setLoading(null);
+    }
+  }
+
   const payload = request.payload ?? {};
   const isAdminActionable = request.status === "pending";
   /** Admin peut refuser même en attente cible (alliance / coopération militaire) pour éviter que les demandes pourrissent. */
@@ -517,76 +915,74 @@ function RequestDetail({
   const targetId = typeof payload.target_country_id === "string" ? payload.target_country_id : null;
   const targetCountry = targetId ? targetCountriesById[targetId] : null;
   const hasTarget = targetCountry != null;
+  const requiresTargetAcceptance = actionRequiresTargetAcceptance(
+    request.state_action_types?.key ?? "",
+    request.state_action_types?.params_schema ?? null
+  );
+  const needsImpactRoll = ACTION_KEYS_REQUIRING_IMPACT_ROLL.has(request.state_action_types?.key ?? "");
 
   async function handleAccept() {
-    if (!isAdminActionable) return;
-    setLoading("accept");
-    onError("");
-    const res = await acceptRequest(request.id);
-    setLoading(null);
-    if (res.error) onError(res.error);
-    else onSuccess();
+    if (!isAdminActionable || loading) return;
+    await runMutation("accept", () => acceptRequest(request.id), onSuccess);
   }
 
   async function handleRefuse() {
-    if (!adminCanRefuse) return;
-    setLoading("refuse");
-    onError("");
-    const res = await refuseRequest(request.id, refund, refusalMsg);
-    setLoading(null);
-    if (res.error) onError(res.error);
-    else onSuccess();
+    if (!adminCanRefuse || loading) return;
+    await runMutation("refuse", () => refuseRequest(request.id, refund, refusalMsg), onSuccess);
   }
 
   const EFFECT_VALUE_MIN = -1000;
   const EFFECT_VALUE_MAX = 1000;
 
-  async function handleSaveEffect(isUp: boolean) {
-    if (!effectForm?.name || !effectForm.effect_kind) return;
-    setLoading("effect");
-    onError("");
+  async function handleSaveEffect() {
+    if (loading || !effectForm?.effect_kind) return;
+    const needsTarget =
+      EFFECT_KINDS_WITH_STAT_TARGET.has(effectForm.effect_kind) ||
+      EFFECT_KINDS_WITH_BUDGET_TARGET.has(effectForm.effect_kind) ||
+      EFFECT_KINDS_WITH_BRANCH_TARGET.has(effectForm.effect_kind) ||
+      EFFECT_KINDS_WITH_ROSTER_UNIT_TARGET.has(effectForm.effect_kind) ||
+      EFFECT_KINDS_WITH_SUB_TYPE_TARGET.has(effectForm.effect_kind) ||
+      EFFECT_KINDS_WITH_COUNTRY_TARGET.has(effectForm.effect_kind);
+    if (needsTarget && !effectForm.effect_target) {
+      onError("Choisissez la cible de cette conséquence.");
+      return;
+    }
     const clampedValue = Math.max(EFFECT_VALUE_MIN, Math.min(EFFECT_VALUE_MAX, Number(effectForm.value) || 0));
-    const payload: AdminEffectAdded = {
+    const payload = normalizeEffectApplication({
       ...effectForm,
+      name: effectForm.name.trim() || EFFECT_KIND_LABELS[effectForm.effect_kind] || "Conséquence",
       value: clampedValue,
       duration_remaining:
         effectForm.duration_kind === "permanent"
           ? 0
           : Math.max(0, Math.min(DURATION_DAYS_MAX, Math.round(Number(effectForm.duration_remaining) || 30))),
-      application: isUp ? "immediate" : "duration",
-    };
+      application: effectForm.application === "immediate" ? "immediate" : "duration",
+    });
     const newList =
       editingIndex !== null
         ? effectsList.map((e, i) => (i === editingIndex ? payload : e))
         : [...effectsList, payload];
-    const res = await updateRequestEffect(request.id, newList);
-    setLoading(null);
-    if (res.error) onError(res.error);
-    else {
+    await runMutation("effect", () => updateRequestEffect(request.id, newList), () => {
       onRefresh();
       setShowEffectForm(false);
       setEditingIndex(null);
       setEffectForm(null);
-    }
+    });
   }
 
   async function handleDeleteEffect(index: number) {
-    setLoading("effect");
-    onError("");
+    if (loading) return;
     const newList = effectsList.filter((_, i) => i !== index);
-    const res = await updateRequestEffect(request.id, newList.length > 0 ? newList : null);
-    setLoading(null);
-    if (res.error) onError(res.error);
-    else {
+    await runMutation("effect", () => updateRequestEffect(request.id, newList.length > 0 ? newList : null), () => {
       onRefresh();
       setShowEffectForm(false);
       setEditingIndex(null);
       setEffectForm(null);
-    }
+    });
   }
 
-  function openAddEffect(isUp: boolean) {
-    setEffectFormIsUp(isUp);
+  function openAddEffect() {
+    onError("");
     const kind = effectKindsForDemandes[0];
     const otherCountries = countriesList.filter((country) => country.id !== request.country_id);
     const defaultTarget = ["stat_delta", "gdp_growth_per_stat", "population_growth_per_stat"].includes(kind)
@@ -608,7 +1004,7 @@ function RequestDetail({
       value: 0,
       duration_kind: "days",
       duration_remaining: 30,
-      application: isUp ? "immediate" : "duration",
+      application: "duration",
     });
     setEditingIndex(null);
     setShowEffectForm(true);
@@ -617,10 +1013,48 @@ function RequestDetail({
   function openEditEffect(index: number) {
     const e = effectsList[index];
     if (!e) return;
+    onError("");
     setEffectForm({ ...e });
-    setEffectFormIsUp(e.application === "immediate");
     setEditingIndex(index);
     setShowEffectForm(true);
+  }
+
+  function closeEffectDraft() {
+    onError("");
+    setShowEffectForm(false);
+    setEditingIndex(null);
+    setEffectForm(null);
+  }
+
+  function canCloseEffectDraft() {
+    return confirm("Fermer sans enregistrer cette conséquence ?");
+  }
+
+  function requestCloseEffectDraft() {
+    if (canCloseEffectDraft()) closeEffectDraft();
+  }
+
+  async function handleRoll(type: "success" | "impact") {
+    if (loading) return;
+    const existingRoll = type === "success" ? request.dice_results?.success_roll : request.dice_results?.impact_roll;
+    if (existingRoll && !confirm("Relancer remplacera le résultat actuel. Continuer ?")) return;
+    const value = parseModifierStr(adminModifierStr);
+    setDecisionToConfirm(null);
+    await runMutation(
+      type === "success" ? "success-roll" : "impact-roll",
+      () => rollD100(
+        request.id,
+        type,
+        value !== 0 ? [{ label: adminModifierLabel.trim() || "Correction manuelle", value }] : []
+      ),
+      onRefresh
+    );
+  }
+
+  async function handleRemoveImpactRoll() {
+    if (loading) return;
+    setDecisionToConfirm(null);
+    await runMutation("remove-roll", () => removeImpactRoll(request.id), onRefresh);
   }
 
   function renderEffectEntries(
@@ -655,8 +1089,8 @@ function RequestDetail({
                     onClick={() => openEditEffect(index)}
                     disabled={loading !== null}
                     className="rounded p-1.5 text-[var(--foreground-muted)] hover:bg-[var(--border)] hover:text-[var(--foreground)] disabled:opacity-50"
-                    title="Modifier"
-                    aria-label="Modifier"
+                    title={`Modifier ${effect.name}`}
+                    aria-label={`Modifier ${effect.name}`}
                   >
                     <span aria-hidden>✎</span>
                   </button>
@@ -665,8 +1099,8 @@ function RequestDetail({
                     onClick={() => handleDeleteEffect(index)}
                     disabled={loading !== null}
                     className="rounded p-1.5 text-[var(--foreground-muted)] hover:bg-red-500/20 hover:text-red-400 disabled:opacity-50"
-                    title="Supprimer"
-                    aria-label="Supprimer"
+                    title={`Supprimer ${effect.name}`}
+                    aria-label={`Supprimer ${effect.name}`}
                   >
                     <span aria-hidden>🗑</span>
                   </button>
@@ -680,118 +1114,205 @@ function RequestDetail({
   }
 
   return (
-    <section
-      id="request-detail"
-      tabIndex={-1}
-      className={`${panelClass} scroll-mt-20 focus:outline-none`}
-      style={panelStyle}
-    >
-      <div className="mb-4 flex items-center justify-between">
-        <h2 className="text-lg font-semibold text-[var(--foreground)]">
-          {request.state_action_types?.label_fr ?? "Détail de la demande"}
-        </h2>
-        <button
-          type="button"
-          onClick={onClose}
-          className="rounded border px-3 py-1.5 text-sm font-medium text-[var(--foreground)] hover:bg-red-500/10 hover:text-red-300"
+    <div className="space-y-4">
+      <AdminDialog
+        id={`request-${request.id}-effect`}
+        open={showEffectForm}
+        onClose={closeEffectDraft}
+        beforeClose={canCloseEffectDraft}
+        title={editingIndex !== null ? "Modifier la conséquence" : "Ajouter une conséquence"}
+        description="Elle sera appliquée uniquement si la demande est acceptée."
+        busy={loading === "effect"}
+        size="md"
+      >
+        {error ? (
+          <p role="alert" className="mb-4 rounded border border-red-500/50 bg-red-500/10 px-3 py-2 text-sm text-red-300">
+            {error}
+          </p>
+        ) : null}
+        <EffectForm
+          value={effectForm}
+          onChange={setEffectForm}
+          rosterUnitIds={rosterUnitIds}
+          rosterUnits={rosterUnits}
+          countriesList={countriesList}
+          requestCountryId={request.country_id}
+          onSave={handleSaveEffect}
+          onCancel={requestCloseEffectDraft}
+          saving={loading === "effect"}
+          editing={editingIndex !== null}
+        />
+      </AdminDialog>
+
+      {adminCanRefuse ? (
+        <section
+          aria-label="Décision sur la demande"
+          className="sticky -top-4 z-20 -mx-4 -mt-4 border-b bg-[var(--background-panel)] px-4 py-3 sm:-top-5 sm:-mx-5 sm:-mt-5 sm:px-5"
           style={{ borderColor: "var(--border)" }}
         >
-          Fermer le détail
-        </button>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="min-w-0">
+              <p className="text-sm font-semibold text-[var(--foreground)]">
+                {decisionToConfirm === "accept"
+                  ? "Confirmer l’acceptation"
+                  : decisionToConfirm === "refuse"
+                    ? "Confirmer le refus"
+                    : "Décision de l’administration"}
+              </p>
+              <p className="mt-0.5 text-xs text-[var(--foreground-muted)]">
+                {decisionToConfirm === "accept"
+                  ? effectsList.length > 0
+                    ? `${effectsList.length} conséquence${effectsList.length > 1 ? "s" : ""} ajoutée${effectsList.length > 1 ? "s" : ""} sera appliquée${effectsList.length > 1 ? "s" : ""}.`
+                    : "Les conséquences prévues par l’action seront appliquées."
+                  : decisionToConfirm === "refuse"
+                    ? "La demande sera clôturée sans appliquer ses conséquences."
+                    : needsImpactRoll && !request.dice_results?.impact_roll && isAdminActionable
+                      ? "Le jet de conséquence est requis avant l’acceptation."
+                      : "Vérifiez les éléments ci-dessous, puis acceptez ou refusez."}
+              </p>
+            </div>
+
+            {!decisionToConfirm ? (
+              <div className={`grid w-full shrink-0 gap-2 sm:w-auto ${isAdminActionable ? "grid-cols-2" : "grid-cols-1"}`}>
+                {isAdminActionable ? (
+                  <button
+                    type="button"
+                    onClick={() => setDecisionToConfirm("accept")}
+                    disabled={loading !== null || (needsImpactRoll && !request.dice_results?.impact_roll)}
+                    className="rounded-lg bg-[var(--accent)] px-4 py-2 text-sm font-semibold text-[#0f1419] hover:bg-[var(--accent-hover)] disabled:opacity-50"
+                  >
+                    Accepter…
+                  </button>
+                ) : null}
+                <button
+                  type="button"
+                  onClick={() => setDecisionToConfirm("refuse")}
+                  disabled={loading !== null}
+                  className="rounded-lg border px-4 py-2 text-sm font-semibold text-[var(--danger)] hover:bg-[color-mix(in_srgb,var(--danger)_10%,transparent)] disabled:opacity-50"
+                  style={{ borderColor: "color-mix(in srgb, var(--danger) 45%, transparent)" }}
+                >
+                  Refuser…
+                </button>
+              </div>
+            ) : null}
+          </div>
+
+          {decisionToConfirm === "refuse" ? (
+            <div className="mt-3 grid gap-2 sm:grid-cols-[auto_minmax(14rem,1fr)] sm:items-center">
+              <label className="flex min-h-10 items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={refund}
+                  onChange={(event) => setRefund(event.target.checked)}
+                />
+                Rembourser les actions d&apos;État
+              </label>
+              <input
+                aria-label="Message explicatif du refus"
+                type="text"
+                placeholder="Message au joueur (recommandé)"
+                value={refusalMsg}
+                onChange={(event) => setRefusalMsg(event.target.value.slice(0, 500))}
+                className="min-h-10 w-full rounded border bg-[var(--background)] px-3 py-1.5 text-sm"
+                style={{ borderColor: "var(--border)" }}
+                maxLength={500}
+              />
+            </div>
+          ) : null}
+
+          {decisionToConfirm ? (
+            <div className="mt-3 grid grid-cols-2 gap-2 sm:ml-auto sm:w-fit">
+              <button
+                type="button"
+                onClick={() => setDecisionToConfirm(null)}
+                disabled={loading !== null}
+                className="rounded-lg border px-3 py-2 text-sm font-medium text-[var(--foreground)]"
+                style={{ borderColor: "var(--border)" }}
+              >
+                Annuler
+              </button>
+              <button
+                type="button"
+                onClick={decisionToConfirm === "accept" ? handleAccept : handleRefuse}
+                disabled={loading !== null}
+                className={`rounded-lg px-3 py-2 text-sm font-semibold disabled:opacity-50 ${
+                  decisionToConfirm === "accept"
+                    ? "bg-[var(--accent)] text-[#0f1419]"
+                    : "bg-[var(--danger)] text-white"
+                }`}
+              >
+                {loading
+                  ? "Application…"
+                  : decisionToConfirm === "accept"
+                    ? "Appliquer les conséquences"
+                    : "Confirmer le refus"}
+              </button>
+            </div>
+          ) : null}
+        </section>
+      ) : null}
+
+      <div className="flex flex-wrap items-center gap-2">
+        {request.status !== "pending_target" ? <StatusBadge status={request.status} /> : null}
+        <span className="text-xs text-[var(--foreground-muted)]">
+          Demande reçue le {new Date(request.created_at).toLocaleString("fr-FR")}
+        </span>
       </div>
 
       {request.status === "pending_target" && (
-        <div className="mb-4 rounded border border-blue-500/30 bg-blue-500/10 px-4 py-3 text-sm text-blue-200">
-          <strong>En attente acceptation par la cible.</strong> Le joueur du pays cible doit accepter cette demande avant que vous puissiez la valider ou la refuser.
+        <div className="rounded border border-blue-500/30 bg-blue-500/10 px-4 py-3 text-sm text-blue-200">
+          Acceptation indisponible ; le refus reste possible.
         </div>
       )}
 
       {isAdminActionable &&
-        actionRequiresTargetAcceptance(
-          request.state_action_types?.key ?? "",
-          request.state_action_types?.params_schema ?? null
-        ) && (
-          <div className="mb-4 rounded border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-200">
+        requiresTargetAcceptance && (
+          <div className="rounded border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-200">
             <strong>Accepté par la cible.</strong> En attente de votre validation.
           </div>
         )}
 
-      <div className="flex gap-0" style={{ borderColor: "var(--border)" }}>
-        <div className={hasTarget ? "flex-1 py-3 pr-4" : "flex-1 py-3"}>
-          <p className="mb-2 text-xs font-medium uppercase tracking-wider text-[var(--foreground-muted)]">
-            {hasTarget ? "Émetteur" : "Pays émetteur"}
-          </p>
-          <div className="flex items-center gap-3">
+      <section className="rounded-lg border p-3" style={{ borderColor: "var(--border)", background: "var(--background)" }} aria-label="Pays concernés">
+        <div className={`grid items-center gap-3 ${hasTarget ? "sm:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)]" : ""}`}>
+          <div className="flex min-w-0 items-center gap-3">
             {request.country?.flag_url ? (
-              <img
-                src={request.country.flag_url}
-                alt=""
-                className="h-10 w-14 rounded object-cover shrink-0"
-              />
-            ) : (
-              <div className="flex h-10 w-14 shrink-0 items-center justify-center rounded bg-[var(--background)] text-xs text-[var(--foreground-muted)]">
-                Drapeau
-              </div>
-            )}
-            <div>
+              <img src={request.country.flag_url} alt="" className="h-8 w-12 shrink-0 rounded object-cover" />
+            ) : null}
+            <div className="min-w-0">
               <p className="font-medium text-[var(--foreground)]">{request.country?.name ?? request.country_id}</p>
-              {request.country?.regime && (
-                <p className="text-xs text-[var(--foreground-muted)]">{request.country.regime}</p>
-              )}
-              <p className="text-xs text-[var(--accent)]">
-                Influence : {request.country_id && influenceByCountryId[request.country_id] != null ? formatNumber(influenceByCountryId[request.country_id]) : "—"}
+              <p className="truncate text-xs text-[var(--foreground-muted)]">
+                {request.country?.regime ?? "Régime non renseigné"} · Influence{" "}
+                {influenceByCountryId[request.country_id] != null ? formatNumber(influenceByCountryId[request.country_id]) : "—"}
               </p>
             </div>
           </div>
-        </div>
-        {hasTarget && (
-          <>
-            <div className="w-px shrink-0 bg-[var(--border)]" aria-hidden />
-            <div className="flex-1 py-3 pl-4">
-              <p className="mb-2 text-xs font-medium uppercase tracking-wider text-[var(--foreground-muted)]">
-                Cible
-              </p>
-              <div className="flex items-center gap-3">
-                {targetCountry.flag_url ? (
-                  <img
-                    src={targetCountry.flag_url}
-                    alt=""
-                    className="h-10 w-14 rounded object-cover shrink-0"
-                  />
-                ) : (
-                  <div className="flex h-10 w-14 shrink-0 items-center justify-center rounded bg-[var(--background)] text-xs text-[var(--foreground-muted)]">
-                    Drapeau
-                  </div>
-                )}
-                <div>
-                  <p className="font-medium text-[var(--foreground)]">{targetCountry.name}</p>
-                  {targetCountry.regime && (
-                    <p className="text-xs text-[var(--foreground-muted)]">{targetCountry.regime}</p>
-                  )}
-                  <p className="text-xs text-[var(--accent)]">
-                    Influence : {targetId && influenceByCountryId[targetId] != null ? formatNumber(influenceByCountryId[targetId]) : "—"}
-                  </p>
+          {hasTarget && targetId ? (() => {
+            const relation = getRelationFromMap(relationMap, request.country_id, targetId);
+            return (
+              <>
+                <div className="flex items-center justify-center gap-2 text-sm" aria-label={`Relation ${relation}, ${getRelationLabel(relation)}`}>
+                  <span aria-hidden className="text-[var(--foreground-muted)]">→</span>
+                  <span className="font-medium" style={{ color: getRelationColor(relation) }}>
+                    {relation} · {getRelationLabel(relation)}
+                  </span>
                 </div>
-              </div>
-            </div>
-          </>
-        )}
-      </div>
-
-      {hasTarget && targetId && (() => {
-        const relation = getRelationFromMap(relationMap, request.country_id, targetId);
-        return (
-          <div className="mt-3 flex flex-wrap items-baseline justify-center gap-2 border-t py-3" style={{ borderColor: "var(--border)" }}>
-            <span className="text-xs text-[var(--foreground-muted)]">Relation bilatérale :</span>
-            <span className="text-sm font-medium" style={{ color: getRelationColor(relation) }}>
-              {relation}
-            </span>
-            <span className="text-sm font-medium" style={{ color: getRelationColor(relation) }}>
-              {getRelationLabel(relation)}
-            </span>
-          </div>
-        );
-      })()}
+                <div className="flex min-w-0 items-center gap-3">
+                  {targetCountry.flag_url ? (
+                    <img src={targetCountry.flag_url} alt="" className="h-8 w-12 shrink-0 rounded object-cover" />
+                  ) : null}
+                  <div className="min-w-0">
+                    <p className="font-medium text-[var(--foreground)]">{targetCountry.name}</p>
+                    <p className="truncate text-xs text-[var(--foreground-muted)]">
+                      {targetCountry.regime ?? "Régime non renseigné"} · Influence{" "}
+                      {influenceByCountryId[targetId] != null ? formatNumber(influenceByCountryId[targetId]) : "—"}
+                    </p>
+                  </div>
+                </div>
+              </>
+            );
+          })() : null}
+        </div>
+      </section>
 
       {((request.state_action_types?.key === "demande_up") ||
         request.state_action_types?.key === "effort_fortifications" ||
@@ -815,18 +1336,77 @@ function RequestDetail({
         </dl>
       )}
 
-      {ACTION_KEYS_REQUIRING_IMPACT_ROLL.has(request.state_action_types?.key ?? "") && (
+      {!adminCanRefuse ? (
+        <section className="rounded-lg border p-3" style={{ borderColor: "var(--border)" }}>
+          <h3 className="text-sm font-semibold text-[var(--foreground)]">Décision enregistrée</h3>
+          <dl className="mt-2 grid gap-2 text-sm sm:grid-cols-2">
+            <div>
+              <dt className="text-xs text-[var(--foreground-muted)]">Résultat</dt>
+              <dd className="font-medium text-[var(--foreground)]">{getStatusLabel(request.status)}</dd>
+            </div>
+            <div>
+              <dt className="text-xs text-[var(--foreground-muted)]">Date</dt>
+              <dd className="font-medium text-[var(--foreground)]">
+                {request.resolved_at ? new Date(request.resolved_at).toLocaleString("fr-FR") : "Non renseignée"}
+              </dd>
+            </div>
+            {request.status !== "accepted" ? (
+              <div>
+                <dt className="text-xs text-[var(--foreground-muted)]">Actions d’État remboursées</dt>
+                <dd className="font-medium text-[var(--foreground)]">{request.refund_actions ? "Oui" : "Non"}</dd>
+              </div>
+            ) : null}
+            {request.status === "accepted" && effectsList.length > 0 ? (
+              <div className="sm:col-span-2">
+                <dt className="text-xs text-[var(--foreground-muted)]">Conséquences ajoutées appliquées</dt>
+                <dd className="mt-1 text-[var(--foreground)]">
+                  <ul className="space-y-1">
+                    {effectsList.map((effect, index) => (
+                      <li key={index}>{formatAdminEffectLabel(effect, effectLookups)}</li>
+                    ))}
+                  </ul>
+                </dd>
+              </div>
+            ) : null}
+          </dl>
+        </section>
+      ) : null}
+
+      {(isAdminActionable || request.status === "pending_target") ? (
+        <dl className="grid gap-2 rounded-lg border p-3 text-sm sm:grid-cols-3" style={{ borderColor: "var(--border)" }}>
+          <div>
+            <dt className="text-xs text-[var(--foreground-muted)]">Accord de la cible</dt>
+            <dd className="mt-0.5 font-medium text-[var(--foreground)]">
+              {!requiresTargetAcceptance ? "Non requis" : request.status === "pending_target" ? "En attente" : "Obtenu"}
+            </dd>
+          </div>
+          <div>
+            <dt className="text-xs text-[var(--foreground-muted)]">Jet de conséquence</dt>
+            <dd className="mt-0.5 font-medium text-[var(--foreground)]">
+              {!needsImpactRoll ? "Non requis" : request.dice_results?.impact_roll ? "Prêt" : "À lancer"}
+            </dd>
+          </div>
+          <div>
+            <dt className="text-xs text-[var(--foreground-muted)]">Conséquences ajoutées</dt>
+            <dd className="mt-0.5 font-medium text-[var(--foreground)]">
+              {effectsList.length === 0 ? "Aucune" : `${effectsList.length} enregistrée${effectsList.length > 1 ? "s" : ""}`}
+            </dd>
+          </div>
+        </dl>
+      ) : null}
+
+      {needsImpactRoll && (
         <div className="mt-4 border-t pt-4" style={{ borderColor: "var(--border)" }}>
           <h3 className="mb-2 text-sm font-medium text-[var(--foreground)]">Jets de dés</h3>
-          {isAdminActionable && (
+          {isAdminActionable ? (
+            <>
             <p className="mb-2 text-xs text-[var(--foreground-muted)]">
               {request.state_action_types?.key === "prise_influence"
-                ? "Les bonus et malus liés aux statistiques, aux relations et au rapport d’influence sont calculés automatiquement à chaque jet."
-                : "Les bonus et malus liés aux statistiques du pays sont calculés automatiquement à chaque jet."}
+                ? "Les statistiques, la relation et le rapport d’influence modifient automatiquement le résultat."
+                : "Les statistiques du pays modifient automatiquement le résultat."}
             </p>
-          )}
-          <div className="mb-3 flex flex-wrap items-center gap-2">
-            <label htmlFor={`request-${request.id}-modifier`} className="text-xs text-[var(--foreground-muted)]">Ajustement exceptionnel</label>
+            <div className="mb-3 flex flex-wrap items-center gap-2">
+            <label htmlFor={`request-${request.id}-modifier`} className="text-xs text-[var(--foreground-muted)]">Correction manuelle du jet</label>
             <input
               id={`request-${request.id}-modifier`}
               type="text"
@@ -840,56 +1420,52 @@ function RequestDetail({
               className="w-20 rounded border bg-[var(--background)] px-2 py-1 text-sm"
               style={{ borderColor: "var(--border)" }}
             />
-            <label htmlFor={`request-${request.id}-modifier-label`} className="text-xs text-[var(--foreground-muted)]">Motif</label>
+            <label htmlFor={`request-${request.id}-modifier-label`} className="text-xs text-[var(--foreground-muted)]">Motif de la correction</label>
             <input
               id={`request-${request.id}-modifier-label`}
               type="text"
               value={adminModifierLabel}
               onChange={(e) => setAdminModifierLabel(e.target.value.slice(0, 50))}
-              placeholder="Contexte particulier"
+              placeholder="Ex. contexte exceptionnel"
               maxLength={50}
               className="min-w-[8rem] rounded border bg-[var(--background)] px-2 py-1 text-sm"
               style={{ borderColor: "var(--border)" }}
             />
-          </div>
-          <div className="mb-2 flex flex-wrap gap-2">
+            </div>
+            <div className="mb-2 flex flex-wrap gap-2">
             <button
               type="button"
-              onClick={async () => {
-                const value = parseModifierStr(adminModifierStr);
-                setDiceLoading("success");
-                onError("");
-                await rollD100(request.id, "success", value !== 0 ? [{ label: adminModifierLabel.trim() || "Ajustement admin", value }] : []);
-                setDiceLoading(null);
-                onRefresh();
-              }}
-              disabled={diceLoading !== null}
+              onClick={() => handleRoll("success")}
+              disabled={loading !== null}
               className="rounded border px-3 py-1.5 text-sm disabled:opacity-50"
               style={{ borderColor: "var(--border)" }}
             >
-              {diceLoading === "success" ? "Jet…" : "Lancer jet succès"}
+              {loading === "success-roll"
+                ? "Jet…"
+                : request.dice_results?.success_roll
+                  ? "Relancer le jet de réussite"
+                  : "Lancer le jet de réussite"}
             </button>
             <button
               type="button"
-              onClick={async () => {
-                const value = parseModifierStr(adminModifierStr);
-                setDiceLoading("impact");
-                onError("");
-                await rollD100(request.id, "impact", value !== 0 ? [{ label: adminModifierLabel.trim() || "Ajustement admin", value }] : []);
-                setDiceLoading(null);
-                onRefresh();
-              }}
-              disabled={diceLoading !== null}
+              onClick={() => handleRoll("impact")}
+              disabled={loading !== null}
               className="rounded border px-3 py-1.5 text-sm disabled:opacity-50"
               style={{ borderColor: "var(--border)" }}
             >
-              {diceLoading === "impact" ? "Jet…" : "Lancer jet impact"}
+              {loading === "impact-roll"
+                ? "Jet…"
+                : request.dice_results?.impact_roll
+                  ? "Relancer le jet de conséquence"
+                  : "Lancer le jet de conséquence"}
             </button>
-          </div>
+            </div>
+            </>
+          ) : null}
           {request.dice_results?.success_roll && (
             <div className="mb-3 flex flex-wrap items-center justify-between gap-3 rounded-lg border p-3" style={{ borderColor: "var(--border)", background: "var(--background)" }}>
               <div className="min-w-0">
-                <p className="mb-1 text-xs font-medium uppercase tracking-wider text-[var(--foreground-muted)]">Jet succès</p>
+                <p className="mb-1 text-xs font-medium uppercase tracking-wider text-[var(--foreground-muted)]">Jet de réussite</p>
                 <p className="text-sm text-[var(--foreground)]">
                   {formatRollFormula(request.dice_results.success_roll, request.dice_results?.admin_modifiers?.[0]?.label)} = <strong className="text-lg">{request.dice_results.success_roll.total}</strong>
                 </p>
@@ -903,14 +1479,14 @@ function RequestDetail({
             <>
               <div className="mb-3 flex flex-wrap items-center justify-between gap-3 rounded-lg border p-3" style={{ borderColor: "var(--border)", background: "var(--background)" }}>
                 <div className="min-w-0">
-                  <p className="mb-1 text-xs font-medium uppercase tracking-wider text-[var(--foreground-muted)]">Jet impact</p>
+                  <p className="mb-1 text-xs font-medium uppercase tracking-wider text-[var(--foreground-muted)]">Jet de conséquence</p>
                   <p className="text-sm text-[var(--foreground)]">
                     {formatRollFormula(request.dice_results.impact_roll, request.dice_results?.admin_modifiers?.[0]?.label)} = <strong className="text-lg">{request.dice_results.impact_roll.total}</strong>
                   </p>
                   {isAdminActionable && (
                     <p className="mt-1 text-xs text-[var(--foreground-muted)]">
                       {request.state_action_types?.key === "prise_influence"
-                        ? "Utilisé pour l'impact sur l'influence à l'acceptation."
+                        ? "Détermine le gain d’influence appliqué lors de l’acceptation."
                         : "Détermine la variation de relation appliquée lors de l’acceptation."}
                     </p>
                   )}
@@ -922,16 +1498,13 @@ function RequestDetail({
                   {isAdminActionable && (
                     <button
                       type="button"
-                      onClick={async () => {
-                        const { error: err } = await removeImpactRoll(request.id);
-                        if (err) onError(err);
-                        else onRefresh();
-                      }}
+                      onClick={handleRemoveImpactRoll}
+                      disabled={loading !== null}
                       className="rounded border px-2 py-1 text-xs text-[var(--foreground-muted)] hover:bg-[var(--background)] hover:text-[var(--foreground)]"
                       style={{ borderColor: "var(--border)" }}
-                      title="Supprimer le jet impact"
+                      title="Supprimer le jet de conséquence"
                     >
-                      Supprimer
+                      {loading === "remove-roll" ? "Suppression…" : "Supprimer"}
                     </button>
                   )}
                 </div>
@@ -947,7 +1520,7 @@ function RequestDetail({
                 if (!impactLabel) return null;
                 return (
                   <div className="mb-3 rounded-lg border p-3" style={{ borderColor: "var(--border)", background: "var(--background)" }}>
-                    <p className="text-xs font-medium uppercase tracking-wider text-[var(--foreground-muted)] mb-1">Impact</p>
+                    <p className="text-xs font-medium uppercase tracking-wider text-[var(--foreground-muted)] mb-1">Conséquence</p>
                     <p className="text-lg font-bold text-[var(--foreground)]">{impactLabel}</p>
                   </div>
                 );
@@ -957,197 +1530,31 @@ function RequestDetail({
         </div>
       )}
 
-      {(isAdminActionable || request.status === "pending_target") && (
+      {isAdminActionable ? (
         <div className="mt-4 space-y-3 border-t pt-3" style={{ borderColor: "var(--border)" }}>
-          {isAdminActionable && (
           <div>
             <h3 className="mb-2 text-sm font-medium text-[var(--foreground)]">Conséquences supplémentaires</h3>
             <div className="mb-3 grid gap-3 lg:grid-cols-2">
-              {renderEffectEntries("Effets dans la durée", durationEffectEntries, "Aucun effet dans la durée.")}
-              {renderEffectEntries("Effets immédiats", immediateEffectEntries, "Aucun effet immédiat.")}
+              {renderEffectEntries("Conséquences dans la durée", durationEffectEntries, "Aucune conséquence dans la durée.")}
+              {renderEffectEntries("Conséquences immédiates", immediateEffectEntries, "Aucune conséquence immédiate.")}
             </div>
-            {!showEffectForm ? (
-              <div className="flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  onClick={() => openAddEffect(false)}
-                  className="rounded border px-3 py-1.5 text-sm"
-                  style={{ borderColor: "var(--border)" }}
-                >
-                  Ajouter un effet dans la durée
-                </button>
-                <button
-                  type="button"
-                  onClick={() => openAddEffect(true)}
-                  className="rounded border px-3 py-1.5 text-sm"
-                  style={{ borderColor: "var(--border)" }}
-                >
-                  Ajouter un effet immédiat
-                </button>
-              </div>
-            ) : (
-              <EffectFormInline
-                value={effectForm}
-                onChange={setEffectForm}
-                rosterUnitIds={rosterUnitIds}
-                rosterUnits={rosterUnits}
-                countriesList={countriesList}
-                requestCountryId={request.country_id}
-                onSave={() => handleSaveEffect(effectFormIsUp)}
-                onCancel={() => { setShowEffectForm(false); setEditingIndex(null); setEffectForm(null); }}
-                saving={loading === "effect"}
-                isUpForm={effectFormIsUp}
-              />
-            )}
-          </div>
-          )}
-          {ACTION_KEYS_REQUIRING_IMPACT_ROLL.has(request.state_action_types?.key ?? "") &&
-            !request.dice_results?.impact_roll &&
-            isAdminActionable && (
-              <p className="text-sm text-amber-500 dark:text-amber-400">
-                Lancez le jet d&apos;impact pour pouvoir accepter cette demande.
-              </p>
-            )}
-          <div className="flex flex-wrap items-start gap-4">
-            <div className="flex flex-wrap items-center gap-2">
-              <button
-                type="button"
-                onClick={() => setDecisionToConfirm("accept")}
-                disabled={
-                  !isAdminActionable ||
-                  loading !== null ||
-                  (ACTION_KEYS_REQUIRING_IMPACT_ROLL.has(request.state_action_types?.key ?? "") &&
-                    !request.dice_results?.impact_roll)
-                }
-                className="rounded-lg bg-[var(--accent)] px-4 py-2 text-sm font-semibold text-[#0f1419] hover:bg-[var(--accent-hover)] disabled:opacity-50"
-              >
-                Préparer l’acceptation
-              </button>
-              <button
-                type="button"
-                onClick={() => setDecisionToConfirm("refuse")}
-                disabled={loading !== null}
-                className="rounded-lg border px-4 py-2 text-sm font-semibold text-[var(--danger)] hover:bg-[color-mix(in_srgb,var(--danger)_10%,transparent)] disabled:opacity-50"
-                style={{ borderColor: "color-mix(in srgb, var(--danger) 45%, transparent)" }}
-              >
-                Préparer le refus
-              </button>
-            </div>
-            {decisionToConfirm === "refuse" ? (
-              <>
-                <div className="w-px shrink-0 self-stretch bg-[var(--border)]" aria-hidden />
-                <div className="flex flex-1 flex-wrap items-center gap-4">
-                  <label className="flex items-center gap-2 text-sm">
-                    <input
-                      type="checkbox"
-                      checked={refund}
-                      onChange={(e) => setRefund(e.target.checked)}
-                    />
-                    Rembourser les actions d&apos;État
-                  </label>
-                  <input
-                    aria-label="Message explicatif du refus"
-                    type="text"
-                    placeholder="Message au joueur (recommandé)"
-                    value={refusalMsg}
-                    onChange={(e) => setRefusalMsg(e.target.value.slice(0, 500))}
-                    className="min-w-[200px] max-w-md flex-1 rounded border bg-[var(--background)] px-3 py-1.5 text-sm"
-                    style={{ borderColor: "var(--border)" }}
-                    maxLength={500}
-                  />
-                </div>
-              </>
-            ) : null}
-          </div>
-          {decisionToConfirm ? (
-            <div
-              className="rounded-xl border p-3"
-              style={{ borderColor: "var(--border)", background: "var(--background)" }}
-              aria-live="polite"
+            <button
+              type="button"
+              onClick={openAddEffect}
+              disabled={loading !== null}
+              className="rounded border px-3 py-1.5 text-sm disabled:opacity-50"
+              style={{ borderColor: "var(--border)" }}
             >
-              <h3 className="font-semibold text-[var(--foreground)]">
-                {decisionToConfirm === "accept" ? "Confirmer l’acceptation" : "Confirmer le refus"}
-              </h3>
-              <dl className="mt-2 grid gap-x-4 gap-y-2 text-sm sm:grid-cols-2">
-                <div>
-                  <dt className="text-[var(--foreground-muted)]">Action</dt>
-                  <dd className="font-medium text-[var(--foreground)]">
-                    {request.state_action_types?.label_fr ?? request.action_type_id}
-                  </dd>
-                </div>
-                <div>
-                  <dt className="text-[var(--foreground-muted)]">Pays concernés</dt>
-                  <dd className="font-medium text-[var(--foreground)]">
-                    {request.country?.name ?? request.country_id}
-                    {targetCountry ? ` → ${targetCountry.name}` : ""}
-                  </dd>
-                </div>
-                {decisionToConfirm === "accept" ? (
-                  <>
-                    <div>
-                      <dt className="text-[var(--foreground-muted)]">Résultat utilisé</dt>
-                      <dd className="font-medium text-[var(--foreground)]">
-                        {request.dice_results?.impact_roll
-                          ? `${request.dice_results.impact_roll.total}/100 au jet d’impact`
-                          : request.dice_results?.success_roll
-                            ? `${request.dice_results.success_roll.total}/100 au jet de réussite`
-                            : "Aucun jet requis"}
-                      </dd>
-                    </div>
-                    <div>
-                      <dt className="text-[var(--foreground-muted)]">Effets ajoutés par l’admin</dt>
-                      <dd className="font-medium text-[var(--foreground)]">
-                        {effectsList.length}
-                      </dd>
-                    </div>
-                  </>
-                ) : (
-                  <>
-                    <div>
-                      <dt className="text-[var(--foreground-muted)]">Remboursement</dt>
-                      <dd className="font-medium text-[var(--foreground)]">{refund ? "Oui" : "Non"}</dd>
-                    </div>
-                    <div>
-                      <dt className="text-[var(--foreground-muted)]">Message au joueur</dt>
-                      <dd className="font-medium text-[var(--foreground)]">
-                        {refusalMsg.trim() || "Aucun message"}
-                      </dd>
-                    </div>
-                  </>
-                )}
-              </dl>
-              <div className="mt-3 flex flex-wrap justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={() => setDecisionToConfirm(null)}
-                  disabled={loading !== null}
-                  className="rounded-lg border px-3 py-2 text-sm font-medium text-[var(--foreground)]"
-                  style={{ borderColor: "var(--border)" }}
-                >
-                  Revenir
-                </button>
-                <button
-                  type="button"
-                  onClick={decisionToConfirm === "accept" ? handleAccept : handleRefuse}
-                  disabled={loading !== null}
-                  className="rounded-lg bg-[var(--accent)] px-3 py-2 text-sm font-semibold text-[#0f1419] disabled:opacity-50"
-                >
-                  {loading
-                    ? "Application…"
-                    : decisionToConfirm === "accept"
-                      ? "Appliquer les conséquences"
-                      : "Confirmer le refus"}
-                </button>
-              </div>
-            </div>
-          ) : null}
+              Ajouter une conséquence
+            </button>
+          </div>
         </div>
-      )}
-    </section>
+      ) : null}
+    </div>
   );
 }
 
-function EffectFormInline({
+function EffectForm({
   value,
   onChange,
   rosterUnitIds,
@@ -1157,7 +1564,7 @@ function EffectFormInline({
   onSave,
   onCancel,
   saving,
-  isUpForm = false,
+  editing = false,
 }: {
   value: AdminEffectAdded | null;
   onChange: (v: AdminEffectAdded) => void;
@@ -1168,7 +1575,7 @@ function EffectFormInline({
   onSave: () => void;
   onCancel: () => void;
   saving: boolean;
-  isUpForm?: boolean;
+  editing?: boolean;
 }) {
   const kindsSource = effectKindsForDemandes;
   const kindGroups = useMemo(() => getEffectKindOptionGroups(kindsSource), [kindsSource]);
@@ -1212,6 +1619,9 @@ function EffectFormInline({
   const kind2 = effect.effect_kind;
   const helper = getEffectKindValueHelper(kind2);
   const displayValue = helper.storedToDisplay(clampedValue);
+  const immediateOnly = kind2.startsWith("ideology_snap_");
+  const supportsImmediate = IMMEDIATE_EFFECT_KINDS.has(kind2);
+  const isImmediate = immediateOnly || (supportsImmediate && effect.application === "immediate");
 
   const needsStatTarget = needsStat;
   const needsBudgetTarget = needsBudget;
@@ -1219,188 +1629,243 @@ function EffectFormInline({
   const needsRosterTarget = needsRoster;
   const needsSubTypeTarget = needsSubType;
   const needsCountryTarget = needsCountry;
+  const needsTarget =
+    needsStatTarget ||
+    needsBudgetTarget ||
+    needsBranchTarget ||
+    needsRosterTarget ||
+    needsSubTypeTarget ||
+    needsCountryTarget;
+  const targetMissing = needsTarget && !effect.effect_target;
+  const fieldLabelClass = "min-w-0 text-xs text-[var(--foreground-muted)]";
+  const fieldClass = "mt-1 min-h-10 w-full rounded border bg-[var(--background)] px-3 py-1.5 text-sm text-[var(--foreground)]";
+  const previewEffect: AdminEffectAdded = {
+    ...effect,
+    name: effect.name.trim() || EFFECT_KIND_LABELS[effect.effect_kind] || "Conséquence",
+    value: clampedValue,
+    application: isImmediate ? "immediate" : "duration",
+  };
+  const previewLabel = formatAdminEffectLabel(previewEffect, {
+    rosterUnits: rosterUnitIds,
+    countries: countriesList,
+  });
 
   return (
-    <div className="space-y-2 rounded border p-4" style={{ borderColor: "var(--border)" }}>
-      <div className="flex flex-wrap gap-2">
-        <input
-          aria-label="Nom de l’effet"
-          type="text"
-          placeholder="Nom de l'effet"
-          value={effect.name}
-          onChange={(e) => onChange({ ...effect, name: e.target.value.slice(0, 500) })}
-          maxLength={500}
-          className="min-w-[180px] rounded border bg-[var(--background)] px-3 py-1.5 text-sm"
-          style={{ borderColor: "var(--border)" }}
-        />
-        <select
-          aria-label="Type d’effet"
-          value={effect.effect_kind}
-          onChange={(e) => {
-            const newKind = e.target.value;
-            const needS = EFFECT_KINDS_WITH_STAT_TARGET.has(newKind);
-            const needB = EFFECT_KINDS_WITH_BUDGET_TARGET.has(newKind);
-            const needBr = EFFECT_KINDS_WITH_BRANCH_TARGET.has(newKind);
-            const needR = EFFECT_KINDS_WITH_ROSTER_UNIT_TARGET.has(newKind);
-            const needSub = EFFECT_KINDS_WITH_SUB_TYPE_TARGET.has(newKind);
-            const needC = EFFECT_KINDS_WITH_COUNTRY_TARGET.has(newKind);
-            const t = needS ? "militarism" : needB ? (getBudgetMinistryOptions()[0]?.key ?? null) : needBr ? MILITARY_BRANCH_EFFECT_IDS[0] : needR ? (rosterUnitIds[0]?.id ?? null) : needSub ? (subTypeOptions[0]?.value ?? MILITARY_BRANCH_EFFECT_IDS[0] + SUB_TYPE_TARGET_SEP) : needC ? (otherCountries[0]?.id ?? null) : null;
-            onChange({ ...effect, effect_kind: newKind, effect_target: t, effect_subtype: null });
-          }}
-          className="rounded border bg-[var(--background)] px-3 py-1.5 text-sm"
-          style={{ borderColor: "var(--border)" }}
-        >
-          {kindGroups.map((group) => (
-            <optgroup key={group.label} label={group.label}>
-              {group.options.map((option) => (
-                <option key={option.id} value={option.id}>{option.label}</option>
-              ))}
-            </optgroup>
-          ))}
-        </select>
-        {needsStatTarget && (
+    <div className="space-y-4">
+      <div className="rounded-lg border px-3 py-2" style={{ borderColor: "var(--border)", background: "var(--background)" }}>
+        <p className="text-xs text-[var(--foreground-muted)]">Conséquence prévue</p>
+        <p className="mt-0.5 font-medium text-[var(--foreground)]">{previewLabel}</p>
+        <p className="mt-0.5 text-xs text-[var(--foreground-muted)]">
+          {isImmediate
+            ? "Appliquée une seule fois lors de l’acceptation."
+            : effect.duration_kind === "permanent"
+              ? "Reste active sans date de fin."
+              : `Reste active pendant ${effect.duration_remaining} jour${effect.duration_remaining > 1 ? "s" : ""}.`}
+        </p>
+      </div>
+
+      <div className="grid gap-3 sm:grid-cols-2">
+        <label className={`${fieldLabelClass} sm:col-span-2`}>
+          Conséquence
           <select
-            aria-label="Statistique ciblée"
-            value={effect.effect_target ?? ""}
-            onChange={(e) => onChange({ ...effect, effect_target: e.target.value || null })}
-            className="rounded border bg-[var(--background)] px-3 py-1.5 text-sm"
+            value={effect.effect_kind}
+            onChange={(e) => {
+              const newKind = e.target.value;
+              const needS = EFFECT_KINDS_WITH_STAT_TARGET.has(newKind);
+              const needB = EFFECT_KINDS_WITH_BUDGET_TARGET.has(newKind);
+              const needBr = EFFECT_KINDS_WITH_BRANCH_TARGET.has(newKind);
+              const needR = EFFECT_KINDS_WITH_ROSTER_UNIT_TARGET.has(newKind);
+              const needSub = EFFECT_KINDS_WITH_SUB_TYPE_TARGET.has(newKind);
+              const needC = EFFECT_KINDS_WITH_COUNTRY_TARGET.has(newKind);
+              const target = needS
+                ? "militarism"
+                : needB
+                  ? (getBudgetMinistryOptions()[0]?.key ?? null)
+                  : needBr
+                    ? MILITARY_BRANCH_EFFECT_IDS[0]
+                    : needR
+                      ? (rosterUnitIds[0]?.id ?? null)
+                      : needSub
+                        ? (subTypeOptions[0]?.value ?? MILITARY_BRANCH_EFFECT_IDS[0] + SUB_TYPE_TARGET_SEP)
+                        : needC
+                          ? (otherCountries[0]?.id ?? null)
+                          : null;
+              onChange(normalizeEffectApplication({
+                ...effect,
+                effect_kind: newKind,
+                effect_target: target,
+                effect_subtype: null,
+                application: newKind.startsWith("ideology_snap_")
+                  ? "immediate"
+                  : IMMEDIATE_EFFECT_KINDS.has(newKind)
+                    ? effect.application
+                    : "duration",
+              }));
+            }}
+            className={fieldClass}
             style={{ borderColor: "var(--border)" }}
           >
-            {Object.entries(STAT_LABELS).map(([k, label]) => (
-              <option key={k} value={k}>{label}</option>
+            {kindGroups.map((group) => (
+              <optgroup key={group.label} label={group.label}>
+                {group.options.map((option) => (
+                  <option key={option.id} value={option.id}>{option.label}</option>
+                ))}
+              </optgroup>
             ))}
           </select>
-        )}
-        {needsBudgetTarget && (
+        </label>
+
+        {needsStatTarget ? (
+          <label className={fieldLabelClass}>
+            Statistique concernée
+            <select value={effect.effect_target ?? ""} onChange={(e) => onChange({ ...effect, effect_target: e.target.value || null })} className={fieldClass} style={{ borderColor: "var(--border)" }}>
+              {Object.entries(STAT_LABELS).map(([key, label]) => <option key={key} value={key}>{label}</option>)}
+            </select>
+          </label>
+        ) : null}
+        {needsBudgetTarget ? (
+          <label className={fieldLabelClass}>
+            Ministère concerné
+            <select value={effect.effect_target ?? ""} onChange={(e) => onChange({ ...effect, effect_target: e.target.value || null })} className={fieldClass} style={{ borderColor: "var(--border)" }}>
+              {getBudgetMinistryOptions().map(({ key, label }) => <option key={key} value={key}>{label}</option>)}
+            </select>
+          </label>
+        ) : null}
+        {needsBranchTarget ? (
+          <label className={fieldLabelClass}>
+            Branche concernée
+            <select value={effect.effect_target ?? ""} onChange={(e) => onChange({ ...effect, effect_target: e.target.value || null })} className={fieldClass} style={{ borderColor: "var(--border)" }}>
+              {Object.entries(MILITARY_BRANCH_EFFECT_LABELS).map(([key, label]) => <option key={key} value={key}>{label}</option>)}
+            </select>
+          </label>
+        ) : null}
+        {needsRosterTarget ? (
+          <label className={fieldLabelClass}>
+            Unité concernée
+            <select value={effect.effect_target ?? ""} onChange={(e) => onChange({ ...effect, effect_target: e.target.value || null })} className={fieldClass} style={{ borderColor: "var(--border)" }}>
+              <option value="">— Choisir une unité —</option>
+              {rosterUnitIds.map((unit) => <option key={unit.id} value={unit.id}>{unit.name_fr}</option>)}
+            </select>
+          </label>
+        ) : null}
+        {needsSubTypeTarget ? (
+          <label className={fieldLabelClass}>
+            Type d’unité concerné
+            <select value={effect.effect_target ?? ""} onChange={(e) => onChange({ ...effect, effect_target: e.target.value || null })} className={fieldClass} style={{ borderColor: "var(--border)" }}>
+              <option value="">— Choisir un type —</option>
+              {subTypeOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+            </select>
+          </label>
+        ) : null}
+        {needsCountryTarget ? (
+          <label className={fieldLabelClass}>
+            Autre pays concerné
+            <select value={effect.effect_target ?? ""} onChange={(e) => onChange({ ...effect, effect_target: e.target.value || null })} className={fieldClass} style={{ borderColor: "var(--border)" }}>
+              <option value="">— Choisir un pays —</option>
+              {otherCountries.map((country) => <option key={country.id} value={country.id}>{country.name}</option>)}
+            </select>
+          </label>
+        ) : null}
+
+        <label className={fieldLabelClass}>
+          {helper.valueLabel}
+          <input
+            type="number"
+            step={helper.valueStep}
+            value={displayValue}
+            onChange={(e) => {
+              const raw = helper.displayToStored(Number(e.target.value));
+              const nextValue = Number.isNaN(raw) ? 0 : Math.max(EFFECT_VALUE_MIN, Math.min(EFFECT_VALUE_MAX, raw));
+              onChange({ ...effect, value: nextValue });
+            }}
+            className={fieldClass}
+            style={{ borderColor: "var(--border)" }}
+          />
+        </label>
+
+        <label className={fieldLabelClass}>
+          Moment d’application
           <select
-            aria-label="Ministère ciblé"
-            value={effect.effect_target ?? ""}
-            onChange={(e) => onChange({ ...effect, effect_target: e.target.value || null })}
-            className="rounded border bg-[var(--background)] px-3 py-1.5 text-sm"
+            value={isImmediate ? "immediate" : "duration"}
+            onChange={(e) => onChange({ ...effect, application: e.target.value as "immediate" | "duration" })}
+            className={fieldClass}
             style={{ borderColor: "var(--border)" }}
           >
-            {getBudgetMinistryOptions().map(({ key, label }) => (
-              <option key={key} value={key}>{label}</option>
-            ))}
+            {!immediateOnly && <option value="duration">Dans la durée</option>}
+            {supportsImmediate && <option value="immediate">Une seule fois</option>}
           </select>
-        )}
-        {needsBranchTarget && (
-          <select
-            aria-label="Branche militaire ciblée"
-            value={effect.effect_target ?? ""}
-            onChange={(e) => onChange({ ...effect, effect_target: e.target.value || null })}
-            className="rounded border bg-[var(--background)] px-3 py-1.5 text-sm"
-            style={{ borderColor: "var(--border)" }}
-          >
-            {Object.entries(MILITARY_BRANCH_EFFECT_LABELS).map(([k, label]) => (
-              <option key={k} value={k}>{label}</option>
-            ))}
-          </select>
-        )}
-        {needsRosterTarget && (
-          <select
-            aria-label="Unité ciblée"
-            value={effect.effect_target ?? ""}
-            onChange={(e) => onChange({ ...effect, effect_target: e.target.value || null })}
-            className="rounded border bg-[var(--background)] px-3 py-1.5 text-sm"
-            style={{ borderColor: "var(--border)" }}
-          >
-            {rosterUnitIds.map((u) => (
-              <option key={u.id} value={u.id}>{u.name_fr}</option>
-            ))}
-          </select>
-        )}
-        {needsSubTypeTarget && (
-          <select
-            aria-label="Sous-branche militaire ciblée"
-            value={effect.effect_target ?? ""}
-            onChange={(e) => onChange({ ...effect, effect_target: e.target.value || null })}
-            className="rounded border bg-[var(--background)] px-3 py-1.5 text-sm min-w-[10rem]"
-            style={{ borderColor: "var(--border)" }}
-            title="Branche et sous-type militaire"
-          >
-            {subTypeOptions.map((opt) => (
-              <option key={opt.value} value={opt.value}>{opt.label}</option>
-            ))}
-          </select>
-        )}
-        {needsCountryTarget && (
-          <select
-            aria-label="Pays ciblé par la relation"
-            value={effect.effect_target ?? ""}
-            onChange={(e) => onChange({ ...effect, effect_target: e.target.value || null })}
-            className="rounded border bg-[var(--background)] px-3 py-1.5 text-sm min-w-[12rem]"
-            style={{ borderColor: "var(--border)" }}
-            title="Pays B (la relation est entre le pays de la demande et ce pays)"
-          >
-            <option value="">— Choisir un pays —</option>
-            {otherCountries.map((c) => (
-              <option key={c.id} value={c.id}>{c.name}</option>
-            ))}
-          </select>
-        )}
-        <input
-          aria-label={helper.valueLabel}
-          type="number"
-          step={helper.valueStep}
-          value={displayValue}
-          onChange={(e) => {
-            const raw = helper.displayToStored(Number(e.target.value));
-            const value = Number.isNaN(raw) ? 0 : Math.max(EFFECT_VALUE_MIN, Math.min(EFFECT_VALUE_MAX, raw));
-            onChange({ ...effect, value });
-          }}
-          className="w-24 rounded border bg-[var(--background)] px-3 py-1.5 text-sm"
-          style={{ borderColor: "var(--border)" }}
-        />
-        {!isUpForm && (
+        </label>
+
+        {!isImmediate ? (
           <>
-            <select
-              aria-label="Durée de l’effet"
-              value={effect.duration_kind === "updates" ? "days" : effect.duration_kind}
-              onChange={(e) =>
-                onChange({
+            <label className={fieldLabelClass}>
+              Durée
+              <select
+                value={effect.duration_kind === "updates" ? "days" : effect.duration_kind}
+                onChange={(e) => onChange({
                   ...effect,
                   duration_kind: e.target.value as "days" | "permanent",
-                  duration_remaining: e.target.value === "permanent" ? 0 : effect.duration_remaining,
-                })
-              }
-              className="rounded border bg-[var(--background)] px-3 py-1.5 text-sm"
-              style={{ borderColor: "var(--border)" }}
-            >
-              <option value="days">Jours</option>
-              <option value="permanent">Permanent</option>
-            </select>
-            {effect.duration_kind !== "permanent" && (
-              <input
-                aria-label="Nombre de jours"
-                type="number"
-                min={1}
-                max={DURATION_DAYS_MAX}
-                value={effect.duration_remaining}
-                onChange={(e) => {
-                  const v = Math.max(1, Math.min(DURATION_DAYS_MAX, Number(e.target.value) || 30));
-                  onChange({ ...effect, duration_remaining: v });
-                }}
-                className="w-20 rounded border bg-[var(--background)] px-3 py-1.5 text-sm"
+                  duration_remaining: e.target.value === "permanent" ? 0 : effect.duration_remaining || 30,
+                })}
+                className={fieldClass}
                 style={{ borderColor: "var(--border)" }}
-              />
-            )}
+              >
+                <option value="days">Après un nombre de jours</option>
+                <option value="permanent">Sans date de fin</option>
+              </select>
+            </label>
+            {effect.duration_kind !== "permanent" ? (
+              <label className={fieldLabelClass}>
+                Durée en jours
+                <input
+                  type="number"
+                  min={1}
+                  max={DURATION_DAYS_MAX}
+                  value={effect.duration_remaining}
+                  onChange={(e) => onChange({
+                    ...effect,
+                    duration_remaining: Math.max(1, Math.min(DURATION_DAYS_MAX, Number(e.target.value) || 30)),
+                  })}
+                  className={fieldClass}
+                  style={{ borderColor: "var(--border)" }}
+                />
+              </label>
+            ) : null}
           </>
-        )}
+        ) : null}
+
+        <label className={fieldLabelClass}>
+          Nom personnalisé (facultatif)
+          <input
+            type="text"
+            placeholder={EFFECT_KIND_LABELS[effect.effect_kind] ?? "Conséquence"}
+            value={effect.name}
+            onChange={(e) => onChange({ ...effect, name: e.target.value.slice(0, 120) })}
+            maxLength={120}
+            className={fieldClass}
+            style={{ borderColor: "var(--border)" }}
+          />
+        </label>
       </div>
-      <div className="flex gap-2">
+
+      {targetMissing ? (
+        <p role="alert" className="text-sm text-[var(--danger)]">Choisissez ce que la conséquence doit modifier.</p>
+      ) : null}
+
+      <div className="flex flex-wrap gap-2">
         <button
           type="button"
           onClick={onSave}
-          disabled={saving || !effect.name}
+          disabled={saving || targetMissing}
           className="rounded bg-[var(--accent)] px-3 py-1.5 text-sm font-semibold text-[#0f1419] disabled:opacity-50"
         >
-          {saving ? "Enregistrement…" : "Enregistrer l'effet"}
+          {saving ? "Enregistrement…" : editing ? "Enregistrer la modification" : "Ajouter à la demande"}
         </button>
         <button
           type="button"
           onClick={onCancel}
-          className="rounded border px-3 py-1.5 text-sm"
+          disabled={saving}
+          className="rounded border px-3 py-1.5 text-sm disabled:opacity-50"
           style={{ borderColor: "var(--border)" }}
         >
           Annuler

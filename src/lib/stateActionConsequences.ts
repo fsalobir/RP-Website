@@ -1,17 +1,13 @@
 /**
  * Logique partagée d'application des conséquences d'une action d'État acceptée
- * (relations, influence, effets admin, Discord). Utilisée par les demandes joueur
- * et par le job Process due des events IA.
+ * (relations, influence, effets admin). Les publications passent exclusivement
+ * par le pipeline RP asynchrone.
  */
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { getRelation, normalizePair, RELATION_MIN, RELATION_MAX } from "@/lib/relations";
-import { dispatchToDiscord } from "@/lib/discord-dispatch";
-import { formatWorldDateForDiscord } from "@/lib/worldDate";
 import {
   normalizeAdminEffectsAdded,
-  formatAdminEffectLabel,
-  formatAdminEffectShortForDiscord,
   DURATION_DAYS_MAX,
 } from "@/lib/countryEffects";
 import {
@@ -186,8 +182,8 @@ export type ApplyStateActionConsequencesParams = {
 };
 
 /**
- * Applique les conséquences d'une action d'État acceptée : relations, influence,
- * effets admin (immédiats et durée), puis envoi Discord.
+ * Applique les conséquences d'une action d'État acceptée : relations, influence
+ * et effets admin (immédiats et durée).
  */
 export async function applyStateActionConsequences({
   supabase,
@@ -196,22 +192,9 @@ export async function applyStateActionConsequences({
   adminEffectAdded,
   diceResults,
   actionKey,
-  actionLabel,
   paramsSchema,
-  options = {},
 }: ApplyStateActionConsequencesParams): Promise<{ error?: string }> {
   const targetCountryId = typeof payload.target_country_id === "string" ? payload.target_country_id : undefined;
-  const diceSuccess = diceResults?.success_roll ? diceResults.success_roll.total >= 50 : true;
-  let discordImpactValue: number | null = null;
-  let discordImpactMagnitude: string | null = null;
-  let discordImpactLabel = "Relations";
-
-  function magnitudeFromAbs(absVal: number): string {
-    if (absVal <= 10) return "faible";
-    if (absVal <= 25) return "modéré";
-    if (absVal <= 50) return "élevé";
-    return "massif";
-  }
 
   // Insulte diplomatique ou types militaires (baisse de relations)
   if (
@@ -239,8 +222,6 @@ export async function applyStateActionConsequences({
         { onConflict: "country_a_id,country_b_id" }
       );
     if (relErr) return { error: relErr.message };
-    discordImpactValue = relationDelta;
-    discordImpactMagnitude = magnitudeFromAbs(Math.abs(relationDelta));
   }
 
   // Ouverture diplomatique (hausse de relations)
@@ -264,8 +245,6 @@ export async function applyStateActionConsequences({
         { onConflict: "country_a_id,country_b_id" }
       );
     if (relErr) return { error: relErr.message };
-    discordImpactValue = relationDelta;
-    discordImpactMagnitude = magnitudeFromAbs(Math.abs(relationDelta));
   }
 
   // Prise d'influence
@@ -299,9 +278,6 @@ export async function applyStateActionConsequences({
         { onConflict: "country_id,controller_country_id" }
       );
     if (ctrlErr) return { error: ctrlErr.message };
-    discordImpactValue = impactPct;
-    discordImpactMagnitude = magnitudeFromAbs(impactPct);
-    discordImpactLabel = "Influence";
   }
 
   const effects = normalizeAdminEffectsAdded(adminEffectAdded);
@@ -333,81 +309,6 @@ export async function applyStateActionConsequences({
       if (insErr) return { error: insErr.message };
     }
   }
-
-  if (options.skipDiscord) return {};
-
-  const [countryRes, targetCountryRes, worldDateRes, rosterRes, countriesRes] = await Promise.all([
-    supabase.from("countries").select("name").eq("id", countryId).single(),
-    targetCountryId
-      ? supabase.from("countries").select("name").eq("id", targetCountryId).single()
-      : Promise.resolve({ data: null }),
-    supabase.from("rule_parameters").select("value").eq("key", "world_date").maybeSingle(),
-    supabase.from("military_roster_units").select("id, name_fr").order("name_fr"),
-    supabase.from("countries").select("id, name").order("name"),
-  ]);
-  const countryName = (countryRes.data as { name?: string } | null)?.name ?? "";
-  const targetCountryName = (targetCountryRes.data as { name?: string } | null)?.name ?? "";
-  const worldDateVal = (worldDateRes.data as { value?: { month?: number; year?: number } } | null)?.value;
-  const resolutionDate =
-    worldDateVal && typeof worldDateVal.month === "number" && typeof worldDateVal.year === "number"
-      ? formatWorldDateForDiscord({ month: worldDateVal.month, year: worldDateVal.year })
-      : new Date().toLocaleDateString("fr-FR", { dateStyle: "medium" });
-
-  const rosterUnits = (rosterRes.data ?? []) as { id: string; name_fr: string }[];
-  const countriesList = (countriesRes.data ?? []) as { id: string; name: string }[];
-  const adminEffectsSummary =
-    effects.length > 0
-      ? effects.map((e) => formatAdminEffectLabel(e, { rosterUnits, countries: countriesList })).join("\n")
-      : undefined;
-
-  const hasStatUp = effects.some((e) => e.effect_kind === "stat_delta");
-  const hasTechUp = effects.some((e) => e.effect_kind === "military_unit_tech_rate");
-  const hasNombreUp = effects.some((e) => e.effect_kind === "military_unit_extra");
-  const hasOtherUpKind = effects.some(
-    (e) =>
-      e.effect_kind !== "stat_delta" &&
-      e.effect_kind !== "military_unit_tech_rate" &&
-      e.effect_kind !== "military_unit_extra"
-  );
-  const upKind =
-    !hasOtherUpKind && hasStatUp && !hasTechUp && !hasNombreUp
-      ? "stat"
-      : !hasOtherUpKind && hasTechUp && !hasStatUp && !hasNombreUp
-        ? "tech"
-        : !hasOtherUpKind && hasNombreUp && !hasStatUp && !hasTechUp
-          ? "nombre"
-          : "mixed";
-
-  const upSummary =
-    effects.length > 0
-      ? effects
-          .map((e) => formatAdminEffectShortForDiscord(e, { rosterUnits, countries: countriesList }))
-          .filter((s) => s.trim().length > 0)
-          .join(" · ")
-      : "";
-
-  const discordKey = `${actionKey}_accepted`;
-  const basePayload: Record<string, string | number | null | undefined> = {
-    country_id: countryId,
-    country_name: countryName,
-    action_label: actionLabel,
-    resolution_date: resolutionDate,
-    date: resolutionDate,
-    dice_success: diceSuccess ? "true" : "false",
-    dice_success_label: diceSuccess ? "Succès" : "Échec",
-    admin_effects_summary: adminEffectsSummary,
-  };
-  if (actionKey === "demande_up") {
-    basePayload.up_kind = upKind;
-    basePayload.up_summary = diceSuccess ? upSummary : "Aucun effet";
-  } else {
-    if (targetCountryId) basePayload.target_country_id = targetCountryId;
-    if (targetCountryName) basePayload.target_country_name = targetCountryName;
-    if (discordImpactMagnitude != null) basePayload.impact_magnitude_text = discordImpactMagnitude;
-    if (discordImpactValue != null) basePayload.impact_value = discordImpactValue;
-    if (discordImpactMagnitude != null) basePayload.impact_label = discordImpactLabel;
-  }
-  dispatchToDiscord(discordKey, basePayload, supabase).catch(() => {});
 
   return {};
 }

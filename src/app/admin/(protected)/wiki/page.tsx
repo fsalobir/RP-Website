@@ -7,6 +7,6 @@ export const metadata = {
 };
 
 export default async function AdminWikiPage() {
-  const pages = await fetchWikiPages();
+  const pages = await fetchWikiPages({ throwOnError: true });
   return <WikiAdminClient initialPages={pages} />;
 }

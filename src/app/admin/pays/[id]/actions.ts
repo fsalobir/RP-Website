@@ -15,9 +15,12 @@ export async function upsertCountryControl(
   const { data: adminRow } = await supabase.from("admins").select("id").eq("user_id", user.id).single();
   if (!adminRow) return { error: "Réservé aux admins." };
 
-  const pct = Math.max(0, Math.min(100, Number(sharePct)));
+  const rawPct = Number(sharePct);
+  if (!Number.isFinite(rawPct) || rawPct < 0 || rawPct > 100) {
+    return { error: "La part de contrôle doit être comprise entre 0 et 100 %." };
+  }
+  const pct = rawPct;
   if (countryId === controllerCountryId) return { error: "Un pays ne peut pas se contrôler lui-même." };
-
   const { error } = await supabase.from("country_control").upsert(
     {
       country_id: countryId,
@@ -47,7 +50,11 @@ export async function updateCountryControl(
   const { data: adminRow } = await supabase.from("admins").select("id").eq("user_id", user.id).single();
   if (!adminRow) return { error: "Réservé aux admins." };
 
-  const pct = Math.max(0, Math.min(100, Number(sharePct)));
+  const rawPct = Number(sharePct);
+  if (!Number.isFinite(rawPct) || rawPct < 0 || rawPct > 100) {
+    return { error: "La part de contrôle doit être comprise entre 0 et 100 %." };
+  }
+  const pct = rawPct;
   const { error } = await supabase
     .from("country_control")
     .update({ share_pct: pct, is_annexed: !!isAnnexed, updated_at: new Date().toISOString() })

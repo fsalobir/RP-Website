@@ -25,6 +25,8 @@ export default async function AdminReglesPage({
     getAllRelationRows(supabase),
     supabase.from("state_action_types").select("id, key, label_fr").in("key", AI_EVENT_ACTION_KEYS).order("sort_order"),
   ]);
+  const loadError = [rulesRes, rosterRes, countriesRes, stateActionTypesRes].find((result) => result.error)?.error;
+  if (loadError) throw new Error(`Impossible de charger les règles : ${loadError.message}`);
   const rules = rulesRes.data ?? [];
   const rosterUnits = rosterRes.data ?? [];
   const countries = (countriesRes.data ?? []) as { id: string; name: string; slug: string }[];
@@ -36,7 +38,7 @@ export default async function AdminReglesPage({
   });
 
   return (
-    <div className="mx-auto max-w-7xl px-4 py-6">
+    <div className="mx-auto max-w-[100rem] px-4 py-6">
       <ReglesForm
         rules={rules}
         rosterUnits={rosterUnits}

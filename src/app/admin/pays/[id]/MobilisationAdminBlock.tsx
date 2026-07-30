@@ -13,10 +13,10 @@ const MOBILISATION_LEVEL_KEYS = [
 ] as const;
 const MOBILISATION_LEVEL_LABELS: Record<string, string> = {
   demobilisation: "Démobilisation",
-  reserve_active: "Réserve Active",
-  mobilisation_partielle: "Mobilisation Partielle",
-  mobilisation_generale: "Mobilisation Générale",
-  guerre_patriotique: "Guerre Patriotique",
+  reserve_active: "Réserve active",
+  mobilisation_partielle: "Mobilisation partielle",
+  mobilisation_generale: "Mobilisation générale",
+  guerre_patriotique: "Guerre patriotique",
 };
 
 function getLevelKeyFromScore(score: number, thresholds: Record<string, number> | undefined): string {
@@ -56,10 +56,18 @@ export function MobilisationAdminBlock({
   async function handleSave() {
     setError(null);
     setSaving(true);
-    const result = await updateMobilisationScore(countryId, scoreNum);
-    setSaving(false);
-    if (result.error) setError(result.error);
-    else router.refresh();
+    try {
+      const result = await updateMobilisationScore(countryId, scoreNum);
+      if (result.error) {
+        setError(result.error);
+        return;
+      }
+      router.refresh();
+    } catch {
+      setError("Impossible d’enregistrer la mobilisation. Vérifiez votre connexion puis réessayez.");
+    } finally {
+      setSaving(false);
+    }
   }
 
   return (
@@ -70,9 +78,12 @@ export function MobilisationAdminBlock({
       <h2 className="mb-3 text-lg font-semibold text-[var(--foreground)]">
         Mobilisation
       </h2>
+      <p className="mb-4 text-sm leading-snug text-[var(--foreground-muted)]">
+        Vous corrigez ici le score actuel. Chaque jour, il se rapproche de la cible choisie par le joueur ; le niveau actif et ses effets suivent ce score.
+      </p>
       <div className="flex flex-wrap items-end gap-4">
         <div>
-          <label htmlFor="mobilisation-score" className="mb-1 block text-xs text-[var(--foreground-muted)]">Score (0–500)</label>
+          <label htmlFor="mobilisation-score" className="mb-1 block text-xs text-[var(--foreground-muted)]">Score actuel (0–500)</label>
           <input
             id="mobilisation-score"
             type="number"
@@ -88,7 +99,7 @@ export function MobilisationAdminBlock({
           <span className="text-[var(--foreground)]">Niveau actuel :</span> {MOBILISATION_LEVEL_LABELS[currentLevelKey]}
         </div>
         <div className="text-sm text-[var(--foreground-muted)]">
-          <span className="text-[var(--foreground)]">Cible :</span> {MOBILISATION_LEVEL_LABELS[targetLevelKey]}
+          <span className="text-[var(--foreground)]">Niveau cible du joueur :</span> {MOBILISATION_LEVEL_LABELS[targetLevelKey]}
         </div>
         <button
           type="button"

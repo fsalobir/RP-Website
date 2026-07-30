@@ -4,12 +4,12 @@
  */
 
 export const RULE_KEY_LABELS: Record<string, string> = {
-  ai_events_config: "Événements des IA",
-  ai_events_cron_last_check: "Dernière vérification des événements IA",
-  ai_events_last_run: "Dernière génération des événements IA",
-  ai_major_effects: "Effets des IA majeures",
-  ai_minor_effects: "Effets des IA mineures",
-  global_growth_effects: "Global (appliqué à tous les pays)",
+  ai_events_config: "Actions automatiques des pays sans joueur",
+  ai_events_cron_last_check: "Dernière vérification automatique",
+  ai_events_last_run: "Dernière création d’événements automatiques",
+  ai_major_effects: "Effets des grandes puissances sans joueur",
+  ai_minor_effects: "Effets des puissances secondaires sans joueur",
+  global_growth_effects: "Effets communs à tous les pays",
   budget_etat: "Ministère d'État",
   budget_education: "Ministère de l'Éducation",
   budget_recherche: "Ministère de la Recherche",
@@ -19,14 +19,14 @@ export const RULE_KEY_LABELS: Record<string, string> = {
   budget_defense: "Ministère de la Défense",
   budget_interieur: "Ministère de l'Intérieur",
   budget_affaires_etrangeres: "Ministère des Affaires étrangères",
-  budget_procuration_militaire: "Procuration Militaire",
-  etat_major_config: "État Major",
+  budget_procuration_militaire: "Procuration militaire",
+  etat_major_config: "État-major",
   world_date: "Date du monde",
-  world_date_advance_months: "Mois par mise à jour (temporalité)",
-  cron_paused: "Jeu en pause (cron désactivé)",
-  ideology_config: "Configuration idéologique",
-  ideology_effects: "Effets par idéologie (hexagone)",
-  influence_config: "Calcul de l’influence",
+  world_date_advance_months: "Mois avancés à chaque jour de jeu",
+  cron_paused: "Mises à jour automatiques en pause",
+  ideology_config: "Évolution des idéologies",
+  ideology_effects: "Effets selon l’idéologie",
+  influence_config: "Influence internationale",
   intel_config: "Renseignement militaire",
   gdp_growth_base_rate: "Croissance de base du PIB",
   gdp_growth_per_industry: "Croissance du PIB liée à l’industrie",
@@ -48,7 +48,6 @@ export const RULE_KEY_LABELS: Record<string, string> = {
   law_research_level_effects: "Recherche — effets par palier",
   mobilisation_config: "Mobilisation — progression",
   mobilisation_level_effects: "Mobilisation — effets par palier",
-  process_due_edge_secret: "Secret du traitement différé",
   sphere_influence_pct: "Influence transmise par les sphères",
   stats_dice_modifier_ranges: "Effet des statistiques sur les jets",
 };
@@ -105,7 +104,7 @@ export const BUDGET_MINISTRY_LABELS: Record<string, string> = {
   budget_defense: "Ministère de la Défense",
   budget_interieur: "Ministère de l'Intérieur",
   budget_affaires_etrangeres: "Ministère des Affaires étrangères",
-  budget_procuration_militaire: "Procuration Militaire",
+  budget_procuration_militaire: "Procuration militaire",
 };
 
 /** Types d’effet budget classiques (population, PIB, stats société). */
@@ -146,11 +145,11 @@ export const BUDGET_EFFECT_TYPES: { id: BudgetMinistryEffectType; label: string;
   { id: "industry", label: "Industrie", defaultGravityApplies: true },
   { id: "science", label: "Science", defaultGravityApplies: true },
   { id: "stability", label: "Stabilité", defaultGravityApplies: true },
-  { id: "bilateral_relations", label: "Relations bilatérales (portée + plage)", defaultGravityApplies: false },
-  { id: "etat_major_design", label: "État-major — vitesse Bureau de design", defaultGravityApplies: true },
-  { id: "etat_major_recrutement", label: "État-major — vitesse Recrutement", defaultGravityApplies: true },
-  { id: "etat_major_procuration", label: "État-major — vitesse Procuration", defaultGravityApplies: true },
-  { id: "etat_major_stock", label: "État-major — vitesse Stock stratégique", defaultGravityApplies: true },
+  { id: "bilateral_relations", label: "Relations avec d’autres pays", defaultGravityApplies: false },
+  { id: "etat_major_design", label: "Conception des unités — progression", defaultGravityApplies: true },
+  { id: "etat_major_recrutement", label: "Recrutement — progression", defaultGravityApplies: true },
+  { id: "etat_major_procuration", label: "Procuration — progression", defaultGravityApplies: true },
+  { id: "etat_major_stock", label: "Stock stratégique — progression", defaultGravityApplies: true },
 ];
 
 export const BUDGET_EFFECT_TYPE_LABELS: Record<string, string> = Object.fromEntries(
@@ -174,7 +173,7 @@ export type BudgetMinistryEffectDef = {
  * Pour chaque ministère, liste des effets (bonus max/jour). Fallback pour rétrocompat quand value.effects est absent.
  */
 export const BUDGET_MINISTRY_EFFECTS: Record<string, { key: string; label: string }[]> = {
-  budget_etat: [{ key: "actions", label: "Actions d'état" }],
+  budget_etat: [{ key: "actions", label: "Points d’action d’État" }],
   budget_education: [
     { key: "science", label: "Science" },
     { key: "stability", label: "Stabilité" },
@@ -192,7 +191,7 @@ export const BUDGET_MINISTRY_EFFECTS: Record<string, { key: string; label: strin
     { key: "stability", label: "Stabilité" },
     { key: "gdp", label: "PIB" },
   ],
-  budget_procuration_militaire: [{ key: "procuration", label: "Points Procuration (État Major)" }],
+  budget_procuration_militaire: [{ key: "procuration", label: "Points de procuration" }],
 };
 
 export type BudgetMinistryValue = {

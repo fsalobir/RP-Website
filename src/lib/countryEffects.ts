@@ -250,12 +250,12 @@ export type EffectKindId = (typeof ALL_EFFECT_KIND_IDS)[number];
 
 /** Métadonnées par effect_kind. */
 export const EFFECT_KIND_META: Record<EffectKindId, EffectKindMeta> = {
-  gdp_growth_base: { targetType: "none", valueFormat: "percent_decimal", label: "Croissance PIB (taux de base)" },
-  gdp_growth_per_stat: { targetType: "stat", valueFormat: "percent_decimal", label: "Croissance PIB (par stat)" },
-  population_growth_base: { targetType: "none", valueFormat: "percent_decimal", label: "Croissance population (taux de base)" },
-  population_growth_per_stat: { targetType: "stat", valueFormat: "percent_decimal", label: "Croissance population (par stat)" },
+  gdp_growth_base: { targetType: "none", valueFormat: "percent_decimal", label: "Croissance quotidienne du PIB" },
+  gdp_growth_per_stat: { targetType: "stat", valueFormat: "percent_decimal", label: "Croissance du PIB liée à une statistique" },
+  population_growth_base: { targetType: "none", valueFormat: "percent_decimal", label: "Croissance quotidienne de la population" },
+  population_growth_per_stat: { targetType: "stat", valueFormat: "percent_decimal", label: "Croissance de la population liée à une statistique" },
   stat_delta: { targetType: "stat", valueFormat: "raw", label: "Variation d’une statistique du pays" },
-  budget_ministry_min_pct: { targetType: "budget_ministry", valueFormat: "percent_display", label: "Part minimale d’un ministère" },
+  budget_ministry_min_pct: { targetType: "budget_ministry", valueFormat: "percent_display", label: "Budget minimal exigé par un ministère" },
   budget_ministry_effect_multiplier: { targetType: "budget_ministry", valueFormat: "multiplier", label: "Force des effets d’un ministère" },
   budget_allocation_cap: { targetType: "none", valueFormat: "percent_display", label: "Plafond de répartition du budget" },
   military_unit_extra: { targetType: "roster_unit", valueFormat: "integer", label: "Unités ajoutées ou retirées" },
@@ -267,24 +267,24 @@ export const EFFECT_KIND_META: Record<EffectKindId, EffectKindMeta> = {
   influence_modifier_gdp: { targetType: "none", valueFormat: "multiplier", label: "Influence liée au PIB" },
   influence_modifier_population: { targetType: "none", valueFormat: "multiplier", label: "Influence liée à la population" },
   influence_modifier_hard_power: { targetType: "none", valueFormat: "multiplier", label: "Influence liée à la puissance militaire" },
-  state_actions_grant: { targetType: "none", valueFormat: "integer", label: "Actions d’État accordées par jour" },
-  relation_delta: { targetType: "country", valueFormat: "raw", label: "Évolution relation bilatérale" },
-  ideology_drift_germanic_monarchy: { targetType: "none", valueFormat: "raw", label: "Dérive idéologique (Monarchisme Germanique)" },
-  ideology_drift_merina_monarchy: { targetType: "none", valueFormat: "raw", label: "Dérive idéologique (Monarchisme Mérinais)" },
-  ideology_drift_french_republicanism: { targetType: "none", valueFormat: "raw", label: "Dérive idéologique (Républicanisme Français)" },
-  ideology_drift_mughal_republicanism: { targetType: "none", valueFormat: "raw", label: "Dérive idéologique (Républicanisme Moghol)" },
-  ideology_drift_nilotique_cultism: { targetType: "none", valueFormat: "raw", label: "Dérive idéologique (Cultisme Nilotique)" },
-  ideology_drift_satoiste_cultism: { targetType: "none", valueFormat: "raw", label: "Dérive idéologique (Cultisme Satoiste)" },
-  ideology_snap_germanic_monarchy: { targetType: "none", valueFormat: "raw", label: "Impulsion idéologique (Monarchisme Germanique)" },
-  ideology_snap_merina_monarchy: { targetType: "none", valueFormat: "raw", label: "Impulsion idéologique (Monarchisme Mérinais)" },
-  ideology_snap_french_republicanism: { targetType: "none", valueFormat: "raw", label: "Impulsion idéologique (Républicanisme Français)" },
-  ideology_snap_mughal_republicanism: { targetType: "none", valueFormat: "raw", label: "Impulsion idéologique (Républicanisme Moghol)" },
-  ideology_snap_nilotique_cultism: { targetType: "none", valueFormat: "raw", label: "Impulsion idéologique (Cultisme Nilotique)" },
-  ideology_snap_satoiste_cultism: { targetType: "none", valueFormat: "raw", label: "Impulsion idéologique (Cultisme Satoiste)" },
-  procuration_points_per_day: { targetType: "none", valueFormat: "integer", label: "Points de Procuration (par jour)" },
-  recrutement_bonus_percent: { targetType: "none", valueFormat: "percent_display", label: "Bonus de Recrutement (%)" },
-  design_bonus_percent: { targetType: "none", valueFormat: "percent_display", label: "Bonus de Design (%)" },
-  procuration_bonus_percent: { targetType: "none", valueFormat: "percent_display", label: "Bonus de Procuration (%)" },
+  state_actions_grant: { targetType: "none", valueFormat: "integer", label: "Points d’action accordés par jour" },
+  relation_delta: { targetType: "country", valueFormat: "raw", label: "Évolution d’une relation entre deux pays" },
+  ideology_drift_germanic_monarchy: { targetType: "none", valueFormat: "raw", label: "Évolution quotidienne vers le Monarchisme Germanique" },
+  ideology_drift_merina_monarchy: { targetType: "none", valueFormat: "raw", label: "Évolution quotidienne vers le Monarchisme Mérinais" },
+  ideology_drift_french_republicanism: { targetType: "none", valueFormat: "raw", label: "Évolution quotidienne vers le Républicanisme Français" },
+  ideology_drift_mughal_republicanism: { targetType: "none", valueFormat: "raw", label: "Évolution quotidienne vers le Républicanisme Moghol" },
+  ideology_drift_nilotique_cultism: { targetType: "none", valueFormat: "raw", label: "Évolution quotidienne vers le Cultisme Nilotique" },
+  ideology_drift_satoiste_cultism: { targetType: "none", valueFormat: "raw", label: "Évolution quotidienne vers le Cultisme Satoiste" },
+  ideology_snap_germanic_monarchy: { targetType: "none", valueFormat: "raw", label: "Changement immédiat vers le Monarchisme Germanique" },
+  ideology_snap_merina_monarchy: { targetType: "none", valueFormat: "raw", label: "Changement immédiat vers le Monarchisme Mérinais" },
+  ideology_snap_french_republicanism: { targetType: "none", valueFormat: "raw", label: "Changement immédiat vers le Républicanisme Français" },
+  ideology_snap_mughal_republicanism: { targetType: "none", valueFormat: "raw", label: "Changement immédiat vers le Républicanisme Moghol" },
+  ideology_snap_nilotique_cultism: { targetType: "none", valueFormat: "raw", label: "Changement immédiat vers le Cultisme Nilotique" },
+  ideology_snap_satoiste_cultism: { targetType: "none", valueFormat: "raw", label: "Changement immédiat vers le Cultisme Satoiste" },
+  procuration_points_per_day: { targetType: "none", valueFormat: "integer", label: "Points de procuration par jour" },
+  recrutement_bonus_percent: { targetType: "none", valueFormat: "percent_display", label: "Vitesse de recrutement" },
+  design_bonus_percent: { targetType: "none", valueFormat: "percent_display", label: "Vitesse de conception" },
+  procuration_bonus_percent: { targetType: "none", valueFormat: "percent_display", label: "Vitesse de procuration" },
 };
 
 /** Libellé court pour effect_kind (affichage liste). Dérivé des métadonnées, avec fallback. */
@@ -300,7 +300,7 @@ export type EffectKindOptionGroup = {
 const EFFECT_KIND_GROUP_LABELS = {
   budget: "Budget",
   croissance: "Croissance",
-  diplomatie: "Diplomatie",
+  diplomatie: "Diplomatie et actions d’État",
   ideologie: "Idéologie",
   influence: "Influence",
   militaire: "Militaire",
@@ -431,7 +431,7 @@ export function getEffectKindValueHelper(effectKind: string): {
       };
     case "raw":
       return {
-        valueLabel: "Variation",
+        valueLabel: "Points ajoutés ou retirés",
         valueStep: 0.01,
         displayToStored: (x) => x,
         storedToDisplay: (x) => x,
@@ -462,7 +462,7 @@ export function getEffectKindValueHelper(effectKind: string): {
       return {
         valueLabel:
           effectKind === "state_actions_grant"
-            ? "Actions par jour"
+            ? "Points d’action par jour"
             : effectKind === "military_unit_tech_rate" || effectKind === "procuration_points_per_day"
               ? "Points par jour"
               : "Nombre d’unités",
@@ -472,7 +472,7 @@ export function getEffectKindValueHelper(effectKind: string): {
       };
     case "integer_percent":
       return {
-        valueLabel: "Variation (%)",
+        valueLabel: "Hausse ou baisse (%)",
         valueStep: 0.01,
         displayToStored: (x) => x,
         storedToDisplay: (x) => Number(x),
@@ -516,11 +516,11 @@ export function getEffectDescription(e: CountryEffect | ResolvedEffect, options?
   if (e.effect_kind === "budget_allocation_cap") {
     return `Plafond de répartition du budget : ${valueStr}`;
   }
-  if (e.effect_kind === "gdp_growth_base") return `Croissance PIB (base) : ${valueStr}`;
-  if (e.effect_kind === "gdp_growth_per_stat" && targetLabel) return `Croissance PIB — ${targetLabel} : ${valueStr}`;
-  if (e.effect_kind === "population_growth_base") return `Croissance population (base) : ${valueStr}`;
-  if (e.effect_kind === "population_growth_per_stat" && targetLabel) return `Croissance population — ${targetLabel} : ${valueStr}`;
-  if (e.effect_kind === "stat_delta" && targetLabel) return `Variation — ${targetLabel} : ${valueStr}`;
+  if (e.effect_kind === "gdp_growth_base") return `Croissance quotidienne du PIB : ${valueStr}`;
+  if (e.effect_kind === "gdp_growth_per_stat" && targetLabel) return `Croissance du PIB liée à ${targetLabel} : ${valueStr}`;
+  if (e.effect_kind === "population_growth_base") return `Croissance quotidienne de la population : ${valueStr}`;
+  if (e.effect_kind === "population_growth_per_stat" && targetLabel) return `Croissance de la population liée à ${targetLabel} : ${valueStr}`;
+  if (e.effect_kind === "stat_delta" && targetLabel) return `${targetLabel} : ${valueStr} point${Math.abs(Number(e.value)) > 1 ? "s" : ""}`;
   if (e.effect_kind === "military_unit_extra" && targetLabel) return `Unités ajoutées — ${targetLabel} : ${valueStr}`;
   if (e.effect_kind === "military_unit_tech_rate" && targetLabel) return `Progression technologique — ${targetLabel} : ${valueStr}`;
   if (e.effect_kind === "military_unit_limit_modifier" && targetLabel) return `Limite de la branche — ${targetLabel} : ${valueStr}`;
@@ -537,12 +537,12 @@ export function getEffectDescription(e: CountryEffect | ResolvedEffect, options?
   if (e.effect_kind.startsWith("ideology_drift_")) {
     const id = e.effect_kind.replace("ideology_drift_", "") as IdeologyId;
     const label = IDEOLOGY_IDS.includes(id) ? IDEOLOGY_LABELS[id] : id;
-    return `Dérive idéologique — ${label} : ${valueStr}`;
+    return `Évolution idéologique quotidienne — ${label} : ${valueStr} points`;
   }
   if (e.effect_kind.startsWith("ideology_snap_")) {
     const id = e.effect_kind.replace("ideology_snap_", "") as IdeologyId;
     const label = IDEOLOGY_IDS.includes(id) ? IDEOLOGY_LABELS[id] : id;
-    return `Impulsion idéologique — ${label} : ${valueStr}`;
+    return `Changement idéologique immédiat — ${label} : ${valueStr} points`;
   }
 
   const kindLabel = EFFECT_KIND_LABELS[e.effect_kind] ?? e.effect_kind;
@@ -563,6 +563,7 @@ export function formatEffectValue(effectKind: string | null | undefined, value: 
   if (kind === "military_unit_tech_rate") return `${Number(value)} pts/jour`;
   if (kind === "military_unit_extra") return (Number(value) >= 0 ? "+" : "") + String(Number(value));
   if (kind === "military_unit_limit_modifier" || kind === "military_unit_limit_modifier_sub_type" || kind === "military_unit_limit_modifier_roster") return `${Number(value) >= 0 ? "+" : ""}${Number(value)} %`;
+  if (kind === "stat_delta") return `${Number(value) >= 0 ? "+" : ""}${Number(value)}`;
   if (kind.startsWith("influence_modifier_")) {
     const pct = (Number(value) - 1) * 100;
     const sign = pct >= 0 ? "+" : "";
@@ -602,26 +603,36 @@ export type FormatAdminEffectLabelLookups = {
   countries?: { id: string; name: string }[];
 };
 
-/** Libellé lisible pour un effet admin (demandes, Discord). Ex. "One Shot : Up Tech (Lance Roquette Multiple : +100 pts/jour)" */
+/** Libellé lisible pour un effet ajouté par l’administration (demandes, Discord). */
 export function formatAdminEffectLabel(
-  effect: Pick<AdminEffectAdded, "name" | "effect_kind" | "effect_target" | "value" | "application">,
+  effect: Pick<AdminEffectAdded, "name" | "effect_kind" | "effect_target" | "value" | "application" | "duration_kind" | "duration_remaining">,
   lookups?: FormatAdminEffectLabelLookups
 ): string {
   const kind = effect.effect_kind;
-  const valueStr = formatEffectValue(kind, Number(effect.value));
-  let targetLabel = "";
-  if (effect.effect_target) {
-    if (EFFECT_KINDS_WITH_STAT_TARGET.has(kind)) targetLabel = STAT_LABELS[effect.effect_target as StatKey] ?? effect.effect_target;
-    else if (EFFECT_KINDS_WITH_BUDGET_TARGET.has(kind))
-      targetLabel = getBudgetMinistryOptions().find((o) => o.key === effect.effect_target)?.label ?? effect.effect_target;
-    else if (EFFECT_KINDS_WITH_BRANCH_TARGET.has(kind)) targetLabel = MILITARY_BRANCH_EFFECT_LABELS[effect.effect_target] ?? effect.effect_target;
-    else if (EFFECT_KINDS_WITH_ROSTER_UNIT_TARGET.has(kind))
-      targetLabel = lookups?.rosterUnits?.find((u) => u.id === effect.effect_target)?.name_fr ?? effect.effect_target;
-    else if (EFFECT_KINDS_WITH_COUNTRY_TARGET.has(kind)) targetLabel = lookups?.countries?.find((c) => c.id === effect.effect_target)?.name ?? effect.effect_target;
-  }
-  const part = targetLabel ? `${targetLabel} : ${valueStr}` : valueStr;
-  const applicationLabel = effect.application === "immediate" ? "One Shot" : "Effet durable";
-  return `${applicationLabel} : ${effect.name} (${part})`;
+  const effectName = effect.name.trim() || EFFECT_KIND_LABELS[kind] || "Conséquence";
+  const consequence = getEffectDescription(
+    {
+      effect_kind: kind,
+      effect_target: effect.effect_target,
+      value: Number(effect.value),
+    } as ResolvedEffect,
+    {
+      rosterUnitName: (id) => lookups?.rosterUnits?.find((unit) => unit.id === id)?.name_fr ?? null,
+      countryName: (id) => lookups?.countries?.find((country) => country.id === id)?.name ?? null,
+    }
+  );
+  const applicationLabel =
+    effect.application === "immediate"
+      ? "Immédiat"
+      : effect.duration_kind === "permanent"
+        ? "Dans la durée, sans date de fin"
+        : `Dans la durée, ${Math.max(1, Number(effect.duration_remaining) || 1)} jour${Number(effect.duration_remaining) > 1 ? "s" : ""}`;
+  const defaultName = EFFECT_KIND_LABELS[kind] || "Conséquence";
+  const description =
+    effectName.localeCompare(defaultName, "fr", { sensitivity: "base" }) === 0
+      ? consequence
+      : `${effectName} · ${consequence}`;
+  return `${applicationLabel} — ${description}`;
 }
 
 /**
@@ -802,7 +813,7 @@ function globalEffectsSource(ctx: EffectResolutionContext): ResolvedEffect[] {
     value: Number(e.value),
     duration_remaining: PERMANENT_DURATION,
     source: "global" as const,
-    sourceLabel: "Global",
+    sourceLabel: "Règles communes",
   }));
 }
 

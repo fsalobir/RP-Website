@@ -1,6 +1,8 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useEffect, useState, useMemo } from "react";
+import { AdminDialog } from "@/components/admin/AdminDialog";
+import { useUnsavedChangesGuard } from "@/hooks/useUnsavedChangesGuard";
 import {
   computeMapRegionNeighbors,
   getVoisinagesByCountry,
@@ -81,16 +83,17 @@ function influencePointsForReference(
   return Math.round(value * reference * 100) / 100;
 }
 
-function formatInfluenceFactor(value: number): string {
-  return `×${value.toLocaleString("fr-FR", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })}`;
-}
-
 function influenceMultiplierPercent(multiplier: number | undefined, fallback: number): number {
   const value = typeof multiplier === "number" && Number.isFinite(multiplier) ? multiplier : fallback;
   return Math.round(value * 10_000) / 100;
+}
+
+function finiteNumber(value: number, fallback: number): number {
+  return Number.isFinite(value) ? value : fallback;
+}
+
+function effectDraftSignature(kind: string, target: string | null, value: string) {
+  return JSON.stringify([kind, target, value]);
 }
 
 function InfluenceWorldGapControl({
@@ -107,6 +110,8 @@ function InfluenceWorldGapControl({
   const safeValue = Math.max(0, Math.min(100, Number(value) || 0));
   const belowAverage = computeInfluenceGravityFactor(100, 50, safeValue, 1);
   const aboveAverage = computeInfluenceGravityFactor(100, 150, safeValue, 1);
+  const correctedBelow = Math.round(100 * belowAverage * 100) / 100;
+  const correctedAbove = Math.round(100 * aboveAverage * 100) / 100;
 
   return (
     <div>
@@ -127,11 +132,11 @@ function InfluenceWorldGapControl({
       <dl className="mt-2 grid grid-cols-2 gap-3 text-xs">
         <div>
           <dt className="text-[var(--foreground-muted)]">50 % sous la moyenne</dt>
-          <dd className="mt-0.5 font-semibold text-[var(--foreground)]">{formatInfluenceFactor(belowAverage)}</dd>
+          <dd className="mt-0.5 font-semibold text-[var(--foreground)]">100 → {correctedBelow.toLocaleString("fr-FR")} points</dd>
         </div>
         <div>
           <dt className="text-[var(--foreground-muted)]">50 % au-dessus</dt>
-          <dd className="mt-0.5 font-semibold text-[var(--foreground)]">{formatInfluenceFactor(aboveAverage)}</dd>
+          <dd className="mt-0.5 font-semibold text-[var(--foreground)]">100 → {correctedAbove.toLocaleString("fr-FR")} points</dd>
         </div>
       </dl>
     </div>
@@ -191,68 +196,39 @@ function RecalculerVoisinagesButton() {
           {message}
         </span>
       )}
-      {voisinagesOpen && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
-          onClick={() => setVoisinagesOpen(false)}
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="voisinages-title"
-        >
-          <div
-            className="max-h-[85vh] w-full max-w-2xl overflow-hidden rounded-lg border shadow-lg"
-            style={{ background: "var(--background-panel)", borderColor: "var(--border)" }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-center justify-between border-b px-4 py-3" style={{ borderColor: "var(--border)" }}>
-              <h3 id="voisinages-title" className="text-sm font-semibold text-[var(--foreground)]">
-                Voisinages par pays (debug)
-              </h3>
-              <button
-                type="button"
-                onClick={() => setVoisinagesOpen(false)}
-                className="rounded p-1 text-[var(--foreground-muted)] hover:bg-[var(--background-elevated)]"
-                aria-label="Fermer"
-              >
-                ✕
-              </button>
-            </div>
-            <div className="max-h-[70vh] overflow-y-auto p-4">
-              {voisinagesError && (
-                <p className="text-sm text-red-500">{voisinagesError}</p>
-              )}
-              {voisinagesData && voisinagesData.length === 0 && (
-                <p className="text-sm text-[var(--foreground-muted)]">
-                  Aucun pays avec région assignée, ou table map_region_neighbors vide. Recalculez les voisinages après avoir assigné des régions aux pays.
+      <AdminDialog
+        open={voisinagesOpen}
+        onClose={() => setVoisinagesOpen(false)}
+        title="Contrôle des voisinages"
+        description="Pays voisins d’après les limites régionales enregistrées."
+        busy={voisinagesLoading}
+        size="md"
+      >
+        {voisinagesLoading ? <p className="text-sm text-[var(--foreground-muted)]">Chargement…</p> : null}
+        {voisinagesError ? <p role="alert" className="text-sm text-red-500">{voisinagesError}</p> : null}
+        {voisinagesData && voisinagesData.length === 0 ? (
+          <p className="text-sm text-[var(--foreground-muted)]">
+            Aucun voisinage disponible. Assignez les régions aux pays, puis relancez le calcul.
+          </p>
+        ) : null}
+        {voisinagesData && voisinagesData.length > 0 ? (
+          <ul className="divide-y" style={{ borderColor: "var(--border)" }}>
+            {voisinagesData.map((entry) => (
+              <li key={entry.country_id} className="py-3 first:pt-0 last:pb-0">
+                <span className="text-sm font-medium text-[var(--foreground)]">{entry.country_name}</span>
+                <span className="ml-1 text-xs text-[var(--foreground-muted)]">
+                  ({entry.neighbors.length} voisin{entry.neighbors.length !== 1 ? "s" : ""})
+                </span>
+                <p className="mt-1 text-xs text-[var(--foreground-muted)]">
+                  {entry.neighbors.length > 0
+                    ? entry.neighbors.map((neighbor) => neighbor.name).join(", ")
+                    : "Aucun voisin enregistré"}
                 </p>
-              )}
-              {voisinagesData && voisinagesData.length > 0 && (
-                <ul className="space-y-3">
-                  {voisinagesData.map((entry) => (
-                    <li
-                      key={entry.country_id}
-                      className="rounded border py-2 px-3"
-                      style={{ borderColor: "var(--border-muted)" }}
-                    >
-                      <span className="text-sm font-medium text-[var(--foreground)]">{entry.country_name}</span>
-                      <span className="ml-1 text-xs text-[var(--foreground-muted)]">
-                        ({entry.neighbors.length} voisin{entry.neighbors.length !== 1 ? "s" : ""})
-                      </span>
-                      {entry.neighbors.length > 0 ? (
-                        <p className="mt-1 text-xs text-[var(--foreground-muted)]">
-                          {entry.neighbors.map((n) => n.name).join(", ")}
-                        </p>
-                      ) : (
-                        <p className="mt-1 text-xs italic text-[var(--foreground-muted)]">Aucun voisin (région sans limite commune)</p>
-                      )}
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
+              </li>
+            ))}
+          </ul>
+        ) : null}
+      </AdminDialog>
     </div>
   );
 }
@@ -295,16 +271,16 @@ function TitleWithInfo({
   className?: string;
 }) {
   return (
-    <span className={className ?? "inline-flex items-center gap-2"}>
-      <span>{title}</span>
+    <span className={className ?? "inline"}>
       {tooltip ? (
         <InfoTooltip
           label={typeof title === "string" ? title : undefined}
           side={side}
           warning={Boolean(warning)}
           content={<TooltipBody text={tooltip} warning={warning} />}
+          title={title}
         />
-      ) : null}
+      ) : <span>{title}</span>}
     </span>
   );
 }
@@ -323,27 +299,27 @@ function FormLabel({
   side?: "top" | "bottom";
 }) {
   return (
-    <span className={`inline-flex items-center gap-1.5 ${className}`}>
-      <span>{label}</span>
+    <span className={`inline ${className}`}>
       {tooltip ? (
         <InfoTooltip
           label={typeof label === "string" ? label : undefined}
           side={side}
           warning={Boolean(warning)}
           content={<TooltipBody text={tooltip} warning={warning} />}
+          title={label}
         />
-      ) : null}
+      ) : <span>{label}</span>}
     </span>
   );
 }
 
 const RULE_SECTION_META: Record<string, { description: string; impact: string }> = {
   "rules-global": {
-    description: "Le rythme commun de la simulation et les calculs appliqués à tous les pays.",
+    description: "Le calendrier et les calculs appliqués automatiquement à tous les pays.",
     impact: "Tous les pays",
   },
   "rules-global-effects": {
-    description: "Croissance et effets ajoutés automatiquement à chaque passage du monde.",
+    description: "Croissance et autres changements appliqués à chaque mise à jour du monde.",
     impact: "Chaque jour",
   },
   "rules-dice-modifiers": {
@@ -359,7 +335,7 @@ const RULE_SECTION_META: Record<string, { description: string; impact: string }>
     impact: "Évolution des pays",
   },
   "rules-budgets": {
-    description: "Seuils de financement, bonus, malus et prise en compte de la moyenne mondiale.",
+    description: "Seuils de financement, effets quotidiens et aide accordée aux pays sous la moyenne.",
     impact: "Effets quotidiens",
   },
   "rules-military-staff": {
@@ -375,7 +351,7 @@ const RULE_SECTION_META: Record<string, { description: string; impact: string }>
     impact: "Actions et idéologies",
   },
   "rules-influence": {
-    description: "Poids relatif du PIB, de la population, de l’armée et de la stabilité.",
+    description: "Comment le PIB, la population, l’armée et la stabilité composent l’influence d’un pays.",
     impact: "Classement et influence",
   },
   "rules-control": {
@@ -387,7 +363,7 @@ const RULE_SECTION_META: Record<string, { description: string; impact: string }>
     impact: "Alignement quotidien",
   },
   "rules-ai": {
-    description: "Fréquence, volume, cibles et effets des actions créées sans joueur.",
+    description: "Fréquence, cibles et effets des actions créées pour les pays sans joueur.",
     impact: "Pays IA",
   },
   "rules-intelligence": {
@@ -404,10 +380,10 @@ const RULE_DOMAINS: Array<{
   description: string;
   sectionId: keyof typeof RULE_SECTION_META;
 }> = [
-  { id: "global", label: "Monde", description: "Rythme, date et effets communs", sectionId: "rules-global" },
+  { id: "global", label: "Monde", description: "Calendrier et effets communs", sectionId: "rules-global" },
   { id: "laws", label: "Lois", description: "Budgets, ministères et armée", sectionId: "rules-laws" },
   { id: "diplomacy", label: "Diplomatie", description: "Relations, influence et contrôle", sectionId: "rules-diplomacy" },
-  { id: "ideology", label: "Idéologie", description: "Alignements et dérive quotidienne", sectionId: "rules-ideology" },
+  { id: "ideology", label: "Idéologie", description: "Alignements et évolution quotidienne", sectionId: "rules-ideology" },
   { id: "ai", label: "Pays IA", description: "Rythme et cibles automatiques", sectionId: "rules-ai" },
   { id: "intelligence", label: "Renseignement", description: "Espionnage et perte d’information", sectionId: "rules-intelligence" },
 ];
@@ -421,7 +397,7 @@ function formatRuleReviewValue(key: string, value: unknown): string {
   if (typeof value === "boolean") return value ? "Activé" : "Désactivé";
   if (typeof value === "number") return value.toLocaleString("fr-FR");
   if (typeof value === "string" && value.length <= 40) return value;
-  return "Configuration modifiée";
+  return "Plusieurs valeurs modifiées";
 }
 
 function CollapsibleBlock({
@@ -569,12 +545,14 @@ export function ReglesForm({
   const [globalEffectKind, setGlobalEffectKind] = useState<string>("gdp_growth_base");
   const [globalEffectTarget, setGlobalEffectTarget] = useState<string | null>(null);
   const [globalEffectValue, setGlobalEffectValue] = useState<string>("");
+  const [globalEffectDraftBaseline, setGlobalEffectDraftBaseline] = useState<string | null>(null);
   const [ideologyEffectFormOpen, setIdeologyEffectFormOpen] = useState(false);
   const [ideologyEffectFormIdeologyId, setIdeologyEffectFormIdeologyId] = useState<string>(IDEOLOGY_IDS[0]);
   const [ideologyEffectKind, setIdeologyEffectKind] = useState<string>("gdp_growth_base");
   const [ideologyEffectTarget, setIdeologyEffectTarget] = useState<string | null>(null);
   const [ideologyEffectValue, setIdeologyEffectValue] = useState<string>("");
   const [ideologyEffectEditLocalIndex, setIdeologyEffectEditLocalIndex] = useState<number | null>(null);
+  const [ideologyEffectDraftBaseline, setIdeologyEffectDraftBaseline] = useState<string | null>(null);
   const [budgetOpen, setBudgetOpen] = useState(false);
   const [budgetMinistryOpen, setBudgetMinistryOpen] = useState<Record<string, boolean>>(() =>
     Object.fromEntries(BUDGET_MINISTRY_KEYS.map((k) => [k, false]))
@@ -599,11 +577,13 @@ export function ReglesForm({
   const [aiMajorEffectKind, setAiMajorEffectKind] = useState<string>("gdp_growth_base");
   const [aiMajorEffectTarget, setAiMajorEffectTarget] = useState<string | null>(null);
   const [aiMajorEffectValue, setAiMajorEffectValue] = useState<string>("");
+  const [aiMajorEffectDraftBaseline, setAiMajorEffectDraftBaseline] = useState<string | null>(null);
   const [aiMinorFormOpen, setAiMinorFormOpen] = useState(false);
   const [aiMinorEditIndex, setAiMinorEditIndex] = useState<number | null>(null);
   const [aiMinorEffectKind, setAiMinorEffectKind] = useState<string>("gdp_growth_base");
   const [aiMinorEffectTarget, setAiMinorEffectTarget] = useState<string | null>(null);
   const [aiMinorEffectValue, setAiMinorEffectValue] = useState<string>("");
+  const [aiMinorEffectDraftBaseline, setAiMinorEffectDraftBaseline] = useState<string | null>(null);
   const [intelOpen, setIntelOpen] = useState(false);
   const [etatMajorOpen, setEtatMajorOpen] = useState(false);
   const [ruleSearch, setRuleSearch] = useState("");
@@ -612,12 +592,19 @@ export function ReglesForm({
       ? initialDomain as RuleDomainId
       : "global"
   );
+  useEffect(() => {
+    setActiveRuleDomain(
+      RULE_DOMAINS.some((domain) => domain.id === initialDomain)
+        ? initialDomain as RuleDomainId
+        : "global"
+    );
+  }, [initialDomain]);
 
   const ruleSearchResults = [
     {
       label: "Effets quotidiens communs",
-      description: "Croissance, statistiques et autres effets appliqués à tous les pays.",
-      keywords: "global population pib croissance",
+      description: "Croissance, statistiques et autres changements appliqués à tous les pays.",
+      keywords: "commun population pib croissance",
       targetId: "rules-global-effects",
       open: () => {
         setEffetsGlobauxOpen(true);
@@ -647,7 +634,7 @@ export function ReglesForm({
     {
       label: "Budgets des ministères",
       description: "Seuils de financement, bonus et malus des ministères.",
-      keywords: "lois allocation gravité rattrapage économie",
+      keywords: "lois allocation moyenne écart rattrapage économie",
       targetId: "rules-budgets",
       open: () => {
         setLoisOpen(true);
@@ -683,7 +670,7 @@ export function ReglesForm({
     },
     {
       label: "Influence internationale",
-      description: "Poids du PIB, de la population, de l’armée et de la stabilité.",
+      description: "Comment le PIB, la population, l’armée et la stabilité composent l’influence d’un pays.",
       keywords: "diplomatie puissance hard power gravité",
       targetId: "rules-influence",
       open: () => {
@@ -748,14 +735,81 @@ export function ReglesForm({
     });
   }
 
+  const ruleValidationErrors = useMemo(() => {
+    const errors: string[] = [];
+
+    const statRanges = items.find((row) => row.key === "stats_dice_modifier_ranges")?.value;
+    if (statRanges && typeof statRanges === "object" && !Array.isArray(statRanges)) {
+      for (const [statKey, rawRange] of Object.entries(statRanges as Record<string, unknown>)) {
+        const range = rawRange as { min?: number; max?: number };
+        if (Number(range.min) > Number(range.max)) {
+          errors.push(`${STAT_LABELS[statKey as keyof typeof STAT_LABELS] ?? statKey} : l’effet minimal dépasse l’effet maximal.`);
+        }
+      }
+    }
+
+    const staffConfig = items.find((row) => row.key === "etat_major_config")?.value;
+    if (staffConfig && typeof staffConfig === "object" && !Array.isArray(staffConfig)) {
+      for (const [key, label] of [["design", "Conception"], ["recrutement", "Recrutement"], ["stock", "Stock stratégique"]] as const) {
+        const config = (staffConfig as Record<string, unknown>)[key] as { min_points_per_tick?: number; max_points_per_tick?: number } | undefined;
+        if (config && Number(config.min_points_per_tick) > Number(config.max_points_per_tick)) {
+          errors.push(`${label} : le minimum quotidien dépasse le maximum.`);
+        }
+      }
+    }
+
+    for (const definition of LAW_DEFINITIONS) {
+      const config = items.find((row) => row.key === definition.configRuleKey)?.value as { level_thresholds?: Record<string, number> } | undefined;
+      const thresholds = definition.levels.map((level) => Number(config?.level_thresholds?.[level.key] ?? 0));
+      if (thresholds.some((threshold, index) => index > 0 && threshold < thresholds[index - 1])) {
+        errors.push(`${definition.title_fr} : les seuils doivent rester dans l’ordre des niveaux.`);
+      }
+    }
+
+    for (const row of items) {
+      if (!row.value || typeof row.value !== "object" || Array.isArray(row.value)) continue;
+      const effects = (row.value as { effects?: BudgetMinistryEffectDef[] }).effects;
+      if (!Array.isArray(effects)) continue;
+      if (effects.some((effect) =>
+        effect.relation_band_min != null &&
+        effect.relation_band_max != null &&
+        effect.relation_band_min > effect.relation_band_max
+      )) {
+        errors.push(`${getRuleLabel(row.key)} : une relation minimale dépasse la relation maximale.`);
+      }
+    }
+
+    return errors;
+  }, [items]);
+
   const dirtyItems = useMemo(() => {
     const savedById = new Map(savedItems.map((row) => [row.id, row.value]));
     return items.filter((row) => JSON.stringify(row.value) !== JSON.stringify(savedById.get(row.id)));
   }, [items, savedItems]);
+  const globalEffectDraftDirty =
+    globalEffectFormOpen &&
+    globalEffectDraftBaseline !== effectDraftSignature(globalEffectKind, globalEffectTarget, globalEffectValue);
+  const ideologyEffectDraftDirty =
+    ideologyEffectFormOpen &&
+    ideologyEffectDraftBaseline !== effectDraftSignature(ideologyEffectKind, ideologyEffectTarget, ideologyEffectValue);
+  const aiMajorEffectDraftDirty =
+    aiMajorFormOpen &&
+    aiMajorEffectDraftBaseline !== effectDraftSignature(aiMajorEffectKind, aiMajorEffectTarget, aiMajorEffectValue);
+  const aiMinorEffectDraftDirty =
+    aiMinorFormOpen &&
+    aiMinorEffectDraftBaseline !== effectDraftSignature(aiMinorEffectKind, aiMinorEffectTarget, aiMinorEffectValue);
+  const dirtyEffectDraftLabels = [
+    globalEffectDraftDirty ? "Effet quotidien commun en cours" : null,
+    ideologyEffectDraftDirty ? "Effet idéologique en cours" : null,
+    aiMajorEffectDraftDirty ? "Effet de grande puissance IA en cours" : null,
+    aiMinorEffectDraftDirty ? "Effet de puissance secondaire IA en cours" : null,
+  ].filter((label): label is string => label !== null);
+  const dirtyCount = dirtyItems.length + dirtyEffectDraftLabels.length;
+  useUnsavedChangesGuard(dirtyCount > 0);
 
   const ruleReviewItems = useMemo(() => {
     const savedById = new Map(savedItems.map((row) => [row.id, row.value]));
-    return dirtyItems.map((row) => {
+    const savedRules = dirtyItems.map((row) => {
       const before = savedById.get(row.id);
       const beforeLabel = formatRuleReviewValue(row.key, before);
       const afterLabel = formatRuleReviewValue(row.key, row.value);
@@ -763,12 +817,20 @@ export function ReglesForm({
         key: row.id,
         label: getRuleLabel(row.key),
         detail:
-          beforeLabel === "Configuration modifiée" || afterLabel === "Configuration modifiée"
-            ? "Valeurs internes modifiées"
+          beforeLabel === "Plusieurs valeurs modifiées" || afterLabel === "Plusieurs valeurs modifiées"
+            ? "Plusieurs valeurs modifiées"
             : `${beforeLabel} → ${afterLabel}`,
       };
     });
-  }, [dirtyItems, savedItems]);
+    return [
+      ...savedRules,
+      ...dirtyEffectDraftLabels.map((label) => ({
+        key: `draft-${label}`,
+        label,
+        detail: "Terminez ou annulez ce brouillon avant d’appliquer les règles.",
+      })),
+    ];
+  }, [dirtyEffectDraftLabels, dirtyItems, savedItems]);
 
   const updateValue = (id: string, value: unknown) => {
     setError(null);
@@ -779,11 +841,20 @@ export function ReglesForm({
   };
 
   async function saveAll() {
-    if (dirtyItems.length === 0 || saving) return;
+    if (saving) return;
     setError(null);
     setSuccess(null);
+    if (dirtyEffectDraftLabels.length > 0) {
+      setError("Terminez ou annulez les effets en cours avant d’appliquer les règles.");
+      return;
+    }
+    if (dirtyItems.length === 0) return;
     if (ruleValueError) {
-      setError("Impossible d'enregistrer : une ou plusieurs valeurs sont invalides (JSON). Corrigez-les puis réessayez.");
+      setError("Impossible d’enregistrer : au moins une valeur avancée est mal écrite. Corrigez-la puis réessayez.");
+      return;
+    }
+    if (ruleValidationErrors.length > 0) {
+      setError(`Impossible d’enregistrer : ${ruleValidationErrors[0]}`);
       return;
     }
     setSaving(true);
@@ -810,9 +881,45 @@ export function ReglesForm({
 
   function resetAll() {
     setItems(savedItems);
+    setGlobalEffectFormOpen(false);
+    setGlobalEffectDraftBaseline(null);
+    setIdeologyEffectFormOpen(false);
+    setIdeologyEffectDraftBaseline(null);
+    setAiMajorFormOpen(false);
+    setAiMajorEffectDraftBaseline(null);
+    setAiMinorFormOpen(false);
+    setAiMinorEffectDraftBaseline(null);
     setError(null);
     setSuccess(null);
     setRuleValueError(null);
+  }
+
+  function confirmEffectDraftDiscard(isDirty: boolean) {
+    return !isDirty || window.confirm("Abandonner cet effet non enregistré ?");
+  }
+
+  function closeGlobalEffectForm() {
+    if (!confirmEffectDraftDiscard(globalEffectDraftDirty)) return;
+    setGlobalEffectFormOpen(false);
+    setGlobalEffectDraftBaseline(null);
+  }
+
+  function closeIdeologyEffectForm() {
+    if (!confirmEffectDraftDiscard(ideologyEffectDraftDirty)) return;
+    setIdeologyEffectFormOpen(false);
+    setIdeologyEffectDraftBaseline(null);
+  }
+
+  function closeAiEffectForm(which: "major" | "minor") {
+    const isMajor = which === "major";
+    if (!confirmEffectDraftDiscard(isMajor ? aiMajorEffectDraftDirty : aiMinorEffectDraftDirty)) return;
+    if (isMajor) {
+      setAiMajorFormOpen(false);
+      setAiMajorEffectDraftBaseline(null);
+    } else {
+      setAiMinorFormOpen(false);
+      setAiMinorEffectDraftBaseline(null);
+    }
   }
 
   const rulesByKey = useMemo(() => new Map(items.map((r) => [r.key, r])), [items]);
@@ -832,6 +939,29 @@ export function ReglesForm({
     }
     return list.sort((a, b) => a.label.localeCompare(b.label, "fr"));
   }, [rosterUnits]);
+
+  function effectNeedsStoredTarget(effectKind: string) {
+    return (
+      EFFECT_KINDS_WITH_STAT_TARGET.has(effectKind) ||
+      EFFECT_KINDS_WITH_BUDGET_TARGET.has(effectKind) ||
+      EFFECT_KINDS_WITH_BRANCH_TARGET.has(effectKind) ||
+      EFFECT_KINDS_WITH_ROSTER_UNIT_TARGET.has(effectKind) ||
+      EFFECT_KINDS_WITH_SUB_TYPE_TARGET.has(effectKind) ||
+      EFFECT_KINDS_WITH_COUNTRY_TARGET.has(effectKind)
+    );
+  }
+
+  function isValidEffectDraft(effectKind: string, effectTarget: string | null, effectValue: string) {
+    if (effectValue.trim() === "" || !Number.isFinite(Number(effectValue))) return false;
+    if (
+      EFFECT_KINDS_WITH_SUB_TYPE_TARGET.has(effectKind) &&
+      (!effectTarget || !subTypeOptions.some((option) => option.value === effectTarget))
+    ) {
+      return false;
+    }
+    if (EFFECT_KINDS_WITH_COUNTRY_TARGET.has(effectKind) && !effectTarget) return false;
+    return true;
+  }
 
   const mobilisationConfigKey = "mobilisation_config";
   const mobilisationEffectsKey = "mobilisation_level_effects";
@@ -916,8 +1046,24 @@ export function ReglesForm({
       ),
     []
   );
+  const globalEffectOptionGroups = useMemo(
+    () =>
+      getEffectKindOptionGroups()
+        .map((group) => ({
+          ...group,
+          options: group.options.filter((option) => option.id !== "relation_delta"),
+        }))
+        .filter((group) => group.options.length > 0),
+    []
+  );
   const ideologyEffectOptionGroups = useMemo(
-    () => getIdeologyEffectKindOptionGroups(EFFECT_KINDS_FOR_IDEOLOGY_RULE),
+    () =>
+      getIdeologyEffectKindOptionGroups(EFFECT_KINDS_FOR_IDEOLOGY_RULE)
+        .map((group) => ({
+          ...group,
+          options: group.options.filter((option) => option.id !== "relation_delta"),
+        }))
+        .filter((group) => group.options.length > 0),
     [EFFECT_KINDS_FOR_IDEOLOGY_RULE]
   );
   function getDefaultTargetForKindIdeology(effectKind: string): string | null {
@@ -930,41 +1076,42 @@ export function ReglesForm({
     return null;
   }
   function openAddIdeologyEffect(ideologyId: string) {
+    if (ideologyEffectFormOpen && !confirmEffectDraftDiscard(ideologyEffectDraftDirty)) return;
     const firstGroup = ideologyEffectOptionGroups[0];
     const firstKind = firstGroup?.options[0]?.id ?? EFFECT_KINDS_FOR_IDEOLOGY_RULE[0];
+    const target = getDefaultTargetForKindIdeology(firstKind);
     setIdeologyEffectFormIdeologyId(ideologyId);
     setIdeologyEffectKind(firstKind);
-    setIdeologyEffectTarget(getDefaultTargetForKindIdeology(firstKind));
+    setIdeologyEffectTarget(target);
     setIdeologyEffectValue("");
     setIdeologyEffectEditLocalIndex(null);
+    setIdeologyEffectDraftBaseline(effectDraftSignature(firstKind, target, ""));
     setIdeologyEffectFormOpen(true);
   }
   function openEditIdeologyEffect(ideologyId: string, localIndex: number) {
+    if (ideologyEffectFormOpen && !confirmEffectDraftDiscard(ideologyEffectDraftDirty)) return;
     const list = getIdeologyEffectsForIdeology(ideologyId);
     const e = list[localIndex];
     if (!e) return;
     const helper = getIdeologyEffectFormValueHelper(e.effect_kind);
+    const value = String(helper.storedToDisplay(Number(e.value)));
     setIdeologyEffectFormIdeologyId(ideologyId);
     setIdeologyEffectKind(e.effect_kind);
     setIdeologyEffectTarget(e.effect_target);
-    setIdeologyEffectValue(String(helper.storedToDisplay(Number(e.value))));
+    setIdeologyEffectValue(value);
     setIdeologyEffectEditLocalIndex(localIndex);
+    setIdeologyEffectDraftBaseline(effectDraftSignature(e.effect_kind, e.effect_target, value));
     setIdeologyEffectFormOpen(true);
   }
   function saveIdeologyEffectForm() {
+    if (!isValidEffectDraft(ideologyEffectKind, ideologyEffectTarget, ideologyEffectValue)) return;
     const valueNum = Number(ideologyEffectValue);
-    if (Number.isNaN(valueNum)) return;
     const helper = getIdeologyEffectFormValueHelper(ideologyEffectKind);
     const valueStored = helper.displayToStored(valueNum);
-    const needsTarget =
-      EFFECT_KINDS_WITH_STAT_TARGET.has(ideologyEffectKind) ||
-      EFFECT_KINDS_WITH_BUDGET_TARGET.has(ideologyEffectKind) ||
-      EFFECT_KINDS_WITH_BRANCH_TARGET.has(ideologyEffectKind) ||
-      EFFECT_KINDS_WITH_ROSTER_UNIT_TARGET.has(ideologyEffectKind);
     const entry: IdeologyEffectEntry = {
       ideology_id: ideologyEffectFormIdeologyId,
       effect_kind: ideologyEffectKind,
-      effect_target: needsTarget ? ideologyEffectTarget : null,
+      effect_target: effectNeedsStoredTarget(ideologyEffectKind) ? ideologyEffectTarget : null,
       value: valueStored,
     };
     if (ideologyEffectEditLocalIndex !== null) {
@@ -973,6 +1120,7 @@ export function ReglesForm({
       addIdeologyEffect(ideologyEffectFormIdeologyId, entry);
     }
     setIdeologyEffectFormOpen(false);
+    setIdeologyEffectDraftBaseline(null);
   }
   function labelForIdeologyEffect(e: IdeologyEffectEntry): string {
     const kindLabel = getIdeologyEffectsKindLabel(e.effect_kind);
@@ -1062,38 +1210,39 @@ export function ReglesForm({
     return null;
   }
   function openAddGlobalEffect() {
-    const firstGroup = getEffectKindOptionGroups()[0];
+    if (globalEffectFormOpen && !confirmEffectDraftDiscard(globalEffectDraftDirty)) return;
+    const firstGroup = globalEffectOptionGroups[0];
     const firstKind = firstGroup?.options[0]?.id ?? ALL_EFFECT_KIND_IDS[0];
+    const target = getDefaultTargetForKindGlobal(firstKind);
     setGlobalEffectKind(firstKind);
-    setGlobalEffectTarget(getDefaultTargetForKindGlobal(firstKind));
+    setGlobalEffectTarget(target);
     setGlobalEffectValue("");
     setGlobalEffectEditIndex(null);
+    setGlobalEffectDraftBaseline(effectDraftSignature(firstKind, target, ""));
     setGlobalEffectFormOpen(true);
   }
   function openEditGlobalEffect(index: number) {
+    if (globalEffectFormOpen && !confirmEffectDraftDiscard(globalEffectDraftDirty)) return;
     const arr = getGlobalGrowthEffects();
     const e = arr[index];
     if (!e) return;
     const helper = getEffectKindValueHelper(e.effect_kind);
+    const value = String(helper.storedToDisplay(Number(e.value)));
     setGlobalEffectKind(e.effect_kind);
     setGlobalEffectTarget(e.effect_target);
-    setGlobalEffectValue(String(helper.storedToDisplay(Number(e.value))));
+    setGlobalEffectValue(value);
     setGlobalEffectEditIndex(index);
+    setGlobalEffectDraftBaseline(effectDraftSignature(e.effect_kind, e.effect_target, value));
     setGlobalEffectFormOpen(true);
   }
   function saveGlobalEffectForm() {
+    if (!isValidEffectDraft(globalEffectKind, globalEffectTarget, globalEffectValue)) return;
     const valueNum = Number(globalEffectValue);
-    if (Number.isNaN(valueNum)) return;
     const helper = getEffectKindValueHelper(globalEffectKind);
     const valueStored = helper.displayToStored(valueNum);
-    const needsTarget =
-      EFFECT_KINDS_WITH_STAT_TARGET.has(globalEffectKind) ||
-      EFFECT_KINDS_WITH_BUDGET_TARGET.has(globalEffectKind) ||
-      EFFECT_KINDS_WITH_BRANCH_TARGET.has(globalEffectKind) ||
-      EFFECT_KINDS_WITH_ROSTER_UNIT_TARGET.has(globalEffectKind);
     const entry: GlobalGrowthEffectEntry = {
       effect_kind: globalEffectKind,
-      effect_target: needsTarget ? globalEffectTarget : null,
+      effect_target: effectNeedsStoredTarget(globalEffectKind) ? globalEffectTarget : null,
       value: valueStored,
     };
     if (globalEffectEditIndex !== null) {
@@ -1102,6 +1251,7 @@ export function ReglesForm({
       addGlobalEffect(entry);
     }
     setGlobalEffectFormOpen(false);
+    setGlobalEffectDraftBaseline(null);
   }
   function labelForGlobalEffect(e: GlobalGrowthEffectEntry): string {
     const kindLabel = EFFECT_KIND_LABELS[e.effect_kind] ?? e.effect_kind;
@@ -1182,40 +1332,51 @@ export function ReglesForm({
     updateValue(rule.id, arr);
   }
   function openAddAiEffect(which: "major" | "minor") {
-    const firstGroup = getEffectKindOptionGroups()[0];
+    const firstGroup = globalEffectOptionGroups[0];
     const firstKind = firstGroup?.options[0]?.id ?? ALL_EFFECT_KIND_IDS[0];
     const defTarget = getDefaultTargetForKindGlobal(firstKind);
     if (which === "major") {
+      if (aiMajorFormOpen && !confirmEffectDraftDiscard(aiMajorEffectDraftDirty)) return;
       setAiMajorEffectKind(firstKind);
       setAiMajorEffectTarget(defTarget);
       setAiMajorEffectValue("");
       setAiMajorEditIndex(null);
+      setAiMajorEffectDraftBaseline(effectDraftSignature(firstKind, defTarget, ""));
       setAiMajorFormOpen(true);
     } else {
+      if (aiMinorFormOpen && !confirmEffectDraftDiscard(aiMinorEffectDraftDirty)) return;
       setAiMinorEffectKind(firstKind);
       setAiMinorEffectTarget(defTarget);
       setAiMinorEffectValue("");
       setAiMinorEditIndex(null);
+      setAiMinorEffectDraftBaseline(effectDraftSignature(firstKind, defTarget, ""));
       setAiMinorFormOpen(true);
     }
   }
   function openEditAiEffect(which: "major" | "minor", index: number) {
+    if (
+      (which === "major" ? aiMajorFormOpen : aiMinorFormOpen) &&
+      !confirmEffectDraftDiscard(which === "major" ? aiMajorEffectDraftDirty : aiMinorEffectDraftDirty)
+    ) return;
     const rule = which === "major" ? aiMajorEffectsRule : aiMinorEffectsRule;
     const arr = getAiEffects(rule);
     const e = arr[index];
     if (!e) return;
     const helper = getEffectKindValueHelper(e.effect_kind);
+    const value = String(helper.storedToDisplay(Number(e.value)));
     if (which === "major") {
       setAiMajorEffectKind(e.effect_kind);
       setAiMajorEffectTarget(e.effect_target);
-      setAiMajorEffectValue(String(helper.storedToDisplay(Number(e.value))));
+      setAiMajorEffectValue(value);
       setAiMajorEditIndex(index);
+      setAiMajorEffectDraftBaseline(effectDraftSignature(e.effect_kind, e.effect_target, value));
       setAiMajorFormOpen(true);
     } else {
       setAiMinorEffectKind(e.effect_kind);
       setAiMinorEffectTarget(e.effect_target);
-      setAiMinorEffectValue(String(helper.storedToDisplay(Number(e.value))));
+      setAiMinorEffectValue(value);
       setAiMinorEditIndex(index);
+      setAiMinorEffectDraftBaseline(effectDraftSignature(e.effect_kind, e.effect_target, value));
       setAiMinorFormOpen(true);
     }
   }
@@ -1225,18 +1386,13 @@ export function ReglesForm({
     const kind = which === "major" ? aiMajorEffectKind : aiMinorEffectKind;
     const target = which === "major" ? aiMajorEffectTarget : aiMinorEffectTarget;
     const valueStr = which === "major" ? aiMajorEffectValue : aiMinorEffectValue;
+    if (!isValidEffectDraft(kind, target, valueStr)) return;
     const valueNum = Number(valueStr);
-    if (Number.isNaN(valueNum)) return;
     const helper = getEffectKindValueHelper(kind);
     const valueStored = helper.displayToStored(valueNum);
-    const needsTarget =
-      EFFECT_KINDS_WITH_STAT_TARGET.has(kind) ||
-      EFFECT_KINDS_WITH_BUDGET_TARGET.has(kind) ||
-      EFFECT_KINDS_WITH_BRANCH_TARGET.has(kind) ||
-      EFFECT_KINDS_WITH_ROSTER_UNIT_TARGET.has(kind);
     const entry: GlobalGrowthEffectEntry = {
       effect_kind: kind,
-      effect_target: needsTarget ? target : null,
+      effect_target: effectNeedsStoredTarget(kind) ? target : null,
       value: valueStored,
     };
     const arr = getAiEffects(rule);
@@ -1249,8 +1405,10 @@ export function ReglesForm({
     }
     if (which === "major") {
       setAiMajorFormOpen(false);
+      setAiMajorEffectDraftBaseline(null);
     } else {
       setAiMinorFormOpen(false);
+      setAiMinorEffectDraftBaseline(null);
     }
   }
   function removeAiEffect(which: "major" | "minor", index: number) {
@@ -1421,8 +1579,7 @@ export function ReglesForm({
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
         setRuleValueError(
-          `JSON invalide. Corrigez la syntaxe (erreur: ${msg}). ` +
-            `Si vous souhaitez enregistrer une chaîne, entourez-la de guillemets (ex: "texte").`
+          `Format avancé invalide : ${msg}. Pour enregistrer du texte, entourez-le de guillemets (ex. "texte").`
         );
         return;
       }
@@ -1436,12 +1593,188 @@ export function ReglesForm({
   const inputClassNarrow =
     "w-full max-w-20 rounded border bg-[var(--background)] px-1.5 py-1 font-mono text-xs text-[var(--foreground)] focus:border-[var(--accent)] focus:outline-none focus:ring-1 focus:ring-[var(--accent)]";
   const inputStyle = { borderColor: "var(--border)" };
-  const genericEffectTypeTooltip = "Type de mécanique appliquée (croissance, statistique, budget, unité, influence, relation ou idéologie).";
-  const genericStatTooltip = "Statistique du pays concernée (militarisme, industrie, science, stabilité).";
-  const genericBudgetTooltip = "Ministère concerné par l'effet.";
-  const genericBranchTooltip = "Branche militaire ciblée (terre, air, mer, stratégique).";
-  const genericUnitTooltip = "Unité militaire précise touchée par l'effet.";
-  const genericEffectValueTooltip = "Intensité de l'effet. Plus la valeur est élevée, plus l'impact est fort à chaque application.";
+  const genericEffectTypeTooltip = "Choisit ce qui changera : croissance, statistique, budget, unité, influence, relation ou idéologie.";
+  const genericStatTooltip = "Statistique du pays qui recevra l’effet : militarisme, industrie, science ou stabilité.";
+  const genericBudgetTooltip = "Ministère dont le seuil ou les effets seront modifiés.";
+  const genericBranchTooltip = "Ensemble d’unités concerné : terre, air, mer ou forces stratégiques.";
+  const genericUnitTooltip = "Unité précise qui recevra l’effet.";
+  const genericEffectValueTooltip = "Valeur ajoutée, retirée ou multipliée à chaque application. L’unité indiquée dans le titre dépend de l’effet choisi.";
+  const effectDialogInputClass =
+    "min-h-11 w-full rounded-lg border bg-[var(--background)] px-3 py-2 text-sm text-[var(--foreground)] focus:border-[var(--accent)] focus:outline-none focus:ring-1 focus:ring-[var(--accent)]";
+
+  function renderGlobalEffectFields({
+    kind,
+    target,
+    value,
+    setKind,
+    setTarget,
+    setValue,
+    ariaContext,
+  }: {
+    kind: string;
+    target: string | null;
+    value: string;
+    setKind: (kind: string) => void;
+    setTarget: (target: string | null) => void;
+    setValue: (value: string) => void;
+    ariaContext: string;
+  }) {
+    const selectableGroups =
+      kind === "relation_delta" ? getEffectKindOptionGroups() : globalEffectOptionGroups;
+    return (
+      <div className="grid gap-4 sm:grid-cols-2">
+        <div className="sm:col-span-2">
+          <label className="mb-1.5 block text-sm font-medium text-[var(--foreground)]">
+            <FormLabel label="Effet" tooltip={genericEffectTypeTooltip} />
+          </label>
+          <select
+            aria-label={`Type d’effet ${ariaContext}`}
+            value={kind}
+            onChange={(event) => {
+              const nextKind = event.target.value;
+              setKind(nextKind);
+              setTarget(getDefaultTargetForKindGlobal(nextKind));
+            }}
+            className={effectDialogInputClass}
+            style={inputStyle}
+          >
+            {selectableGroups.map((group) => (
+              <optgroup key={group.label} label={group.label}>
+                {group.options.map((option) => (
+                  <option key={option.id} value={option.id}>{option.label}</option>
+                ))}
+              </optgroup>
+            ))}
+          </select>
+        </div>
+        {EFFECT_KINDS_WITH_STAT_TARGET.has(kind) && (
+          <div>
+            <label className="mb-1.5 block text-sm font-medium text-[var(--foreground)]">
+              <FormLabel label="Statistique" tooltip={genericStatTooltip} />
+            </label>
+            <select
+              aria-label={`Statistique ciblée ${ariaContext}`}
+              value={target ?? STAT_KEYS[0]}
+              onChange={(event) => setTarget(event.target.value || null)}
+              className={effectDialogInputClass}
+              style={inputStyle}
+            >
+              {STAT_KEYS.map((statKey) => (
+                <option key={statKey} value={statKey}>{STAT_LABELS[statKey]}</option>
+              ))}
+            </select>
+          </div>
+        )}
+        {EFFECT_KINDS_WITH_BUDGET_TARGET.has(kind) && (
+          <div>
+            <label className="mb-1.5 block text-sm font-medium text-[var(--foreground)]">
+              <FormLabel label="Ministère" tooltip={genericBudgetTooltip} />
+            </label>
+            <select
+              aria-label={`Ministère ciblé ${ariaContext}`}
+              value={target ?? getBudgetMinistryOptions()[0]?.key ?? ""}
+              onChange={(event) => setTarget(event.target.value || null)}
+              className={effectDialogInputClass}
+              style={inputStyle}
+            >
+              {getBudgetMinistryOptions().map(({ key, label }) => (
+                <option key={key} value={key}>{label}</option>
+              ))}
+            </select>
+          </div>
+        )}
+        {EFFECT_KINDS_WITH_BRANCH_TARGET.has(kind) && (
+          <div>
+            <label className="mb-1.5 block text-sm font-medium text-[var(--foreground)]">
+              <FormLabel label="Branche" tooltip={genericBranchTooltip} />
+            </label>
+            <select
+              aria-label={`Branche ciblée ${ariaContext}`}
+              value={target ?? MILITARY_BRANCH_EFFECT_IDS[0]}
+              onChange={(event) => setTarget(event.target.value || null)}
+              className={effectDialogInputClass}
+              style={inputStyle}
+            >
+              {MILITARY_BRANCH_EFFECT_IDS.map((branch) => (
+                <option key={branch} value={branch}>{MILITARY_BRANCH_EFFECT_LABELS[branch]}</option>
+              ))}
+            </select>
+          </div>
+        )}
+        {EFFECT_KINDS_WITH_ROSTER_UNIT_TARGET.has(kind) && (
+          <div>
+            <label className="mb-1.5 block text-sm font-medium text-[var(--foreground)]">
+              <FormLabel label="Unité" tooltip={genericUnitTooltip} />
+            </label>
+            <select
+              aria-label={`Unité ciblée ${ariaContext}`}
+              value={target ?? rosterUnits[0]?.id ?? ""}
+              onChange={(event) => setTarget(event.target.value || null)}
+              className={effectDialogInputClass}
+              style={inputStyle}
+            >
+              {rosterUnits.map((unit) => (
+                <option key={unit.id} value={unit.id}>{unit.name_fr}</option>
+              ))}
+            </select>
+          </div>
+        )}
+        {EFFECT_KINDS_WITH_SUB_TYPE_TARGET.has(kind) && (
+          <div>
+            <label className="mb-1.5 block text-sm font-medium text-[var(--foreground)]">
+              <FormLabel label="Sous-type militaire" tooltip="Ensemble précis d’unités concerné au sein d’une branche." />
+            </label>
+            <select
+              aria-label={`Sous-branche ciblée ${ariaContext}`}
+              value={target ?? subTypeOptions[0]?.value ?? ""}
+              onChange={(event) => setTarget(event.target.value || null)}
+              className={effectDialogInputClass}
+              style={inputStyle}
+            >
+              {subTypeOptions.map((option) => (
+                <option key={option.value} value={option.value}>{option.label}</option>
+              ))}
+            </select>
+          </div>
+        )}
+        <div>
+          <label className="mb-1.5 block text-sm font-medium text-[var(--foreground)]">
+            <FormLabel label={getEffectKindValueHelper(kind).valueLabel} tooltip={genericEffectValueTooltip} />
+          </label>
+          <input
+            aria-label={getEffectKindValueHelper(kind).valueLabel}
+            type="number"
+            step={getEffectKindValueHelper(kind).valueStep}
+            value={value}
+            onChange={(event) => setValue(event.target.value)}
+            className={`${effectDialogInputClass} font-mono sm:max-w-48`}
+            style={inputStyle}
+          />
+        </div>
+      </div>
+    );
+  }
+
+  function globalEffectDraftLabel(kind: string, target: string | null, value: string) {
+    if (value.trim() === "" || !Number.isFinite(Number(value))) return null;
+    const helper = getEffectKindValueHelper(kind);
+    return labelForGlobalEffect({
+      effect_kind: kind,
+      effect_target: effectNeedsStoredTarget(kind) ? target : null,
+      value: helper.displayToStored(Number(value)),
+    });
+  }
+
+  function ideologyEffectDraftLabel() {
+    if (ideologyEffectValue.trim() === "" || !Number.isFinite(Number(ideologyEffectValue))) return null;
+    const helper = getIdeologyEffectFormValueHelper(ideologyEffectKind);
+    return labelForIdeologyEffect({
+      ideology_id: ideologyEffectFormIdeologyId,
+      effect_kind: ideologyEffectKind,
+      effect_target: effectNeedsStoredTarget(ideologyEffectKind) ? ideologyEffectTarget : null,
+      value: helper.displayToStored(Number(ideologyEffectValue)),
+    });
+  }
 
   const ruleForMinistry = rulesByKey.get(simulatorMinistry);
   const simulatorParams = ruleForMinistry ? getBudgetValue(ruleForMinistry) : null;
@@ -1491,7 +1824,7 @@ export function ReglesForm({
     }
     return {
       key: `${eff.effect_type}-${effIdx}`,
-      line: `${label}${scopeNote} : ${fc >= 0 ? "+" : ""}${fc.toFixed(4)} / jour${allocationBelowMin ? " (sous seuil → malus intégré)" : ""}`,
+      line: `${label}${scopeNote} : ${fc >= 0 ? "+" : ""}${fc.toFixed(4)} / jour${allocationBelowMin ? " (financement insuffisant : perte incluse)" : ""}`,
     };
   });
 
@@ -1515,60 +1848,51 @@ export function ReglesForm({
     },
     {
       label: "Pays IA",
-      value: `Toutes les ${aiOverview.interval_hours ?? 1} h · ${aiMajorCount} action${aiMajorCount === 1 ? "" : "s"} majeure${aiMajorCount === 1 ? "" : "s"} et ${aiMinorCount} mineure${aiMinorCount === 1 ? "" : "s"} par passage`,
+      value: `Toutes les ${aiOverview.interval_hours ?? 1} h · ${aiMajorCount} action${aiMajorCount === 1 ? "" : "s"} pour les grandes puissances et ${aiMinorCount} pour les puissances secondaires`,
     },
   ];
   const activeDomain = RULE_DOMAINS.find((domain) => domain.id === activeRuleDomain) ?? RULE_DOMAINS[0];
   const activeDomainMeta = RULE_SECTION_META[activeDomain.sectionId];
+  const globalEffectPreview = globalEffectDraftLabel(globalEffectKind, globalEffectTarget, globalEffectValue);
+  const ideologyEffectPreview = ideologyEffectDraftLabel();
+  const ideologyEffectFormIdeology =
+    IDEOLOGY_IDS.find((ideologyId) => ideologyId === ideologyEffectFormIdeologyId) ?? IDEOLOGY_IDS[0];
+  const aiMajorEffectPreview = globalEffectDraftLabel(aiMajorEffectKind, aiMajorEffectTarget, aiMajorEffectValue);
+  const aiMinorEffectPreview = globalEffectDraftLabel(aiMinorEffectKind, aiMinorEffectTarget, aiMinorEffectValue);
 
   return (
     <div className="admin-settings-form space-y-4">
-      <div className="mb-4">
-        <h1 className="mb-1 text-2xl font-bold text-[var(--foreground)]">
+      <header className="grid items-end gap-4 border-b pb-4 lg:grid-cols-[minmax(0,1fr)_minmax(20rem,34rem)]" style={{ borderColor: "var(--border)" }}>
+        <div>
+          <h1 className="text-2xl font-bold text-[var(--foreground)]">
           Règles de simulation
-        </h1>
-        <p className="max-w-[72ch] text-sm leading-snug text-[var(--foreground-muted)]">
-          Réglez les calculs quotidiens, les lois, la diplomatie et les pays sans joueur.
-        </p>
-      </div>
-
-      <section
-        aria-labelledby="rules-overview-title"
-        className="border-y"
-        style={{ borderColor: "var(--border)" }}
-      >
-        <h2 id="rules-overview-title" className="sr-only">
-          Situation générale
-        </h2>
-        <dl className="grid sm:grid-cols-2">
-          {overviewRows.map((row) => (
-            <div
-              key={row.label}
-              className="border-t py-3 first:border-t-0 sm:border-l sm:border-t-0 sm:px-4 sm:first:border-l-0 sm:first:pl-0"
+          </h1>
+        </div>
+        <div className="relative">
+          <label htmlFor="rule-setting-search" className="sr-only">
+            Trouver un réglage
+          </label>
+          <div className="relative">
+            <svg aria-hidden className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--foreground-muted)]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <circle cx="11" cy="11" r="7" />
+              <path d="m20 20-4-4" />
+            </svg>
+            <input
+              id="rule-setting-search"
+              type="search"
+              value={ruleSearch}
+              onChange={(event) => setRuleSearch(event.target.value)}
+              placeholder="Trouver un réglage…"
+              className="min-h-11 w-full rounded-lg border bg-[var(--background)] pl-9 pr-3 text-base text-[var(--foreground)] placeholder:text-[var(--foreground-muted)]"
               style={{ borderColor: "var(--border)" }}
-            >
-              <dt className="text-xs font-medium uppercase tracking-[0.08em] text-[var(--foreground-muted)]">{row.label}</dt>
-              <dd className="mt-1 text-sm font-medium leading-relaxed text-[var(--foreground)]">{row.value}</dd>
-            </div>
-          ))}
-        </dl>
-      </section>
-
-      <div className="max-w-3xl">
-        <label htmlFor="rule-setting-search" className="mb-1 block text-sm font-medium text-[var(--foreground)]">
-          Trouver un réglage
-        </label>
-        <input
-          id="rule-setting-search"
-          type="search"
-          value={ruleSearch}
-          onChange={(event) => setRuleSearch(event.target.value)}
-          placeholder="Ex. budget, idéologie, espionnage…"
-          className="min-h-11 w-full rounded-lg border bg-[var(--background)] px-3 text-base text-[var(--foreground)] placeholder:text-[var(--foreground-muted)]"
-          style={{ borderColor: "var(--border)" }}
-        />
-        {ruleSearch && (
-          <div className="mt-2 space-y-1" aria-live="polite">
+            />
+          </div>
+          {ruleSearch && (
+          <div
+            className="absolute inset-x-0 top-[calc(100%+0.5rem)] z-30 max-h-[26rem] space-y-1 overflow-y-auto rounded-xl border p-2 shadow-[0_18px_48px_rgba(0,0,0,0.45)]"
+            style={{ background: "var(--background-elevated)", borderColor: "var(--border)" }}
+            aria-live="polite"
+          >
             {ruleSearchResults.map((result) => (
               <button
                 key={result.targetId}
@@ -1590,7 +1914,8 @@ export function ReglesForm({
             )}
           </div>
         )}
-      </div>
+        </div>
+      </header>
       {ruleValueError && (
         <p role="alert" className="rounded-lg bg-[color-mix(in_srgb,var(--danger)_12%,transparent)] px-3 py-2 text-sm text-[var(--danger)]">
           {ruleValueError}
@@ -1601,10 +1926,10 @@ export function ReglesForm({
           className="rounded-lg border p-8 text-center"
           style={{ background: "var(--background-panel)", borderColor: "var(--border)" }}
         >
-          <p className="text-[var(--foreground-muted)]">Aucun paramètre. Ajoutez-en via SQL (table rule_parameters).</p>
+          <p className="text-[var(--foreground-muted)]">Aucun réglage n’est disponible. Vérifiez que les règles ont bien été installées dans la base de données.</p>
         </div>
       ) : (
-        <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-4 lg:grid-cols-[13rem_minmax(0,1fr)]">
+        <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-4 lg:grid-cols-[11rem_minmax(0,1fr)] 2xl:grid-cols-[11rem_minmax(0,1fr)_17rem]">
           <AdminSectionNav
             label="Domaines de règles"
             items={RULE_DOMAINS}
@@ -1622,18 +1947,18 @@ export function ReglesForm({
                 </p>
               </div>
               <span className="rounded-full border px-2.5 py-1 text-xs font-medium text-[var(--foreground-muted)]" style={{ borderColor: "var(--border)" }}>
-                Impact : {activeDomainMeta.impact}
+                Portée : {activeDomainMeta.impact}
               </span>
             </header>
             <div
-              className="flex min-w-0 flex-col gap-2 overflow-hidden rounded-xl border p-2"
-              style={{ background: "var(--background-panel)", borderColor: "var(--border)" }}
+              className="flex min-w-0 flex-col overflow-hidden border-y"
+              style={{ borderColor: "var(--border)" }}
             >
           {items.length > 0 && (
             <CollapsibleBlock
               id="rules-global"
-              title="Effets globaux"
-              infoContent={<TooltipBody text="Réglages appliqués à tous les pays. Ils définissent le climat général de la simulation." />}
+              title="Règles communes"
+              infoContent={<TooltipBody text="Ces réglages s’appliquent à tous les pays et définissent le rythme général de la simulation." />}
               open={effetsGlobauxOpen}
               onToggle={() => setEffetsGlobauxOpen((o) => !o)}
               variant="section"
@@ -1644,14 +1969,11 @@ export function ReglesForm({
             <CollapsibleBlock
               id="rules-global-effects"
               title="Effets quotidiens communs"
-              infoContent={<TooltipBody text="Effets appliqués à tous les pays à chaque passage du monde : croissance, statistiques, budget, etc." />}
+              infoContent={<TooltipBody text="Changements appliqués à tous les pays lors de chaque mise à jour quotidienne : croissance, statistiques et budget." />}
               open={globalGrowthOpen}
               onToggle={() => setGlobalGrowthOpen((o) => !o)}
             >
               <div className="space-y-3 p-3">
-                <p className="text-xs text-[var(--foreground-muted)]">
-                  Ces effets sont appliqués à tous les pays pendant la mise à jour quotidienne.
-                </p>
                 <ul className="space-y-2">
                   {getGlobalGrowthEffects().map((e, idx) => (
                     <li
@@ -1679,164 +2001,13 @@ export function ReglesForm({
                     </li>
                   ))}
                 </ul>
-                {!globalEffectFormOpen ? (
-                  <button
-                    type="button"
-                    onClick={openAddGlobalEffect}
-                    className="text-sm text-[var(--accent)] hover:underline"
-                  >
-                    Ajouter un effet
-                  </button>
-                ) : (
-                  <div className="rounded border p-3 space-y-2" style={{ borderColor: "var(--border-muted)" }}>
-                    <div>
-                      <label className="mb-0.5 block text-xs text-[var(--foreground-muted)]">
-                        <FormLabel label="Effet" tooltip={genericEffectTypeTooltip} />
-                      </label>
-                      <select
-                        aria-label="Type d’effet global"
-                        value={globalEffectKind}
-                        onChange={(ev) => {
-                          const k = ev.target.value;
-                          setGlobalEffectKind(k);
-                          setGlobalEffectTarget(getDefaultTargetForKindGlobal(k));
-                        }}
-                        className={inputClass}
-                        style={inputStyle}
-                      >
-                        {getEffectKindOptionGroups().map((group) => (
-                          <optgroup key={group.label} label={group.label}>
-                            {group.options.map((opt) => (
-                              <option key={opt.id} value={opt.id}>{opt.label}</option>
-                            ))}
-                          </optgroup>
-                        ))}
-                      </select>
-                    </div>
-                    {EFFECT_KINDS_WITH_STAT_TARGET.has(globalEffectKind) && (
-                      <div>
-                        <label className="mb-0.5 block text-xs text-[var(--foreground-muted)]">
-                          <FormLabel label="Statistique" tooltip={genericStatTooltip} />
-                        </label>
-                        <select
-                          aria-label="Statistique ciblée par l’effet global"
-                          value={globalEffectTarget ?? STAT_KEYS[0]}
-                          onChange={(ev) => setGlobalEffectTarget(ev.target.value || null)}
-                          className={inputClass}
-                          style={inputStyle}
-                        >
-                          {STAT_KEYS.map((k) => (
-                            <option key={k} value={k}>{STAT_LABELS[k]}</option>
-                          ))}
-                        </select>
-                      </div>
-                    )}
-                    {EFFECT_KINDS_WITH_BUDGET_TARGET.has(globalEffectKind) && (
-                      <div>
-                        <label className="mb-0.5 block text-xs text-[var(--foreground-muted)]">
-                          <FormLabel label="Ministère" tooltip={genericBudgetTooltip} />
-                        </label>
-                        <select
-                          aria-label="Ministère ciblé par l’effet global"
-                          value={globalEffectTarget ?? getBudgetMinistryOptions()[0]?.key ?? ""}
-                          onChange={(ev) => setGlobalEffectTarget(ev.target.value || null)}
-                          className={inputClass}
-                          style={inputStyle}
-                        >
-                          {getBudgetMinistryOptions().map(({ key, label }) => (
-                            <option key={key} value={key}>{label}</option>
-                          ))}
-                        </select>
-                      </div>
-                    )}
-                    {EFFECT_KINDS_WITH_BRANCH_TARGET.has(globalEffectKind) && (
-                      <div>
-                        <label className="mb-0.5 block text-xs text-[var(--foreground-muted)]">
-                          <FormLabel label="Branche" tooltip={genericBranchTooltip} />
-                        </label>
-                        <select
-                          aria-label="Branche ciblée par l’effet global"
-                          value={globalEffectTarget ?? MILITARY_BRANCH_EFFECT_IDS[0]}
-                          onChange={(ev) => setGlobalEffectTarget(ev.target.value || null)}
-                          className={inputClass}
-                          style={inputStyle}
-                        >
-                          {MILITARY_BRANCH_EFFECT_IDS.map((b) => (
-                            <option key={b} value={b}>{MILITARY_BRANCH_EFFECT_LABELS[b]}</option>
-                          ))}
-                        </select>
-                      </div>
-                    )}
-                    {EFFECT_KINDS_WITH_ROSTER_UNIT_TARGET.has(globalEffectKind) && (
-                      <div>
-                        <label className="mb-0.5 block text-xs text-[var(--foreground-muted)]">
-                          <FormLabel label="Unité" tooltip={genericUnitTooltip} />
-                        </label>
-                        <select
-                          aria-label="Unité ciblée par l’effet global"
-                          value={globalEffectTarget ?? rosterUnits[0]?.id ?? ""}
-                          onChange={(ev) => setGlobalEffectTarget(ev.target.value || null)}
-                          className={inputClass}
-                          style={inputStyle}
-                        >
-                          {rosterUnits.map((u) => (
-                            <option key={u.id} value={u.id}>{u.name_fr}</option>
-                          ))}
-                        </select>
-                      </div>
-                    )}
-                    {EFFECT_KINDS_WITH_SUB_TYPE_TARGET.has(globalEffectKind) && (
-                      <div>
-                        <label className="mb-0.5 block text-xs text-[var(--foreground-muted)]">
-                          <FormLabel label="Sous-type militaire" tooltip="Branche et sous-type militaire ciblé." />
-                        </label>
-                        <select
-                          aria-label="Sous-branche ciblée par l’effet global"
-                          value={globalEffectTarget ?? subTypeOptions[0]?.value ?? ""}
-                          onChange={(ev) => setGlobalEffectTarget(ev.target.value || null)}
-                          className={inputClass}
-                          style={inputStyle}
-                        >
-                          {subTypeOptions.map((opt) => (
-                            <option key={opt.value} value={opt.value}>{opt.label}</option>
-                          ))}
-                        </select>
-                      </div>
-                    )}
-                    <div>
-                      <label className="mb-0.5 block text-xs text-[var(--foreground-muted)]">
-                        <FormLabel label={getEffectKindValueHelper(globalEffectKind).valueLabel} tooltip={genericEffectValueTooltip} />
-                      </label>
-                      <input
-                        aria-label={getEffectKindValueHelper(globalEffectKind).valueLabel}
-                        type="number"
-                        step={getEffectKindValueHelper(globalEffectKind).valueStep}
-                        value={globalEffectValue}
-                        onChange={(e) => setGlobalEffectValue(e.target.value)}
-                        className={inputClassNarrow}
-                        style={inputStyle}
-                      />
-                    </div>
-                    <div className="flex gap-2">
-                      <button
-                        type="button"
-                        onClick={saveGlobalEffectForm}
-                        className="rounded py-1.5 px-3 text-sm font-medium"
-                        style={{ background: "var(--accent)", color: "#0f1419" }}
-                      >
-                        Enregistrer
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setGlobalEffectFormOpen(false)}
-                        className="rounded border py-1.5 px-3 text-sm"
-                        style={{ borderColor: "var(--border)" }}
-                      >
-                        Annuler
-                      </button>
-                    </div>
-                  </div>
-                )}
+                <button
+                  type="button"
+                  onClick={openAddGlobalEffect}
+                  className="text-sm text-[var(--accent)] hover:underline"
+                >
+                  Ajouter un effet
+                </button>
               </div>
             </CollapsibleBlock>
           )}
@@ -1896,7 +2067,7 @@ export function ReglesForm({
                       <div className="max-w-[72ch]">
                         <h4 className="text-sm font-medium text-[var(--foreground)]">Le contexte vient de l’action</h4>
                         <p className="mt-1 text-xs leading-relaxed text-[var(--foreground-muted)]">
-                          Le type d’action décide quelles statistiques entrent dans le jet. La relation, le rapport de force et les corrections du MJ peuvent ensuite modifier le résultat.
+                          Le type d’action décide quelles statistiques entrent dans le jet. La relation, le rapport d’influence et les corrections manuelles peuvent ensuite modifier le résultat.
                         </p>
                       </div>
                       <a
@@ -1914,7 +2085,7 @@ export function ReglesForm({
                 <CollapsibleBlock
                   id="rules-world-date"
                   title="Date"
-                  infoContent={<TooltipBody text="Date officielle de l'univers et nombre de mois avançant à chaque passage du monde." />}
+                  infoContent={<TooltipBody text="Date officielle de l’univers et nombre de mois ajoutés à chaque jour de jeu." />}
                   open={worldDateOpen}
                   onToggle={() => setWorldDateOpen((o) => !o)}
                 >
@@ -2072,7 +2243,7 @@ export function ReglesForm({
                       </div>
                       <div className="flex flex-col gap-0.5">
                         <label className="text-xs text-[var(--foreground-muted)]">
-                          <FormLabel label="Correction de l’écart mondial (%)" tooltip="Part de l’écart à la moyenne mondiale répercutée sur les effets adaptés. 0 % donne le même effet à tous ; 100 % prend tout l’écart en compte." />
+                          <FormLabel label="Correction selon le niveau du pays (%)" tooltip="Modifie uniquement les effets cochés ci-dessous. À 0 %, tous les pays reçoivent le même effet. À 100 %, un pays 50 % sous la moyenne reçoit un gain multiplié par 1,5 et un malus divisé par 2." />
                         </label>
                         <input
                           aria-label={`Prise en compte de l’écart mondial pour ${BUDGET_MINISTRY_LABELS[key] ?? key}`}
@@ -2094,7 +2265,7 @@ export function ReglesForm({
                     <div>
                       <div className="mb-1 flex items-center justify-between">
                         <span className="text-xs text-[var(--foreground-muted)]">
-                          <TitleWithInfo title="Effets du ministère" tooltip="Chaque ligne indique ce que le ministère améliore, ce qu’il pénalise en cas de sous-financement et si la moyenne mondiale modifie cet effet." className="inline-flex items-center gap-1.5" />
+                          <TitleWithInfo title="Effets du ministère" tooltip="Chaque ligne indique ce que le ministère change, le gain à 100 % de budget, la perte à 0 % et l’éventuelle correction selon le niveau du pays." className="inline-flex items-center gap-1.5" />
                         </span>
                         <button
                           type="button"
@@ -2107,7 +2278,7 @@ export function ReglesForm({
                       </div>
                       {effectsList.length === 0 ? (
                         <p className="text-xs text-[var(--foreground-muted)]">
-                          Aucun effet configuré (valeurs par défaut utilisées).
+                          Aucun effet personnalisé : ce ministère conserve ses effets actuels.
                         </p>
                       ) : (
                         <ul className="space-y-2">
@@ -2144,7 +2315,7 @@ export function ReglesForm({
                               </div>
                               <div className="flex flex-col gap-0.5">
                                 <label className="text-xs text-[var(--foreground-muted)]">
-                                  <FormLabel label="Gain quotidien maximal" tooltip="Effet positif maximal produit à chaque passage du monde quand le ministère est correctement financé." />
+                                  <FormLabel label="Gain quotidien à 100 % de budget" tooltip="Gain produit chaque jour si tout le budget est attribué à ce ministère. Une part plus faible produit un gain proportionnel." />
                                 </label>
                                 <input
                                   aria-label={`Bonus de l’effet ${idx + 1} pour ${BUDGET_MINISTRY_LABELS[key] ?? key}`}
@@ -2159,7 +2330,7 @@ export function ReglesForm({
                               </div>
                               <div className="flex flex-col gap-0.5">
                                 <label className="text-xs text-[var(--foreground-muted)]">
-                                  <FormLabel label="Perte quotidienne maximale" tooltip="Effet négatif appliqué quand le ministère tombe sous son seuil minimal de financement." />
+                                  <FormLabel label="Perte quotidienne à 0 % de budget" tooltip="Perte appliquée chaque jour si ce ministère ne reçoit aucun budget. Elle diminue à mesure que le financement approche du minimum." />
                                 </label>
                                 <input
                                   aria-label={`Malus de l’effet ${idx + 1} pour ${BUDGET_MINISTRY_LABELS[key] ?? key}`}
@@ -2181,7 +2352,7 @@ export function ReglesForm({
                                   className="rounded"
                                 />
                                 <label htmlFor={`gravity-${r.id}-${idx}`} className="text-xs text-[var(--foreground-muted)]">
-                                  <FormLabel label="Adapter selon la moyenne mondiale" tooltip="Si activé, un pays sous la moyenne reçoit davantage de bonus et subit moins de malus. Un pays au-dessus connaît l’effet inverse." />
+                                  <FormLabel label="Corriger selon le niveau du pays" tooltip="Si cette option est cochée, un pays sous la moyenne reçoit un gain plus fort et une perte plus faible. Un pays au-dessus de la moyenne connaît l’effet inverse." />
                                 </label>
                               </div>
                               {effect.effect_type === "bilateral_relations" && (
@@ -2217,9 +2388,12 @@ export function ReglesForm({
                                       max={100}
                                       step={1}
                                       value={effect.relation_band_min ?? -100}
-                                      onChange={(e) =>
-                                        updateBudgetEffectAt(r, idx, { relation_band_min: Math.round(Number(e.target.value)) || -100 })
-                                      }
+                                      onChange={(e) => {
+                                        const value = e.currentTarget.valueAsNumber;
+                                        if (Number.isFinite(value)) {
+                                          updateBudgetEffectAt(r, idx, { relation_band_min: Math.max(-100, Math.min(100, Math.round(value))) });
+                                        }
+                                      }}
                                       className={`${inputClassNarrow} w-16`}
                                       style={inputStyle}
                                     />
@@ -2235,9 +2409,12 @@ export function ReglesForm({
                                       max={100}
                                       step={1}
                                       value={effect.relation_band_max ?? 100}
-                                      onChange={(e) =>
-                                        updateBudgetEffectAt(r, idx, { relation_band_max: Math.round(Number(e.target.value)) || 100 })
-                                      }
+                                      onChange={(e) => {
+                                        const value = e.currentTarget.valueAsNumber;
+                                        if (Number.isFinite(value)) {
+                                          updateBudgetEffectAt(r, idx, { relation_band_max: Math.max(-100, Math.min(100, Math.round(value))) });
+                                        }
+                                      }}
                                       className={`${inputClassNarrow} w-16`}
                                       style={inputStyle}
                                     />
@@ -2266,7 +2443,7 @@ export function ReglesForm({
               style={{ borderColor: "var(--border-muted)", background: "var(--background)" }}
             >
               <div className="mb-2 text-sm font-medium text-[var(--foreground)]">
-                <TitleWithInfo title="Tester un budget" tooltip="Prévisualisez les effets d’un ministère selon son budget et la situation du pays par rapport au reste du monde." className="inline-flex items-center gap-2" />
+                <TitleWithInfo title="Tester un budget" tooltip="Estime les changements quotidiens produits par un ministère selon son financement et la situation du pays." className="inline-flex items-center gap-2" />
               </div>
               <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
                 <div>
@@ -2287,7 +2464,7 @@ export function ReglesForm({
                 </div>
                 <div>
                   <label className="mb-0.5 block text-xs text-[var(--foreground-muted)]">
-                    <FormLabel label="Valeur du pays dans le domaine testé" tooltip="Valeur actuelle estimée du pays sur le domaine testé, avant application du ministère." />
+                    <FormLabel label="Niveau actuel du pays" tooltip="Valeur actuelle du pays dans le domaine concerné par l’effet. Utilisez la même unité que pour la moyenne mondiale." />
                   </label>
                   <input
                     aria-label="Valeur de base du pays simulé"
@@ -2301,7 +2478,7 @@ export function ReglesForm({
                 </div>
                 <div>
                   <label className="mb-0.5 block text-xs text-[var(--foreground-muted)]">
-                    <FormLabel label="Moyenne mondiale du même domaine" tooltip="Référence comparée à la valeur du pays pour adapter les effets qui tiennent compte de la moyenne mondiale." />
+                    <FormLabel label="Moyenne mondiale" tooltip="Valeur moyenne des pays dans le même domaine et dans la même unité. Elle sert uniquement aux effets corrigés selon le niveau du pays." />
                   </label>
                   <input
                     aria-label="Moyenne mondiale simulée"
@@ -2333,7 +2510,7 @@ export function ReglesForm({
                 </div>
               </div>
               <div className="mt-3 rounded border p-2" style={{ borderColor: "var(--border-muted)" }}>
-                <div className="text-xs font-medium text-[var(--foreground-muted)]">Résultat quotidien (estimation mensuelle : × 30)</div>
+                <div className="text-xs font-medium text-[var(--foreground-muted)]">Changement par jour (pour estimer un mois, multipliez par 30)</div>
                 <ul className="mt-1 list-none space-y-0.5 font-mono text-sm text-[var(--foreground)]">
                   {bonusesPerDay.map(({ key, line }) => (
                     <li key={key}>{line}</li>
@@ -2427,8 +2604,8 @@ export function ReglesForm({
                       },
                       {
                         key: "procurement",
-                        title: "Procuration",
-                        description: "Progression directement liée au budget affecté.",
+                        title: "Procuration militaire",
+                        description: "Progression pour déployer des navires, des escadrons aériens et des unités de soutien. Elle dépend du budget affecté.",
                         cells: [
                           <div key="base" className="flex items-center gap-2">
                             <input aria-label="Base quotidienne de procuration" type="number" min={0} step={0.5} value={procuration.base_points_per_tick ?? 0} onChange={(e) => updateEtatMajor("procuration", "base_points_per_tick", Number(e.target.value) || 0)} className={inputClassNarrow} style={inputStyle} />
@@ -2460,7 +2637,7 @@ export function ReglesForm({
                 title={def.title_fr}
                 description={`Seuils, vitesse de progression et conséquences de la loi « ${def.title_fr} ».`}
                 impact="Prochaine mise à jour"
-                infoContent={<TooltipBody text={`Seuils, pas quotidien et effets par palier pour la loi « ${def.title_fr} ».`} />}
+                infoContent={<TooltipBody text={`Seuils, progression quotidienne et effets de chaque palier pour la loi « ${def.title_fr} ».`} />}
                 open={isOpen}
                 onToggle={() => setLawSectionsOpen((o) => ({ ...o, [def.lawKey]: !o[def.lawKey] }))}
               >
@@ -2525,104 +2702,142 @@ export function ReglesForm({
                               const needsSubTypeTarget = EFFECT_KINDS_WITH_SUB_TYPE_TARGET.has(e.effect_kind);
                               const onValueChange = (val: number) => updateLawEffect(def, idx, { value: valueHelper.displayToStored(val) });
                               return (
-                                <li key={idx} className="flex flex-wrap items-center gap-2 text-sm">
-                                  <select
-                                    aria-label={`Type de l’effet ${idx + 1} du palier ${level.label}`}
-                                    value={e.effect_kind}
-                                    onChange={(ev) => updateLawEffect(def, idx, { effect_kind: ev.target.value })}
-                                    className="rounded border bg-[var(--background)] px-1.5 py-1 text-[var(--foreground)] text-xs"
-                                    style={{ borderColor: "var(--border)", maxWidth: "240px" }}
-                                  >
-                                    {getEffectKindOptionGroups().map((group) => (
-                                      <optgroup key={group.label} label={group.label}>
-                                        {group.options.map((opt) => (
-                                          <option key={opt.id} value={opt.id}>{opt.label}</option>
-                                        ))}
-                                      </optgroup>
-                                    ))}
-                                  </select>
-                                  {needsStatTarget && (
+                                <li
+                                  key={idx}
+                                  className="grid gap-2 rounded-lg border p-2 text-sm sm:grid-cols-2 lg:grid-cols-[minmax(12rem,1.5fr)_minmax(10rem,1fr)_minmax(8rem,0.7fr)_auto] lg:items-end"
+                                  style={{ borderColor: "var(--border-muted)" }}
+                                >
+                                  <label className="min-w-0">
+                                    <span className="mb-1 block text-xs text-[var(--foreground-muted)]">
+                                      <FormLabel label="Conséquence" tooltip={genericEffectTypeTooltip} />
+                                    </span>
                                     <select
-                                      aria-label={`Statistique ciblée par l’effet ${idx + 1}`}
-                                      value={e.effect_target ?? STAT_KEYS[0]}
-                                      onChange={(ev) => updateLawEffect(def, idx, { effect_target: ev.target.value || null })}
-                                      className="rounded border bg-[var(--background)] px-1.5 py-1 text-[var(--foreground)]"
+                                      aria-label={`Conséquence ${idx + 1} du palier ${level.label}`}
+                                      value={e.effect_kind}
+                                      onChange={(ev) => updateLawEffect(def, idx, { effect_kind: ev.target.value })}
+                                      className="min-h-10 w-full rounded border bg-[var(--background)] px-2 text-[var(--foreground)]"
                                       style={{ borderColor: "var(--border)" }}
                                     >
-                                      {STAT_KEYS.map((k) => (
-                                        <option key={k} value={k}>{STAT_LABELS[k]}</option>
+                                      {(e.effect_kind === "relation_delta"
+                                        ? getEffectKindOptionGroups()
+                                        : globalEffectOptionGroups
+                                      ).map((group) => (
+                                        <optgroup key={group.label} label={group.label}>
+                                          {group.options.map((opt) => (
+                                            <option key={opt.id} value={opt.id}>{opt.label}</option>
+                                          ))}
+                                        </optgroup>
                                       ))}
                                     </select>
+                                  </label>
+                                  {needsStatTarget && (
+                                    <label className="min-w-0">
+                                      <span className="mb-1 block text-xs text-[var(--foreground-muted)]">
+                                        <FormLabel label="Statistique concernée" tooltip={genericStatTooltip} />
+                                      </span>
+                                      <select
+                                        aria-label={`Statistique ciblée par l’effet ${idx + 1}`}
+                                        value={e.effect_target ?? STAT_KEYS[0]}
+                                        onChange={(ev) => updateLawEffect(def, idx, { effect_target: ev.target.value || null })}
+                                        className="min-h-10 w-full rounded border bg-[var(--background)] px-2 text-[var(--foreground)]"
+                                        style={{ borderColor: "var(--border)" }}
+                                      >
+                                        {STAT_KEYS.map((k) => (
+                                          <option key={k} value={k}>{STAT_LABELS[k]}</option>
+                                        ))}
+                                      </select>
+                                    </label>
                                   )}
                                   {needsBudgetTarget && (
-                                    <select
-                                      aria-label={`Ministère ciblé par l’effet ${idx + 1}`}
-                                      value={e.effect_target ?? getBudgetMinistryOptions()[0]?.key ?? ""}
-                                      onChange={(ev) => updateLawEffect(def, idx, { effect_target: ev.target.value || null })}
-                                      className="rounded border bg-[var(--background)] px-1.5 py-1 text-[var(--foreground)]"
-                                      style={{ borderColor: "var(--border)" }}
-                                    >
-                                      {getBudgetMinistryOptions().map(({ key, label }) => (
-                                        <option key={key} value={key}>{label}</option>
-                                      ))}
-                                    </select>
+                                    <label className="min-w-0">
+                                      <span className="mb-1 block text-xs text-[var(--foreground-muted)]">
+                                        <FormLabel label="Ministère concerné" tooltip={genericBudgetTooltip} />
+                                      </span>
+                                      <select
+                                        aria-label={`Ministère ciblé par l’effet ${idx + 1}`}
+                                        value={e.effect_target ?? getBudgetMinistryOptions()[0]?.key ?? ""}
+                                        onChange={(ev) => updateLawEffect(def, idx, { effect_target: ev.target.value || null })}
+                                        className="min-h-10 w-full rounded border bg-[var(--background)] px-2 text-[var(--foreground)]"
+                                        style={{ borderColor: "var(--border)" }}
+                                      >
+                                        {getBudgetMinistryOptions().map(({ key, label }) => (
+                                          <option key={key} value={key}>{label}</option>
+                                        ))}
+                                      </select>
+                                    </label>
                                   )}
                                   {needsBranchTarget && (
-                                    <select
-                                      aria-label={`Branche ciblée par l’effet ${idx + 1}`}
-                                      value={e.effect_target ?? MILITARY_BRANCH_EFFECT_IDS[0]}
-                                      onChange={(ev) => updateLawEffect(def, idx, { effect_target: ev.target.value || null })}
-                                      className="rounded border bg-[var(--background)] px-1.5 py-1 text-[var(--foreground)]"
-                                      style={{ borderColor: "var(--border)" }}
-                                    >
-                                      {MILITARY_BRANCH_EFFECT_IDS.map((b) => (
-                                        <option key={b} value={b}>{MILITARY_BRANCH_EFFECT_LABELS[b]}</option>
-                                      ))}
-                                    </select>
+                                    <label className="min-w-0">
+                                      <span className="mb-1 block text-xs text-[var(--foreground-muted)]">
+                                        <FormLabel label="Branche concernée" tooltip={genericBranchTooltip} />
+                                      </span>
+                                      <select
+                                        aria-label={`Branche ciblée par l’effet ${idx + 1}`}
+                                        value={e.effect_target ?? MILITARY_BRANCH_EFFECT_IDS[0]}
+                                        onChange={(ev) => updateLawEffect(def, idx, { effect_target: ev.target.value || null })}
+                                        className="min-h-10 w-full rounded border bg-[var(--background)] px-2 text-[var(--foreground)]"
+                                        style={{ borderColor: "var(--border)" }}
+                                      >
+                                        {MILITARY_BRANCH_EFFECT_IDS.map((b) => (
+                                          <option key={b} value={b}>{MILITARY_BRANCH_EFFECT_LABELS[b]}</option>
+                                        ))}
+                                      </select>
+                                    </label>
                                   )}
                                   {needsRosterTarget && (
-                                    <select
-                                      aria-label={`Unité ciblée par l’effet ${idx + 1}`}
-                                      value={e.effect_target ?? rosterUnits[0]?.id ?? ""}
-                                      onChange={(ev) => updateLawEffect(def, idx, { effect_target: ev.target.value || null })}
-                                      className="rounded border bg-[var(--background)] px-1.5 py-1 text-[var(--foreground)]"
-                                      style={{ borderColor: "var(--border)", minWidth: "140px" }}
-                                    >
-                                      {rosterUnits.map((u) => (
-                                        <option key={u.id} value={u.id}>{u.name_fr}</option>
-                                      ))}
-                                    </select>
+                                    <label className="min-w-0">
+                                      <span className="mb-1 block text-xs text-[var(--foreground-muted)]">
+                                        <FormLabel label="Unité concernée" tooltip={genericUnitTooltip} />
+                                      </span>
+                                      <select
+                                        aria-label={`Unité ciblée par l’effet ${idx + 1}`}
+                                        value={e.effect_target ?? rosterUnits[0]?.id ?? ""}
+                                        onChange={(ev) => updateLawEffect(def, idx, { effect_target: ev.target.value || null })}
+                                        className="min-h-10 w-full rounded border bg-[var(--background)] px-2 text-[var(--foreground)]"
+                                        style={{ borderColor: "var(--border)" }}
+                                      >
+                                        {rosterUnits.map((u) => (
+                                          <option key={u.id} value={u.id}>{u.name_fr}</option>
+                                        ))}
+                                      </select>
+                                    </label>
                                   )}
                                   {needsSubTypeTarget && (
-                                    <select
-                                      aria-label={`Sous-branche ciblée par l’effet ${idx + 1}`}
-                                      value={e.effect_target ?? subTypeOptions[0]?.value ?? ""}
-                                      onChange={(ev) => updateLawEffect(def, idx, { effect_target: ev.target.value || null })}
-                                      className="rounded border bg-[var(--background)] px-1.5 py-1 text-[var(--foreground)]"
-                                      style={{ borderColor: "var(--border)", minWidth: "160px" }}
-                                    >
-                                      {subTypeOptions.map((opt) => (
-                                        <option key={opt.value} value={opt.value}>{opt.label}</option>
-                                      ))}
-                                    </select>
+                                    <label className="min-w-0">
+                                      <span className="mb-1 block text-xs text-[var(--foreground-muted)]">
+                                        <FormLabel label="Type d’unité concerné" tooltip="Ensemble précis d’unités concerné au sein d’une branche." />
+                                      </span>
+                                      <select
+                                        aria-label={`Sous-branche ciblée par l’effet ${idx + 1}`}
+                                        value={e.effect_target ?? subTypeOptions[0]?.value ?? ""}
+                                        onChange={(ev) => updateLawEffect(def, idx, { effect_target: ev.target.value || null })}
+                                        className="min-h-10 w-full rounded border bg-[var(--background)] px-2 text-[var(--foreground)]"
+                                        style={{ borderColor: "var(--border)" }}
+                                      >
+                                        {subTypeOptions.map((opt) => (
+                                          <option key={opt.value} value={opt.value}>{opt.label}</option>
+                                        ))}
+                                      </select>
+                                    </label>
                                   )}
-                                  <label className="flex items-center gap-1">
-                                    <span className="text-[var(--foreground-muted)] shrink-0">
+                                  <label className="min-w-0">
+                                    <span className="mb-1 block text-xs text-[var(--foreground-muted)]">
                                       <FormLabel label={valueHelper.valueLabel} tooltip={genericEffectValueTooltip} />
                                     </span>
                                     <input
+                                      aria-label={`${valueHelper.valueLabel} de l’effet ${idx + 1}`}
                                       type="number"
                                       step={valueHelper.valueStep}
                                       value={inputValue}
                                       onChange={(ev) => onValueChange(Number(ev.target.value) || 0)}
-                                      className="w-20 rounded border bg-[var(--background)] px-1.5 py-1 font-mono text-[var(--foreground)]"
+                                      className="min-h-10 w-full rounded border bg-[var(--background)] px-2 font-mono text-[var(--foreground)]"
                                       style={{ borderColor: "var(--border)" }}
                                     />
                                   </label>
                                   <button
                                     type="button"
                                     onClick={() => removeLawEffect(def, idx)}
-                                    className="text-[var(--danger)] hover:underline"
+                                    className="min-h-10 rounded-lg px-3 text-[var(--danger)] hover:bg-[var(--danger)]/10"
                                   >
                                     Supprimer
                                   </button>
@@ -2823,7 +3038,7 @@ export function ReglesForm({
                         Correction des écarts avec la moyenne mondiale
                       </h4>
                       <p className="mt-1 max-w-[72ch] text-xs leading-relaxed text-[var(--foreground-muted)]">
-                        Cette correction rapproche les contributions des pays sans créer une nouvelle source d’influence. Un pays à la moyenne reste toujours à ×1,00. À 0 %, les écarts restent bruts ; à 100 %, la correction est maximale.
+                        Cette correction aide les pays sous la moyenne et freine ceux qui la dépassent. Un pays à la moyenne ne change pas. Chaque exemple ci-dessous part de 100 points.
                       </p>
                       <div className="mt-3 grid min-w-0 grid-cols-[minmax(0,1fr)] gap-5 lg:grid-cols-3">
                         <InfluenceWorldGapControl
@@ -2853,7 +3068,7 @@ export function ReglesForm({
               {items.length > 0 && sphereInfluencePctRule && (
                 <CollapsibleBlock
                   id="rules-control"
-                  title="Sphère"
+                  title="Contrôle territorial"
                   infoContent={
                     <TooltipBody
                       text={<strong>Règle la part d&apos;influence transférée du pays contrôlé vers le pays contrôleur.</strong>}
@@ -2868,9 +3083,6 @@ export function ReglesForm({
                   onToggle={() => setSphereOpen((o) => !o)}
                 >
                   <div className="p-3 space-y-3">
-                    <p className="text-xs text-[var(--foreground-muted)]">
-                      Pour chaque statut, choisissez la part de l&apos;influence du pays contrôlé transférée au pays contrôleur.
-                    </p>
                     <AdminParameterTable
                       label="Influence transférée selon le statut de contrôle"
                       columns={["Part transférée"]}
@@ -2930,7 +3142,7 @@ export function ReglesForm({
             >
               <div className="p-3 space-y-4">
                 <p className="text-xs text-[var(--foreground-muted)]">
-                  Règles de l'hexagone à six idéologies d’alignement. La dérive combine le voisinage, la relation, l’influence, le contrôle et les effets idéologiques actifs.
+                  Chaque jour, l’alignement d’un pays évolue selon ses voisins, ses relations, leur influence, leur contrôle et ses effets idéologiques actifs.
                 </p>
                 {ideologyConfigRule && (
                 <>
@@ -2954,7 +3166,7 @@ export function ReglesForm({
                             onChange={(e) => updateIdeologyConfig({
                               daily_step: Math.max(
                                 0,
-                                Math.min(100, Number(e.target.value) || DEFAULT_IDEOLOGY_CONFIG.daily_step * 100)
+                                Math.min(100, finiteNumber(e.target.valueAsNumber, DEFAULT_IDEOLOGY_CONFIG.daily_step * 100))
                               ) / 100,
                             })}
                             className={inputClassNarrow}
@@ -2966,36 +3178,46 @@ export function ReglesForm({
                     },
                     {
                       key: "neighbor-pull",
-                      title: "Pression des pays voisins",
-                      description: "Poids des voisins face aux effets actifs. 1 = poids de référence ; 0 les ignore.",
+                      title: "Force des pays voisins",
+                      description: "100 % conserve leur force actuelle ; 0 % les ignore.",
                       cells: [
-                        <input
-                          key="neighbor-pull"
-                          aria-label="Pression idéologique des pays voisins"
-                          type="number"
-                          step="0.01"
-                          value={getIdeologyConfigValue().neighbor_pull_weight}
-                          onChange={(e) => updateIdeologyConfig({ neighbor_pull_weight: Number(e.target.value) || DEFAULT_IDEOLOGY_CONFIG.neighbor_pull_weight })}
-                          className={inputClassNarrow}
-                          style={inputStyle}
-                        />,
+                        <div key="neighbor-pull" className="flex items-center gap-2">
+                          <input
+                            aria-label="Force idéologique des pays voisins en pourcentage"
+                            type="number"
+                            min={0}
+                            step={5}
+                            value={Math.round(getIdeologyConfigValue().neighbor_pull_weight * 10_000) / 100}
+                            onChange={(e) => updateIdeologyConfig({
+                              neighbor_pull_weight: finiteNumber(e.target.valueAsNumber, DEFAULT_IDEOLOGY_CONFIG.neighbor_pull_weight * 100) / 100,
+                            })}
+                            className={inputClassNarrow}
+                            style={inputStyle}
+                          />
+                          <span className="text-xs text-[var(--foreground-muted)]">%</span>
+                        </div>,
                       ],
                     },
                     {
                       key: "effect-pull",
-                      title: "Effets idéologiques actifs",
-                      description: "Poids des lois, avantages et autres effets progressifs. 1 conserve leur force ; 0 les ignore.",
+                      title: "Force des effets progressifs",
+                      description: "Lois, avantages et autres effets quotidiens : 100 % conserve leur force actuelle ; 0 % les ignore.",
                       cells: [
-                        <input
-                          key="effect-pull"
-                          aria-label="Poids des effets idéologiques actifs"
-                          type="number"
-                          step="0.01"
-                          value={getIdeologyConfigValue().effect_pull_weight}
-                          onChange={(e) => updateIdeologyConfig({ effect_pull_weight: Number(e.target.value) || DEFAULT_IDEOLOGY_CONFIG.effect_pull_weight })}
-                          className={inputClassNarrow}
-                          style={inputStyle}
-                        />,
+                        <div key="effect-pull" className="flex items-center gap-2">
+                          <input
+                            aria-label="Force des effets idéologiques progressifs en pourcentage"
+                            type="number"
+                            min={0}
+                            step={5}
+                            value={Math.round(getIdeologyConfigValue().effect_pull_weight * 10_000) / 100}
+                            onChange={(e) => updateIdeologyConfig({
+                              effect_pull_weight: finiteNumber(e.target.valueAsNumber, DEFAULT_IDEOLOGY_CONFIG.effect_pull_weight * 100) / 100,
+                            })}
+                            className={inputClassNarrow}
+                            style={inputStyle}
+                          />
+                          <span className="text-xs text-[var(--foreground-muted)]">%</span>
+                        </div>,
                       ],
                     },
                   ]}
@@ -3006,70 +3228,90 @@ export function ReglesForm({
                   rows={[
                     {
                       key: "relation-pull",
-                      title: "Relations diplomatiques",
-                      description: "À 0,35, une relation de +100 renforce l’attraction de 35 % ; −100 la réduit de 35 %.",
+                      title: "Effet maximal des relations",
+                      description: "À 35 %, une relation de +100 renforce l’attraction de 35 % ; −100 la réduit de 35 %.",
                       cells: [
-                        <input
-                          key="relation-pull"
-                          aria-label="Poids des relations diplomatiques"
-                          type="number"
-                          step="0.01"
-                          value={getIdeologyConfigValue().relation_pull_weight}
-                          onChange={(e) => updateIdeologyConfig({ relation_pull_weight: Number(e.target.value) || DEFAULT_IDEOLOGY_CONFIG.relation_pull_weight })}
-                          className={inputClassNarrow}
-                          style={inputStyle}
-                        />,
+                        <div key="relation-pull" className="flex items-center gap-2">
+                          <input
+                            aria-label="Effet maximal des relations diplomatiques en pourcentage"
+                            type="number"
+                            min={0}
+                            step={5}
+                            value={Math.round(getIdeologyConfigValue().relation_pull_weight * 10_000) / 100}
+                            onChange={(e) => updateIdeologyConfig({
+                              relation_pull_weight: finiteNumber(e.target.valueAsNumber, DEFAULT_IDEOLOGY_CONFIG.relation_pull_weight * 100) / 100,
+                            })}
+                            className={inputClassNarrow}
+                            style={inputStyle}
+                          />
+                          <span className="text-xs text-[var(--foreground-muted)]">%</span>
+                        </div>,
                       ],
                     },
                     {
                       key: "influence-pull",
-                      title: "Influence internationale",
-                      description: "À 0,45, le voisin le plus influent pèse jusqu’à 45 % de plus.",
+                      title: "Effet maximal de l’influence",
+                      description: "À 45 %, le voisin le plus influent attire jusqu’à 45 % plus fortement.",
                       cells: [
-                        <input
-                          key="influence-pull"
-                          aria-label="Poids de l’influence internationale"
-                          type="number"
-                          step="0.01"
-                          value={getIdeologyConfigValue().influence_pull_weight}
-                          onChange={(e) => updateIdeologyConfig({ influence_pull_weight: Number(e.target.value) || DEFAULT_IDEOLOGY_CONFIG.influence_pull_weight })}
-                          className={inputClassNarrow}
-                          style={inputStyle}
-                        />,
+                        <div key="influence-pull" className="flex items-center gap-2">
+                          <input
+                            aria-label="Effet maximal de l’influence internationale en pourcentage"
+                            type="number"
+                            min={0}
+                            step={5}
+                            value={Math.round(getIdeologyConfigValue().influence_pull_weight * 10_000) / 100}
+                            onChange={(e) => updateIdeologyConfig({
+                              influence_pull_weight: finiteNumber(e.target.valueAsNumber, DEFAULT_IDEOLOGY_CONFIG.influence_pull_weight * 100) / 100,
+                            })}
+                            className={inputClassNarrow}
+                            style={inputStyle}
+                          />
+                          <span className="text-xs text-[var(--foreground-muted)]">%</span>
+                        </div>,
                       ],
                     },
                     {
                       key: "control-pull",
-                      title: "Contrôle territorial",
-                      description: "À 1,10, un contrôle à 100 % multiplie l’attraction du pays dominant par 2,10.",
+                      title: "Effet d’un contrôle total",
+                      description: "À 110 %, un contrôle à 100 % multiplie l’attraction du pays dominant par 2,10.",
                       cells: [
-                        <input
-                          key="control-pull"
-                          aria-label="Poids du contrôle territorial"
-                          type="number"
-                          step="0.01"
-                          value={getIdeologyConfigValue().control_pull_weight}
-                          onChange={(e) => updateIdeologyConfig({ control_pull_weight: Number(e.target.value) || DEFAULT_IDEOLOGY_CONFIG.control_pull_weight })}
-                          className={inputClassNarrow}
-                          style={inputStyle}
-                        />,
+                        <div key="control-pull" className="flex items-center gap-2">
+                          <input
+                            aria-label="Effet d’un contrôle territorial total en pourcentage"
+                            type="number"
+                            min={0}
+                            step={5}
+                            value={Math.round(getIdeologyConfigValue().control_pull_weight * 10_000) / 100}
+                            onChange={(e) => updateIdeologyConfig({
+                              control_pull_weight: finiteNumber(e.target.valueAsNumber, DEFAULT_IDEOLOGY_CONFIG.control_pull_weight * 100) / 100,
+                            })}
+                            className={inputClassNarrow}
+                            style={inputStyle}
+                          />
+                          <span className="text-xs text-[var(--foreground-muted)]">%</span>
+                        </div>,
                       ],
                     },
                     {
                       key: "snap-strength",
-                      title: "Impulsions ponctuelles",
-                      description: "Multiplicateur des chocs ponctuels : 16 leur donne seize fois le poids d’un effet progressif.",
+                      title: "Force des changements immédiats",
+                      description: "16 signifie qu’un changement immédiat pèse autant que seize changements quotidiens de même valeur.",
                       cells: [
-                        <input
-                          key="snap-strength"
-                          aria-label="Force des impulsions idéologiques"
-                          type="number"
-                          step="0.1"
-                          value={getIdeologyConfigValue().snap_strength}
-                          onChange={(e) => updateIdeologyConfig({ snap_strength: Number(e.target.value) || DEFAULT_IDEOLOGY_CONFIG.snap_strength })}
-                          className={inputClassNarrow}
-                          style={inputStyle}
-                        />,
+                        <div key="snap-strength" className="flex items-center gap-2">
+                          <input
+                            aria-label="Force des changements idéologiques immédiats"
+                            type="number"
+                            min={0}
+                            step="0.1"
+                            value={getIdeologyConfigValue().snap_strength}
+                            onChange={(e) => updateIdeologyConfig({
+                              snap_strength: finiteNumber(e.target.valueAsNumber, DEFAULT_IDEOLOGY_CONFIG.snap_strength),
+                            })}
+                            className={inputClassNarrow}
+                            style={inputStyle}
+                          />
+                          <span className="text-xs text-[var(--foreground-muted)]">fois</span>
+                        </div>,
                       ],
                     },
                   ]}
@@ -3097,7 +3339,6 @@ export function ReglesForm({
                       </p>
                     {IDEOLOGY_IDS.map((ideologyId) => {
                       const list = getIdeologyEffectsForIdeology(ideologyId);
-                      const formOpenForThis = ideologyEffectFormOpen && ideologyEffectFormIdeologyId === ideologyId;
                       return (
                         <div key={ideologyId} className="rounded border p-2 space-y-2" style={{ borderColor: "var(--border-muted)" }}>
                           <div className="text-xs font-medium text-[var(--foreground-muted)]">{IDEOLOGY_LABELS[ideologyId]}</div>
@@ -3130,70 +3371,7 @@ export function ReglesForm({
                               Aucun effet configuré pour cette idéologie.
                             </div>
                           )}
-                          {!formOpenForThis ? (
-                            <button type="button" onClick={() => openAddIdeologyEffect(ideologyId)} className="text-sm text-[var(--accent)] hover:underline">Ajouter un effet</button>
-                          ) : (
-                            <div className="rounded border p-3 space-y-2 mt-2" style={{ borderColor: "var(--border-muted)" }}>
-                              <div>
-                                <label className="mb-0.5 block text-xs text-[var(--foreground-muted)]">Type d'effet</label>
-                                <select aria-label="Type d’effet idéologique" value={ideologyEffectKind} onChange={(ev) => { const k = ev.target.value; setIdeologyEffectKind(k); setIdeologyEffectTarget(getDefaultTargetForKindIdeology(k)); }} className="w-full rounded border py-1.5 px-2 text-sm" style={{ borderColor: "var(--border)", background: "var(--background)" }}>
-                                  {ideologyEffectOptionGroups.map((group) => (
-                                    <optgroup key={group.label} label={group.label}>
-                                      {group.options.map((opt) => (<option key={opt.id} value={opt.id}>{opt.label}</option>))}
-                                    </optgroup>
-                                  ))}
-                                </select>
-                              </div>
-                              {EFFECT_KINDS_WITH_STAT_TARGET.has(ideologyEffectKind) && (
-                                <div>
-                                  <label className="mb-0.5 block text-xs text-[var(--foreground-muted)]">Statistique</label>
-                                  <select aria-label="Statistique ciblée par l’effet idéologique" value={ideologyEffectTarget ?? STAT_KEYS[0]} onChange={(ev) => setIdeologyEffectTarget(ev.target.value || null)} className="w-full rounded border py-1.5 px-2 text-sm" style={{ borderColor: "var(--border)", background: "var(--background)" }}>
-                                    {STAT_KEYS.map((k) => (<option key={k} value={k}>{STAT_LABELS[k]}</option>))}
-                                  </select>
-                                </div>
-                              )}
-                              {EFFECT_KINDS_WITH_BUDGET_TARGET.has(ideologyEffectKind) && (
-                                <div>
-                                  <label className="mb-0.5 block text-xs text-[var(--foreground-muted)]">Ministère</label>
-                                  <select aria-label="Ministère ciblé par l’effet idéologique" value={ideologyEffectTarget ?? getBudgetMinistryOptions()[0]?.key ?? ""} onChange={(ev) => setIdeologyEffectTarget(ev.target.value || null)} className="w-full rounded border py-1.5 px-2 text-sm" style={{ borderColor: "var(--border)", background: "var(--background)" }}>
-                                    {getBudgetMinistryOptions().map(({ key, label }) => (<option key={key} value={key}>{label}</option>))}
-                                  </select>
-                                </div>
-                              )}
-                              {EFFECT_KINDS_WITH_BRANCH_TARGET.has(ideologyEffectKind) && (
-                                <div>
-                                  <label className="mb-0.5 block text-xs text-[var(--foreground-muted)]">Branche</label>
-                                  <select aria-label="Branche ciblée par l’effet idéologique" value={ideologyEffectTarget ?? MILITARY_BRANCH_EFFECT_IDS[0]} onChange={(ev) => setIdeologyEffectTarget(ev.target.value || null)} className="w-full rounded border py-1.5 px-2 text-sm" style={{ borderColor: "var(--border)", background: "var(--background)" }}>
-                                    {MILITARY_BRANCH_EFFECT_IDS.map((b) => (<option key={b} value={b}>{MILITARY_BRANCH_EFFECT_LABELS[b]}</option>))}
-                                  </select>
-                                </div>
-                              )}
-                              {EFFECT_KINDS_WITH_ROSTER_UNIT_TARGET.has(ideologyEffectKind) && (
-                                <div>
-                                  <label className="mb-0.5 block text-xs text-[var(--foreground-muted)]">Unité</label>
-                                  <select aria-label="Unité ciblée par l’effet idéologique" value={ideologyEffectTarget ?? rosterUnits[0]?.id ?? ""} onChange={(ev) => setIdeologyEffectTarget(ev.target.value || null)} className="w-full rounded border py-1.5 px-2 text-sm" style={{ borderColor: "var(--border)", background: "var(--background)" }}>
-                                    {rosterUnits.map((u) => (<option key={u.id} value={u.id}>{u.name_fr}</option>))}
-                                  </select>
-                                </div>
-                              )}
-                              {EFFECT_KINDS_WITH_SUB_TYPE_TARGET.has(ideologyEffectKind) && (
-                                <div>
-                                  <label className="mb-0.5 block text-xs text-[var(--foreground-muted)]">Sous-branche/type</label>
-                                  <select aria-label="Sous-branche ciblée par l’effet idéologique" value={ideologyEffectTarget ?? subTypeOptions[0]?.value ?? ""} onChange={(ev) => setIdeologyEffectTarget(ev.target.value || null)} className="w-full rounded border py-1.5 px-2 text-sm" style={{ borderColor: "var(--border)", background: "var(--background)" }}>
-                                    {subTypeOptions.map((opt) => (<option key={opt.value} value={opt.value}>{opt.label}</option>))}
-                                  </select>
-                                </div>
-                              )}
-                              <div>
-                                <label className="mb-0.5 block text-xs text-[var(--foreground-muted)]">{getIdeologyEffectFormValueHelper(ideologyEffectKind).valueLabel}</label>
-                                <input aria-label={getIdeologyEffectFormValueHelper(ideologyEffectKind).valueLabel} type="number" step={getIdeologyEffectFormValueHelper(ideologyEffectKind).valueStep} value={ideologyEffectValue} onChange={(e) => setIdeologyEffectValue(e.target.value)} className="w-32 rounded border py-1.5 px-2 text-sm font-mono" style={{ borderColor: "var(--border)", background: "var(--background)" }} />
-                              </div>
-                              <div className="flex flex-wrap gap-2">
-                                <button type="button" onClick={saveIdeologyEffectForm} className="rounded py-1.5 px-3 text-sm font-medium" style={{ background: "var(--accent)", color: "#0f1419" }}>Enregistrer</button>
-                                <button type="button" onClick={() => setIdeologyEffectFormOpen(false)} className="rounded border py-1.5 px-3 text-sm" style={{ borderColor: "var(--border)" }}>Annuler</button>
-                              </div>
-                            </div>
-                          )}
+                          <button type="button" onClick={() => openAddIdeologyEffect(ideologyId)} className="text-sm text-[var(--accent)] hover:underline">Ajouter un effet</button>
                         </div>
                       );
                     })}
@@ -3209,7 +3387,7 @@ export function ReglesForm({
             <CollapsibleBlock
               id="rules-ai"
               title="Pays gérés par l’IA"
-              infoContent={<TooltipBody text="Rythme de création des événements et effets permanents pour les puissances majeures et mineures sans joueur." />}
+              infoContent={<TooltipBody text="Rythme de création des événements et effets permanents pour les grandes puissances et puissances secondaires sans joueur." />}
               open={aiOpen}
               onToggle={() => setAiOpen((o) => !o)}
               variant="section"
@@ -3218,7 +3396,7 @@ export function ReglesForm({
             >
               <div className="p-3 space-y-4">
                 <p className="text-xs text-[var(--foreground-muted)]">
-                  Effets appliqués aux pays sans joueur selon leur statut IA (Majeur / Mineur) défini dans la liste admin des pays.
+                  Les pays sans joueur sont classés comme grandes puissances ou puissances secondaires dans la liste des pays. Ce choix détermine leurs actions et leurs effets permanents.
                 </p>
 
                 {aiEventsConfigRule && (
@@ -3252,7 +3430,7 @@ export function ReglesForm({
                         {
                           key: "major-count",
                           title: "Grandes puissances IA",
-                          description: "Nombre d’actions majeures créées à chaque passage.",
+                          description: "Nombre d’actions créées pour les grandes puissances à chaque passage.",
                           cells: [
                             <div key="major-count" className="flex items-center gap-2">
                               <input
@@ -3271,7 +3449,7 @@ export function ReglesForm({
                         {
                           key: "minor-count",
                           title: "Puissances secondaires IA",
-                          description: "Nombre d’actions mineures créées à chaque passage.",
+                          description: "Nombre d’actions créées pour les puissances secondaires à chaque passage.",
                           cells: [
                             <div key="minor-count" className="flex items-center gap-2">
                               <input
@@ -3310,7 +3488,7 @@ export function ReglesForm({
                     />
                     <div>
                       <span className="mb-1 block text-xs text-[var(--foreground-muted)]">
-                        <TitleWithInfo title="Actions autorisées (IA majeures)" tooltip="Liste des types d'actions que les IA majeures ont le droit de générer automatiquement." className="inline-flex items-center gap-1.5" />
+                        <TitleWithInfo title="Actions des grandes puissances" tooltip="Types d’actions que les grandes puissances sans joueur peuvent créer automatiquement." className="inline-flex items-center gap-1.5" />
                       </span>
                       <div className="flex flex-wrap gap-2">
                         {stateActionTypesForAi.map((t) => (
@@ -3327,7 +3505,7 @@ export function ReglesForm({
                     </div>
                     <div>
                       <span className="mb-1 block text-xs text-[var(--foreground-muted)]">
-                        <TitleWithInfo title="Actions autorisées (IA mineures)" tooltip="Liste des types d'actions que les IA mineures ont le droit de générer automatiquement." className="inline-flex items-center gap-1.5" />
+                        <TitleWithInfo title="Actions des puissances secondaires" tooltip="Types d’actions que les puissances secondaires sans joueur peuvent créer automatiquement." className="inline-flex items-center gap-1.5" />
                       </span>
                       <div className="flex flex-wrap gap-2">
                         {stateActionTypesForAi.map((t) => (
@@ -3353,7 +3531,7 @@ export function ReglesForm({
                             checked={getAiEventsConfig().target_major_ai ?? false}
                             onChange={(e) => updateAiEventsConfig({ target_major_ai: e.target.checked })}
                           />
-                          IA majeures
+                          Grandes puissances sans joueur
                         </label>
                         <label className="flex items-center gap-1.5 text-sm">
                           <input
@@ -3361,7 +3539,7 @@ export function ReglesForm({
                             checked={getAiEventsConfig().target_minor_ai ?? false}
                             onChange={(e) => updateAiEventsConfig({ target_minor_ai: e.target.checked })}
                           />
-                          IA mineures
+                          Puissances secondaires sans joueur
                         </label>
                         <label className="flex items-center gap-1.5 text-sm">
                           <input
@@ -3403,13 +3581,13 @@ export function ReglesForm({
                         ))}
                       </div>
                       <p className="mt-1 text-xs text-[var(--foreground-muted)]">
-                        Pour « Voisins », les régions limitrophes sont lues depuis la table map_region_neighbors. Après modification des formes de la carte, recalculer les voisinages.
+                        « Voisins » utilise les frontières de la carte. Après une modification de la carte, recalculez les voisinages.
                       </p>
                       <RecalculerVoisinagesButton />
                     </div>
                     <div>
                       <span className="mb-1 block text-xs text-[var(--foreground-muted)]">
-                        <TitleWithInfo title="Accepter automatiquement (par type)" tooltip="Permet de faire passer certaines actions IA directement à l'état accepté, sans validation manuelle." className="inline-flex items-center gap-1.5" />
+                        <TitleWithInfo title="Actions appliquées sans validation" tooltip="Les types cochés sont acceptés automatiquement. Ils ne passent pas par la file de décision de l’administration." className="inline-flex items-center gap-1.5" />
                       </span>
                       <div className="flex flex-wrap gap-2">
                         {stateActionTypesForAi.map((t) => (
@@ -3431,7 +3609,7 @@ export function ReglesForm({
                 <div className="space-y-3">
                   <div>
                     <h4 className="mb-2 text-sm font-medium text-[var(--foreground)]">
-                      <TitleWithInfo title="IA majeure" tooltip="Effets permanents appliqués aux pays sans joueur considérés comme grandes puissances IA." className="inline-flex items-center gap-2" />
+                      <TitleWithInfo title="Grandes puissances sans joueur" tooltip="Effets permanents appliqués à tous les pays classés comme grandes puissances." className="inline-flex items-center gap-2" />
                     </h4>
                     <ul className="space-y-2">
                       {getAiEffects(aiMajorEffectsRule).map((e, idx) => (
@@ -3448,35 +3626,11 @@ export function ReglesForm({
                         </li>
                       ))}
                     </ul>
-                    {!aiMajorFormOpen ? (
-                      <button type="button" onClick={() => openAddAiEffect("major")} className="text-sm text-[var(--accent)] hover:underline">Ajouter un effet</button>
-                    ) : (
-                      <div className="rounded border p-3 space-y-2" style={{ borderColor: "var(--border-muted)" }}>
-                        <div>
-                          <label className="mb-0.5 block text-xs text-[var(--foreground-muted)]">
-                            <FormLabel label="Effet" tooltip={genericEffectTypeTooltip} />
-                          </label>
-                          <select aria-label="Type d’effet pour une IA majeure" value={aiMajorEffectKind} onChange={(ev) => { const k = ev.target.value; setAiMajorEffectKind(k); setAiMajorEffectTarget(getDefaultTargetForKindGlobal(k)); }} className={inputClass} style={inputStyle}>
-                            {getEffectKindOptionGroups().map((group) => (
-                              <optgroup key={group.label} label={group.label}>
-                                {group.options.map((opt) => (<option key={opt.id} value={opt.id}>{opt.label}</option>))}
-                              </optgroup>
-                            ))}
-                          </select>
-                        </div>
-                        {EFFECT_KINDS_WITH_STAT_TARGET.has(aiMajorEffectKind) && (<div><label className="mb-0.5 block text-xs text-[var(--foreground-muted)]"><FormLabel label="Statistique" tooltip={genericStatTooltip} /></label><select aria-label="Statistique ciblée pour une IA majeure" value={aiMajorEffectTarget ?? STAT_KEYS[0]} onChange={(ev) => setAiMajorEffectTarget(ev.target.value || null)} className={inputClass} style={inputStyle}>{STAT_KEYS.map((k) => (<option key={k} value={k}>{STAT_LABELS[k]}</option>))}</select></div>)}
-                        {EFFECT_KINDS_WITH_BUDGET_TARGET.has(aiMajorEffectKind) && (<div><label className="mb-0.5 block text-xs text-[var(--foreground-muted)]"><FormLabel label="Ministère" tooltip={genericBudgetTooltip} /></label><select aria-label="Ministère ciblé pour une IA majeure" value={aiMajorEffectTarget ?? getBudgetMinistryOptions()[0]?.key ?? ""} onChange={(ev) => setAiMajorEffectTarget(ev.target.value || null)} className={inputClass} style={inputStyle}>{getBudgetMinistryOptions().map(({ key, label }) => (<option key={key} value={key}>{label}</option>))}</select></div>)}
-                        {EFFECT_KINDS_WITH_BRANCH_TARGET.has(aiMajorEffectKind) && (<div><label className="mb-0.5 block text-xs text-[var(--foreground-muted)]"><FormLabel label="Branche" tooltip={genericBranchTooltip} /></label><select aria-label="Branche ciblée pour une IA majeure" value={aiMajorEffectTarget ?? MILITARY_BRANCH_EFFECT_IDS[0]} onChange={(ev) => setAiMajorEffectTarget(ev.target.value || null)} className={inputClass} style={inputStyle}>{MILITARY_BRANCH_EFFECT_IDS.map((b) => (<option key={b} value={b}>{MILITARY_BRANCH_EFFECT_LABELS[b]}</option>))}</select></div>)}
-                        {EFFECT_KINDS_WITH_ROSTER_UNIT_TARGET.has(aiMajorEffectKind) && (<div><label className="mb-0.5 block text-xs text-[var(--foreground-muted)]"><FormLabel label="Unité" tooltip={genericUnitTooltip} /></label><select aria-label="Unité ciblée pour une IA majeure" value={aiMajorEffectTarget ?? rosterUnits[0]?.id ?? ""} onChange={(ev) => setAiMajorEffectTarget(ev.target.value || null)} className={inputClass} style={inputStyle}>{rosterUnits.map((u) => (<option key={u.id} value={u.id}>{u.name_fr}</option>))}</select></div>)}
-                        {EFFECT_KINDS_WITH_SUB_TYPE_TARGET.has(aiMajorEffectKind) && (<div><label className="mb-0.5 block text-xs text-[var(--foreground-muted)]"><FormLabel label="Sous-type militaire" tooltip="Branche et sous-type militaire." /></label><select aria-label="Sous-branche ciblée pour une IA majeure" value={aiMajorEffectTarget ?? subTypeOptions[0]?.value ?? ""} onChange={(ev) => setAiMajorEffectTarget(ev.target.value || null)} className={inputClass} style={inputStyle}>{subTypeOptions.map((opt) => (<option key={opt.value} value={opt.value}>{opt.label}</option>))}</select></div>)}
-                        <div><label className="mb-0.5 block text-xs text-[var(--foreground-muted)]"><FormLabel label={getEffectKindValueHelper(aiMajorEffectKind).valueLabel} tooltip={genericEffectValueTooltip} /></label><input aria-label={getEffectKindValueHelper(aiMajorEffectKind).valueLabel} type="number" step={getEffectKindValueHelper(aiMajorEffectKind).valueStep} value={aiMajorEffectValue} onChange={(e) => setAiMajorEffectValue(e.target.value)} className={inputClassNarrow} style={inputStyle} /></div>
-                        <div className="flex gap-2"><button type="button" onClick={() => saveAiEffectForm("major")} className="rounded py-1.5 px-3 text-sm font-medium" style={{ background: "var(--accent)", color: "#0f1419" }}>Enregistrer</button><button type="button" onClick={() => setAiMajorFormOpen(false)} className="rounded border py-1.5 px-3 text-sm" style={{ borderColor: "var(--border)" }}>Annuler</button></div>
-                      </div>
-                    )}
+                    <button type="button" onClick={() => openAddAiEffect("major")} className="text-sm text-[var(--accent)] hover:underline">Ajouter un effet</button>
                   </div>
                   <div>
                     <h4 className="mb-2 text-sm font-medium text-[var(--foreground)]">
-                      <TitleWithInfo title="IA mineure" tooltip="Effets permanents appliqués aux pays sans joueur considérés comme puissances secondaires IA." className="inline-flex items-center gap-2" />
+                      <TitleWithInfo title="Puissances secondaires sans joueur" tooltip="Effets permanents appliqués à tous les pays classés comme puissances secondaires." className="inline-flex items-center gap-2" />
                     </h4>
                     <ul className="space-y-2">
                       {getAiEffects(aiMinorEffectsRule).map((e, idx) => (
@@ -3493,31 +3647,7 @@ export function ReglesForm({
                         </li>
                       ))}
                     </ul>
-                    {!aiMinorFormOpen ? (
-                      <button type="button" onClick={() => openAddAiEffect("minor")} className="text-sm text-[var(--accent)] hover:underline">Ajouter un effet</button>
-                    ) : (
-                      <div className="rounded border p-3 space-y-2" style={{ borderColor: "var(--border-muted)" }}>
-                        <div>
-                          <label className="mb-0.5 block text-xs text-[var(--foreground-muted)]">
-                            <FormLabel label="Effet" tooltip={genericEffectTypeTooltip} />
-                          </label>
-                          <select aria-label="Type d’effet pour une IA mineure" value={aiMinorEffectKind} onChange={(ev) => { const k = ev.target.value; setAiMinorEffectKind(k); setAiMinorEffectTarget(getDefaultTargetForKindGlobal(k)); }} className={inputClass} style={inputStyle}>
-                            {getEffectKindOptionGroups().map((group) => (
-                              <optgroup key={group.label} label={group.label}>
-                                {group.options.map((opt) => (<option key={opt.id} value={opt.id}>{opt.label}</option>))}
-                              </optgroup>
-                            ))}
-                          </select>
-                        </div>
-                        {EFFECT_KINDS_WITH_STAT_TARGET.has(aiMinorEffectKind) && (<div><label className="mb-0.5 block text-xs text-[var(--foreground-muted)]"><FormLabel label="Statistique" tooltip={genericStatTooltip} /></label><select aria-label="Statistique ciblée pour une IA mineure" value={aiMinorEffectTarget ?? STAT_KEYS[0]} onChange={(ev) => setAiMinorEffectTarget(ev.target.value || null)} className={inputClass} style={inputStyle}>{STAT_KEYS.map((k) => (<option key={k} value={k}>{STAT_LABELS[k]}</option>))}</select></div>)}
-                        {EFFECT_KINDS_WITH_BUDGET_TARGET.has(aiMinorEffectKind) && (<div><label className="mb-0.5 block text-xs text-[var(--foreground-muted)]"><FormLabel label="Ministère" tooltip={genericBudgetTooltip} /></label><select aria-label="Ministère ciblé pour une IA mineure" value={aiMinorEffectTarget ?? getBudgetMinistryOptions()[0]?.key ?? ""} onChange={(ev) => setAiMinorEffectTarget(ev.target.value || null)} className={inputClass} style={inputStyle}>{getBudgetMinistryOptions().map(({ key, label }) => (<option key={key} value={key}>{label}</option>))}</select></div>)}
-                        {EFFECT_KINDS_WITH_BRANCH_TARGET.has(aiMinorEffectKind) && (<div><label className="mb-0.5 block text-xs text-[var(--foreground-muted)]"><FormLabel label="Branche" tooltip={genericBranchTooltip} /></label><select aria-label="Branche ciblée pour une IA mineure" value={aiMinorEffectTarget ?? MILITARY_BRANCH_EFFECT_IDS[0]} onChange={(ev) => setAiMinorEffectTarget(ev.target.value || null)} className={inputClass} style={inputStyle}>{MILITARY_BRANCH_EFFECT_IDS.map((b) => (<option key={b} value={b}>{MILITARY_BRANCH_EFFECT_LABELS[b]}</option>))}</select></div>)}
-                        {EFFECT_KINDS_WITH_ROSTER_UNIT_TARGET.has(aiMinorEffectKind) && (<div><label className="mb-0.5 block text-xs text-[var(--foreground-muted)]"><FormLabel label="Unité" tooltip={genericUnitTooltip} /></label><select aria-label="Unité ciblée pour une IA mineure" value={aiMinorEffectTarget ?? rosterUnits[0]?.id ?? ""} onChange={(ev) => setAiMinorEffectTarget(ev.target.value || null)} className={inputClass} style={inputStyle}>{rosterUnits.map((u) => (<option key={u.id} value={u.id}>{u.name_fr}</option>))}</select></div>)}
-                        {EFFECT_KINDS_WITH_SUB_TYPE_TARGET.has(aiMinorEffectKind) && (<div><label className="mb-0.5 block text-xs text-[var(--foreground-muted)]"><FormLabel label="Sous-type militaire" tooltip="Branche et sous-type militaire." /></label><select aria-label="Sous-branche ciblée pour une IA mineure" value={aiMinorEffectTarget ?? subTypeOptions[0]?.value ?? ""} onChange={(ev) => setAiMinorEffectTarget(ev.target.value || null)} className={inputClass} style={inputStyle}>{subTypeOptions.map((opt) => (<option key={opt.value} value={opt.value}>{opt.label}</option>))}</select></div>)}
-                        <div><label className="mb-0.5 block text-xs text-[var(--foreground-muted)]"><FormLabel label={getEffectKindValueHelper(aiMinorEffectKind).valueLabel} tooltip={genericEffectValueTooltip} /></label><input aria-label={getEffectKindValueHelper(aiMinorEffectKind).valueLabel} type="number" step={getEffectKindValueHelper(aiMinorEffectKind).valueStep} value={aiMinorEffectValue} onChange={(e) => setAiMinorEffectValue(e.target.value)} className={inputClassNarrow} style={inputStyle} /></div>
-                        <div className="flex gap-2"><button type="button" onClick={() => saveAiEffectForm("minor")} className="rounded py-1.5 px-3 text-sm font-medium" style={{ background: "var(--accent)", color: "#0f1419" }}>Enregistrer</button><button type="button" onClick={() => setAiMinorFormOpen(false)} className="rounded border py-1.5 px-3 text-sm" style={{ borderColor: "var(--border)" }}>Annuler</button></div>
-                      </div>
-                    )}
+                    <button type="button" onClick={() => openAddAiEffect("minor")} className="text-sm text-[var(--accent)] hover:underline">Ajouter un effet</button>
                   </div>
                 </div>
               </div>
@@ -3608,7 +3738,7 @@ export function ReglesForm({
                     {
                       key: "espionage-gain",
                       title: "Gain d’un espionnage parfait",
-                      description: "Un impact de 70/100 donne 70 % de cette valeur.",
+                      description: "Un jet de conséquence de 70/100 accorde 70 % de cette valeur.",
                       cells: [
                         <div key="espionage-gain" className="flex items-center gap-2">
                           <input
@@ -3634,21 +3764,368 @@ export function ReglesForm({
 
             </div>
           </section>
+          <aside className="hidden min-w-0 space-y-3 2xl:sticky 2xl:top-4 2xl:block 2xl:self-start" aria-label="Repères et enregistrement">
+            <section
+              className="overflow-hidden rounded-xl border"
+              style={{ background: "var(--background-elevated)", borderColor: "var(--border)" }}
+            >
+              <h2 className="border-b px-3 py-2 text-sm font-semibold text-[var(--foreground)]" style={{ borderColor: "var(--border-muted)" }}>
+                Repères de session
+              </h2>
+              <dl className="divide-y" style={{ borderColor: "var(--border-muted)" }}>
+                {overviewRows.map((row) => (
+                  <div key={row.label} className="px-3 py-3">
+                    <dt className="text-xs font-medium text-[var(--foreground-muted)]">{row.label}</dt>
+                    <dd className="mt-1 text-sm font-medium leading-snug text-[var(--foreground)]">{row.value}</dd>
+                  </div>
+                ))}
+              </dl>
+            </section>
+            <AdminSaveBar
+              dirtyCount={dirtyCount}
+              saving={saving}
+              onSave={saveAll}
+              onReset={resetAll}
+              error={error ?? ruleValidationErrors[0] ?? null}
+              success={success}
+              reviewItems={ruleReviewItems}
+              saveLabel="Appliquer les règles"
+              placement="rail"
+            />
+          </aside>
+          <div className="lg:col-span-2 2xl:hidden">
+            <AdminSaveBar
+              dirtyCount={dirtyCount}
+              saving={saving}
+              onSave={saveAll}
+              onReset={resetAll}
+              error={error ?? ruleValidationErrors[0] ?? null}
+              success={success}
+              reviewItems={ruleReviewItems}
+              saveLabel="Appliquer les règles"
+            />
+          </div>
         </div>
       )}
+      <AdminDialog
+        open={globalEffectFormOpen}
+        onClose={() => {
+          setGlobalEffectFormOpen(false);
+          setGlobalEffectDraftBaseline(null);
+        }}
+        beforeClose={() => confirmEffectDraftDiscard(globalEffectDraftDirty)}
+        title={globalEffectEditIndex === null ? "Ajouter un effet quotidien" : "Modifier l’effet quotidien"}
+        description="Appliqué à tous les pays lors de chaque mise à jour quotidienne."
+        size="md"
+        actions={(
+          <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+            <button
+              type="button"
+              onClick={closeGlobalEffectForm}
+              className="min-h-11 rounded-lg border px-4 py-2 text-sm font-medium hover:bg-[var(--background-elevated)]"
+              style={{ borderColor: "var(--border)" }}
+            >
+              Annuler
+            </button>
+            <button
+              type="button"
+              onClick={saveGlobalEffectForm}
+              disabled={!isValidEffectDraft(globalEffectKind, globalEffectTarget, globalEffectValue)}
+              className="min-h-11 rounded-lg px-4 py-2 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-45"
+              style={{ background: "var(--accent)", color: "#0f1419" }}
+            >
+              {globalEffectEditIndex === null ? "Ajouter l’effet" : "Enregistrer l’effet"}
+            </button>
+          </div>
+        )}
+      >
+        {renderGlobalEffectFields({
+          kind: globalEffectKind,
+          target: globalEffectTarget,
+          value: globalEffectValue,
+          setKind: setGlobalEffectKind,
+          setTarget: setGlobalEffectTarget,
+          setValue: setGlobalEffectValue,
+          ariaContext: "appliqué à tous les pays",
+        })}
+        {globalEffectPreview ? (
+          <div className="mt-5 rounded-lg bg-[var(--background-elevated)] px-3 py-2.5" aria-live="polite">
+            <span className="block text-xs font-medium text-[var(--foreground-muted)]">Aperçu</span>
+            <span className="mt-1 block text-sm font-medium text-[var(--foreground)]">{globalEffectPreview}</span>
+          </div>
+        ) : null}
+      </AdminDialog>
 
-      {items.length > 0 ? (
-        <AdminSaveBar
-          dirtyCount={dirtyItems.length}
-          saving={saving}
-          onSave={saveAll}
-          onReset={resetAll}
-          error={error}
-          success={success}
-          reviewItems={ruleReviewItems}
-          saveLabel="Appliquer les règles"
-        />
-      ) : null}
+      <AdminDialog
+        open={ideologyEffectFormOpen}
+        onClose={() => {
+          setIdeologyEffectFormOpen(false);
+          setIdeologyEffectDraftBaseline(null);
+        }}
+        beforeClose={() => confirmEffectDraftDiscard(ideologyEffectDraftDirty)}
+        title={ideologyEffectEditLocalIndex === null ? "Ajouter un effet idéologique" : "Modifier l’effet idéologique"}
+        description={`${IDEOLOGY_LABELS[ideologyEffectFormIdeology]} · valeur atteinte à 100 % d’alignement.`}
+        size="md"
+        actions={(
+          <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+            <button
+              type="button"
+              onClick={closeIdeologyEffectForm}
+              className="min-h-11 rounded-lg border px-4 py-2 text-sm font-medium hover:bg-[var(--background-elevated)]"
+              style={{ borderColor: "var(--border)" }}
+            >
+              Annuler
+            </button>
+            <button
+              type="button"
+              onClick={saveIdeologyEffectForm}
+              disabled={!isValidEffectDraft(ideologyEffectKind, ideologyEffectTarget, ideologyEffectValue)}
+              className="min-h-11 rounded-lg px-4 py-2 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-45"
+              style={{ background: "var(--accent)", color: "#0f1419" }}
+            >
+              {ideologyEffectEditLocalIndex === null ? "Ajouter l’effet" : "Enregistrer l’effet"}
+            </button>
+          </div>
+        )}
+      >
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="sm:col-span-2">
+            <label className="mb-1.5 block text-sm font-medium text-[var(--foreground)]">
+              <FormLabel label="Conséquence" tooltip={genericEffectTypeTooltip} />
+            </label>
+            <select
+              aria-label="Type d’effet idéologique"
+              value={ideologyEffectKind}
+              onChange={(event) => {
+                const nextKind = event.target.value;
+                setIdeologyEffectKind(nextKind);
+                setIdeologyEffectTarget(getDefaultTargetForKindIdeology(nextKind));
+              }}
+              className={effectDialogInputClass}
+              style={inputStyle}
+            >
+              {(ideologyEffectKind === "relation_delta"
+                ? getIdeologyEffectKindOptionGroups(EFFECT_KINDS_FOR_IDEOLOGY_RULE)
+                : ideologyEffectOptionGroups
+              ).map((group) => (
+                <optgroup key={group.label} label={group.label}>
+                  {group.options.map((option) => (
+                    <option key={option.id} value={option.id}>{option.label}</option>
+                  ))}
+                </optgroup>
+              ))}
+            </select>
+          </div>
+          {EFFECT_KINDS_WITH_STAT_TARGET.has(ideologyEffectKind) && (
+            <div>
+              <label className="mb-1.5 block text-sm font-medium text-[var(--foreground)]">
+                <FormLabel label="Statistique concernée" tooltip={genericStatTooltip} />
+              </label>
+              <select
+                aria-label="Statistique ciblée par l’effet idéologique"
+                value={ideologyEffectTarget ?? STAT_KEYS[0]}
+                onChange={(event) => setIdeologyEffectTarget(event.target.value || null)}
+                className={effectDialogInputClass}
+                style={inputStyle}
+              >
+                {STAT_KEYS.map((statKey) => (
+                  <option key={statKey} value={statKey}>{STAT_LABELS[statKey]}</option>
+                ))}
+              </select>
+            </div>
+          )}
+          {EFFECT_KINDS_WITH_BUDGET_TARGET.has(ideologyEffectKind) && (
+            <div>
+              <label className="mb-1.5 block text-sm font-medium text-[var(--foreground)]">
+                <FormLabel label="Ministère concerné" tooltip={genericBudgetTooltip} />
+              </label>
+              <select
+                aria-label="Ministère ciblé par l’effet idéologique"
+                value={ideologyEffectTarget ?? getBudgetMinistryOptions()[0]?.key ?? ""}
+                onChange={(event) => setIdeologyEffectTarget(event.target.value || null)}
+                className={effectDialogInputClass}
+                style={inputStyle}
+              >
+                {getBudgetMinistryOptions().map(({ key, label }) => (
+                  <option key={key} value={key}>{label}</option>
+                ))}
+              </select>
+            </div>
+          )}
+          {EFFECT_KINDS_WITH_BRANCH_TARGET.has(ideologyEffectKind) && (
+            <div>
+              <label className="mb-1.5 block text-sm font-medium text-[var(--foreground)]">
+                <FormLabel label="Branche concernée" tooltip={genericBranchTooltip} />
+              </label>
+              <select
+                aria-label="Branche ciblée par l’effet idéologique"
+                value={ideologyEffectTarget ?? MILITARY_BRANCH_EFFECT_IDS[0]}
+                onChange={(event) => setIdeologyEffectTarget(event.target.value || null)}
+                className={effectDialogInputClass}
+                style={inputStyle}
+              >
+                {MILITARY_BRANCH_EFFECT_IDS.map((branch) => (
+                  <option key={branch} value={branch}>{MILITARY_BRANCH_EFFECT_LABELS[branch]}</option>
+                ))}
+              </select>
+            </div>
+          )}
+          {EFFECT_KINDS_WITH_ROSTER_UNIT_TARGET.has(ideologyEffectKind) && (
+            <div>
+              <label className="mb-1.5 block text-sm font-medium text-[var(--foreground)]">
+                <FormLabel label="Unité concernée" tooltip={genericUnitTooltip} />
+              </label>
+              <select
+                aria-label="Unité ciblée par l’effet idéologique"
+                value={ideologyEffectTarget ?? rosterUnits[0]?.id ?? ""}
+                onChange={(event) => setIdeologyEffectTarget(event.target.value || null)}
+                className={effectDialogInputClass}
+                style={inputStyle}
+              >
+                {rosterUnits.map((unit) => (
+                  <option key={unit.id} value={unit.id}>{unit.name_fr}</option>
+                ))}
+              </select>
+            </div>
+          )}
+          {EFFECT_KINDS_WITH_SUB_TYPE_TARGET.has(ideologyEffectKind) && (
+            <div>
+              <label className="mb-1.5 block text-sm font-medium text-[var(--foreground)]">
+                <FormLabel label="Type d’unité concerné" tooltip="Ensemble précis d’unités concerné au sein d’une branche." />
+              </label>
+              <select
+                aria-label="Sous-branche ciblée par l’effet idéologique"
+                value={ideologyEffectTarget ?? subTypeOptions[0]?.value ?? ""}
+                onChange={(event) => setIdeologyEffectTarget(event.target.value || null)}
+                className={effectDialogInputClass}
+                style={inputStyle}
+              >
+                {subTypeOptions.map((option) => (
+                  <option key={option.value} value={option.value}>{option.label}</option>
+                ))}
+              </select>
+            </div>
+          )}
+          <div>
+            <label className="mb-1.5 block text-sm font-medium text-[var(--foreground)]">
+              <FormLabel label={getIdeologyEffectFormValueHelper(ideologyEffectKind).valueLabel} tooltip={genericEffectValueTooltip} />
+            </label>
+            <input
+              aria-label={getIdeologyEffectFormValueHelper(ideologyEffectKind).valueLabel}
+              type="number"
+              step={getIdeologyEffectFormValueHelper(ideologyEffectKind).valueStep}
+              value={ideologyEffectValue}
+              onChange={(event) => setIdeologyEffectValue(event.target.value)}
+              className={`${effectDialogInputClass} font-mono sm:max-w-48`}
+              style={inputStyle}
+            />
+          </div>
+        </div>
+        {ideologyEffectPreview ? (
+          <div className="mt-5 rounded-lg bg-[var(--background-elevated)] px-3 py-2.5" aria-live="polite">
+            <span className="block text-xs font-medium text-[var(--foreground-muted)]">Aperçu</span>
+            <span className="mt-1 block text-sm font-medium text-[var(--foreground)]">{ideologyEffectPreview}</span>
+          </div>
+        ) : null}
+      </AdminDialog>
+
+      <AdminDialog
+        open={aiMajorFormOpen}
+        onClose={() => {
+          setAiMajorFormOpen(false);
+          setAiMajorEffectDraftBaseline(null);
+        }}
+        beforeClose={() => confirmEffectDraftDiscard(aiMajorEffectDraftDirty)}
+        title={aiMajorEditIndex === null ? "Ajouter un effet aux grandes puissances" : "Modifier l’effet des grandes puissances"}
+        description="Effet permanent pour tous les pays sans joueur classés comme grandes puissances."
+        size="md"
+        actions={(
+          <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+            <button
+              type="button"
+              onClick={() => closeAiEffectForm("major")}
+              className="min-h-11 rounded-lg border px-4 py-2 text-sm font-medium hover:bg-[var(--background-elevated)]"
+              style={{ borderColor: "var(--border)" }}
+            >
+              Annuler
+            </button>
+            <button
+              type="button"
+              onClick={() => saveAiEffectForm("major")}
+              disabled={!isValidEffectDraft(aiMajorEffectKind, aiMajorEffectTarget, aiMajorEffectValue)}
+              className="min-h-11 rounded-lg px-4 py-2 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-45"
+              style={{ background: "var(--accent)", color: "#0f1419" }}
+            >
+              {aiMajorEditIndex === null ? "Ajouter l’effet" : "Enregistrer l’effet"}
+            </button>
+          </div>
+        )}
+      >
+        {renderGlobalEffectFields({
+          kind: aiMajorEffectKind,
+          target: aiMajorEffectTarget,
+          value: aiMajorEffectValue,
+          setKind: setAiMajorEffectKind,
+          setTarget: setAiMajorEffectTarget,
+          setValue: setAiMajorEffectValue,
+          ariaContext: "pour une grande puissance sans joueur",
+        })}
+        {aiMajorEffectPreview ? (
+          <div className="mt-5 rounded-lg bg-[var(--background-elevated)] px-3 py-2.5" aria-live="polite">
+            <span className="block text-xs font-medium text-[var(--foreground-muted)]">Aperçu</span>
+            <span className="mt-1 block text-sm font-medium text-[var(--foreground)]">{aiMajorEffectPreview}</span>
+          </div>
+        ) : null}
+      </AdminDialog>
+
+      <AdminDialog
+        open={aiMinorFormOpen}
+        onClose={() => {
+          setAiMinorFormOpen(false);
+          setAiMinorEffectDraftBaseline(null);
+        }}
+        beforeClose={() => confirmEffectDraftDiscard(aiMinorEffectDraftDirty)}
+        title={aiMinorEditIndex === null ? "Ajouter un effet aux puissances secondaires" : "Modifier l’effet des puissances secondaires"}
+        description="Effet permanent pour tous les pays sans joueur classés comme puissances secondaires."
+        size="md"
+        actions={(
+          <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+            <button
+              type="button"
+              onClick={() => closeAiEffectForm("minor")}
+              className="min-h-11 rounded-lg border px-4 py-2 text-sm font-medium hover:bg-[var(--background-elevated)]"
+              style={{ borderColor: "var(--border)" }}
+            >
+              Annuler
+            </button>
+            <button
+              type="button"
+              onClick={() => saveAiEffectForm("minor")}
+              disabled={!isValidEffectDraft(aiMinorEffectKind, aiMinorEffectTarget, aiMinorEffectValue)}
+              className="min-h-11 rounded-lg px-4 py-2 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-45"
+              style={{ background: "var(--accent)", color: "#0f1419" }}
+            >
+              {aiMinorEditIndex === null ? "Ajouter l’effet" : "Enregistrer l’effet"}
+            </button>
+          </div>
+        )}
+      >
+        {renderGlobalEffectFields({
+          kind: aiMinorEffectKind,
+          target: aiMinorEffectTarget,
+          value: aiMinorEffectValue,
+          setKind: setAiMinorEffectKind,
+          setTarget: setAiMinorEffectTarget,
+          setValue: setAiMinorEffectValue,
+          ariaContext: "pour une puissance secondaire sans joueur",
+        })}
+        {aiMinorEffectPreview ? (
+          <div className="mt-5 rounded-lg bg-[var(--background-elevated)] px-3 py-2.5" aria-live="polite">
+            <span className="block text-xs font-medium text-[var(--foreground-muted)]">Aperçu</span>
+            <span className="mt-1 block text-sm font-medium text-[var(--foreground)]">{aiMinorEffectPreview}</span>
+          </div>
+        ) : null}
+      </AdminDialog>
     </div>
   );
 }

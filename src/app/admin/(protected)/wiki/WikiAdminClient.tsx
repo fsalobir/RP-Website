@@ -3,9 +3,8 @@
 import type { Editor } from "@tiptap/core";
 import type { JSONContent } from "@tiptap/core";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { DisclosureChevron } from "@/components/ui/DisclosureChevron";
-import { AdminSettingsGuide } from "@/components/admin/AdminSettingsUi";
 import {
   createWikiPageAction,
   deleteWikiPageAction,
@@ -13,9 +12,11 @@ import {
   saveWikiPageAction,
 } from "@/app/actions/wiki";
 import { WikiEditor } from "@/components/wiki/WikiEditor";
+import { AdminConfirmDialog } from "@/components/admin/AdminConfirmDialog";
 import { buildWikiTree, getAncestorSlugs } from "@/lib/wiki/tree";
 import { matchesSearchText } from "@/lib/searchText";
 import type { WikiPageRow, WikiTreeNode } from "@/lib/wiki/types";
+import { useUnsavedChangesGuard } from "@/hooks/useUnsavedChangesGuard";
 
 const btnClass =
   "rounded-lg border border-[var(--border)] bg-[var(--background-panel)] px-3 py-2 text-sm text-[var(--foreground)] hover:bg-[var(--background-elevated)] disabled:opacity-40";
@@ -28,12 +29,14 @@ function AdminTreeRow({
   expandedSlugs,
   toggleExpand,
   onSelect,
+  disabled,
 }: {
   node: WikiTreeNode;
   selectedId: string | null;
   expandedSlugs: Set<string>;
   toggleExpand: (slug: string) => void;
   onSelect: (id: string) => void;
+  disabled: boolean;
 }) {
   const hasChildren = node.children.length > 0;
   const expanded = expandedSlugs.has(node.slug);
@@ -45,6 +48,7 @@ function AdminTreeRow({
           <button
             type="button"
             onClick={() => toggleExpand(node.slug)}
+            disabled={disabled}
             className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-[var(--foreground-muted)] hover:bg-[var(--background-elevated)] hover:text-[var(--foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
             aria-expanded={expanded}
             aria-label={`${expanded ? "Replier" : "Développer"} ${node.title}`}
@@ -58,6 +62,7 @@ function AdminTreeRow({
         <button
           type="button"
           onClick={() => onSelect(node.id)}
+          disabled={disabled}
           className={`min-w-0 flex-1 rounded-md px-2 py-1.5 text-left text-sm ${
             isSelected
               ? "bg-[var(--accent)]/25 text-[var(--foreground)] font-medium"
@@ -78,6 +83,7 @@ function AdminTreeRow({
               expandedSlugs={expandedSlugs}
               toggleExpand={toggleExpand}
               onSelect={onSelect}
+              disabled={disabled}
             />
           ))}
         </ul>
@@ -93,14 +99,48 @@ export function WikiAdminClient({ initialPages }: { initialPages: WikiPageRow[] 
   const [title, setTitle] = useState(initialPages[0]?.title ?? "");
   const [editor, setEditor] = useState<Editor | null>(null);
   const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [moving, setMoving] = useState<"up" | "down" | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [expandedSlugs, setExpandedSlugs] = useState<Set<string>>(() => new Set());
+  const [newPageMode, setNewPageMode] = useState<"root" | "child" | null>(null);
+  const [newPageTitle, setNewPageTitle] = useState("");
+  const [creating, setCreating] = useState(false);
+  const [dirty, setDirty] = useState(false);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const dirtyRef = useRef(false);
+  const pageNavigationRef = useRef<HTMLDetailsElement>(null);
+  const busy = saving || creating || deleting || moving !== null;
+  useUnsavedChangesGuard(dirty, "Quitter le wiki sans enregistrer les modifications ?");
+
+  const setDirtyState = useCallback((next: boolean) => {
+    dirtyRef.current = next;
+    setDirty(next);
+  }, []);
+
+  const confirmDiscard = useCallback(() => {
+    return (
+      !dirtyRef.current ||
+      window.confirm("Abandonner les modifications non enregistrées de cette page ?")
+    );
+  }, []);
 
   useEffect(() => {
     setPages(initialPages);
   }, [initialPages]);
+
+  useEffect(() => {
+    const media = window.matchMedia("(min-width: 1024px)");
+    const syncNavigation = () => {
+      if (media.matches) pageNavigationRef.current?.setAttribute("open", "");
+      else pageNavigationRef.current?.removeAttribute("open");
+    };
+    syncNavigation();
+    media.addEventListener("change", syncNavigation);
+    return () => media.removeEventListener("change", syncNavigation);
+  }, []);
 
   const tree = useMemo(() => buildWikiTree(pages), [pages]);
   const searchResults = useMemo(
@@ -139,21 +179,31 @@ export function WikiAdminClient({ initialPages }: { initialPages: WikiPageRow[] 
   const clearSaveMessage = useCallback(() => {
     setMsg(null);
     setError(null);
-  }, []);
+    setDirtyState(true);
+  }, [setDirtyState]);
 
   const selectPage = useCallback(
     (id: string) => {
+      if (id === selectedId || busy || !confirmDiscard()) return;
+      setDirtyState(false);
       setSelectedId(id);
+      if (!window.matchMedia("(min-width: 1024px)").matches) {
+        pageNavigationRef.current?.removeAttribute("open");
+      }
       const p = pages.find((x) => x.id === id);
       if (p) setTitle(p.title);
       setMsg(null);
       setError(null);
     },
-    [pages]
+    [busy, confirmDiscard, pages, selectedId, setDirtyState]
   );
 
   const handleSave = useCallback(async () => {
     if (!selectedPage || !editor) return;
+    if (!title.trim()) {
+      setError("Le titre de la page ne peut pas être vide.");
+      return;
+    }
     setSaving(true);
     setMsg(null);
     setError(null);
@@ -164,192 +214,343 @@ export function WikiAdminClient({ initialPages }: { initialPages: WikiPageRow[] 
      * Forcer un objet JSON plain garantit la même forme qu’après persistance DB.
      */
     const content = JSON.parse(JSON.stringify(rawDoc)) as JSONContent;
-    const res = await saveWikiPageAction({
-      id: selectedPage.id,
-      title: title.trim() || selectedPage.title,
-      content,
-    });
-    setSaving(false);
-    if (!res.ok) {
-      setError(res.error);
-      return;
+    const savedTitle = title.trim();
+    try {
+      const res = await saveWikiPageAction({
+        id: selectedPage.id,
+        title: savedTitle,
+        content,
+      });
+      if (!res.ok) {
+        setError(res.error);
+        return;
+      }
+      const changedDuringSave =
+        title.trim() !== savedTitle ||
+        JSON.stringify(editor.getJSON()) !== JSON.stringify(content);
+      setDirtyState(changedDuringSave);
+      setMsg(
+        changedDuringSave
+          ? "Version précédente publiée. De nouvelles modifications restent à enregistrer."
+          : "Modifications publiées."
+      );
+      router.refresh();
+    } catch {
+      setError("Impossible d’enregistrer la page. Réessayez.");
+    } finally {
+      setSaving(false);
     }
-    setMsg("Enregistré.");
-    router.refresh();
-  }, [selectedPage, editor, title, router]);
+  }, [selectedPage, editor, title, router, setDirtyState]);
 
-  const handleNewRoot = useCallback(async () => {
-    const name = window.prompt("Titre de la nouvelle section (racine)", "Nouvelle page");
-    if (!name?.trim()) return;
-    const res = await createWikiPageAction({ parent_id: null, title: name.trim() });
-    if (!res.ok) {
-      setError(res.error);
+  const handleCreatePage = useCallback(async () => {
+    const name = newPageTitle.trim();
+    if (
+      !name ||
+      !newPageMode ||
+      (newPageMode === "child" && !selectedPage) ||
+      !confirmDiscard()
+    ) {
       return;
     }
+    setCreating(true);
+    setMsg(null);
     setError(null);
-    router.refresh();
-    setSelectedId(res.id);
-  }, [router]);
-
-  const handleNewChild = useCallback(async () => {
-    if (!selectedPage) return;
-    const name = window.prompt("Titre de la sous-section", "Nouvelle sous-page");
-    if (!name?.trim()) return;
-    const res = await createWikiPageAction({ parent_id: selectedPage.id, title: name.trim() });
-    if (!res.ok) {
-      setError(res.error);
-      return;
+    try {
+      const res = await createWikiPageAction({
+        parent_id: newPageMode === "child" ? selectedPage?.id ?? null : null,
+        title: name,
+      });
+      if (!res.ok) {
+        setError(res.error);
+        return;
+      }
+      setDirtyState(false);
+      setNewPageMode(null);
+      setNewPageTitle("");
+      setSelectedId(res.id);
+      setTitle(name);
+      setMsg("Page créée.");
+      router.refresh();
+    } catch {
+      setError("Impossible de créer la page. Réessayez.");
+    } finally {
+      setCreating(false);
     }
-    setError(null);
-    router.refresh();
-    setSelectedId(res.id);
-  }, [selectedPage, router]);
+  }, [confirmDiscard, newPageMode, newPageTitle, selectedPage, router, setDirtyState]);
 
   const handleDelete = useCallback(async () => {
-    if (!selectedPage) return;
-    if (!window.confirm(`Supprimer « ${selectedPage.title} » et ses sous-pages éventuelles ?`)) return;
-    const res = await deleteWikiPageAction(selectedPage.id);
-    if (!res.ok) {
-      setError(res.error);
-      return;
-    }
+    if (!selectedPage || deleting) return;
+    setDeleting(true);
+    setMsg(null);
     setError(null);
-    router.refresh();
-    setSelectedId(null);
-    setTitle("");
-  }, [selectedPage, router]);
+    try {
+      const res = await deleteWikiPageAction(selectedPage.id);
+      if (!res.ok) {
+        setError(res.error);
+        return;
+      }
+      setDirtyState(false);
+      setSelectedId(null);
+      setTitle("");
+      setDeleteConfirmOpen(false);
+      setMsg("Page supprimée.");
+      router.refresh();
+    } catch {
+      setError("Impossible de supprimer la page. Réessayez.");
+    } finally {
+      setDeleting(false);
+    }
+  }, [deleting, selectedPage, router, setDirtyState]);
 
   const handleMove = useCallback(
     async (dir: "up" | "down") => {
-      if (!selectedPage) return;
+      if (!selectedPage || moving || dirty) return;
+      setMoving(dir);
+      setMsg(null);
       setError(null);
-      const result = await moveWikiPageAction(selectedPage.id, dir);
-      if (!result.ok) setError(result.error);
-      else router.refresh();
+      try {
+        const result = await moveWikiPageAction(selectedPage.id, dir);
+        if (!result.ok) {
+          setError(result.error);
+          return;
+        }
+        setMsg(dir === "up" ? "Page remontée." : "Page descendue.");
+        router.refresh();
+      } catch {
+        setError("Impossible de déplacer la page. Réessayez.");
+      } finally {
+        setMoving(null);
+      }
     },
-    [selectedPage, router]
+    [dirty, moving, selectedPage, router]
   );
 
   return (
-    <div className="admin-settings-form mx-auto max-w-6xl px-4 py-6">
-      <h1 className="mb-1 text-2xl font-semibold text-[var(--foreground)]">Wiki</h1>
-      <p className="mb-4 text-sm text-[var(--foreground-muted)]">
-        Éditez les pages visibles par les joueurs. Les images acceptées pèsent au maximum 5 Mo.
-      </p>
-      <AdminSettingsGuide
-        purpose="L’éditeur montre le contenu tel qu’il sera publié."
-        impact="Enregistrer modifie immédiatement la page lue par les joueurs. Supprimer une section supprime aussi ses sous-sections."
-        check="Relisez le titre, la hiérarchie et le rendu dans l’éditeur avant d’enregistrer."
-      />
-      {error ? <p role="alert" className="mt-4 text-sm text-[var(--danger)]">{error}</p> : null}
+    <div className="admin-settings-form mx-auto max-w-[100rem] px-4 py-6">
+      <header className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <h1 className="text-2xl font-semibold text-[var(--foreground)]">Wiki</h1>
+          <span className="rounded bg-[var(--background-elevated)] px-2 py-1 text-xs text-[var(--foreground-muted)]">
+            {pages.length} page{pages.length > 1 ? "s" : ""}
+          </span>
+        </div>
+        <span
+          className={`rounded px-2 py-1 text-sm font-medium ${
+            dirty ? "bg-amber-500/15 text-amber-300" : "bg-emerald-500/15 text-emerald-300"
+          }`}
+        >
+          {dirty ? "À enregistrer" : "Publié"}
+        </span>
+      </header>
 
-      <div className="mt-4 flex flex-col gap-4 lg:flex-row">
-        <aside className="w-full shrink-0 lg:w-72">
-          <div className="rounded-xl border border-[var(--border)] bg-[var(--background-panel)] p-3">
-            <div className="mb-2 flex flex-wrap gap-2">
-              <button type="button" className={btnClass} onClick={handleNewRoot}>
-                + Section racine
+      {(error || msg) ? (
+        <div className="mt-3" aria-live="polite">
+          {error ? <p role="alert" className="text-sm text-[var(--danger)]">{error}</p> : null}
+          {!error && msg ? <p role="status" className="text-sm text-[var(--accent)]">{msg}</p> : null}
+        </div>
+      ) : null}
+
+      <div className="mt-4 grid min-w-0 overflow-hidden rounded-xl border bg-[var(--background-panel)] lg:grid-cols-[19rem_minmax(0,1fr)]" style={{ borderColor: "var(--border)" }}>
+        <details ref={pageNavigationRef} className="wiki-admin-pages min-w-0 border-b lg:border-r lg:border-b-0" style={{ borderColor: "var(--border)" }}>
+          <summary className="flex min-h-12 cursor-pointer list-none items-center justify-between gap-3 px-3 text-sm font-semibold text-[var(--foreground)] lg:hidden [&::-webkit-details-marker]:hidden">
+            <span className="min-w-0 truncate">
+              Pages <span className="font-normal text-[var(--foreground-muted)]">· {selectedPage?.title ?? "Aucune sélection"}</span>
+            </span>
+            <span aria-hidden className="text-[var(--foreground-muted)]">⌄</span>
+          </summary>
+          <div className="wiki-admin-pages-content">
+          <div className="flex items-center justify-between gap-2 border-b p-3" style={{ borderColor: "var(--border)" }}>
+            <h2 className="text-sm font-semibold text-[var(--foreground)]">Pages</h2>
+            <div className="flex gap-1">
+              <button
+                type="button"
+                className="min-h-9 rounded-lg border px-2.5 text-sm text-[var(--foreground)] hover:bg-[var(--background-elevated)] disabled:opacity-40"
+                style={{ borderColor: "var(--border)" }}
+                onClick={() => {
+                  setNewPageMode("root");
+                  setNewPageTitle("");
+                }}
+                disabled={busy}
+              >
+                + Page
               </button>
-              <button type="button" className={btnClass} onClick={handleNewChild} disabled={!selectedPage}>
-                + Sous-section
+              <button
+                type="button"
+                className="min-h-9 rounded-lg border px-2.5 text-sm text-[var(--foreground)] hover:bg-[var(--background-elevated)] disabled:opacity-40"
+                style={{ borderColor: "var(--border)" }}
+                onClick={() => {
+                  setNewPageMode("child");
+                  setNewPageTitle("");
+                }}
+                disabled={busy || !selectedPage}
+              >
+                + Enfant
               </button>
             </div>
+          </div>
+
+          {newPageMode ? (
+            <form
+              className="border-b bg-[var(--background)] p-3"
+              style={{ borderColor: "var(--border)" }}
+              onSubmit={(event) => {
+                event.preventDefault();
+                void handleCreatePage();
+              }}
+            >
+              <label htmlFor="new-wiki-page-title" className="text-xs font-medium text-[var(--foreground)]">
+                {newPageMode === "root" ? "Nouvelle page" : `Sous-page de « ${selectedPage?.title ?? ""} »`}
+              </label>
+              <input
+                id="new-wiki-page-title"
+                autoFocus
+                value={newPageTitle}
+                onChange={(event) => setNewPageTitle(event.target.value.slice(0, 120))}
+                maxLength={120}
+                disabled={creating}
+                className="mt-1 min-h-11 w-full rounded-lg border border-[var(--border)] bg-[var(--background-panel)] px-3 text-sm text-[var(--foreground)]"
+              />
+              <div className="mt-2 grid grid-cols-2 gap-2">
+                <button type="button" onClick={() => setNewPageMode(null)} disabled={creating} className={btnClass}>Annuler</button>
+                <button
+                  type="submit"
+                  disabled={creating || !newPageTitle.trim()}
+                  className="rounded-lg bg-[var(--accent)] px-3 py-2 text-sm font-semibold text-[#0f1419] disabled:opacity-40"
+                >
+                  {creating ? "Création…" : "Créer"}
+                </button>
+              </div>
+            </form>
+          ) : null}
+
+          <div className="border-b p-3" style={{ borderColor: "var(--border)" }}>
             <label htmlFor="wiki-admin-search" className="sr-only">Rechercher une page du wiki</label>
             <input
               id="wiki-admin-search"
               type="search"
               value={query}
               onChange={(event) => setQuery(event.target.value)}
-              placeholder="Rechercher une page…"
-              className="mb-3 min-h-11 w-full rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 text-base text-[var(--foreground)]"
+              placeholder="Rechercher…"
+              className="min-h-10 w-full rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 text-sm text-[var(--foreground)]"
             />
-            <ul className="max-h-[50vh] space-y-0.5 overflow-y-auto">
-              {query ? (
-                searchResults.length > 0 ? (
-                  searchResults.map((page) => (
-                    <li key={page.id}>
-                      <button
-                        type="button"
-                        onClick={() => selectPage(page.id)}
-                        className={`min-h-11 w-full rounded-lg px-2 py-1.5 text-left text-sm ${
-                          selectedId === page.id
-                            ? "bg-[var(--accent)]/25 font-medium text-[var(--foreground)]"
-                            : "text-[var(--foreground-muted)] hover:bg-[var(--background-elevated)]"
-                        }`}
-                      >
-                        <span className="block">{page.title}</span>
-                        <span className="block break-all text-xs text-[var(--foreground-muted)]">/{page.slug}</span>
-                      </button>
-                    </li>
-                  ))
-                ) : (
-                  <li className="px-2 py-4 text-sm text-[var(--foreground-muted)]">Aucune page trouvée.</li>
-                )
-              ) : tree.length === 0 ? (
-                <li className="text-sm text-[var(--foreground-muted)]">Aucune page. Créez-en une.</li>
-              ) : (
-                tree.map((n) => (
-                  <AdminTreeRow
-                    key={n.id}
-                    node={n}
-                    selectedId={selectedId}
-                    expandedSlugs={expandedSlugs}
-                    toggleExpand={toggleExpand}
-                    onSelect={selectPage}
-                  />
-                ))
-              )}
-            </ul>
           </div>
-        </aside>
 
-        <main className="min-w-0 flex-1 space-y-4">
+          <ul className="max-h-[42dvh] space-y-0.5 overflow-y-auto p-2 lg:max-h-[calc(100dvh-14rem)]">
+            {query ? (
+              searchResults.length > 0 ? (
+                searchResults.map((page) => (
+                  <li key={page.id}>
+                    <button
+                      type="button"
+                      onClick={() => selectPage(page.id)}
+                      disabled={busy}
+                      className={`min-h-11 w-full rounded-lg px-2 py-1.5 text-left text-sm ${
+                        selectedId === page.id
+                          ? "bg-[var(--accent)]/20 font-medium text-[var(--foreground)]"
+                          : "text-[var(--foreground-muted)] hover:bg-[var(--background-elevated)]"
+                      }`}
+                    >
+                      <span className="block truncate">{page.title}</span>
+                      <span className="block truncate text-xs text-[var(--foreground-muted)]">/{page.slug}</span>
+                    </button>
+                  </li>
+                ))
+              ) : (
+                <li className="px-2 py-6 text-center text-sm text-[var(--foreground-muted)]">Aucun résultat.</li>
+              )
+            ) : tree.length === 0 ? (
+              <li className="px-2 py-6 text-center text-sm text-[var(--foreground-muted)]">Aucune page.</li>
+            ) : (
+              tree.map((n) => (
+                <AdminTreeRow
+                  key={n.id}
+                  node={n}
+                  selectedId={selectedId}
+                  expandedSlugs={expandedSlugs}
+                  toggleExpand={toggleExpand}
+                  onSelect={selectPage}
+                  disabled={busy}
+                />
+              ))
+            )}
+          </ul>
+          </div>
+        </details>
+
+        <section className="min-w-0" aria-label="Édition de la page">
           {selectedPage ? (
             <>
-              <div className="flex flex-wrap items-end gap-3">
-                <label className="flex min-w-[200px] flex-1 flex-col gap-1">
-                  <span className="text-xs text-[var(--foreground-muted)]">Titre</span>
-                  <input
-                    value={title}
-                    onChange={(e) => {
-                      setTitle(e.target.value);
-                      setMsg(null);
-                    }}
-                    className="rounded-lg border border-[var(--border)] bg-[var(--background-elevated)] px-3 py-2 text-sm text-[var(--foreground)]"
-                  />
-                </label>
-                <button type="button" className={btnClass} onClick={() => handleMove("up")} disabled={saving}>
-                  Monter
-                </button>
-                <button type="button" className={btnClass} onClick={() => handleMove("down")} disabled={saving}>
-                  Descendre
-                </button>
-                <button type="button" className={dangerBtn} onClick={handleDelete} disabled={saving}>
-                  Supprimer
-                </button>
-                <button
-                  type="button"
-                  className="rounded-lg bg-[var(--accent)] px-4 py-2 text-sm font-medium text-[var(--background)] hover:opacity-90 disabled:opacity-50"
-                  onClick={handleSave}
-                  disabled={saving || !editor}
-                >
-                  {saving ? "Enregistrement…" : "Enregistrer"}
-                </button>
+              <header className="sticky top-0 z-10 border-b bg-[var(--background-panel)] p-3" style={{ borderColor: "var(--border)" }}>
+                <div className="flex flex-col gap-3 xl:flex-row xl:items-end">
+                  <label className="flex min-w-[12rem] flex-1 flex-col gap-1">
+                    <span className="text-xs text-[var(--foreground-muted)]">Titre</span>
+                    <input
+                      value={title}
+                      onChange={(e) => {
+                        setTitle(e.target.value);
+                        clearSaveMessage();
+                      }}
+                      maxLength={120}
+                      aria-invalid={!title.trim()}
+                      disabled={deleting}
+                      className="min-h-10 rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 text-sm font-medium text-[var(--foreground)]"
+                    />
+                  </label>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <div className="flex rounded-lg border p-0.5" style={{ borderColor: "var(--border)" }}>
+                      <button type="button" className="min-h-9 px-3 text-sm text-[var(--foreground-muted)] hover:text-[var(--foreground)] disabled:opacity-40" onClick={() => handleMove("up")} disabled={busy || dirty}>
+                        {moving === "up" ? "Déplacement…" : "↑ Monter"}
+                      </button>
+                      <button type="button" className="min-h-9 border-l px-3 text-sm text-[var(--foreground-muted)] hover:text-[var(--foreground)] disabled:opacity-40" style={{ borderColor: "var(--border)" }} onClick={() => handleMove("down")} disabled={busy || dirty}>
+                        {moving === "down" ? "Déplacement…" : "↓ Descendre"}
+                      </button>
+                    </div>
+                    <button type="button" className={dangerBtn} onClick={() => setDeleteConfirmOpen(true)} disabled={busy}>
+                      {deleting ? "Suppression…" : "Supprimer"}
+                    </button>
+                    <button
+                      type="button"
+                      className="min-h-10 rounded-lg bg-[var(--accent)] px-4 text-sm font-semibold text-[#0f1419] hover:bg-[var(--accent-hover)] disabled:opacity-50"
+                      onClick={handleSave}
+                      disabled={busy || !editor || !dirty}
+                    >
+                      {saving ? "Enregistrement…" : "Enregistrer"}
+                    </button>
+                  </div>
+                </div>
+              </header>
+              <div className="min-w-0 p-3 sm:p-4">
+                <WikiEditor
+                  key={selectedPage.id}
+                  content={selectedPage.content}
+                  serverRevision={selectedPage.updated_at ?? selectedPage.id}
+                  onEditorReady={setEditor}
+                  onDocumentChange={clearSaveMessage}
+                />
               </div>
-              {msg ? <p className="text-sm text-[var(--accent)]">{msg}</p> : null}
-              <WikiEditor
-                key={selectedPage.id}
-                content={selectedPage.content}
-                serverRevision={selectedPage.updated_at ?? selectedPage.id}
-                onEditorReady={setEditor}
-                onDocumentChange={clearSaveMessage}
-              />
             </>
           ) : (
-            <p className="text-sm text-[var(--foreground-muted)]">Sélectionnez une page dans l’arborescence.</p>
+            <div className="grid min-h-72 place-items-center p-6 text-sm text-[var(--foreground-muted)]">
+              Sélectionnez une page.
+            </div>
           )}
-        </main>
+        </section>
       </div>
+
+      <AdminConfirmDialog
+        open={deleteConfirmOpen && Boolean(selectedPage)}
+        onClose={() => setDeleteConfirmOpen(false)}
+        title={`Supprimer « ${selectedPage?.title ?? ""} » ?`}
+        consequence={
+          dirty
+            ? "Cette page, ses sous-pages et vos modifications non enregistrées seront supprimées. Cette opération est irréversible."
+            : "Cette page et ses sous-pages éventuelles seront supprimées. Cette opération est irréversible."
+        }
+        confirmLabel="Supprimer la page"
+        danger
+        busy={deleting}
+        onConfirm={() => void handleDelete()}
+      />
     </div>
   );
 }

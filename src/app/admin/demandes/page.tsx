@@ -27,6 +27,17 @@ export default async function AdminDemandesPage() {
     supabase.from("rule_parameters").select("value").eq("key", "intel_config").maybeSingle(),
     getAllRelationRows(supabase),
   ]);
+  const loadError = [
+    requestsRes,
+    rosterRes,
+    countriesRes,
+    countriesListRes,
+    cmuRes,
+    rosterLevelsRes,
+    influenceConfigRes,
+    intelConfigRes,
+  ].find((result) => result.error)?.error;
+  if (loadError) throw new Error(`Impossible de charger les demandes : ${loadError.message}`);
 
   type RequestRow = {
     id: string;
@@ -67,10 +78,11 @@ const rosterUnitIds = rosterUnits.map((u) => ({ id: u.id, name_fr: u.name_fr }))
   }
   let targetCountriesById: Record<string, { name: string; flag_url: string | null; regime: string | null }> = {};
   if (targetCountryIds.size > 0) {
-    const { data: targetRows } = await supabase
+    const { data: targetRows, error: targetError } = await supabase
       .from("countries")
       .select("id, name, flag_url, regime")
       .in("id", Array.from(targetCountryIds));
+    if (targetError) throw new Error(`Impossible de charger les pays ciblés : ${targetError.message}`);
     if (targetRows?.length) {
       targetCountriesById = Object.fromEntries(
         targetRows.map((c) => [c.id, { name: c.name, flag_url: c.flag_url ?? null, regime: c.regime ?? null }])
@@ -97,12 +109,9 @@ const rosterUnitIds = rosterUnits.map((u) => ({ id: u.id, name_fr: u.name_fr }))
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-6">
-      <h1 className="mb-1 text-2xl font-bold text-[var(--foreground)]">
+      <h1 className="mb-5 text-2xl font-bold text-[var(--foreground)]">
         Demandes des joueurs
       </h1>
-      <p className="mb-5 max-w-[72ch] text-sm leading-relaxed text-[var(--foreground-muted)]">
-        Examinez chaque demande, vérifiez ses conséquences, puis appliquez votre décision.
-      </p>
       <DemandesList
         requests={requests}
         rosterUnitIds={rosterUnitIds}

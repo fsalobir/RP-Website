@@ -21,12 +21,14 @@ export async function createPerkCategory(formData: FormData) {
   const name_fr = (formData.get("name_fr") as string)?.trim();
   const sort_order = Number(formData.get("sort_order")) || 0;
   if (!name_fr) return { error: "Nom requis." };
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from("perk_categories")
-    .insert({ name_fr, sort_order });
+    .insert({ name_fr, sort_order })
+    .select("*")
+    .single();
   if (error) return { error: error.message };
   revalidatePath("/admin/avantages");
-  return { error: null };
+  return { error: null, data };
 }
 
 export async function updatePerkCategory(id: string, formData: FormData) {
@@ -34,13 +36,15 @@ export async function updatePerkCategory(id: string, formData: FormData) {
   const name_fr = (formData.get("name_fr") as string)?.trim();
   const sort_order = Number(formData.get("sort_order")) || 0;
   if (!name_fr) return { error: "Nom requis." };
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from("perk_categories")
     .update({ name_fr, sort_order })
-    .eq("id", id);
+    .eq("id", id)
+    .select("*")
+    .single();
   if (error) return { error: error.message };
   revalidatePath("/admin/avantages");
-  return { error: null };
+  return { error: null, data };
 }
 
 export async function deletePerkCategory(id: string) {
@@ -78,7 +82,7 @@ export async function createPerk(
     .single();
   if (insertError) return { error: insertError.message };
   if (perk?.id && effects.length > 0) {
-    await supabase.from("perk_effects").insert(
+    const { error } = await supabase.from("perk_effects").insert(
       effects.map((e) => ({
         perk_id: perk.id,
         effect_kind: e.effect_kind,
@@ -87,9 +91,13 @@ export async function createPerk(
         value: Number(e.value),
       }))
     );
+    if (error) {
+      await supabase.from("perks").delete().eq("id", perk.id);
+      return { error: `Création annulée : ${error.message}` };
+    }
   }
   if (perk?.id && requirements.length > 0) {
-    await supabase.from("perk_requirements").insert(
+    const { error } = await supabase.from("perk_requirements").insert(
       requirements.map((r) => ({
         perk_id: perk.id,
         requirement_kind: r.requirement_kind,
@@ -97,6 +105,10 @@ export async function createPerk(
         value: Number(r.value),
       }))
     );
+    if (error) {
+      await supabase.from("perks").delete().eq("id", perk.id);
+      return { error: `Création annulée : ${error.message}` };
+    }
   }
   revalidatePath("/admin/avantages");
   revalidateTag("country-page-globals", "max");
@@ -129,9 +141,10 @@ export async function updatePerk(
     })
     .eq("id", id);
   if (updateError) return { error: updateError.message };
-  await supabase.from("perk_effects").delete().eq("perk_id", id);
+  const { error: deleteEffectsError } = await supabase.from("perk_effects").delete().eq("perk_id", id);
+  if (deleteEffectsError) return { error: deleteEffectsError.message };
   if (effects.length > 0) {
-    await supabase.from("perk_effects").insert(
+    const { error: insertEffectsError } = await supabase.from("perk_effects").insert(
       effects.map((e) => ({
         perk_id: id,
         effect_kind: e.effect_kind,
@@ -140,10 +153,12 @@ export async function updatePerk(
         value: Number(e.value),
       }))
     );
+    if (insertEffectsError) return { error: `Avantage enregistré, mais ses effets n’ont pas pu être remplacés : ${insertEffectsError.message}` };
   }
-  await supabase.from("perk_requirements").delete().eq("perk_id", id);
+  const { error: deleteRequirementsError } = await supabase.from("perk_requirements").delete().eq("perk_id", id);
+  if (deleteRequirementsError) return { error: deleteRequirementsError.message };
   if (requirements.length > 0) {
-    await supabase.from("perk_requirements").insert(
+    const { error: insertRequirementsError } = await supabase.from("perk_requirements").insert(
       requirements.map((r) => ({
         perk_id: id,
         requirement_kind: r.requirement_kind,
@@ -151,6 +166,9 @@ export async function updatePerk(
         value: Number(r.value),
       }))
     );
+    if (insertRequirementsError) {
+      return { error: `Avantage enregistré, mais ses conditions n’ont pas pu être remplacées : ${insertRequirementsError.message}` };
+    }
   }
   revalidatePath("/admin/avantages");
   revalidateTag("country-page-globals", "max");

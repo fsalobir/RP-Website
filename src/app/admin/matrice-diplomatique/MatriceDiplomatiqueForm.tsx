@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { setRelation, resetAllRelations, randomizeAllRelations } from "./actions";
 import { RELATION_MIN, RELATION_MAX } from "@/lib/relations";
+import { AdminConfirmDialog } from "@/components/admin/AdminConfirmDialog";
 
 type Country = { id: string; name: string; slug: string };
 
@@ -24,8 +25,11 @@ export function MatriceDiplomatiqueForm({
 }) {
   const [countryA, setCountryA] = useState<string>("");
   const [countryB, setCountryB] = useState<string>("");
+  const [countryAQuery, setCountryAQuery] = useState("");
+  const [countryBQuery, setCountryBQuery] = useState("");
   const [value, setValue] = useState(0);
   const [message, setMessage] = useState<{ type: "ok" | "error"; text: string } | null>(null);
+  const [globalAction, setGlobalAction] = useState<"random" | "reset" | null>(null);
   const [isPending, startTransition] = useTransition();
   const router = useRouter();
 
@@ -36,6 +40,18 @@ export function MatriceDiplomatiqueForm({
 
   const currentValue =
     countryA && countryB && countryA !== countryB ? relationMap[key(countryA, countryB)] ?? 0 : null;
+  const countryAName = countries.find((country) => country.id === countryA)?.name;
+  const countryBName = countries.find((country) => country.id === countryB)?.name;
+  const pairReady = currentValue !== null;
+  const relationDelta = pairReady ? value - currentValue : 0;
+
+  if (countries.length < 2) {
+    return (
+      <p className="rounded-lg border p-4 text-sm text-[var(--foreground-muted)]" style={{ borderColor: "var(--border)" }}>
+        Ajoutez au moins deux pays avant de définir leurs relations.
+      </p>
+    );
+  }
 
   const handleSave = () => {
     if (!countryA || !countryB || countryA === countryB) {
@@ -54,7 +70,6 @@ export function MatriceDiplomatiqueForm({
   };
 
   const handleResetAll = () => {
-    if (!window.confirm("Réinitialiser toutes les relations à 0 ?")) return;
     setMessage(null);
     startTransition(async () => {
       const result = await resetAllRelations();
@@ -68,7 +83,6 @@ export function MatriceDiplomatiqueForm({
   };
 
   const handleRandom = () => {
-    if (!window.confirm("Attribuer une valeur aléatoire (-100 à +100) à toutes les paires de pays ?")) return;
     setMessage(null);
     startTransition(async () => {
       const result = await randomizeAllRelations();
@@ -82,158 +96,200 @@ export function MatriceDiplomatiqueForm({
 
   return (
     <div className="admin-settings-form space-y-4">
-      <section>
-        <h2 className="text-lg font-semibold text-[var(--foreground)]">Modifier une relation</h2>
-        <p className="mb-3 mt-1 text-sm leading-snug text-[var(--foreground-muted)]">
-          Cette valeur réciproque influence les actions, les événements IA et les idéologies. La valeur actuelle est chargée après le choix des deux pays.
-        </p>
-        <div className="grid grid-cols-1 items-end gap-3 sm:grid-cols-2 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(14rem,1fr)_auto]">
-          <div className="flex min-w-0 flex-col gap-1">
-            <label htmlFor="relation-country-a" className="text-sm text-[var(--foreground-muted)]">Premier pays</label>
-            <select
+      <section aria-labelledby="bilateral-relation-title" className="border-y py-4" style={{ borderColor: "var(--border)" }}>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h2 id="bilateral-relation-title" className="text-base font-semibold text-[var(--foreground)]">
+            Relation bilatérale
+          </h2>
+          <span className="text-xs text-[var(--foreground-muted)]">{countries.length} pays disponibles</span>
+        </div>
+
+        <div className="mt-4 grid items-end gap-3 sm:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)]">
+          <label htmlFor="relation-country-a" className="min-w-0">
+            <span className="mb-1 block text-xs font-medium text-[var(--foreground-muted)]">Premier pays</span>
+            <input
               id="relation-country-a"
-              value={countryA}
-              onChange={(e) => {
-                const nextA = e.target.value;
+              type="search"
+              list="relation-country-a-options"
+              autoComplete="off"
+              placeholder="Rechercher un pays…"
+              value={countryAQuery}
+              onChange={(event) => {
+                const query = event.target.value;
+                const nextA = countries.find((country) => country.name === query)?.id ?? "";
                 const nextB = nextA === countryB ? "" : countryB;
+                setCountryAQuery(query);
                 setCountryA(nextA);
-                if (nextB !== countryB) setCountryB(nextB);
+                if (nextB !== countryB) {
+                  setCountryB(nextB);
+                  setCountryBQuery("");
+                }
                 setValue(nextA && nextB ? relationMap[key(nextA, nextB)] ?? 0 : 0);
               }}
-              className="w-full min-w-0 rounded border bg-[var(--background)] px-3 py-2 text-[var(--foreground)]"
+              className="min-h-11 w-full min-w-0 rounded-lg border bg-[var(--background)] px-3 text-[var(--foreground)] focus:border-[var(--accent)] focus:outline-none focus:ring-2 focus:ring-[var(--accent)]"
               style={{ borderColor: "var(--border)" }}
-            >
-              <option value="">— Choisir —</option>
-              {countries.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                </option>
+            />
+            <datalist id="relation-country-a-options">
+              {countries.map((country) => (
+                <option key={country.id} value={country.name} />
               ))}
-            </select>
-          </div>
-          <div className="flex min-w-0 flex-col gap-1">
-            <label htmlFor="relation-country-b" className="text-sm text-[var(--foreground-muted)]">Second pays</label>
-            <select
+            </datalist>
+          </label>
+
+          <span aria-hidden className="hidden pb-3 text-lg text-[var(--foreground-muted)] sm:block">↔</span>
+
+          <label htmlFor="relation-country-b" className="min-w-0">
+            <span className="mb-1 block text-xs font-medium text-[var(--foreground-muted)]">Second pays</span>
+            <input
               id="relation-country-b"
-              value={countryB}
-              onChange={(e) => {
-                const nextB = e.target.value;
+              type="search"
+              list="relation-country-b-options"
+              autoComplete="off"
+              placeholder="Rechercher un pays…"
+              value={countryBQuery}
+              onChange={(event) => {
+                const query = event.target.value;
+                const nextB = countries.find((country) => country.name === query)?.id ?? "";
                 const nextA = nextB === countryA ? "" : countryA;
+                setCountryBQuery(query);
                 setCountryB(nextB);
-                if (nextA !== countryA) setCountryA(nextA);
+                if (nextA !== countryA) {
+                  setCountryA(nextA);
+                  setCountryAQuery("");
+                }
                 setValue(nextA && nextB ? relationMap[key(nextA, nextB)] ?? 0 : 0);
               }}
-              className="w-full min-w-0 rounded border bg-[var(--background)] px-3 py-2 text-[var(--foreground)]"
+              className="min-h-11 w-full min-w-0 rounded-lg border bg-[var(--background)] px-3 text-[var(--foreground)] focus:border-[var(--accent)] focus:outline-none focus:ring-2 focus:ring-[var(--accent)]"
               style={{ borderColor: "var(--border)" }}
-            >
-              <option value="">— Choisir —</option>
-              {countries.map((c) => (
-                <option key={c.id} value={c.id} disabled={c.id === countryA}>
-                  {c.name}
-                </option>
+            />
+            <datalist id="relation-country-b-options">
+              {countries.map((country) => (
+                <option key={country.id} value={country.name} />
               ))}
-            </select>
-          </div>
-          <div className="flex min-w-0 flex-col gap-1">
-            <label htmlFor="relation-range" className="text-sm text-[var(--foreground-muted)]">
-              Relation : −100 hostile · 0 neutre · +100 allié
-            </label>
-            <div className="flex min-w-0 items-center gap-3">
+            </datalist>
+          </label>
+        </div>
+
+        {pairReady ? (
+          <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,1fr)_15rem]">
+            <div className="min-w-0">
+              <div className="flex items-end justify-between gap-3">
+                <label htmlFor="relation-range" className="text-sm font-medium text-[var(--foreground)]">
+                  Position diplomatique
+                </label>
+                <input
+                  aria-label="Valeur numérique de la relation"
+                  type="number"
+                  min={RELATION_MIN}
+                  max={RELATION_MAX}
+                  value={value}
+                  onChange={(event) => setValue(Number(event.target.value))}
+                  className="min-h-10 w-20 rounded-lg border bg-[var(--background)] px-2 text-center text-base font-semibold text-[var(--foreground)]"
+                  style={{ borderColor: "var(--border)" }}
+                />
+              </div>
               <input
                 id="relation-range"
                 type="range"
                 min={RELATION_MIN}
                 max={RELATION_MAX}
                 value={value}
-                onChange={(e) => setValue(Number(e.target.value))}
-                className="min-h-11 min-w-0 flex-1 accent-[var(--accent)]"
+                onChange={(event) => setValue(Number(event.target.value))}
+                className="mt-2 min-h-11 w-full accent-[var(--accent)]"
               />
-              <input
-                aria-label="Valeur numérique de la relation"
-                type="number"
-                min={RELATION_MIN}
-                max={RELATION_MAX}
-                value={value}
-                onChange={(e) => setValue(Number(e.target.value))}
-                className="min-h-11 w-24 rounded-lg border bg-[var(--background)] px-2 text-center text-base text-[var(--foreground)]"
-                style={{ borderColor: "var(--border)" }}
-              />
+              <div
+                aria-label={`Échelle diplomatique : ${getRelationLabel(value)}, valeur ${value}`}
+                role="img"
+                className="relative mt-1 h-2 rounded-full"
+                style={{ background: "linear-gradient(90deg, var(--danger), var(--border-muted) 50%, var(--accent))" }}
+              >
+                <span
+                  className="absolute top-1/2 h-4 w-4 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-[var(--foreground)] bg-[var(--background)]"
+                  style={{ left: `${((value - RELATION_MIN) / (RELATION_MAX - RELATION_MIN)) * 100}%` }}
+                />
+              </div>
+              <div className="mt-2 flex justify-between text-xs text-[var(--foreground-muted)]">
+                <span>−100 Hostilité</span><span>0 Neutre</span><span>+100 Alliance</span>
+              </div>
             </div>
+
+            <aside className="flex flex-col justify-between rounded-xl bg-[var(--background-elevated)] p-3">
+              <div>
+                <p className="truncate text-xs text-[var(--foreground-muted)]">{countryAName} ↔ {countryBName}</p>
+                <p className="mt-1 text-lg font-semibold text-[var(--foreground)]">{getRelationLabel(value)}</p>
+                <p className="mt-2 text-sm text-[var(--foreground-muted)]">
+                  {currentValue} <span aria-hidden>→</span> <strong className="text-[var(--foreground)]">{value}</strong>
+                  {relationDelta !== 0 ? (
+                    <span className="ml-2 text-[var(--accent)]">({relationDelta > 0 ? "+" : ""}{relationDelta})</span>
+                  ) : null}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={handleSave}
+                disabled={isPending || value === currentValue}
+                className="mt-4 min-h-11 w-full rounded-lg px-4 text-sm font-semibold text-[#0f1419] disabled:opacity-40"
+                style={{ background: "var(--accent)" }}
+              >
+                {isPending ? "Enregistrement…" : value === currentValue ? "Relation à jour" : "Enregistrer"}
+              </button>
+            </aside>
           </div>
-          <button
-            type="button"
-            onClick={handleSave}
-            disabled={isPending || !countryA || !countryB || countryA === countryB}
-            className="min-h-11 w-full rounded-lg px-4 text-sm font-semibold text-[#0f1419] disabled:opacity-50"
-            style={{ background: "var(--accent)" }}
-          >
-            {isPending ? "Enregistrement…" : "Enregistrer la relation"}
-          </button>
-        </div>
-        {countryA && countryB && countryA !== countryB && (
-          <div className="mt-3 rounded-lg bg-[var(--background-elevated)] p-3">
-            <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
-              <p className="text-[var(--foreground-muted)]">
-                Valeur enregistrée : <strong className="text-[var(--foreground)]">{currentValue ?? 0}</strong>
-              </p>
-              <p className="font-semibold text-[var(--foreground)]">
-                Nouvelle lecture : {getRelationLabel(value)}
-              </p>
-            </div>
-            <div
-              aria-label={`Échelle diplomatique : ${getRelationLabel(value)}, valeur ${value}`}
-              role="img"
-              className="relative mt-4 h-2 rounded-full"
-              style={{ background: "linear-gradient(90deg, var(--danger), var(--border-muted) 50%, var(--accent))" }}
+        ) : null}
+      </section>
+
+      <details className="rounded-xl border px-3" style={{ borderColor: "var(--border-muted)" }}>
+        <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between text-sm font-medium text-[var(--foreground)] [&::-webkit-details-marker]:hidden">
+          Actions globales
+          <span aria-hidden className="text-[var(--foreground-muted)]">▾</span>
+        </summary>
+        <div className="border-t py-3" style={{ borderColor: "var(--border-muted)" }}>
+          <p className="text-xs text-[var(--foreground-muted)]">Ces actions remplacent toute la matrice.</p>
+          <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+            <button
+              type="button"
+              onClick={() => setGlobalAction("random")}
+              disabled={isPending}
+              className="min-h-11 rounded-lg border px-4 text-sm font-medium text-[var(--foreground)] hover:bg-[var(--background-elevated)] disabled:opacity-50"
+              style={{ borderColor: "var(--border)" }}
             >
-              <span
-                className="absolute top-1/2 h-4 w-4 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-[var(--foreground)] bg-[var(--background)]"
-                style={{ left: `${((value - RELATION_MIN) / (RELATION_MAX - RELATION_MIN)) * 100}%` }}
-              />
-            </div>
-            <div className="mt-2 flex justify-between text-xs text-[var(--foreground-muted)]">
-              <span>Hostilité</span><span>Neutre</span><span>Alliance</span>
-            </div>
+              Générer des relations aléatoires
+            </button>
+            <button
+              type="button"
+              onClick={() => setGlobalAction("reset")}
+              disabled={isPending}
+              className="min-h-11 rounded-lg px-4 text-sm font-medium text-[var(--danger)] hover:bg-[var(--danger)]/10 disabled:opacity-50"
+            >
+              Tout remettre à 0
+            </button>
           </div>
-        )}
-      </section>
-
-      <section className="border-t pt-4" style={{ borderColor: "var(--border-muted)" }}>
-        <h3 className="text-sm font-semibold text-[var(--foreground)]">Actions sur toute la matrice</h3>
-        <p className="mt-1 text-xs leading-relaxed text-[var(--foreground-muted)]">
-          Ces actions remplacent toutes les relations existantes. Une confirmation est demandée.
-        </p>
-        <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
-        <button
-          type="button"
-          onClick={handleResetAll}
-          disabled={isPending}
-          className="min-h-11 rounded-lg px-4 text-sm font-medium text-white disabled:opacity-50"
-          style={{ background: "var(--danger)" }}
-        >
-          Réinitialiser toutes les relations (0)
-        </button>
-        <button
-          type="button"
-          onClick={handleRandom}
-          disabled={isPending}
-          className="min-h-11 rounded-lg border px-4 text-sm font-medium hover:bg-[var(--background-elevated)] disabled:opacity-50"
-          style={{ borderColor: "var(--border)", color: "var(--foreground)" }}
-        >
-          Relations aléatoires
-        </button>
         </div>
-      </section>
+      </details>
 
-      {message && (
-        <p
-          role={message.type === "error" ? "alert" : "status"}
-          className="text-sm"
-          style={{ color: message.type === "error" ? "var(--danger)" : "var(--accent)" }}
-        >
+      {message ? (
+        <p role={message.type === "error" ? "alert" : "status"} className="text-sm" style={{ color: message.type === "error" ? "var(--danger)" : "var(--accent)" }}>
           {message.text}
         </p>
-      )}
+      ) : null}
+
+      <AdminConfirmDialog
+        open={globalAction !== null}
+        onClose={() => setGlobalAction(null)}
+        title={globalAction === "reset" ? "Remettre toutes les relations à zéro ?" : "Générer une nouvelle matrice ?"}
+        consequence={
+          globalAction === "reset"
+            ? "Toutes les relations bilatérales deviendront neutres. Cette opération remplace la matrice actuelle."
+            : "Chaque paire de pays recevra une nouvelle relation entre −100 et +100. La matrice actuelle sera entièrement remplacée."
+        }
+        confirmLabel={globalAction === "reset" ? "Tout remettre à zéro" : "Générer la matrice"}
+        danger={globalAction === "reset"}
+        busy={isPending}
+        onConfirm={() => {
+          if (globalAction === "reset") handleResetAll();
+          else if (globalAction === "random") handleRandom();
+        }}
+      />
     </div>
   );
 }

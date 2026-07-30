@@ -4,6 +4,7 @@ import { useState, useMemo, useTransition } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { formatNumber, formatGdp, formatPopulation } from "@/lib/format";
+import { AdminDialog } from "@/components/admin/AdminDialog";
 import { InfoTooltipWithWikiLink } from "@/components/ui/InfoTooltipWithWikiLink";
 import { matchesSearchText } from "@/lib/searchText";
 
@@ -107,6 +108,7 @@ function compare(
 }
 
 type AdminSortKey = "name" | "player" | "continent";
+type AdminStatusFilter = "all" | "played" | "ai" | "inactive";
 
 function getAdminSortValue(
   row: Row,
@@ -173,7 +175,9 @@ export function CountriesTable({
   const [continentPendingId, setContinentPendingId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [assignmentFilter, setAssignmentFilter] = useState<"all" | "assigned_only">("all");
+  const [adminStatusFilter, setAdminStatusFilter] = useState<AdminStatusFilter>("all");
   const [adminPage, setAdminPage] = useState(1);
+  const [editingAdminCountryId, setEditingAdminCountryId] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [actionSuccess, setActionSuccess] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
@@ -187,11 +191,19 @@ export function CountriesTable({
   const sortedRows = useMemo(() => {
     if (adminLayout) {
       let list = [...rows];
+      if (adminStatusFilter === "played") {
+        list = list.filter((row) => playedSet.has(row.country.id));
+      } else if (adminStatusFilter === "ai") {
+        list = list.filter((row) => !playedSet.has(row.country.id) && !!row.country.ai_status);
+      } else if (adminStatusFilter === "inactive") {
+        list = list.filter((row) => !playedSet.has(row.country.id) && !row.country.ai_status);
+      }
       if (searchQuery.trim()) {
         list = list.filter((row) => {
           const c = row.country;
           return matchesSearchText(searchQuery, [
             c.name ?? "",
+            c.regime ?? "",
             playerNameByCountryId[c.id] ?? "",
             continentLabelById[c.continent_id ?? ""] ?? "",
           ]);
@@ -218,7 +230,17 @@ export function CountriesTable({
       const vb = getSortValue(b, sortKey);
       return compare(va, vb, sortOrder === "asc");
     });
-  }, [rows, sortKey, adminSortKey, sortOrder, adminLayout, showSearch, showAssignmentFilter, assignmentFilter, assignedSet, searchQuery, playerNameByCountryId, continentLabelById]);
+  }, [rows, sortKey, adminSortKey, sortOrder, adminLayout, showSearch, showAssignmentFilter, assignmentFilter, adminStatusFilter, assignedSet, playedSet, searchQuery, playerNameByCountryId, continentLabelById]);
+
+  const adminStatusCounts = useMemo(
+    () => ({
+      all: rows.length,
+      played: rows.filter((row) => playedSet.has(row.country.id)).length,
+      ai: rows.filter((row) => !playedSet.has(row.country.id) && !!row.country.ai_status).length,
+      inactive: rows.filter((row) => !playedSet.has(row.country.id) && !row.country.ai_status).length,
+    }),
+    [rows, playedSet]
+  );
 
   function handleHeaderClick(key: SortKey) {
     if (sortKey === key) {
@@ -238,6 +260,38 @@ export function CountriesTable({
     }
   }
 
+  function handleAdminContinentChange(country: CountryRow, value: string) {
+    if (!updateCountryContinentAction) return;
+    const continentId = value === "" ? null : value;
+    setContinentPendingId(country.id);
+    setActionError(null);
+    setActionSuccess(null);
+    startTransition(() => {
+      void updateCountryContinentAction(country.id, continentId)
+        .then((result) => {
+          if (result.error) setActionError(`${country.name} : ${result.error}`);
+          else setActionSuccess(`Continent de ${country.name} enregistré.`);
+        })
+        .finally(() => setContinentPendingId(null));
+    });
+  }
+
+  function handleAdminAiChange(country: CountryRow, value: string) {
+    if (!updateAiStatusAction) return;
+    const aiStatus = value === "major" || value === "minor" ? value : null;
+    setPendingId(country.id);
+    setActionError(null);
+    setActionSuccess(null);
+    startTransition(() => {
+      void updateAiStatusAction(country.id, aiStatus)
+        .then((result) => {
+          if (result.error) setActionError(`${country.name} : ${result.error}`);
+          else setActionSuccess(`Rôle automatique de ${country.name} enregistré.`);
+        })
+        .finally(() => setPendingId(null));
+    });
+  }
+
   const glassPanelClass = "rounded-2xl border border-white/25 bg-white/15 shadow-xl backdrop-blur-xl";
   const glassBorderClass = "border-white/20";
   const glassMutedClass = "text-white/85";
@@ -252,23 +306,65 @@ export function CountriesTable({
       (effectiveAdminPage - 1) * ADMIN_PAGE_SIZE,
       effectiveAdminPage * ADMIN_PAGE_SIZE
     );
+    const adminFilters: Array<{ key: AdminStatusFilter; label: string }> = [
+      { key: "all", label: "Tous" },
+      { key: "played", label: "Joués" },
+      { key: "ai", label: "Pilotés par l’IA" },
+      { key: "inactive", label: "Sans gestion" },
+    ];
+    const editingCountry = editingAdminCountryId
+      ? rows.find((row) => row.country.id === editingAdminCountryId)?.country ?? null
+      : null;
+    const editingCountryPlayer = editingCountry
+      ? playerNameByCountryId[editingCountry.id]
+      : null;
+    const editingCountryIsPlayed = editingCountry
+      ? playedSet.has(editingCountry.id)
+      : false;
+    const aiStatusLabel = (status: string | null | undefined) => {
+      if (status === "major") return "Grande puissance";
+      if (status === "minor") return "Puissance secondaire";
+      return "Sans gestion automatique";
+    };
     return (
-      <div className="rounded-lg border" style={panelStyle}>
-        <div className="p-3 border-b" style={{ borderColor: "var(--border)" }}>
+      <section aria-label="Liste des pays" className="border-y" style={{ borderColor: "var(--border)" }}>
+        <div className="border-b bg-[var(--background-panel)] p-3" style={{ borderColor: "var(--border)" }}>
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <div className="flex flex-wrap gap-2" aria-label="Filtrer les pays">
+              {adminFilters.map(({ key, label }) => (
+                <button
+                  key={key}
+                  type="button"
+                  aria-pressed={adminStatusFilter === key}
+                  onClick={() => {
+                    setAdminStatusFilter(key);
+                    setAdminPage(1);
+                  }}
+                  className={`min-h-10 rounded-lg border px-3 py-1.5 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] ${
+                    adminStatusFilter === key
+                      ? "border-[var(--accent)] bg-[color-mix(in_srgb,var(--accent)_14%,transparent)] text-[var(--accent)]"
+                      : "border-[var(--border)] text-[var(--foreground-muted)] hover:bg-[var(--background-elevated)] hover:text-[var(--foreground)]"
+                  }`}
+                >
+                  {label} <span className="ml-1 opacity-70">{adminStatusCounts[key]}</span>
+                </button>
+              ))}
+            </div>
           <input
             type="search"
-            placeholder="Rechercher par pays, joueur ou continent…"
+              placeholder="Pays, joueur, régime ou continent…"
             value={searchQuery}
             onChange={(e) => {
               setSearchQuery(e.target.value);
               setAdminPage(1);
             }}
-            className="min-h-11 w-full max-w-md rounded border bg-[var(--background)] px-3 py-2 text-sm text-[var(--foreground)] placeholder:text-[var(--foreground-muted)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
+              className="min-h-11 w-full rounded-lg border bg-[var(--background)] px-3 py-2 text-sm text-[var(--foreground)] placeholder:text-[var(--foreground-muted)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] lg:max-w-md"
             style={{ borderColor: "var(--border)" }}
             aria-label="Rechercher dans la liste des pays"
           />
+          </div>
           <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-xs text-[var(--foreground-muted)]">
-            <span>{sortedRows.length} pays trouvé{sortedRows.length > 1 ? "s" : ""}</span>
+            <span>{sortedRows.length} résultat{sortedRows.length > 1 ? "s" : ""}</span>
             <span>Page {effectiveAdminPage} sur {adminPageCount}</span>
           </div>
           {actionError && (
@@ -279,12 +375,10 @@ export function CountriesTable({
           {!actionError && actionSuccess && (
             <p aria-live="polite" className="mt-3 text-sm text-[var(--accent)]">{actionSuccess}</p>
           )}
-          <p className="mt-2 text-xs text-[var(--foreground-muted)] sm:hidden">
-            Faites glisser le tableau pour voir toutes les colonnes.
-          </p>
         </div>
-        <div className="overflow-x-auto">
-        <table className="w-full min-w-[500px] text-left text-sm">
+
+        <div className="hidden overflow-x-auto md:block">
+        <table className="w-full min-w-[720px] text-left text-sm">
           <thead>
             <tr className="border-b" style={{ borderColor: "var(--border)" }}>
               {ADMIN_COLUMNS.map(({ key, label }) => (
@@ -309,8 +403,8 @@ export function CountriesTable({
                 </th>
               ))}
               {showAiStatusColumn && (
-                <th className="w-32 p-2 font-medium text-[var(--foreground-muted)]" style={{ borderColor: "var(--border)" }}>
-                  Statut IA
+                <th className="w-44 p-2 font-medium text-[var(--foreground-muted)]" style={{ borderColor: "var(--border)" }}>
+                  Rôle sans joueur
                 </th>
               )}
               {showModifierButton && (
@@ -324,7 +418,6 @@ export function CountriesTable({
             {visibleAdminRows.map((row) => {
               const { country: c } = row;
               const playerName = playerNameByCountryId[c.id];
-              const isContinentPending = continentPendingId === c.id;
               return (
                 <tr
                   key={c.id}
@@ -361,86 +454,38 @@ export function CountriesTable({
                   <td className="p-2 text-[var(--foreground)]">
                     {playerName ?? "—"}
                   </td>
-                  <td className="p-2">
-                    <select
-                      aria-label={`Continent de ${c.name}`}
-                      value={c.continent_id ?? ""}
-                      onChange={(e) => {
-                        const v = e.target.value;
-                        const continentId = v === "" ? null : v;
-                        if (updateCountryContinentAction) {
-                          setContinentPendingId(c.id);
-                          setActionError(null);
-                          setActionSuccess(null);
-                          startTransition(() => {
-                            void updateCountryContinentAction(c.id, continentId)
-                              .then((result) => {
-                                if (result.error) setActionError(`${c.name} : ${result.error}`);
-                                else setActionSuccess(`Continent de ${c.name} enregistré.`);
-                              })
-                              .finally(() => setContinentPendingId(null));
-                          });
-                        }
-                      }}
-                      disabled={isContinentPending}
-                      className="min-h-11 min-w-[8rem] rounded border bg-[var(--background-elevated)] px-2 py-1 text-sm text-[var(--foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
-                      style={{ borderColor: "var(--border)" }}
-                    >
-                      <option value="">—</option>
-                      {continents.map((co) => (
-                        <option key={co.id} value={co.id}>
-                          {co.label_fr}
-                        </option>
-                      ))}
-                    </select>
+                  <td className="p-2 text-[var(--foreground-muted)]">
+                    {continentLabelById[c.continent_id ?? ""] ?? "Non renseigné"}
                   </td>
                   {showAiStatusColumn && (
                     <td className="p-2">
                       {playedSet.has(c.id) ? (
-                        <span className="text-sm text-[var(--foreground-muted)]" title="Pays assigné à un joueur">
-                          {playerName ?? "Joué"}
+                        <span className="inline-flex rounded-md bg-[color-mix(in_srgb,var(--accent)_13%,transparent)] px-2 py-1 text-xs font-semibold text-[var(--accent)]">
+                          Joué
                         </span>
                       ) : (
-                        <select
-                          aria-label={`Statut IA de ${c.name}`}
-                          value={c.ai_status ?? ""}
-                          onChange={(e) => {
-                            const v = e.target.value;
-                            const aiStatus = v === "major" || v === "minor" ? v : null;
-                            if (updateAiStatusAction) {
-                              setPendingId(c.id);
-                              setActionError(null);
-                              setActionSuccess(null);
-                              startTransition(() => {
-                                void updateAiStatusAction(c.id, aiStatus)
-                                  .then((result) => {
-                                    if (result.error) setActionError(`${c.name} : ${result.error}`);
-                                    else setActionSuccess(`Statut IA de ${c.name} enregistré.`);
-                                  })
-                                  .finally(() => setPendingId(null));
-                              });
-                            }
-                          }}
-                          disabled={isPending && pendingId === c.id}
-                          className="min-h-11 rounded border bg-[var(--background-elevated)] px-2 py-1 text-sm text-[var(--foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
-                          style={{ borderColor: "var(--border)" }}
+                        <span
+                          className={`inline-flex rounded-md px-2 py-1 text-xs font-semibold ${
+                            c.ai_status
+                              ? "bg-blue-500/12 text-blue-200"
+                              : "bg-[var(--background-elevated)] text-[var(--foreground-muted)]"
+                          }`}
                         >
-                          <option value="">—</option>
-                          <option value="major">Majeur</option>
-                          <option value="minor">Mineur</option>
-                        </select>
+                          {aiStatusLabel(c.ai_status)}
+                        </span>
                       )}
                     </td>
                   )}
                   {showModifierButton && (
                     <td className="p-2">
-                      <Link
-                        href={`/admin/pays/${c.id}`}
-                        className="inline-flex min-h-11 items-center rounded px-3 py-1.5 text-sm font-medium transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--warning)]"
-                        style={{ background: "var(--warning)", color: "#0f1419" }}
+                      <button
+                        type="button"
+                        onClick={() => setEditingAdminCountryId(c.id)}
+                        className="inline-flex min-h-10 items-center rounded-lg border px-3 text-sm font-semibold text-[var(--foreground)] transition-colors hover:border-[var(--accent)] hover:text-[var(--accent)]"
+                        style={{ borderColor: "var(--border)" }}
                       >
-                        Modifier
-                      </Link>
+                        Gérer
+                      </button>
                     </td>
                   )}
                 </tr>
@@ -459,6 +504,55 @@ export function CountriesTable({
           </tbody>
         </table>
         </div>
+
+        <div className="divide-y md:hidden" style={{ borderColor: "var(--border-muted)" }}>
+          {visibleAdminRows.map(({ country: c }) => {
+            const playerName = playerNameByCountryId[c.id];
+            const isPlayed = playedSet.has(c.id);
+            return (
+              <article key={c.id} className="bg-[var(--background-panel)] px-3 py-2.5">
+                <div className="flex items-center justify-between gap-3">
+                  <Link
+                    href={`/admin/pays/${c.id}`}
+                    className="flex min-w-0 items-center gap-3 font-semibold text-[var(--foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
+                  >
+                    {c.flag_url ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={c.flag_url} alt="" className="h-8 w-12 shrink-0 rounded object-cover" />
+                    ) : (
+                      <span className="h-8 w-12 shrink-0 rounded bg-[var(--background-elevated)]" aria-hidden />
+                    )}
+                    <span className="min-w-0">
+                      <span className="block truncate">{c.name}</span>
+                      <span className="mt-0.5 flex flex-wrap gap-x-2 text-xs font-normal text-[var(--foreground-muted)]">
+                        <span>{continentLabelById[c.continent_id ?? ""] ?? "Continent non renseigné"}</span>
+                        <span aria-hidden>·</span>
+                        <span className={isPlayed || c.ai_status ? "text-[var(--accent)]" : ""}>
+                          {isPlayed ? playerName ?? "Pays joué" : aiStatusLabel(c.ai_status)}
+                        </span>
+                      </span>
+                    </span>
+                  </Link>
+                  <button
+                    type="button"
+                    onClick={() => setEditingAdminCountryId(c.id)}
+                    className="grid min-h-10 min-w-10 shrink-0 place-items-center rounded-lg border text-xl text-[var(--foreground-muted)] hover:border-[var(--accent)] hover:text-[var(--accent)]"
+                    style={{ borderColor: "var(--border)" }}
+                    aria-label={`Gérer ${c.name}`}
+                  >
+                    <span aria-hidden>›</span>
+                  </button>
+                </div>
+              </article>
+            );
+          })}
+          {visibleAdminRows.length === 0 && (
+            <p className="p-8 text-center text-sm text-[var(--foreground-muted)]">
+              Aucun pays ne correspond à cette recherche.
+            </p>
+          )}
+        </div>
+
         {sortedRows.length > ADMIN_PAGE_SIZE && (
           <div className="flex items-center justify-between gap-3 border-t p-3" style={{ borderColor: "var(--border)" }}>
             <button
@@ -485,7 +579,101 @@ export function CountriesTable({
             </button>
           </div>
         )}
-      </div>
+
+        <AdminDialog
+          open={Boolean(editingCountry)}
+          onClose={() => setEditingAdminCountryId(null)}
+          title={editingCountry ? `Gérer ${editingCountry.name}` : "Gérer le pays"}
+          description={
+            editingCountryIsPlayed
+              ? `Assigné à ${editingCountryPlayer ?? "un joueur"}.`
+              : "Définissez sa région et son comportement lorsqu’aucun joueur ne le contrôle."
+          }
+          size="sm"
+          busy={Boolean(editingCountry && (
+            continentPendingId === editingCountry.id
+            || (isPending && pendingId === editingCountry.id)
+          ))}
+          actions={editingCountry ? (
+            <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-between">
+              <button
+                type="button"
+                onClick={() => setEditingAdminCountryId(null)}
+                className="min-h-11 rounded-lg border px-4 text-sm font-medium text-[var(--foreground)]"
+                style={{ borderColor: "var(--border)" }}
+              >
+                Fermer
+              </button>
+              <Link
+                href={`/admin/pays/${editingCountry.id}`}
+                className="inline-flex min-h-11 items-center justify-center rounded-lg bg-[var(--accent)] px-4 text-sm font-semibold text-[#08110c]"
+              >
+                Ouvrir la fiche complète
+              </Link>
+            </div>
+          ) : null}
+        >
+          {editingCountry ? (
+            <div className="space-y-4">
+              <div className="flex items-center gap-3 rounded-xl bg-[var(--background-elevated)] p-3">
+                {editingCountry.flag_url ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={editingCountry.flag_url} alt="" className="h-10 w-16 rounded object-cover" />
+                ) : (
+                  <span className="h-10 w-16 rounded bg-[var(--background)]" aria-hidden />
+                )}
+                <div className="min-w-0">
+                  <p className="truncate font-semibold text-[var(--foreground)]">{editingCountry.name}</p>
+                  <p className="truncate text-sm text-[var(--foreground-muted)]">{editingCountry.regime ?? "Régime non renseigné"}</p>
+                </div>
+              </div>
+
+              <label className="block text-sm font-medium text-[var(--foreground)]">
+                Continent
+                <select
+                  aria-label={`Continent de ${editingCountry.name}`}
+                  value={editingCountry.continent_id ?? ""}
+                  onChange={(event) => handleAdminContinentChange(editingCountry, event.target.value)}
+                  disabled={continentPendingId === editingCountry.id}
+                  className="mt-1 min-h-11 w-full rounded-lg border bg-[var(--background)] px-3 text-[var(--foreground)]"
+                  style={{ borderColor: "var(--border)" }}
+                >
+                  <option value="">Non renseigné</option>
+                  {continents.map((continent) => (
+                    <option key={continent.id} value={continent.id}>{continent.label_fr}</option>
+                  ))}
+                </select>
+              </label>
+
+              {editingCountryIsPlayed ? (
+                <div className="rounded-xl border px-3 py-3" style={{ borderColor: "var(--border)" }}>
+                  <p className="text-sm font-semibold text-[var(--foreground)]">Contrôlé par un joueur</p>
+                  <p className="mt-0.5 text-sm text-[var(--foreground-muted)]">{editingCountryPlayer ?? "Joueur assigné"}</p>
+                </div>
+              ) : showAiStatusColumn ? (
+                <label className="block text-sm font-medium text-[var(--foreground)]">
+                  Gestion automatique
+                  <select
+                    aria-label={`Rôle automatique de ${editingCountry.name} lorsqu’aucun joueur ne le contrôle`}
+                    value={editingCountry.ai_status ?? ""}
+                    onChange={(event) => handleAdminAiChange(editingCountry, event.target.value)}
+                    disabled={isPending && pendingId === editingCountry.id}
+                    className="mt-1 min-h-11 w-full rounded-lg border bg-[var(--background)] px-3 text-[var(--foreground)]"
+                    style={{ borderColor: "var(--border)" }}
+                  >
+                    <option value="">Aucune gestion</option>
+                    <option value="major">Grande puissance</option>
+                    <option value="minor">Puissance secondaire</option>
+                  </select>
+                </label>
+              ) : null}
+
+              {actionError ? <p role="alert" className="text-sm text-[var(--danger)]">{actionError}</p> : null}
+              {!actionError && actionSuccess ? <p role="status" className="text-sm text-[var(--accent)]">{actionSuccess}</p> : null}
+            </div>
+          ) : null}
+        </AdminDialog>
+      </section>
     );
   }
 
@@ -605,8 +793,8 @@ export function CountriesTable({
               </th>
             ))}
             {showAiStatusColumn && (
-              <th className={glassContext ? `p-3 w-32 font-medium ${glassMutedClass}` : "p-3 w-32 font-medium text-[var(--foreground-muted)]"} style={thStyle}>
-                Statut IA
+              <th className={glassContext ? `p-3 w-44 font-medium ${glassMutedClass}` : "p-3 w-44 font-medium text-[var(--foreground-muted)]"} style={thStyle}>
+                Rôle sans joueur
               </th>
             )}
             {showModifierButton && (
@@ -678,7 +866,7 @@ export function CountriesTable({
                     </span>
                   ) : (
                     <select
-                      aria-label={`Statut IA de ${c.name}`}
+                      aria-label={`Rôle automatique de ${c.name} lorsqu’aucun joueur ne le contrôle`}
                       value={c.ai_status ?? ""}
                       onChange={(e) => {
                         const v = e.target.value;
@@ -696,9 +884,9 @@ export function CountriesTable({
                         : "min-h-11 rounded border bg-[var(--background-elevated)] px-2 py-1 text-sm text-[var(--foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]"}
                       style={!glassContext ? { borderColor: "var(--border)" } : undefined}
                     >
-                      <option value="">—</option>
-                      <option value="major">Majeur</option>
-                      <option value="minor">Mineur</option>
+                      <option value="">Aucun</option>
+                      <option value="major">Grande puissance</option>
+                      <option value="minor">Puissance secondaire</option>
                     </select>
                   )}
                 </td>

@@ -15,18 +15,29 @@ export default function AdminInscriptionPage() {
     e.preventDefault();
     setError(null);
     setLoading(true);
-    const supabase = createClient();
-    const { error: signError } = await supabase.auth.signUp({
-      email,
-      password,
-      options: { emailRedirectTo: `${typeof window !== "undefined" ? window.location.origin : ""}/admin` },
-    });
-    setLoading(false);
-    if (signError) {
-      setError(signError.message);
-      return;
+    try {
+      const supabase = createClient();
+      const { error: signError } = await supabase.auth.signUp({
+        email,
+        password,
+        options: { emailRedirectTo: `${window.location.origin}/admin` },
+      });
+      if (signError) {
+        setError(
+          signError.code === "user_already_exists"
+            ? "Un compte utilise déjà cette adresse email."
+            : signError.code === "weak_password"
+              ? "Le mot de passe doit contenir au moins 6 caractères."
+              : "Impossible de créer le compte. Vérifiez vos informations, puis réessayez.",
+        );
+        return;
+      }
+      setSuccess(true);
+    } catch {
+      setError("Création impossible. Vérifiez votre connexion internet, puis réessayez.");
+    } finally {
+      setLoading(false);
     }
-    setSuccess(true);
   }
 
   if (success) {
@@ -39,7 +50,10 @@ export default function AdminInscriptionPage() {
             borderColor: "var(--border)",
           }}
         >
-          <p className="text-[var(--accent)]">Compte créé. Vérifiez votre email pour confirmer, puis connectez-vous.</p>
+          <h1 className="text-xl font-bold text-[var(--foreground)]">Compte créé</h1>
+          <p className="mt-3 text-[var(--accent)]" role="status">
+            Vérifiez votre email pour confirmer votre compte, puis connectez-vous.
+          </p>
           <p className="mt-4 text-sm text-[var(--foreground-muted)]">
             Si la confirmation par email est désactivée, vous pouvez vous connecter directement.
           </p>
@@ -65,10 +79,10 @@ export default function AdminInscriptionPage() {
         }}
       >
         <h1 className="mb-2 text-xl font-bold text-[var(--foreground)]">
-          Inscription administration
+          Créer un compte
         </h1>
         <p className="mb-6 text-sm text-[var(--foreground-muted)]">
-          Créez un compte. Un administrateur devra ensuite autoriser votre accès.
+          L’accès au panneau d’administration devra ensuite être autorisé par un administrateur.
         </p>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
@@ -98,9 +112,13 @@ export default function AdminInscriptionPage() {
               required
               minLength={6}
               autoComplete="new-password"
+              aria-describedby="password-help"
               className="min-h-11 w-full rounded border bg-[var(--background)] px-3 py-2 text-[var(--foreground)] focus:border-[var(--accent)] focus:outline-none focus:ring-2 focus:ring-[var(--accent)]"
               style={{ borderColor: "var(--border)" }}
             />
+            <p id="password-help" className="mt-1.5 text-sm text-[var(--foreground-muted)]">
+              6 caractères minimum.
+            </p>
           </div>
           {error && <p className="text-sm text-[var(--danger)]" role="alert">{error}</p>}
           <button

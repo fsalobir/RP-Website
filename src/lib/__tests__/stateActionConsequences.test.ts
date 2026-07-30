@@ -1,9 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
-
-// Isoler la logique et éviter les side effects.
-vi.mock("@/lib/discord-dispatch", () => ({
-  dispatchToDiscord: vi.fn(async () => {}),
-}));
+import { describe, expect, it } from "vitest";
 
 import { applyImmediateEffect, applyStateActionConsequences } from "@/lib/stateActionConsequences";
 

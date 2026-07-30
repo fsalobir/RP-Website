@@ -42,63 +42,91 @@ export function ControlAdminBlock({
 
   const status = deriveStatus(controls);
   const totalShare = controls.reduce((sum, row) => sum + Number(row.share_pct || 0), 0);
+  const newShareValue = Number(newSharePct);
   const availableCountries = otherCountries.filter(
     (c) => c.id !== countryId && !controls.some((r) => r.controller_country_id === c.id)
   );
 
   async function handleAdd() {
     if (!newControllerId.trim()) return;
+    if (!Number.isFinite(newShareValue) || newShareValue < 0 || newShareValue > 100) {
+      setError("La part de contrôle doit être comprise entre 0 et 100 %.");
+      return;
+    }
     setError(null);
     setSuccess(null);
     setSaving(true);
-    const result = await upsertCountryControl(
-      countryId,
-      newControllerId,
-      Number(newSharePct) || 0,
-      newIsAnnexed
-    );
-    setSaving(false);
-    if (result.error) setError(result.error);
-    else {
+    try {
+      const result = await upsertCountryControl(
+        countryId,
+        newControllerId,
+        Number(newSharePct) || 0,
+        newIsAnnexed
+      );
+      if (result.error) {
+        setError(result.error);
+        return;
+      }
       setNewControllerId("");
       setNewSharePct("100");
       setNewIsAnnexed(false);
       setSuccess("Contrôle ajouté.");
       router.refresh();
+    } catch {
+      setError("Impossible d’ajouter ce contrôle. Vérifiez votre connexion puis réessayez.");
+    } finally {
+      setSaving(false);
     }
   }
 
   async function handleUpdate(row: ControlRow) {
+    const editValue = Number(editSharePct);
+    if (!Number.isFinite(editValue) || editValue < 0 || editValue > 100) {
+      setError("La part de contrôle doit être comprise entre 0 et 100 %.");
+      return;
+    }
     setError(null);
     setSuccess(null);
     setSaving(true);
-    const result = await updateCountryControl(
-      row.id,
-      countryId,
-      Number(editSharePct) || 0,
-      editIsAnnexed
-    );
-    setSaving(false);
-    if (result.error) setError(result.error);
-    else {
+    try {
+      const result = await updateCountryControl(
+        row.id,
+        countryId,
+        Number(editSharePct) || 0,
+        editIsAnnexed
+      );
+      if (result.error) {
+        setError(result.error);
+        return;
+      }
       setEditingId(null);
       setSuccess("Contrôle mis à jour.");
       router.refresh();
+    } catch {
+      setError("Impossible de modifier ce contrôle. Vérifiez votre connexion puis réessayez.");
+    } finally {
+      setSaving(false);
     }
   }
 
-  async function handleDelete(controlId: string) {
-    if (!confirm("Supprimer ce contrôle ?")) return;
+  async function handleDelete(controlId: string, controllerName: string) {
+    if (!confirm(`Supprimer le contrôle exercé par ${controllerName} ?`)) return;
     setError(null);
     setSuccess(null);
     setSaving(true);
-    const result = await deleteCountryControl(controlId, countryId);
-    setSaving(false);
-    if (result.error) setError(result.error);
-    else {
+    try {
+      const result = await deleteCountryControl(controlId, countryId);
+      if (result.error) {
+        setError(result.error);
+        return;
+      }
       setEditingId(null);
-      setSuccess("Contrôle supprimé.");
+      setSuccess(`Contrôle exercé par ${controllerName} supprimé.`);
       router.refresh();
+    } catch {
+      setError(`Impossible de supprimer le contrôle exercé par ${controllerName}. Vérifiez votre connexion puis réessayez.`);
+    } finally {
+      setSaving(false);
     }
   }
 
@@ -108,43 +136,28 @@ export function ControlAdminBlock({
     setEditIsAnnexed(row.is_annexed);
   }
 
-  const panelStyle = {
-    background: "var(--background-panel)",
-    border: "1px solid var(--border)",
-    borderRadius: "var(--radius)",
-  };
   const inputStyle = { borderColor: "var(--border)" };
 
   return (
-    <div className="admin-settings-form rounded-lg border p-4" style={panelStyle}>
-      <h2 className="mb-2 text-lg font-semibold text-[var(--foreground)]">
-        Contrôle
-      </h2>
-      <p className="mb-4 text-sm text-[var(--foreground-muted)]">
-        Parts détenues par d&apos;autres pays. Le statut public est calculé automatiquement à partir de cette répartition.
-      </p>
-      <dl className="mb-5 grid gap-3 rounded-lg bg-[var(--background-elevated)] p-3 text-sm sm:grid-cols-2">
+    <div className="admin-settings-form border-y" style={{ borderColor: "var(--border)" }}>
+      <div className="flex flex-wrap items-center justify-between gap-3 py-3">
         <div>
-          <dt className="text-[var(--foreground-muted)]">Statut public actuel</dt>
-          <dd className="mt-1 font-semibold text-[var(--foreground)]">{status}</dd>
+          <h2 className="text-lg font-semibold text-[var(--foreground)]">Contrôle territorial</h2>
+          <p className="mt-0.5 text-xs text-[var(--foreground-muted)]">Les parts déterminent le statut public du pays.</p>
         </div>
-        <div>
-          <dt className="text-[var(--foreground-muted)]">Contrôle déclaré</dt>
-          <dd className="mt-1 font-semibold text-[var(--foreground)]">{totalShare} % au total</dd>
+        <div className="flex items-center gap-2 text-sm">
+          <span className="rounded-lg bg-[var(--background-elevated)] px-2.5 py-1 font-semibold text-[var(--foreground)]">{status}</span>
+          <span className="text-[var(--foreground-muted)]">{totalShare} % contrôlé</span>
         </div>
-      </dl>
-      {totalShare > 100 ? (
-        <p role="alert" className="mb-4 rounded-lg bg-[color-mix(in_srgb,var(--warning)_12%,transparent)] px-3 py-2 text-sm text-[var(--foreground)]">
-          Le total dépasse 100 %. Le jeu l’accepte, mais cette répartition est difficile à interpréter pour les joueurs.
-        </p>
-      ) : null}
-
-      <ul className="mb-6 space-y-2">
+      </div>
+      {controls.length === 0 ? (
+        <p className="border-t py-4 text-sm text-[var(--foreground-muted)]" style={{ borderColor: "var(--border-muted)" }}>Aucun autre pays ne contrôle ce territoire.</p>
+      ) : (
+      <ul className="divide-y border-t" style={{ borderColor: "var(--border-muted)" }}>
         {controls.map((row) => (
           <li
             key={row.id}
-            className="flex flex-wrap items-center gap-3 rounded border py-2 px-3"
-            style={{ borderColor: "var(--border-muted)" }}
+            className="flex flex-wrap items-center gap-3 py-2"
           >
             <span className="font-medium text-[var(--foreground)]">{row.controller_name}</span>
             {editingId === row.id ? (
@@ -166,12 +179,17 @@ export function ControlAdminBlock({
                     checked={editIsAnnexed}
                     onChange={(e) => setEditIsAnnexed(e.target.checked)}
                   />
-                  Annexé
+                  Considérer comme annexé
                 </label>
                 <button
                   type="button"
                   onClick={() => handleUpdate(row)}
-                  disabled={saving}
+                  disabled={
+                    saving ||
+                    !Number.isFinite(Number(editSharePct)) ||
+                    Number(editSharePct) < 0 ||
+                    Number(editSharePct) > 100
+                  }
                   className="min-h-11 rounded-lg px-2 text-sm text-[var(--accent)] hover:bg-[var(--background-elevated)] disabled:opacity-50"
                 >
                   Enregistrer
@@ -198,7 +216,7 @@ export function ControlAdminBlock({
                 </button>
                 <button
                   type="button"
-                  onClick={() => handleDelete(row.id)}
+                  onClick={() => handleDelete(row.id, row.controller_name)}
                   disabled={saving}
                   className="min-h-11 rounded-lg px-2 text-sm text-[var(--danger)] hover:bg-[var(--background-elevated)] disabled:opacity-50"
                 >
@@ -209,9 +227,10 @@ export function ControlAdminBlock({
           </li>
         ))}
       </ul>
+      )}
 
       {availableCountries.length > 0 && (
-        <div className="flex flex-wrap items-end gap-3 rounded border p-3" style={{ borderColor: "var(--border-muted)" }}>
+        <div className="mt-3 flex flex-wrap items-end gap-3 border-t py-3" style={{ borderColor: "var(--border-muted)" }}>
           <div className="w-full min-w-0 sm:w-auto">
             <label htmlFor="new-controller" className="mb-0.5 block text-xs text-[var(--foreground-muted)]">Ajouter un contrôleur</label>
             <select
@@ -228,7 +247,7 @@ export function ControlAdminBlock({
             </select>
           </div>
           <div>
-            <label htmlFor="new-controller-share" className="mb-0.5 block text-xs text-[var(--foreground-muted)]">Part %</label>
+            <label htmlFor="new-controller-share" className="mb-0.5 block text-xs text-[var(--foreground-muted)]">Part contrôlée (%)</label>
             <input
               id="new-controller-share"
               type="number"
@@ -246,16 +265,22 @@ export function ControlAdminBlock({
               checked={newIsAnnexed}
               onChange={(e) => setNewIsAnnexed(e.target.checked)}
             />
-            Annexé
+            Considérer comme annexé
           </label>
           <button
             type="button"
             onClick={handleAdd}
-            disabled={saving || !newControllerId}
+            disabled={
+              saving ||
+              !newControllerId ||
+              !Number.isFinite(newShareValue) ||
+              newShareValue < 0 ||
+              newShareValue > 100
+            }
             className="min-h-11 rounded-lg px-3 text-sm font-medium disabled:opacity-50"
             style={{ background: "var(--accent)", color: "#0f1419" }}
           >
-            Ajouter
+            Ajouter le contrôle
           </button>
         </div>
       )}

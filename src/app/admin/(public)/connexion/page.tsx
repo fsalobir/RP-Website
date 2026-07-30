@@ -1,36 +1,46 @@
 "use client";
 
-import { useState } from "react";
+import { Suspense, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { getRedirectPathAfterLogin } from "../../connexion/actions";
 
-export default function AdminConnexionPage() {
+function ConnexionForm() {
+  const searchParams = useSearchParams();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const accessDenied = searchParams.get("error") === "non-admin";
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
     setLoading(true);
-    const supabase = createClient();
-    const { error: signError } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
-    if (signError) {
+    try {
+      const supabase = createClient();
+      const { error: signError } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+      if (signError) {
+        setError(
+          signError.code === "invalid_credentials"
+            ? "Adresse email ou mot de passe incorrect."
+            : "Connexion impossible. Vérifiez vos informations, puis réessayez.",
+        );
+        return;
+      }
+      const { path, error: redirectError } = await getRedirectPathAfterLogin();
+      const targetPath = path === "/" && redirectError ? "/?error=non-autorise" : path;
+      // Navigation complète pour que la nouvelle session soit bien prise en compte.
+      window.location.assign(targetPath);
+    } catch {
+      setError("Connexion impossible. Vérifiez votre connexion internet, puis réessayez.");
+    } finally {
       setLoading(false);
-      setError(signError.message === "Invalid login credentials" ? "Identifiants incorrects." : signError.message);
-      return;
     }
-    const { path, error: redirectError } = await getRedirectPathAfterLogin();
-    if (redirectError) setError(redirectError);
-    const targetPath = path === "/" && redirectError ? "/?error=non-autorise" : path;
-    setLoading(false);
-    // Navigation complète pour que la nouvelle session soit bien prise en compte (évite "rendering" infini)
-    window.location.assign(targetPath);
   }
 
   return (
@@ -48,6 +58,15 @@ export default function AdminConnexionPage() {
         <p className="mb-6 text-sm text-[var(--foreground-muted)]">
           Connectez-vous avec votre compte joueur ou administrateur.
         </p>
+        {accessDenied && (
+          <p
+            className="mb-5 rounded-lg border border-[var(--warning)]/40 bg-[var(--warning)]/10 p-3 text-sm text-[var(--foreground)]"
+            role="alert"
+          >
+            Accès administrateur refusé. Ce compte n’a pas les droits nécessaires.
+            Connectez-vous avec un compte administrateur ou demandez à un administrateur de vous autoriser.
+          </p>
+        )}
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label htmlFor="email" className="mb-1 block text-sm font-medium text-[var(--foreground-muted)]">
@@ -110,6 +129,14 @@ export default function AdminConnexionPage() {
         </p>
       </div>
     </div>
+  );
+}
+
+export default function AdminConnexionPage() {
+  return (
+    <Suspense>
+      <ConnexionForm />
+    </Suspense>
   );
 }
 

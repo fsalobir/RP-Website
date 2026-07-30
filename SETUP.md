@@ -81,9 +81,9 @@ Alternative si le CLI est installé localement : `npm run supabase -- db push`.
 
 Après un `git push` sur la branche de production, le déploiement doit apparaître sur **ce** projet Vercel ; l’URL de prod ne doit pas afficher d’erreurs Supabase dans la console réseau.
 
-### 5. Secrets Edge (function `process-ai-events-due`)
+### 5. Secrets Edge (function `rp-pipeline`)
 
-Sur le dashboard Supabase du projet **`ssnqervwthlqvbewhtrd`**, les secrets de la function doivent réutiliser **cette** URL et la **service_role** du même projet. Procédure détaillée : [docs/process-due-edge-deploy.md](docs/process-due-edge-deploy.md). Vérifie qu’aucun secret ne contient une autre URL `*.supabase.co`.
+Le worker unique produit les articles Magnum, applique les conséquences et livre Discord. Procédure détaillée : [docs/rp-pipeline-deploy.md](docs/rp-pipeline-deploy.md). Les clés Magnum, bot et webhooks restent uniquement dans les secrets Supabase.
 
 ### 6. Fichiers versionnés vs secrets
 

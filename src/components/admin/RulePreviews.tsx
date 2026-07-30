@@ -184,19 +184,23 @@ export function BudgetWorldGapPreview({
     bonusFactor: cronGravityFactorTs(1, true, safeWeight, 100, situation.countryValue),
     malusFactor: Math.abs(cronGravityFactorTs(-1, true, safeWeight, 100, situation.countryValue)),
   }));
-  const factor = (value: number) =>
-    `×${value.toLocaleString("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  const exampleEffect = 10;
+  const result = (value: number, sign: "+" | "−") =>
+    `${sign}${(exampleEffect * value).toLocaleString("fr-FR", {
+      minimumFractionDigits: 1,
+      maximumFractionDigits: 1,
+    })}`;
 
   return (
     <section className="border-t pt-3" style={{ borderColor: "var(--border-muted)" }}>
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h5 className="text-sm font-medium text-[var(--foreground)]">Conséquence de ce pourcentage</h5>
+        <h5 className="text-sm font-medium text-[var(--foreground)]">Effet de la correction</h5>
         <p className="text-xs text-[var(--foreground-muted)]">
           {safeWeight === 0
-            ? "L’écart mondial est ignoré"
+            ? "Le niveau du pays est ignoré"
             : safeWeight === 100
-              ? "L’écart mondial est entièrement pris en compte"
-              : `${safeWeight} % de l’écart mondial est pris en compte`}
+              ? "Le niveau du pays est entièrement pris en compte"
+              : `Le niveau du pays compte à ${safeWeight} %`}
         </p>
       </div>
 
@@ -205,7 +209,7 @@ export function BudgetWorldGapPreview({
           className="mt-2 rounded-lg border px-3 py-2 text-xs text-[var(--foreground)]"
           style={{ borderColor: "var(--warning)", background: "color-mix(in srgb, var(--warning) 10%, transparent)" }}
         >
-          Ce pourcentage ne modifie actuellement aucun effet de ce ministère. Activez « Tenir compte de la moyenne mondiale » sur une ligne d’effet pour l’utiliser.
+          Ce réglage ne modifie actuellement aucun effet de ce ministère. Activez « Corriger selon le niveau du pays » sur une ligne d’effet pour l’utiliser.
         </p>
       )}
 
@@ -214,8 +218,8 @@ export function BudgetWorldGapPreview({
           <thead className="text-[var(--foreground-muted)]">
             <tr>
               <th className="pb-2 pr-4 font-medium">Situation du pays</th>
-              <th className="pb-2 px-4 font-medium">Effet positif reçu</th>
-              <th className="pb-2 pl-4 font-medium">Malus subi</th>
+              <th className="pb-2 px-4 font-medium">Si le gain normal est +10</th>
+              <th className="pb-2 pl-4 font-medium">Si la perte normale est −10</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-[var(--border-muted)] text-[var(--foreground)]">
@@ -223,10 +227,10 @@ export function BudgetWorldGapPreview({
               <tr key={situation.label}>
                 <th className="py-2 pr-4 font-medium">{situation.label}</th>
                 <td className="px-4 py-2">
-                  <strong>{factor(situation.bonusFactor)}</strong>
+                  <strong>{result(situation.bonusFactor, "+")}</strong>
                 </td>
                 <td className="py-2 pl-4">
-                  <strong>{factor(situation.malusFactor)}</strong>
+                  <strong>{result(situation.malusFactor, "−")}</strong>
                 </td>
               </tr>
             ))}
@@ -239,19 +243,19 @@ export function BudgetWorldGapPreview({
             <p className="font-medium text-[var(--foreground)]">{situation.label}</p>
             <dl className="mt-1 grid grid-cols-2 gap-4">
               <div>
-                <dt className="text-[var(--foreground-muted)]">Effet positif reçu</dt>
-                <dd className="mt-0.5 font-semibold text-[var(--foreground)]">{factor(situation.bonusFactor)}</dd>
+                <dt className="text-[var(--foreground-muted)]">Gain normal de +10</dt>
+                <dd className="mt-0.5 font-semibold text-[var(--foreground)]">{result(situation.bonusFactor, "+")}</dd>
               </div>
               <div>
-                <dt className="text-[var(--foreground-muted)]">Malus subi</dt>
-                <dd className="mt-0.5 font-semibold text-[var(--foreground)]">{factor(situation.malusFactor)}</dd>
+                <dt className="text-[var(--foreground-muted)]">Perte normale de −10</dt>
+                <dd className="mt-0.5 font-semibold text-[var(--foreground)]">{result(situation.malusFactor, "−")}</dd>
               </div>
             </dl>
           </div>
         ))}
       </div>
       <p className="mt-2 text-xs leading-relaxed text-[var(--foreground-muted)]">
-        Exemple illustratif avec une moyenne mondiale de 100. Le jeu refait ce calcul séparément pour chaque domaine concerné.
+        Exemple avec une moyenne mondiale de 100. Le jeu refait ce calcul pour chaque statistique concernée.
       </p>
     </section>
   );
@@ -357,14 +361,14 @@ export function IntelRulePreview({ config }: { config: IntelConfig }) {
           <p className="mt-2 text-xs text-[var(--foreground-muted)]">Perte totale : −{compact(totalLoss)} points</p>
         </li>
         <li className="p-4">
-          <p className="text-xs font-medium text-[var(--foreground-muted)]">Puis espionnage · impact 70/100</p>
+          <p className="text-xs font-medium text-[var(--foreground-muted)]">Puis espionnage · jet de conséquence 70/100</p>
           <p className="mt-1 text-2xl font-semibold text-[var(--accent)]">{compact(afterEspionage)} / 100</p>
           <div className="mt-3 h-2 overflow-hidden rounded-full bg-[var(--background-panel)]">
             <div className="h-full bg-[var(--accent)]" style={{ width: `${afterEspionage}%` }} />
           </div>
           <p className="mt-2 text-xs leading-relaxed text-[var(--foreground-muted)]">
-            +{espionageGain} calculés, soit +{compact(usefulGain)} utiles
-            {cappedGain > 0 ? ` ; ${compact(cappedGain)} dépassent le plafond.` : "."}
+            Gain théorique : +{espionageGain}. Gain réellement ajouté : +{compact(usefulGain)}
+            {cappedGain > 0 ? ` ; ${compact(cappedGain)} points sont perdus au plafond de 100.` : "."}
           </p>
         </li>
       </ol>
@@ -466,7 +470,7 @@ export function IdeologyRulePreview({
 
   return (
     <PreviewFrame
-      title="Test de dérive en un jour"
+      title="Évolution idéologique en un jour"
       description="Scénario de référence : pays à 34 %, deux voisins aux profils différents, influences de 800 à 1.500, relation +25 et contrôle à 25 %."
     >
       <div className="grid gap-4 sm:grid-cols-[11rem_minmax(0,1fr)] sm:items-center">
@@ -563,9 +567,9 @@ export function AiRulePreview({ config }: { config: AiConfig }) {
   const passages = Math.max(1, Math.floor(24 / interval));
   const perPassage = Math.max(0, Number(config.count_major_per_run ?? 0)) + Math.max(0, Number(config.count_minor_per_run ?? 0));
   const targets = [
-    config.target_major_ai ? "IA majeures" : null,
-    config.target_minor_ai ? "IA mineures" : null,
-    config.target_players ? "joueurs" : null,
+    config.target_major_ai ? "grandes puissances sans joueur" : null,
+    config.target_minor_ai ? "puissances secondaires sans joueur" : null,
+    config.target_players ? "pays avec joueur" : null,
   ].filter(Boolean);
   const automatic = Object.values(config.auto_accept_by_action_type ?? {}).filter(Boolean).length;
 
@@ -595,7 +599,7 @@ export function AiRulePreview({ config }: { config: AiConfig }) {
             <dd className="text-right text-[var(--foreground)]">{targets.length ? targets.join(", ") : "Aucune"}</dd>
           </div>
           <div className="flex justify-between gap-3">
-            <dt className="text-[var(--foreground-muted)]">Types auto-acceptés</dt>
+            <dt className="text-[var(--foreground-muted)]">Actions appliquées sans validation</dt>
             <dd className="font-semibold text-[var(--foreground)]">{automatic}</dd>
           </div>
         </dl>

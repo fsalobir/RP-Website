@@ -14,7 +14,12 @@ import { getWikiEditorProps } from "@/lib/wiki/wikiEditorProps";
 import { uploadWikiImageAction } from "@/app/actions/wiki";
 
 const toolbarBtn =
-  "rounded-lg border border-white/25 bg-white/10 px-2 py-1.5 text-xs font-medium text-white hover:bg-white/20 disabled:opacity-40";
+  "inline-flex shrink-0 items-center justify-center rounded-md px-2.5 text-sm font-medium text-[var(--foreground-muted)] transition-colors hover:bg-white/10 hover:text-white disabled:cursor-not-allowed disabled:opacity-35";
+
+const toolbarSelect =
+  "shrink-0 rounded-md border border-white/15 bg-[var(--background)] px-2 text-sm font-medium text-white outline-none";
+
+const imageWidthOptions = [25, 33, 50, 66, 75, 100] as const;
 
 const proseClass =
   "wiki-tiptap min-h-[280px] max-w-none rounded-xl border border-white/20 bg-black/20 p-4 text-white/90 outline-none ring-0 focus-within:outline-none focus-within:ring-0 [&_a]:text-[var(--accent)] [&_h2]:text-lg [&_h3]:text-base [&_p]:mb-2";
@@ -194,104 +199,184 @@ export function WikiEditor({ content, serverRevision, onEditorReady, onDocumentC
     return <p className="text-sm text-[var(--foreground-muted)]">Initialisation de l’éditeur…</p>;
   }
 
+  const selectedImage = isWikiImageToolbarVisible(editor);
+  const rawImageAlign = editor.getAttributes("image").align as WikiImageAlign | undefined;
+  const selectedImageAlign: WikiImageAlign =
+    rawImageAlign === "left" || rawImageAlign === "right" || rawImageAlign === "center"
+      ? rawImageAlign
+      : "none";
+  const imageWidth = Number(editor.getAttributes("image").width);
+  const editorWidth = editor.view.dom.getBoundingClientRect().width;
+  const imageWidthPct =
+    imageWidth > 0 && editorWidth > 0
+      ? imageWidthOptions.reduce((closest, pct) =>
+          Math.abs(pct - (imageWidth / editorWidth) * 100) <
+          Math.abs(closest - (imageWidth / editorWidth) * 100)
+            ? pct
+            : closest
+        )
+      : 100;
+  const blockStyle = editor.isActive("heading", { level: 2 })
+    ? "2"
+    : editor.isActive("heading", { level: 3 })
+      ? "3"
+      : editor.isActive("heading", { level: 4 })
+        ? "4"
+        : "paragraph";
+  const buttonClass = (active = false) =>
+    `${toolbarBtn} ${active ? "bg-white/15 text-white" : ""}`;
+
   return (
     <div className="space-y-2">
       <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={onFile} />
-      <div className="flex flex-wrap gap-1 rounded-xl border border-white/20 bg-[var(--background-panel)] p-2">
-        <button type="button" className={toolbarBtn} onClick={() => editor.chain().focus().toggleBold().run()}>
-          Gras
-        </button>
-        <button type="button" className={toolbarBtn} onClick={() => editor.chain().focus().toggleItalic().run()}>
-          Italique
-        </button>
-        <button
-          type="button"
-          className={toolbarBtn}
-          onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}
-        >
-          Titre 2
-        </button>
-        <button
-          type="button"
-          className={toolbarBtn}
-          onClick={() => editor.chain().focus().toggleHeading({ level: 3 }).run()}
-        >
-          Titre 3
-        </button>
-        <button
-          type="button"
-          className={toolbarBtn}
-          onClick={() => editor.chain().focus().toggleHeading({ level: 4 }).run()}
-        >
-          Titre 4
-        </button>
-        <button type="button" className={toolbarBtn} onClick={() => editor.chain().focus().toggleBulletList().run()}>
-          Liste
-        </button>
-        <button type="button" className={toolbarBtn} onClick={() => editor.chain().focus().toggleOrderedList().run()}>
-          Liste num.
-        </button>
-        <button type="button" className={toolbarBtn} onClick={() => editor.chain().focus().setHorizontalRule().run()}>
-          Séparateur
-        </button>
-        <button type="button" className={toolbarBtn} onClick={setLink}>
-          Lien
-        </button>
-        <button type="button" className={toolbarBtn} onClick={insertImage}>
-          Image
-        </button>
-        {isWikiImageToolbarVisible(editor) ? (
-          <>
-            <span className="mx-1 w-full basis-full text-xs text-[var(--foreground-muted)] sm:basis-auto sm:w-auto">
-              Image : cliquez pour sélectionner. Alignement (texte autour) et largeur :
-            </span>
-            <button
-              type="button"
-              className={toolbarBtn}
-              title="Bloc pleine largeur"
-              onClick={() => setImageAlign("none")}
-            >
-              Bloc
-            </button>
-            <button
-              type="button"
-              className={toolbarBtn}
-              title="Image à gauche, texte à droite"
-              onClick={() => setImageAlign("left")}
-            >
-              Gauche
-            </button>
-            <button
-              type="button"
-              className={toolbarBtn}
-              title="Image à droite, texte à gauche"
-              onClick={() => setImageAlign("right")}
-            >
-              Droite
-            </button>
-            <button
-              type="button"
-              className={toolbarBtn}
-              title="Centré, pas de texte autour"
-              onClick={() => setImageAlign("center")}
-            >
-              Centré
-            </button>
-            <span className="mx-1 text-xs text-[var(--foreground-muted)] self-center">Largeur</span>
-            {[25, 33, 50, 66, 75, 100].map((pct) => (
-              <button key={pct} type="button" className={toolbarBtn} onClick={() => setImageWidthPct(pct)}>
-                {pct}%
-              </button>
-            ))}
-          </>
-        ) : null}
-        <button type="button" className={toolbarBtn} onClick={() => editor.chain().focus().undo().run()}>
-          Annuler
-        </button>
-        <button type="button" className={toolbarBtn} onClick={() => editor.chain().focus().redo().run()}>
-          Rétablir
-        </button>
+      <div
+        role="toolbar"
+        aria-label="Mise en forme du contenu"
+        className="flex items-center gap-1 overflow-x-auto rounded-xl border border-white/15 bg-[var(--background-panel)] px-2 py-1.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+      >
+        <div role="group" aria-label="Style du texte" className="flex shrink-0 items-center gap-0.5 border-r border-white/10 pr-1">
+          <select
+            aria-label="Niveau de titre"
+            className={toolbarSelect}
+            value={blockStyle}
+            onChange={(event) => {
+              const level = Number(event.target.value);
+              if (level === 2 || level === 3 || level === 4) {
+                editor.chain().focus().setHeading({ level }).run();
+              } else {
+                editor.chain().focus().setParagraph().run();
+              }
+            }}
+          >
+            <option value="paragraph">Texte</option>
+            <option value="2">Titre 2</option>
+            <option value="3">Titre 3</option>
+            <option value="4">Titre 4</option>
+          </select>
+          <button
+            type="button"
+            className={buttonClass(editor.isActive("bold"))}
+            aria-label="Gras"
+            aria-pressed={editor.isActive("bold")}
+            title="Gras"
+            onClick={() => editor.chain().focus().toggleBold().run()}
+          >
+            <strong aria-hidden="true">G</strong>
+          </button>
+          <button
+            type="button"
+            className={buttonClass(editor.isActive("italic"))}
+            aria-label="Italique"
+            aria-pressed={editor.isActive("italic")}
+            title="Italique"
+            onClick={() => editor.chain().focus().toggleItalic().run()}
+          >
+            <em aria-hidden="true">I</em>
+          </button>
+        </div>
+
+        <div role="group" aria-label="Listes" className="flex shrink-0 items-center gap-0.5 border-r border-white/10 pr-1">
+          <button
+            type="button"
+            className={buttonClass(editor.isActive("bulletList"))}
+            aria-pressed={editor.isActive("bulletList")}
+            onClick={() => editor.chain().focus().toggleBulletList().run()}
+          >
+            • Liste
+          </button>
+          <button
+            type="button"
+            className={buttonClass(editor.isActive("orderedList"))}
+            aria-pressed={editor.isActive("orderedList")}
+            onClick={() => editor.chain().focus().toggleOrderedList().run()}
+          >
+            1. Liste
+          </button>
+        </div>
+
+        <div role="group" aria-label="Insérer" className="flex shrink-0 items-center gap-0.5 border-r border-white/10 pr-1">
+          <button
+            type="button"
+            className={buttonClass(editor.isActive("link"))}
+            aria-pressed={editor.isActive("link")}
+            onClick={setLink}
+          >
+            Lien
+          </button>
+          <button type="button" className={toolbarBtn} onClick={insertImage}>
+            Image
+          </button>
+          <button
+            type="button"
+            className={toolbarBtn}
+            title="Insérer un séparateur"
+            onClick={() => editor.chain().focus().setHorizontalRule().run()}
+          >
+            Séparateur
+          </button>
+        </div>
+
+        <div role="group" aria-label="Historique" className="ml-auto flex shrink-0 items-center gap-0.5">
+          <button
+            type="button"
+            className={toolbarBtn}
+            aria-label="Annuler la dernière modification"
+            title="Annuler"
+            disabled={!editor.can().chain().focus().undo().run()}
+            onClick={() => editor.chain().focus().undo().run()}
+          >
+            ↶
+          </button>
+          <button
+            type="button"
+            className={toolbarBtn}
+            aria-label="Rétablir la modification"
+            title="Rétablir"
+            disabled={!editor.can().chain().focus().redo().run()}
+            onClick={() => editor.chain().focus().redo().run()}
+          >
+            ↷
+          </button>
+        </div>
       </div>
+
+      {selectedImage ? (
+        <div
+          role="group"
+          aria-label="Réglages de l’image sélectionnée"
+          className="flex flex-wrap items-end gap-2 rounded-xl border border-[color-mix(in_srgb,var(--accent)_35%,transparent)] bg-[color-mix(in_srgb,var(--accent)_8%,var(--background-panel))] p-2"
+        >
+          <strong className="w-full self-center text-sm sm:mr-auto sm:w-auto">Image sélectionnée</strong>
+          <label className="grid min-w-0 flex-1 gap-1 text-xs text-[var(--foreground-muted)] sm:max-w-48">
+            Disposition
+            <select
+              className={toolbarSelect}
+              value={selectedImageAlign}
+              onChange={(event) => setImageAlign(event.target.value as WikiImageAlign)}
+            >
+              <option value="none">Bloc</option>
+              <option value="left">À gauche du texte</option>
+              <option value="center">Centrée</option>
+              <option value="right">À droite du texte</option>
+            </select>
+          </label>
+          <label className="grid min-w-24 gap-1 text-xs text-[var(--foreground-muted)]">
+            Largeur
+            <select
+              className={toolbarSelect}
+              value={imageWidthPct}
+              onChange={(event) => setImageWidthPct(Number(event.target.value))}
+            >
+              {imageWidthOptions.map((pct) => (
+                <option key={pct} value={pct}>
+                  {pct} %
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+      ) : null}
+
       <EditorContent editor={editor} className={proseClass} />
     </div>
   );
