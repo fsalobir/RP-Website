@@ -47,7 +47,7 @@ describe("countryEffects", () => {
     expect(formatEffectValue("budget_ministry_min_pct", 12)).toBe("12 %");
     expect(formatEffectValue("budget_allocation_cap", 5)).toBe("+5 %");
     expect(formatEffectValue("budget_allocation_cap", -5)).toBe("-5 %");
-    expect(formatEffectValue("gdp_growth_base", 0.0123)).toBe("1.23 %");
+    expect(formatEffectValue("gdp_growth_base", 0.0123)).toBe("1,23 %");
     expect(formatEffectValue("military_unit_extra", 3)).toBe("+3");
     expect(formatEffectValue("military_unit_extra", -2)).toBe("-2");
   });
@@ -156,6 +156,12 @@ describe("countryEffects", () => {
     );
     expect(desc).toContain("Char");
     expect(desc).toContain("+2");
+    expect(
+      getEffectDescription({ effect_kind: "military_unit_extra", effect_target: "unknown", value: 1 } as any)
+    ).toContain("Unité non visible");
+    expect(
+      getEffectDescription({ effect_kind: "relation_delta", effect_target: "unknown", value: -1 } as any)
+    ).toContain("Pays non visible");
   });
 });
 

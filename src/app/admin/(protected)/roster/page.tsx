@@ -19,12 +19,12 @@ export default async function AdminRosterPage() {
   ]);
 
   return (
-    <div className="mx-auto max-w-6xl px-4 py-10">
-      <h1 className="mb-2 text-2xl font-bold text-[var(--foreground)]">
-        Roster
+    <div className="mx-auto max-w-7xl px-4 py-6">
+      <h1 className="mb-1 text-2xl font-bold text-[var(--foreground)]">
+        Unités militaires
       </h1>
-      <p className="mb-8 text-[var(--foreground-muted)]">
-        Déclarez les unités militaires (templates) disponibles. Chaque unité définit un type, un sous-type, un nombre de niveaux, une base et le manpower par niveau.
+      <p className="mb-5 max-w-[72ch] text-sm leading-relaxed text-[var(--foreground-muted)]">
+        Définissez les modèles d’unités disponibles, leurs niveaux, leurs effectifs, leur puissance et leur coût.
       </p>
 
       <RosterEditor initialUnits={unitsRes.data ?? []} initialLevels={levelsRes.data ?? []} />

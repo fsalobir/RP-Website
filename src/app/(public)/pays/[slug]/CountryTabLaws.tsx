@@ -6,6 +6,7 @@ import { LAW_DEFINITIONS, getLawLevelKeyFromScore, getLawEffectsForLevel, type C
 import {
   EFFECT_KIND_LABELS,
   formatEffectValue,
+  isEffectDisplayPositive,
   MILITARY_BRANCH_EFFECT_LABELS,
   STAT_LABELS,
   formatSubTypeTargetLabel,
@@ -14,7 +15,16 @@ import {
 } from "@/lib/countryEffects";
 import { BUDGET_MINISTRY_LABELS } from "@/lib/ruleParameters";
 import { formatNumber } from "@/lib/format";
+import { DisclosureChevron } from "@/components/ui/DisclosureChevron";
 import { setLawScoreImmediate, setLawTarget } from "./actions";
+
+const LAW_ICONS: Record<string, string> = {
+  mobilisation: "🛡️",
+  auto_industry: "🚙",
+  air_industry: "✈️",
+  naval_industry: "⚓",
+  research: "🔬",
+};
 
 function resolveTargetLabel(
   effectKind: string,
@@ -23,7 +33,7 @@ function resolveTargetLabel(
 ): string {
   if (!target) return "";
   if (effectKind === "military_unit_extra" || effectKind === "military_unit_tech_rate" || effectKind === "military_unit_limit_modifier_roster") {
-    return rosterNameById.get(target) ?? target;
+    return rosterNameById.get(target) ?? "Unité non visible";
   }
   if (effectKind === "military_unit_limit_modifier_sub_type" && target) {
     const p = parseSubTypeTarget(target);
@@ -53,20 +63,21 @@ function EffectLine({
   const label = EFFECT_KIND_LABELS[effectKind] ?? effectKind;
   const targetStr = resolveTargetLabel(effectKind, effectTarget, rosterNameById);
   const valStr = formatEffectValue(effectKind, value);
-  const isPositive = value > 0;
-  const isNegative = value < 0;
+  const isNeutral = effectKind.startsWith("influence_modifier_") ? value === 1 : value === 0;
+  const isPositive = !isNeutral && isEffectDisplayPositive({ effect_kind: effectKind, value });
+  const isNegative = !isNeutral && !isPositive;
 
   return (
-    <li className="flex items-baseline gap-1.5 text-xs leading-relaxed">
+    <li className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-start gap-x-2 text-xs leading-relaxed">
       <span
-        className="inline-block w-1.5 h-1.5 rounded-full shrink-0 mt-[5px]"
+        className="mt-[5px] inline-block h-1.5 w-1.5 shrink-0 rounded-full"
         style={{ background: isPositive ? "var(--accent)" : isNegative ? "var(--danger)" : "var(--foreground-muted)" }}
       />
-      <span className={glassMutedClass}>
+      <span className={`min-w-0 break-words ${glassMutedClass}`}>
         {label}{targetStr ? ` — ${targetStr}` : ""}
       </span>
       <span
-        className="font-semibold ml-auto shrink-0"
+        className="shrink-0 text-right font-semibold"
         style={{ color: isPositive ? "var(--accent)" : isNegative ? "var(--danger)" : "#ffffff" }}
       >
         {valStr}
@@ -178,61 +189,48 @@ function LawCard({
   const rightSummary = inTransition
     ? `${targetLabel} // ${formatNumber(daysToTarget)} jour(s) restants`
     : currentLabel;
+  const icon = LAW_ICONS[def.lawKey] ?? "⚖️";
 
   return (
     <div
       className={`rounded-xl border ${glassBorderClass}`}
       style={{
-        background: "rgba(255,255,255,0.12)",
-        backdropFilter: "blur(12px)",
+        background: "rgba(255,255,255,0.06)",
       }}
     >
       <button
         type="button"
         onClick={() => setExpanded((e) => !e)}
-        className={`relative w-full text-left transition-all duration-200 ${expanded ? "px-5 py-4 border-b" : "h-10 px-3"}`}
+        className={`group relative min-h-11 w-full px-3 py-3 text-left transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--accent)] sm:px-4 ${expanded ? "border-b" : ""}`}
         style={expanded ? { borderColor: "rgba(255,255,255,0.22)" } : undefined}
         aria-expanded={expanded}
       >
-        {expanded ? (
-          <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3">
-            <span className="flex min-w-0 items-center gap-1.5 leading-tight">
-              <span className={`truncate text-lg font-bold ${glassTextClass}`}>{def.title_fr}</span>
-              <span className={`shrink-0 text-xs ${glassMutedClass}`} aria-hidden>
-                ▾
-              </span>
-            </span>
-            <span
-              className={`shrink-0 whitespace-nowrap text-right text-sm font-bold leading-tight ${glassTextClass}`}
-              title={rightSummary}
-            >
-              {rightSummary}
-            </span>
-          </div>
-        ) : (
-          <>
-            <div className="flex h-full min-w-0 items-center gap-1.5 pr-[45%]">
-              <span className={`truncate text-sm font-bold ${glassTextClass}`}>{def.title_fr}</span>
-              <span className={`shrink-0 text-xs ${glassMutedClass}`} aria-hidden>
-                ▾
-              </span>
-            </div>
-            <span
-              className={`absolute right-3 top-1/2 -translate-y-1/2 text-right text-xs font-bold leading-tight ${glassTextClass}`}
-              style={{ maxWidth: "42%" }}
-              title={rightSummary}
-            >
-              <span className="block truncate whitespace-nowrap">{rightSummary}</span>
-            </span>
-          </>
-        )}
+        <span className="grid grid-cols-[2.25rem_minmax(0,1fr)_2.5rem] items-center gap-x-3">
+          <span
+            aria-hidden
+            className="row-span-2 flex h-9 w-9 items-center justify-center rounded-lg border border-white/15 bg-black/20 text-lg"
+          >
+            {icon}
+          </span>
+          <span className={`min-w-0 text-sm font-bold leading-snug sm:text-base ${glassTextClass}`}>
+            {def.title_fr}
+          </span>
+          <span className="col-start-3 row-span-2 row-start-1 flex h-10 w-10 items-center justify-center self-center rounded-lg text-white/80 transition-colors group-hover:bg-white/5 group-active:bg-white/10">
+            <DisclosureChevron open={expanded} />
+          </span>
+          <span className={`col-start-2 col-end-3 mt-0.5 min-w-0 break-words text-xs leading-snug ${glassMutedClass}`}>
+            {rightSummary}
+          </span>
+        </span>
       </button>
 
       <div
         className={`overflow-hidden transition-[max-height,opacity] duration-300 ease-in-out ${expanded ? "opacity-100" : "opacity-0"}`}
         style={{ maxHeight: expanded ? "2000px" : "0px" }}
+        inert={!expanded}
+        aria-hidden={!expanded}
       >
-        <div className="relative px-5 pt-3 pb-5">
+        <div className="relative px-3 pb-5 pt-3 sm:px-5">
           <div
             className={`space-y-1 pt-1 transition-[filter] duration-200 ${isLoading ? "pointer-events-none select-none blur-[3px]" : ""}`}
             aria-busy={isLoading}
@@ -249,18 +247,13 @@ function LawCard({
                 ? "var(--accent-muted)"
                 : "rgba(255,255,255,0.28)";
             const bottomClr = levelEffects.length > 0 ? "transparent" : borderClr;
-            const cardShadow = isCurrent
-              ? "0 0 0 1px rgba(16,185,129,0.45), 0 0 16px rgba(16,185,129,0.28)"
-              : isTarget
-                ? "0 0 0 1px rgba(148,163,184,0.45), 0 0 14px rgba(148,163,184,0.22)"
-                : "0 0 0 1px rgba(255,255,255,0.08)";
             return (
               <div key={level.key}>
                 <button
                   type="button"
                   disabled={!canEditCountry || isLoading}
                   onClick={() => handleClick(level.key)}
-                  className="flex w-full items-center gap-3 rounded-t border border-solid px-3 py-2 text-left text-sm font-medium transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+                  className="flex min-h-11 w-full items-center gap-3 rounded-t border border-solid px-3 py-2 text-left text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-60"
                   style={{
                     borderTopColor: borderClr,
                     borderRightColor: borderClr,
@@ -273,18 +266,17 @@ function LawCard({
                         : "rgba(255,255,255,0.14)",
                     color: "#ffffff",
                     borderRadius: levelEffects.length > 0 ? "0.375rem 0.375rem 0 0" : "0.375rem",
-                    boxShadow: cardShadow,
                   }}
                 >
-                  <span className="flex-1 font-semibold text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.5)]">{level.label}</span>
+                  <span className="min-w-0 flex-1 break-words font-semibold text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.5)]">{level.label}</span>
                   {isCurrent && (
-                    <span className="text-xs px-1.5 py-0.5 rounded" style={{ background: "var(--accent)", color: "#0f1419" }}>
+                    <span className="shrink-0 self-start rounded px-1.5 py-0.5 text-xs" style={{ background: "var(--accent)", color: "#0f1419" }}>
                       Actuel
                     </span>
                   )}
                   {isTarget && !isCurrent && !isAdmin && (
                     <span
-                      className="text-xs px-1.5 py-0.5 rounded text-white/95"
+                      className="shrink-0 self-start rounded px-1.5 py-0.5 text-xs text-white/95"
                       style={{ background: "rgba(255,255,255,0.18)", border: "1px solid rgba(255,255,255,0.28)" }}
                     >
                       Cible
@@ -301,7 +293,6 @@ function LawCard({
                           ? "var(--accent-muted)"
                           : "rgba(255,255,255,0.22)",
                       background: "rgba(15,23,42,0.55)",
-                      boxShadow: cardShadow,
                     }}
                   >
                     <ul className="space-y-0.5">
@@ -377,7 +368,7 @@ export function CountryTabLaws({
   return (
     <section
       className={`${panelClass} rounded-xl border p-4 ${glassBorderClass}`}
-      style={{ ...panelStyle, background: "rgba(255,255,255,0.12)", backdropFilter: "blur(12px)" }}
+      style={{ ...panelStyle, background: "rgba(12,20,32,0.92)", borderColor: "rgba(255,255,255,0.2)" }}
     >
       <h2 className={`mb-4 text-lg font-semibold ${glassTextClass}`}>
         Lois nationales

@@ -68,7 +68,7 @@ describe("stateActionConsequences", () => {
   });
 
   it("applyImmediateEffect: relation_delta upserts normalized pair and clamps", async () => {
-    const upsertSpy = vi.fn(async () => ({ error: null }));
+    const upsertSpy = vi.fn(async (_payload: Record<string, unknown>) => ({ error: null }));
     const supabase = makeSupabaseMock({
       country_relations: {
         upsert: upsertSpy,
@@ -112,7 +112,7 @@ describe("stateActionConsequences", () => {
 
     expect(res.error).toBeUndefined();
     expect(upsertSpy).toHaveBeenCalledTimes(1);
-    const payload = upsertSpy.mock.calls[0]?.[0];
+    const [payload] = upsertSpy.mock.calls[0]!;
     // normalized pair: a < b
     expect(payload.country_a_id).toBe("a");
     expect(payload.country_b_id).toBe("b");

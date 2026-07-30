@@ -73,12 +73,12 @@ export default async function AdminBotDiscordPage() {
       : new Date().toLocaleDateString("fr-FR", { dateStyle: "medium" });
 
   return (
-    <div className="mx-auto max-w-6xl px-4 py-10">
-      <h1 className="mb-2 text-2xl font-bold text-[var(--foreground)]">
-        Bot Discord
+    <div className="mx-auto max-w-7xl px-4 py-6">
+      <h1 className="mb-1 text-2xl font-bold text-[var(--foreground)]">
+        Publications Discord
       </h1>
-      <p className="mb-8 text-[var(--foreground-muted)]">
-        Types de dispatch (dérivés des actions d'État), canaux par continent (national / international) et templates.
+      <p className="mb-5 max-w-[72ch] text-sm leading-relaxed text-[var(--foreground-muted)]">
+        Choisissez quels événements sont publiés, dans quels salons et avec quel message.
       </p>
       <BotDiscordForm
         stateActionTypes={stateActionTypes}

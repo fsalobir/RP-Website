@@ -3,6 +3,32 @@
 import { revalidateTag, revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 
+type RuleParameterUpdate = {
+  id: string;
+  key: string;
+  value: unknown;
+  description: string | null;
+};
+
+export async function saveRuleParameters(rows: RuleParameterUpdate[]): Promise<{ error?: string }> {
+  if (rows.length === 0) return {};
+  if (rows.length > 250) return { error: "Trop de réglages envoyés en une fois." };
+  if (rows.some((row) => !row.id || !row.key)) return { error: "Un réglage est incomplet." };
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("rule_parameters")
+    .upsert(rows, { onConflict: "id" });
+
+  if (error) return { error: error.message };
+  revalidateTag("country-page-globals", "max");
+  revalidatePath("/admin/regles");
+  revalidatePath("/classement");
+  revalidatePath("/");
+  revalidatePath("/ideologie");
+  return {};
+}
+
 /**
  * Invalide les caches impactés par la modification des règles.
  * - Fiches pays : tag country-page-globals

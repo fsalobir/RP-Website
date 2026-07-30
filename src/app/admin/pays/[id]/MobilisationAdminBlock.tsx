@@ -64,16 +64,17 @@ export function MobilisationAdminBlock({
 
   return (
     <div
-      className="rounded-lg border p-6"
+      className="rounded-lg border p-4"
       style={{ background: "var(--background-panel)", borderColor: "var(--border)" }}
     >
-      <h2 className="mb-4 text-lg font-semibold text-[var(--foreground)]">
+      <h2 className="mb-3 text-lg font-semibold text-[var(--foreground)]">
         Mobilisation
       </h2>
       <div className="flex flex-wrap items-end gap-4">
         <div>
-          <label className="mb-1 block text-xs text-[var(--foreground-muted)]">Score (0–500)</label>
+          <label htmlFor="mobilisation-score" className="mb-1 block text-xs text-[var(--foreground-muted)]">Score (0–500)</label>
           <input
+            id="mobilisation-score"
             type="number"
             min={0}
             max={500}
@@ -99,7 +100,7 @@ export function MobilisationAdminBlock({
           {saving ? "Enregistrement…" : "Enregistrer"}
         </button>
       </div>
-      {error && <p className="mt-2 text-sm text-[var(--danger)]">{error}</p>}
+      {error && <p className="mt-2 text-sm text-[var(--danger)]" role="alert">{error}</p>}
     </div>
   );
 }

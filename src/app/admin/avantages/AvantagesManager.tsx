@@ -38,6 +38,8 @@ import {
   type PerkEffectInput,
   type PerkRequirementInput,
 } from "./actions";
+import { AdminAnchorNav, AdminImpactPreview, AdminSettingsGuide } from "@/components/admin/AdminSettingsUi";
+import { matchesSearchText } from "@/lib/searchText";
 
 const inputClass = "w-full rounded border py-1.5 px-2 text-sm text-[var(--foreground)]";
 const inputStyle = { borderColor: "var(--border)", background: "var(--background)" } as const;
@@ -55,8 +57,8 @@ export function AvantagesManager({
   perks: initialPerks,
   rosterUnits,
 }: AvantagesManagerProps) {
-  const [categories, setCategories] = useState(initialCategories);
-  const [perks, setPerks] = useState(initialPerks);
+  const [categories] = useState(initialCategories);
+  const [perks] = useState(initialPerks);
   const [categoryFormOpen, setCategoryFormOpen] = useState(false);
   const [editingCategoryId, setEditingCategoryId] = useState<string | null>(null);
   const [categoryName, setCategoryName] = useState("");
@@ -75,6 +77,7 @@ export function AvantagesManager({
   const [perkEffects, setPerkEffects] = useState<PerkEffectInput[]>([]);
   const [perkRequirements, setPerkRequirements] = useState<PerkRequirementInput[]>([]);
   const [perkError, setPerkError] = useState<string | null>(null);
+  const [perkQuery, setPerkQuery] = useState("");
 
   const [requirementFormOpen, setRequirementFormOpen] = useState(false);
   const [editingRequirementIndex, setEditingRequirementIndex] = useState<number | null>(null);
@@ -151,7 +154,11 @@ export function AvantagesManager({
   }
   async function handleDeleteCategory(id: string) {
     if (!confirm("Supprimer cette catégorie ? Les avantages qui y sont rattachés n’auront plus de catégorie.")) return;
-    await deletePerkCategory(id);
+    const result = await deletePerkCategory(id);
+    if (result.error) {
+      setCategoryError(result.error);
+      return;
+    }
     window.location.reload();
   }
 
@@ -247,7 +254,11 @@ export function AvantagesManager({
   }
   async function handleDeletePerk(id: string) {
     if (!confirm("Supprimer cet avantage ?")) return;
-    await deletePerk(id);
+    const result = await deletePerk(id);
+    if (result.error) {
+      setPerkError(result.error);
+      return;
+    }
     window.location.reload();
   }
 
@@ -296,11 +307,39 @@ export function AvantagesManager({
   }
 
   const categoryById = new Map(categories.map((c) => [c.id, c]));
+  const filteredPerks = perks.filter((perk) =>
+    matchesSearchText(perkQuery, [
+      perk.name_fr,
+      perk.description_fr ?? "",
+      categoryById.get(perk.category_id ?? "")?.name_fr ?? "",
+      ...(perk.perk_requirements ?? []).map((requirement) => formatRequirementLabel(requirement)),
+      ...(perk.perk_effects ?? []).map((effect) =>
+        getEffectDescription(effect as ResolvedEffect, {
+          rosterUnitName: (id) => rosterUnits.find((unit) => unit.id === id)?.name_fr ?? null,
+          countryName: () => null,
+        })
+      ),
+    ])
+  );
+  const previewIconUrl = perkIconPreviewUrl || perkIconUrl;
+  const previewCategory = categoryById.get(perkCategoryId)?.name_fr ?? "Sans catégorie";
 
   return (
-    <div className="space-y-10">
-      <section>
-        <h2 className="mb-3 text-lg font-semibold text-[var(--foreground)]">Catégories</h2>
+    <div className="admin-settings-form space-y-5">
+      <AdminSettingsGuide
+        purpose="Un avantage devient visible avec son nom, son icône, ses conditions de déblocage et les bonus qu’il applique."
+        impact="La modification d’un avantage existant change immédiatement son affichage et ses effets pour les pays concernés."
+        check="Vérifiez l’aperçu, puis lisez les conditions et effets comme le ferait un joueur avant d’enregistrer."
+      />
+      <AdminAnchorNav
+        label="Sections des avantages"
+        items={[
+          { href: "#perk-categories", label: "Catégories" },
+          { href: "#perk-list", label: "Avantages" },
+        ]}
+      />
+      <section id="perk-categories" className="scroll-mt-20">
+        <h2 className="mb-2 text-lg font-semibold text-[var(--foreground)]">Catégories</h2>
         <ul className="space-y-2">
           {categories.map((cat) => (
             <li
@@ -339,11 +378,12 @@ export function AvantagesManager({
             Ajouter une catégorie
           </button>
         ) : (
-          <div className="mt-3 rounded border p-4 space-y-3" style={{ borderColor: "var(--border-muted)" }}>
-            {categoryError && <p className="text-sm text-[var(--danger)]">{categoryError}</p>}
+          <div className="mt-3 space-y-3 rounded border p-3" style={{ borderColor: "var(--border-muted)" }}>
+            {categoryError && <p role="alert" className="text-sm text-[var(--danger)]">{categoryError}</p>}
             <div>
-              <label className="mb-1 block text-xs text-[var(--foreground-muted)]">Nom</label>
+              <label htmlFor="perk-category-name" className="mb-1 block text-xs text-[var(--foreground-muted)]">Nom</label>
               <input
+                id="perk-category-name"
                 type="text"
                 value={categoryName}
                 onChange={(e) => setCategoryName(e.target.value)}
@@ -352,8 +392,9 @@ export function AvantagesManager({
               />
             </div>
             <div>
-              <label className="mb-1 block text-xs text-[var(--foreground-muted)]">Ordre</label>
+              <label htmlFor="perk-category-order" className="mb-1 block text-xs text-[var(--foreground-muted)]">Ordre d’affichage</label>
               <input
+                id="perk-category-order"
                 type="number"
                 value={categorySortOrder}
                 onChange={(e) => setCategorySortOrder(Number(e.target.value) || 0)}
@@ -361,7 +402,7 @@ export function AvantagesManager({
                 style={inputStyle}
               />
             </div>
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-2">
               <button
                 type="button"
                 onClick={saveCategory}
@@ -383,10 +424,27 @@ export function AvantagesManager({
         )}
       </section>
 
-      <section>
-        <h2 className="mb-3 text-lg font-semibold text-[var(--foreground)]">Avantages</h2>
+      <section id="perk-list" className="scroll-mt-20 border-t pt-4" style={{ borderColor: "var(--border)" }}>
+        <h2 className="mb-2 text-lg font-semibold text-[var(--foreground)]">Avantages</h2>
+        <div className="mb-3 max-w-xl">
+          <label htmlFor="perk-search" className="mb-1 block text-sm font-medium text-[var(--foreground)]">
+            Rechercher un avantage
+          </label>
+          <input
+            id="perk-search"
+            type="search"
+            value={perkQuery}
+            onChange={(event) => setPerkQuery(event.target.value)}
+            placeholder="Nom, catégorie, condition ou effet…"
+            className={inputClass}
+            style={inputStyle}
+          />
+          <p className="mt-1 text-xs text-[var(--foreground-muted)]" aria-live="polite">
+            {filteredPerks.length} avantage{filteredPerks.length > 1 ? "s" : ""} affiché{filteredPerks.length > 1 ? "s" : ""}
+          </p>
+        </div>
         <ul className="space-y-2">
-          {perks.map((p) => (
+          {filteredPerks.map((p) => (
             <li
               key={p.id}
               className="flex flex-wrap items-center justify-between gap-2 rounded border py-2 px-3"
@@ -400,11 +458,13 @@ export function AvantagesManager({
                   </span>
                 )}
                 <span className="ml-2 text-xs text-[var(--foreground-muted)]">
-                  {(p.perk_requirements?.length ?? 0) > 0 ? `${p.perk_requirements!.length} requis` : "Aucun requis"}
+                  {(p.perk_requirements?.length ?? 0) > 0
+                    ? `${p.perk_requirements!.length} condition${p.perk_requirements!.length > 1 ? "s" : ""}`
+                    : "Sans condition"}
                 </span>
                 {(p.perk_effects?.length ?? 0) > 0 && (
                   <span className="ml-2 text-xs text-[var(--accent)]">
-                    {p.perk_effects!.length} effet(s)
+                    {p.perk_effects!.length} effet{p.perk_effects!.length > 1 ? "s" : ""}
                   </span>
                 )}
               </div>
@@ -427,6 +487,11 @@ export function AvantagesManager({
             </li>
           ))}
         </ul>
+        {filteredPerks.length === 0 && (
+          <p className="rounded border px-4 py-6 text-center text-sm text-[var(--foreground-muted)]" style={{ borderColor: "var(--border-muted)" }}>
+            Aucun avantage ne correspond à cette recherche.
+          </p>
+        )}
         {!perkFormOpen ? (
           <button
             type="button"
@@ -437,12 +502,74 @@ export function AvantagesManager({
             Ajouter un avantage
           </button>
         ) : (
-          <div className="mt-3 rounded border p-4 space-y-4" style={{ borderColor: "var(--border-muted)" }}>
-            {perkError && <p className="text-sm text-[var(--danger)]">{perkError}</p>}
+          <div className="mt-3 space-y-3 rounded border p-3" style={{ borderColor: "var(--border-muted)" }}>
+            {perkError && <p role="alert" className="text-sm text-[var(--danger)]">{perkError}</p>}
+            <AdminImpactPreview
+              title="Aperçu joueur, avant enregistrement"
+              description="Le contenu ci-dessous suit immédiatement vos modifications."
+            >
+              <div className="flex items-start gap-3">
+                <div
+                  className="flex shrink-0 items-center justify-center overflow-hidden rounded-lg border bg-[var(--background)] text-xl text-[var(--foreground-muted)]"
+                  style={{
+                    borderColor: "var(--border-muted)",
+                    width: Math.min(72, perkIconSize),
+                    height: Math.min(72, perkIconSize),
+                  }}
+                >
+                  {previewIconUrl ? (
+                    <img src={previewIconUrl} alt="" className="h-full w-full object-contain" />
+                  ) : (
+                    <span aria-hidden>★</span>
+                  )}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs font-medium uppercase tracking-wide text-[var(--accent)]">{previewCategory}</p>
+                  <p className="mt-1 break-words text-base font-semibold text-[var(--foreground)]">
+                    {perkName.trim() || "Nom de l’avantage"}
+                  </p>
+                  <p className="mt-1 whitespace-pre-wrap break-words text-sm leading-relaxed text-[var(--foreground-muted)]">
+                    {perkDescription.trim() || "La description visible par les joueurs apparaîtra ici."}
+                  </p>
+                </div>
+              </div>
+              <div className="mt-3 grid gap-3 border-t pt-3 sm:grid-cols-2" style={{ borderColor: "var(--border-muted)" }}>
+                <div>
+                  <p className="text-xs font-medium text-[var(--foreground)]">Pour le débloquer</p>
+                  {perkRequirements.length > 0 ? (
+                    <ul className="mt-2 space-y-1 text-xs leading-relaxed text-[var(--foreground-muted)]">
+                      {perkRequirements.map((requirement, index) => (
+                        <li key={index}>✓ {formatRequirementLabel(requirement)}</li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="mt-2 text-xs text-[var(--warning)]">Aucune condition : l’avantage est accessible sans seuil.</p>
+                  )}
+                </div>
+                <div>
+                  <p className="text-xs font-medium text-[var(--foreground)]">Ce qu’il change</p>
+                  {perkEffects.length > 0 ? (
+                    <ul className="mt-2 space-y-1 text-xs leading-relaxed text-[var(--foreground-muted)]">
+                      {perkEffects.map((effect, index) => (
+                        <li key={index}>
+                          → {getEffectDescription(effect as ResolvedEffect, {
+                            rosterUnitName: (id) => rosterUnits.find((unit) => unit.id === id)?.name_fr ?? null,
+                            countryName: () => null,
+                          })}
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="mt-2 text-xs text-[var(--warning)]">Aucun effet : le déblocage n’aura aucune conséquence en jeu.</p>
+                  )}
+                </div>
+              </div>
+            </AdminImpactPreview>
             <div className="grid gap-3 sm:grid-cols-2">
               <div>
-                <label className="mb-1 block text-xs text-[var(--foreground-muted)]">Titre</label>
+                <label htmlFor="perk-title" className="mb-1 block text-xs text-[var(--foreground-muted)]">Titre</label>
                 <input
+                  id="perk-title"
                   type="text"
                   value={perkName}
                   onChange={(e) => setPerkName(e.target.value)}
@@ -451,8 +578,9 @@ export function AvantagesManager({
                 />
               </div>
               <div>
-                <label className="mb-1 block text-xs text-[var(--foreground-muted)]">Catégorie</label>
+                <label htmlFor="perk-category" className="mb-1 block text-xs text-[var(--foreground-muted)]">Catégorie</label>
                 <select
+                  id="perk-category"
                   value={perkCategoryId}
                   onChange={(e) => setPerkCategoryId(e.target.value)}
                   className={inputClass}
@@ -466,8 +594,9 @@ export function AvantagesManager({
               </div>
             </div>
             <div>
-              <label className="mb-1 block text-xs text-[var(--foreground-muted)]">Description (fluff)</label>
+              <label htmlFor="perk-description" className="mb-1 block text-xs text-[var(--foreground-muted)]">Description visible par les joueurs</label>
               <textarea
+                id="perk-description"
                 value={perkDescription}
                 onChange={(e) => setPerkDescription(e.target.value)}
                 rows={2}
@@ -476,10 +605,12 @@ export function AvantagesManager({
               />
             </div>
             <div className="space-y-2">
-              <label className="mb-1 block text-xs text-[var(--foreground-muted)]">Icône</label>
+              <p className="text-xs text-[var(--foreground-muted)]">Icône</p>
               <div className="flex flex-wrap items-end gap-3">
-                <div>
+                <div className="min-w-0">
+                  <label htmlFor="perk-icon-file" className="sr-only">Fichier de l’icône</label>
                   <input
+                    id="perk-icon-file"
                     type="file"
                     accept="image/*"
                     onChange={(e) => {
@@ -491,12 +622,13 @@ export function AvantagesManager({
                     className="block w-full text-sm text-[var(--foreground-muted)] file:mr-2 file:rounded file:border-0 file:py-1.5 file:px-3 file:text-sm file:font-medium file:bg-[var(--accent)] file:text-[#0f1419]"
                   />
                   <p className="mt-0.5 text-xs text-[var(--foreground-muted)]">
-                    Téléverser un fichier (tous les fichiers sont regroupés dans le dossier <em>avantages/icons</em>).
+                    Importez une image ou renseignez une adresse ci-contre.
                   </p>
                 </div>
                 <div className="min-w-[12rem] flex-1">
-                  <span className="mb-0.5 block text-xs text-[var(--foreground-muted)]">ou URL</span>
+                  <label htmlFor="perk-icon-url" className="mb-0.5 block text-xs text-[var(--foreground-muted)]">ou URL</label>
                   <input
+                    id="perk-icon-url"
                     type="text"
                     value={perkIconUrl}
                     onChange={(e) => { setPerkIconUrl(e.target.value); setPerkIconFile(null); }}
@@ -506,8 +638,9 @@ export function AvantagesManager({
                   />
                 </div>
                 <div>
-                  <label className="mb-0.5 block text-xs text-[var(--foreground-muted)]">Taille (px)</label>
+                  <label htmlFor="perk-icon-size" className="mb-0.5 block text-xs text-[var(--foreground-muted)]">Taille (px)</label>
                   <input
+                    id="perk-icon-size"
                     type="number"
                     min={16}
                     max={256}
@@ -536,8 +669,9 @@ export function AvantagesManager({
             </div>
             <div className="grid gap-3 sm:grid-cols-2">
               <div>
-                <label className="mb-1 block text-xs text-[var(--foreground-muted)]">Ordre</label>
+                <label htmlFor="perk-order" className="mb-1 block text-xs text-[var(--foreground-muted)]">Ordre d’affichage</label>
                 <input
+                  id="perk-order"
                   type="number"
                   value={perkSortOrder}
                   onChange={(e) => setPerkSortOrder(Number(e.target.value) || 0)}
@@ -548,7 +682,7 @@ export function AvantagesManager({
             </div>
 
             <div>
-              <p className="mb-2 text-sm font-medium text-[var(--foreground)]">Requis (dynamiques)</p>
+              <p className="mb-2 text-sm font-medium text-[var(--foreground)]">Conditions de déblocage</p>
               <ul className="space-y-2">
                 {perkRequirements.map((r, idx) => (
                   <li
@@ -600,13 +734,14 @@ export function AvantagesManager({
                   }}
                   className="mt-1 text-sm text-[var(--accent)] hover:underline"
                 >
-                  + Ajouter un requis
+                  Ajouter une condition
                 </button>
               ) : (
-                <div className="mt-2 flex flex-wrap items-end gap-2 rounded border p-2" style={{ borderColor: "var(--border-muted)" }}>
+                <div className="mt-2 grid grid-cols-1 items-end gap-2 rounded border p-2 sm:flex sm:flex-wrap" style={{ borderColor: "var(--border-muted)" }}>
                   <div>
-                    <label className="mb-0.5 block text-xs text-[var(--foreground-muted)]">Type</label>
+                    <label htmlFor="perk-requirement-kind" className="mb-0.5 block text-xs text-[var(--foreground-muted)]">Type</label>
                     <select
+                      id="perk-requirement-kind"
                       value={requirementKind}
                       onChange={(e) => {
                         setRequirementKind(e.target.value);
@@ -623,8 +758,9 @@ export function AvantagesManager({
                   </div>
                   {metaForRequirementKind.needsTarget && requirementTargetOptions.length > 0 && (
                     <div>
-                      <label className="mb-0.5 block text-xs text-[var(--foreground-muted)]">{metaForRequirementKind.targetLabel ?? "Cible"}</label>
+                      <label htmlFor="perk-requirement-target" className="mb-0.5 block text-xs text-[var(--foreground-muted)]">{metaForRequirementKind.targetLabel ?? "Cible"}</label>
                       <select
+                        id="perk-requirement-target"
                         value={requirementTarget}
                         onChange={(e) => setRequirementTarget(e.target.value)}
                         className={inputClass}
@@ -637,8 +773,9 @@ export function AvantagesManager({
                     </div>
                   )}
                   <div>
-                    <label className="mb-0.5 block text-xs text-[var(--foreground-muted)]">{getRequirementValueHelper(requirementKind).valueLabel}</label>
+                    <label htmlFor="perk-requirement-value" className="mb-0.5 block text-xs text-[var(--foreground-muted)]">{getRequirementValueHelper(requirementKind).valueLabel}</label>
                     <input
+                      id="perk-requirement-value"
                       type="number"
                       step={getRequirementValueHelper(requirementKind).valueStep}
                       value={requirementValue}
@@ -658,7 +795,7 @@ export function AvantagesManager({
             </div>
 
             <div>
-              <p className="mb-2 text-sm font-medium text-[var(--foreground)]">Effets (logique dynamique)</p>
+              <p className="mb-2 text-sm font-medium text-[var(--foreground)]">Effets appliqués</p>
               <ul className="space-y-2">
                 {perkEffects.map((e, idx) => (
                   <li
@@ -720,10 +857,11 @@ export function AvantagesManager({
                   Ajouter un effet
                 </button>
               ) : (
-                <div className="mt-2 rounded border p-3 space-y-2" style={{ borderColor: "var(--border-muted)" }}>
+                <div className="mt-2 space-y-2 rounded border p-2" style={{ borderColor: "var(--border-muted)" }}>
                   <div>
-                    <label className="mb-0.5 block text-xs text-[var(--foreground-muted)]">Type d&apos;effet</label>
+                    <label htmlFor="perk-effect-kind" className="mb-0.5 block text-xs text-[var(--foreground-muted)]">Type d&apos;effet</label>
                     <select
+                      id="perk-effect-kind"
                       value={effectKind}
                       onChange={(e) => {
                         const k = e.target.value;
@@ -744,8 +882,9 @@ export function AvantagesManager({
                   </div>
                   {EFFECT_KINDS_WITH_STAT_TARGET.has(effectKind) && (
                     <div>
-                      <label className="mb-0.5 block text-xs text-[var(--foreground-muted)]">Stat</label>
+                      <label htmlFor="perk-effect-stat" className="mb-0.5 block text-xs text-[var(--foreground-muted)]">Statistique</label>
                       <select
+                        id="perk-effect-stat"
                         value={currentEffectTarget ?? STAT_KEYS[0]}
                         onChange={(e) => setEffectTarget(e.target.value || null)}
                         className={inputClass}
@@ -759,8 +898,9 @@ export function AvantagesManager({
                   )}
                   {EFFECT_KINDS_WITH_BUDGET_TARGET.has(effectKind) && (
                     <div>
-                      <label className="mb-0.5 block text-xs text-[var(--foreground-muted)]">Ministère</label>
+                      <label htmlFor="perk-effect-ministry" className="mb-0.5 block text-xs text-[var(--foreground-muted)]">Ministère</label>
                       <select
+                        id="perk-effect-ministry"
                         value={currentEffectTarget ?? getBudgetMinistryOptions()[0]?.key ?? ""}
                         onChange={(e) => setEffectTarget(e.target.value || null)}
                         className={inputClass}
@@ -774,8 +914,9 @@ export function AvantagesManager({
                   )}
                   {EFFECT_KINDS_WITH_BRANCH_TARGET.has(effectKind) && (
                     <div>
-                      <label className="mb-0.5 block text-xs text-[var(--foreground-muted)]">Branche</label>
+                      <label htmlFor="perk-effect-branch" className="mb-0.5 block text-xs text-[var(--foreground-muted)]">Branche</label>
                       <select
+                        id="perk-effect-branch"
                         value={currentEffectTarget ?? MILITARY_BRANCH_EFFECT_IDS[0]}
                         onChange={(e) => setEffectTarget(e.target.value || null)}
                         className={inputClass}
@@ -789,8 +930,9 @@ export function AvantagesManager({
                   )}
                   {EFFECT_KINDS_WITH_ROSTER_UNIT_TARGET.has(effectKind) && (
                     <div>
-                      <label className="mb-0.5 block text-xs text-[var(--foreground-muted)]">Unité</label>
+                      <label htmlFor="perk-effect-unit" className="mb-0.5 block text-xs text-[var(--foreground-muted)]">Unité</label>
                       <select
+                        id="perk-effect-unit"
                         value={currentEffectTarget ?? rosterUnits[0]?.id ?? ""}
                         onChange={(e) => setEffectTarget(e.target.value || null)}
                         className={inputClass}
@@ -804,8 +946,9 @@ export function AvantagesManager({
                   )}
                   {EFFECT_KINDS_WITH_SUB_TYPE_TARGET.has(effectKind) && (
                     <div>
-                      <label className="mb-0.5 block text-xs text-[var(--foreground-muted)]">Sous-branche/type</label>
+                      <label htmlFor="perk-effect-subtype" className="mb-0.5 block text-xs text-[var(--foreground-muted)]">Sous-branche/type</label>
                       <select
+                        id="perk-effect-subtype"
                         value={currentEffectTarget ?? subTypeOptions[0]?.value ?? ""}
                         onChange={(e) => setEffectTarget(e.target.value || null)}
                         className={inputClass}
@@ -818,10 +961,11 @@ export function AvantagesManager({
                     </div>
                   )}
                   <div>
-                    <label className="mb-0.5 block text-xs text-[var(--foreground-muted)]">
+                    <label htmlFor="perk-effect-value" className="mb-0.5 block text-xs text-[var(--foreground-muted)]">
                       {getEffectKindValueHelper(effectKind).valueLabel}
                     </label>
                     <input
+                      id="perk-effect-value"
                       type="number"
                       step={getEffectKindValueHelper(effectKind).valueStep}
                       value={effectValue}
@@ -830,7 +974,7 @@ export function AvantagesManager({
                       style={{ ...inputStyle, maxWidth: "12rem" }}
                     />
                   </div>
-                  <div className="flex gap-2">
+                  <div className="flex flex-wrap gap-2">
                     <button
                       type="button"
                       onClick={addEffect}
@@ -855,7 +999,7 @@ export function AvantagesManager({
               )}
             </div>
 
-            <div className="flex gap-2 pt-2">
+            <div className="flex flex-wrap gap-2 pt-2">
               <button
                 type="button"
                 onClick={savePerk}

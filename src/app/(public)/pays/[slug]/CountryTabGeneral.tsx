@@ -2,8 +2,7 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import type { Country } from "@/types/database";
-import type { CountryEffect } from "@/types/database";
+import type { Country, CountryEffect } from "@/types/database";
 import { formatNumber, formatGdp, formatPopulation } from "@/lib/format";
 import {
   getEffectDescription,
@@ -186,12 +185,12 @@ function SpherePieChart({
                 style={{ backgroundColor: SPHERE_PIE_COLORS[s.colorIndex % SPHERE_PIE_COLORS.length] }}
               />
               {s.flag_url ? (
-                <Link href={`/pays/${s.slug}`} className="shrink-0">
+                <Link href={`/pays/${s.slug}`} className="shrink-0" aria-label={`Voir ${s.name}`}>
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img src={s.flag_url} alt="" width={16} height={11} className="inline-block h-[11px] w-4 rounded object-cover align-middle" />
                 </Link>
               ) : null}
-              <Link href={`/pays/${s.slug}`} className="truncate text-[var(--foreground-muted)] hover:text-[var(--accent)] hover:underline">
+              <Link href={`/pays/${s.slug}`} className="min-w-0 break-words text-[var(--foreground-muted)] hover:text-[var(--accent)] hover:underline">
                 {s.name}
               </Link>
             </li>
@@ -204,6 +203,10 @@ function SpherePieChart({
 
 type CountryTabGeneralProps = {
   country: Country;
+  previousSnapshot?: Pick<Country, "population" | "gdp" | "militarism" | "industry" | "science" | "stability"> | null;
+  worldDate?: { month: number; year: number } | null;
+  ownerMode?: boolean;
+  onNavigate?: (tab: "budget" | "laws" | "state_actions") => void;
   rankPopulation: number;
   rankGdp: number;
   rankInfluence: number;
@@ -292,6 +295,10 @@ type CountryTabGeneralProps = {
 
 export function CountryTabGeneral({
   country,
+  previousSnapshot = null,
+  worldDate = null,
+  ownerMode = false,
+  onNavigate,
   rankPopulation,
   rankGdp,
   rankInfluence,
@@ -359,6 +366,47 @@ export function CountryTabGeneral({
       : null;
   const getCountryName = (id: string) =>
     (id === country.id ? country.name : otherCountriesForRelation.find((c) => c.id === id)?.name) ?? null;
+  const briefingDate = worldDate
+    ? new Intl.DateTimeFormat("fr-FR", { month: "long", year: "numeric", timeZone: "UTC" }).format(
+        new Date(Date.UTC(worldDate.year, worldDate.month - 1, 1))
+      )
+    : null;
+  const percentChange = (before: number | null, after: number | null) =>
+    before != null && after != null && before !== 0 ? ((after - before) / Math.abs(before)) * 100 : null;
+  const strongestStatChange = previousSnapshot
+    ? [
+        { label: "Militarisme", before: previousSnapshot.militarism, after: country.militarism },
+        { label: "Industrie", before: previousSnapshot.industry, after: country.industry },
+        { label: "Science", before: previousSnapshot.science, after: country.science },
+        { label: "Stabilité", before: previousSnapshot.stability, after: country.stability },
+      ]
+        .filter((stat): stat is { label: string; before: number; after: number } => stat.before != null && stat.after != null)
+        .map((stat) => ({ label: stat.label, value: stat.after - stat.before }))
+        .sort((a, b) => Math.abs(b.value) - Math.abs(a.value))[0]
+    : null;
+  const briefingTrends = previousSnapshot
+    ? [
+        { label: "PIB", value: percentChange(previousSnapshot.gdp, country.gdp), suffix: " %" },
+        {
+          label: "Population",
+          value: percentChange(previousSnapshot.population, country.population),
+          suffix: " %",
+        },
+        strongestStatChange && Math.abs(strongestStatChange.value) >= 0.05
+          ? { label: strongestStatChange.label, value: strongestStatChange.value, suffix: "" }
+          : null,
+      ].filter((trend): trend is { label: string; value: number; suffix: string } => trend?.value != null)
+    : [];
+  const briefingAlerts = resolvedEffects
+    .filter((effect) => Math.abs(effect.value) > 1e-9 && !isEffectDisplayPositive(effect))
+    .map((effect) =>
+      getEffectDescription(effect, {
+        rosterUnitName: (id) => rosterUnitsFlat.find((unit) => unit.id === id)?.name_fr ?? null,
+        countryName: getCountryName,
+      })
+    )
+    .filter((description, index, descriptions) => descriptions.indexOf(description) === index)
+    .slice(0, 2);
   const effectKindGroups = getEffectKindOptionGroups();
 
   function getInfluenceIntensity(value: number, maxValue: number): string {
@@ -373,6 +421,7 @@ export function CountryTabGeneral({
   const glassMutedClass = "text-white/90 drop-shadow-[0_1px_2px_rgba(0,0,0,0.4)]";
   const glassBorderClass = "border-white/25";
   const glassTextClass = "text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.5)]";
+  const briefingSurfaceStyle = { background: "rgba(12,20,32,0.88)" };
   const activeIdeologyEffects = resolvedEffects.filter((e) => e.source === "ideology");
   const activePerkEffects = resolvedEffects.filter((e) => e.source === "perk");
   const activeLawEffects = useMemo(() => {
@@ -408,24 +457,111 @@ export function CountryTabGeneral({
     })} %`;
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6 sm:space-y-8">
       {/* Premier bloc : population / PIB / influence / idéologie / effets — fond image + glass */}
       <section className={`relative overflow-hidden rounded-2xl ${panelClass}`} style={{ ...panelStyle, background: "transparent" }}>
         <div className="absolute inset-0 overflow-hidden rounded-2xl" aria-hidden>
           <div
-            className="absolute inset-0 bg-cover bg-no-repeat scale-105"
+            className="absolute inset-0 bg-cover bg-no-repeat"
             style={{
-              backgroundImage: "url(/images/site/generalites-bg.png)",
+              backgroundImage: "url(/images/site/generalites-bg.webp)",
               backgroundPosition: "top center",
-              filter: "blur(0.5px)",
             }}
           />
-          <div className="absolute inset-0 bg-[var(--background-panel)]/75" />
+          <div className="absolute inset-0 bg-[var(--background-panel)]/85" />
         </div>
-        <div className="relative z-10 p-6 space-y-6">
-        <div className={`rounded-xl border p-4 ${glassBorderClass}`} style={{ background: "rgba(255,255,255,0.12)", backdropFilter: "blur(12px)" }}>
-          <h4 className={`mb-4 text-sm font-semibold ${glassTextClass}`}>Indicateurs</h4>
-          <div className="flex flex-wrap justify-center gap-x-12 gap-y-4">
+        <div className="relative z-10 space-y-5 p-4 sm:space-y-6 sm:p-6">
+        <h2 className={`text-xl font-semibold sm:text-2xl ${glassTextClass}`}>Situation générale</h2>
+        <section
+          aria-labelledby="country-briefing-title"
+          className={`border-y py-4 sm:py-5 ${glassBorderClass}`}
+          style={briefingSurfaceStyle}
+        >
+          <div className="mb-4 flex items-center gap-3 px-4">
+            <h3 id="country-briefing-title" className={`text-base font-semibold sm:text-lg ${glassTextClass}`}>
+              Briefing{briefingDate ? ` — ${briefingDate}` : ""}
+            </h3>
+            <span className="h-px flex-1 bg-white/20" aria-hidden />
+          </div>
+          <div className={`grid gap-5 px-4 ${ownerMode ? "lg:grid-cols-[1fr_1.2fr_auto]" : "md:grid-cols-2"}`}>
+            <div>
+              <h4 className={`mb-3 text-sm font-semibold ${glassTextClass}`}>Depuis le dernier tour</h4>
+              {briefingTrends.length > 0 ? (
+                <dl className="space-y-2">
+                  {briefingTrends.map((trend) => {
+                    const direction = trend.value > 0 ? "\u2197\uFE0E" : trend.value < 0 ? "\u2198\uFE0E" : "→";
+                    const trendClass =
+                      trend.value > 0
+                        ? "text-[var(--accent)]"
+                        : trend.value < 0
+                          ? "text-[var(--danger)]"
+                          : "text-white/75";
+                    return (
+                      <div key={trend.label} className="flex items-baseline justify-between gap-4 text-sm">
+                        <dt className={glassMutedClass}>{trend.label}</dt>
+                        <dd className={`font-semibold tabular-nums ${trendClass}`}>
+                          <span className="font-sans" aria-hidden>{direction} </span>
+                          {trend.value.toLocaleString("fr-FR", {
+                            signDisplay: "exceptZero",
+                            minimumFractionDigits: 1,
+                            maximumFractionDigits: 1,
+                          })}
+                          {trend.suffix}
+                        </dd>
+                      </div>
+                    );
+                  })}
+                </dl>
+              ) : (
+                <p className={`text-sm ${glassMutedClass}`}>Pas encore de bilan.</p>
+              )}
+            </div>
+
+            <div className="border-t border-white/20 pt-5 md:border-l md:border-t-0 md:pl-5 md:pt-0">
+              <h4 className={`mb-3 text-sm font-semibold ${glassTextClass}`}>À surveiller</h4>
+              {briefingAlerts.length > 0 ? (
+                <ul className="space-y-2">
+                  {briefingAlerts.map((alert) => (
+                    <li key={alert} className={`flex gap-2 text-sm leading-5 ${glassMutedClass}`}>
+                      <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--danger)]" aria-hidden />
+                      <span>{alert}</span>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className={`text-sm ${glassMutedClass}`}>Aucune alerte active.</p>
+              )}
+            </div>
+
+            {ownerMode && onNavigate && (
+              <div className="border-t border-white/20 pt-5 lg:border-l lg:border-t-0 lg:pl-5 lg:pt-0">
+                <h4 className={`mb-3 text-sm font-semibold ${glassTextClass}`}>Décider</h4>
+                <div className="grid grid-cols-2 gap-2 lg:w-44 lg:grid-cols-1">
+                  {[
+                    ["Budget", "budget"],
+                    ["Lois", "laws"],
+                    ["Actions d’État", "state_actions"],
+                  ].map(([label, target]) => (
+                    <button
+                      key={target}
+                      type="button"
+                      onClick={() => onNavigate(target as "budget" | "laws" | "state_actions")}
+                      className="min-h-11 rounded-lg border border-white/25 bg-white/[0.06] px-3 py-2 text-left text-sm font-semibold text-white transition-colors last:col-span-2 hover:border-[var(--accent)] hover:text-[var(--accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] lg:last:col-span-1"
+                    >
+                      <span className="flex items-center justify-between gap-3">
+                        {label}
+                        <span aria-hidden>→</span>
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        </section>
+        <div className={`rounded-xl border p-4 ${glassBorderClass}`} style={briefingSurfaceStyle}>
+          <h3 className={`mb-4 text-sm font-semibold ${glassTextClass}`}>Indicateurs</h3>
+          <dl className="grid gap-4 sm:grid-cols-3">
             <div className="text-center">
               <dt className={`text-sm font-semibold ${glassMutedClass}`}>
                 <strong className={glassTextClass}>Population</strong>
@@ -449,9 +585,9 @@ export function CountryTabGeneral({
                 <dd className={`stat-value mt-0.5 text-2xl font-bold ${glassTextClass}`}>{formatNumber(Math.round(totalInfluenceValue ?? 0))}</dd>
               </div>
             )}
-          </div>
+          </dl>
           {isAdmin && influenceResult != null && (
-            <dl className={`mt-3 flex flex-wrap justify-center gap-x-4 gap-y-1 text-xs ${glassMutedClass}`}>
+            <div className={`mt-3 flex flex-wrap justify-center gap-x-4 gap-y-1 text-xs ${glassMutedClass}`}>
               <span>Influence propre : {formatNumber(Math.round(baseInfluenceValue ?? 0))}</span>
               {sphereInfluenceBonus !== 0 && (
                 <span>
@@ -464,20 +600,20 @@ export function CountryTabGeneral({
               <span>Stabilité : ×{Number(influenceResult.componentsAfterGravity.stabilityMultiplier).toLocaleString("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
               <span>Hard Power brut : {formatNumber(Math.round(hardPowerByBranch?.total ?? 0))}</span>
               <span>Hard Power (pondéré) : {formatNumber(Math.round(influenceResult.componentsAfterGravity.military))}</span>
-            </dl>
+            </div>
           )}
         </div>
         {hardPowerByBranch != null && (
-          <div className={`rounded-xl border p-4 ${glassBorderClass}`} style={{ background: "rgba(255,255,255,0.12)", backdropFilter: "blur(12px)" }}>
-            <h4 className={`mb-4 text-sm font-semibold ${glassTextClass}`}>Hard Power</h4>
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <div className={`rounded-xl border p-4 ${glassBorderClass}`} style={briefingSurfaceStyle}>
+            <h3 className={`mb-4 text-sm font-semibold ${glassTextClass}`}>Hard Power</h3>
+            <div className="grid gap-x-4 gap-y-2 sm:grid-cols-2 lg:grid-cols-4">
               {[
                 { key: "terre" as const, label: "Terrestre", value: hardPowerByBranch.terre },
                 { key: "air" as const, label: "Aérien", value: hardPowerByBranch.air },
                 { key: "mer" as const, label: "Naval", value: hardPowerByBranch.mer },
                 { key: "strategique" as const, label: "Stratégique", value: hardPowerByBranch.strategique },
               ].map((item) => (
-                <div key={item.label} className={`rounded border px-3 py-3 text-center ${glassBorderClass}`} style={{ background: "rgba(255,255,255,0.08)" }}>
+                <div key={item.label} className="px-3 py-2 text-center">
                   <div className={`text-xs ${glassMutedClass}`}>
                     {item.label}
                     {rankHardPowerByType[item.key] > 0 && ` — ${rankEmoji(rankHardPowerByType[item.key]) ? `${rankEmoji(rankHardPowerByType[item.key])} ` : ""}#${rankHardPowerByType[item.key]}`}
@@ -486,7 +622,7 @@ export function CountryTabGeneral({
                 </div>
               ))}
             </div>
-            <div className={`mt-4 rounded border px-3 py-2 text-center ${glassBorderClass}`} style={{ background: "rgba(255,255,255,0.10)" }}>
+            <div className="mt-3 border-t border-white/20 px-3 pt-3 text-center">
               <span className={`text-xs uppercase tracking-wide ${glassMutedClass}`}>
                 Total
                 {rankHardPower > 0 && ` — ${rankEmoji(rankHardPower) ? `${rankEmoji(rankHardPower)} ` : ""}#${rankHardPower}`}
@@ -496,8 +632,8 @@ export function CountryTabGeneral({
           </div>
         )}
         {ideologySummary && (
-          <div className={`rounded-xl border p-4 text-sm ${glassBorderClass}`} style={{ background: "rgba(255,255,255,0.12)", backdropFilter: "blur(12px)" }}>
-            <h4 className={`mb-3 text-sm font-semibold ${glassTextClass}`}>Idéologie</h4>
+          <div className={`rounded-xl border p-4 text-sm ${glassBorderClass}`} style={briefingSurfaceStyle}>
+            <h3 className={`mb-3 text-sm font-semibold ${glassTextClass}`}>Idéologie</h3>
             {ideologyRanking[0] && (
               <div className="rounded border px-3 py-4 text-center" style={{ background: "rgba(255,255,255,0.08)", borderColor: "rgba(255,255,255,0.25)" }}>
                 <div className={`text-xs ${glassMutedClass}`}>#1 Alignement actuel</div>
@@ -517,9 +653,8 @@ export function CountryTabGeneral({
           </div>
         )}
 
-        <hr className={`my-8 border-0 border-t ${glassBorderClass}`} />
-        <div className={`rounded-xl border p-4 ${glassBorderClass}`} style={{ background: "rgba(255,255,255,0.12)", backdropFilter: "blur(12px)" }}>
-          <h4 className={`mb-3 text-sm font-semibold ${glassTextClass}`}>Effets</h4>
+        <div className={`border-t pt-5 ${glassBorderClass}`}>
+          <h3 className={`mb-3 text-sm font-semibold ${glassTextClass}`}>Effets</h3>
           <div className="mb-3 flex flex-wrap gap-2">
             {[
               { id: "active" as const, label: "Actifs" },
@@ -532,7 +667,8 @@ export function CountryTabGeneral({
                 key={tab.id}
                 type="button"
                 onClick={() => setEffectsView(tab.id)}
-                className={`rounded border px-3 py-1.5 text-sm font-medium transition-colors ${
+                aria-pressed={effectsView === tab.id}
+                className={`min-h-11 rounded border px-3 py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] ${
                   effectsView === tab.id ? "border-[var(--accent)] text-[var(--accent)]" : `${glassBorderClass} ${glassMutedClass} hover:text-white`
                 }`}
                 style={{ background: effectsView === tab.id ? "rgba(16,185,129,0.10)" : "rgba(255,255,255,0.06)" }}
@@ -565,10 +701,10 @@ export function CountryTabGeneral({
                       </div>
                       {isAdmin && (
                         <div className="flex shrink-0 gap-2">
-                          <button type="button" onClick={() => onEditEffect(e)} className="text-sm text-[var(--accent)] hover:underline">
+                          <button type="button" onClick={() => onEditEffect(e)} className="inline-flex min-h-11 items-center text-sm text-[var(--accent)] hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]">
                             Modifier
                           </button>
-                          <button type="button" onClick={() => onDeleteEffect(e)} className="text-sm text-[var(--danger)] hover:underline">
+                          <button type="button" onClick={() => onDeleteEffect(e)} className="inline-flex min-h-11 items-center text-sm text-[var(--danger)] hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]">
                             Supprimer
                           </button>
                         </div>
@@ -655,7 +791,7 @@ export function CountryTabGeneral({
                       {ideologySummary.breakdown.neighborContributors.map((neighbor) => (
                         <div
                           key={neighbor.countryId}
-                          className={`flex items-center justify-between gap-3 rounded border px-2 py-2 ${glassBorderClass}`}
+                          className={`grid gap-2 rounded border px-2 py-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center ${glassBorderClass}`}
                           style={{ background: "rgba(255,255,255,0.06)" }}
                         >
                           <div className="flex min-w-0 items-center gap-2">
@@ -665,11 +801,11 @@ export function CountryTabGeneral({
                             ) : (
                               <div className={`h-4 w-6 rounded border ${glassBorderClass}`} />
                             )}
-                            <Link href={`/pays/${neighbor.slug}`} className="truncate text-[var(--accent)] hover:underline">
+                            <Link href={`/pays/${neighbor.slug}`} className="min-w-0 break-words text-[var(--accent)] hover:underline">
                               {neighbor.name}
                             </Link>
                           </div>
-                          <div className={`text-right text-xs ${glassMutedClass}`}>
+                          <div className={`text-left text-xs sm:text-right ${glassMutedClass}`}>
                             <div className={glassTextClass}>
                               Influence {getInfluenceIntensity(neighbor.value, strongestNeighborInfluence)} vers le {IDEOLOGY_LABELS[neighbor.ideology]}
                             </div>
@@ -705,7 +841,7 @@ export function CountryTabGeneral({
                         {law.effects.map((effect, idx) => (
                           <p
                             key={`${law.lawKey}-${idx}`}
-                            className={`text-sm font-semibold ${effect.value >= 0 ? "text-[var(--accent)]" : "text-[var(--danger)]"}`}
+                            className={`text-sm font-semibold ${isEffectDisplayPositive(effect) ? "text-[var(--accent)]" : "text-[var(--danger)]"}`}
                           >
                             {getEffectDescription(effect, {
                               rosterUnitName: (id) => rosterUnitsFlat.find((u) => u.id === id)?.name_fr ?? null,
@@ -727,34 +863,36 @@ export function CountryTabGeneral({
               <button
                 type="button"
                 onClick={onOpenNewEffect}
-                className="rounded py-2 px-4 text-sm font-medium"
+                className="min-h-11 rounded px-4 py-2 text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
                 style={{ background: "var(--accent)", color: "#0f1419" }}
               >
                 Ajouter un effet
               </button>
             ) : (
               <div className="space-y-3">
-                {effectError && <p className="text-sm text-[var(--danger)]">{effectError}</p>}
+                {effectError && <p role="alert" className="text-sm text-[var(--danger)]">{effectError}</p>}
                 <div>
-                  <label className="mb-1 block text-sm text-[var(--foreground-muted)]">Nom</label>
+                  <label htmlFor="country-effect-name" className="mb-1 block text-sm text-[var(--foreground-muted)]">Nom</label>
                   <input
+                    id="country-effect-name"
                     type="text"
                     value={effectName}
                     onChange={(e) => setEffectName(e.target.value)}
-                    className="w-full max-w-md rounded border bg-[var(--background)] px-2 py-1.5 text-sm text-[var(--foreground)]"
+                    className="min-h-11 w-full max-w-md rounded border bg-[var(--background)] px-3 py-2 text-sm text-[var(--foreground)]"
                     style={{ borderColor: "var(--border)" }}
                   />
                 </div>
                 <div>
-                  <label className="mb-1 block text-sm text-[var(--foreground-muted)]">Type d&apos;effet</label>
+                  <label htmlFor="country-effect-kind" className="mb-1 block text-sm text-[var(--foreground-muted)]">Type d&apos;effet</label>
                   <select
+                    id="country-effect-kind"
                     value={effectKind}
                     onChange={(e) => {
                       const k = e.target.value;
                       setEffectKind(k);
                       setEffectTarget(getDefaultTargetForKind(k, rosterUnitsFlat.map((u) => u.id), otherCountriesForRelation.map((c) => c.id)));
                     }}
-                    className="rounded border bg-[var(--background)] px-2 py-1.5 text-sm text-[var(--foreground)]"
+                    className="min-h-11 w-full rounded border bg-[var(--background)] px-3 py-2 text-sm text-[var(--foreground)] sm:w-auto"
                     style={{ borderColor: "var(--border)" }}
                   >
                     {effectKindGroups.map((group) => (
@@ -768,11 +906,12 @@ export function CountryTabGeneral({
                 </div>
                 {EFFECT_KINDS_WITH_STAT_TARGET.has(effectKind) && (
                   <div>
-                    <label className="mb-1 block text-sm text-[var(--foreground-muted)]">Stat</label>
+                    <label htmlFor="country-effect-stat" className="mb-1 block text-sm text-[var(--foreground-muted)]">Stat</label>
                     <select
+                      id="country-effect-stat"
                       value={effectTarget ?? ""}
                       onChange={(e) => setEffectTarget(e.target.value || null)}
-                      className="rounded border bg-[var(--background)] px-2 py-1.5 text-sm text-[var(--foreground)]"
+                      className="min-h-11 w-full rounded border bg-[var(--background)] px-3 py-2 text-sm text-[var(--foreground)] sm:w-auto"
                       style={{ borderColor: "var(--border)" }}
                     >
                       {STAT_KEYS.map((k) => (
@@ -783,11 +922,12 @@ export function CountryTabGeneral({
                 )}
                 {EFFECT_KINDS_WITH_BUDGET_TARGET.has(effectKind) && (
                   <div>
-                    <label className="mb-1 block text-sm text-[var(--foreground-muted)]">Ministère</label>
+                    <label htmlFor="country-effect-ministry" className="mb-1 block text-sm text-[var(--foreground-muted)]">Ministère</label>
                     <select
+                      id="country-effect-ministry"
                       value={effectTarget ?? ""}
                       onChange={(e) => setEffectTarget(e.target.value || null)}
-                      className="rounded border bg-[var(--background)] px-2 py-1.5 text-sm text-[var(--foreground)]"
+                      className="min-h-11 w-full rounded border bg-[var(--background)] px-3 py-2 text-sm text-[var(--foreground)] sm:w-auto"
                       style={{ borderColor: "var(--border)" }}
                     >
                       {getBudgetMinistryOptions().map(({ key, label }) => (
@@ -798,11 +938,12 @@ export function CountryTabGeneral({
                 )}
                 {EFFECT_KINDS_WITH_BRANCH_TARGET.has(effectKind) && (
                   <div>
-                    <label className="mb-1 block text-sm text-[var(--foreground-muted)]">Branche</label>
+                    <label htmlFor="country-effect-branch" className="mb-1 block text-sm text-[var(--foreground-muted)]">Branche</label>
                     <select
+                      id="country-effect-branch"
                       value={effectTarget ?? "terre"}
                       onChange={(e) => setEffectTarget(e.target.value || null)}
-                      className="rounded border bg-[var(--background)] px-2 py-1.5 text-sm text-[var(--foreground)]"
+                      className="min-h-11 w-full rounded border bg-[var(--background)] px-3 py-2 text-sm text-[var(--foreground)] sm:w-auto"
                       style={{ borderColor: "var(--border)" }}
                     >
                       {MILITARY_BRANCH_EFFECT_IDS.map((b) => (
@@ -813,11 +954,12 @@ export function CountryTabGeneral({
                 )}
                 {EFFECT_KINDS_WITH_ROSTER_UNIT_TARGET.has(effectKind) && (
                   <div>
-                    <label className="mb-1 block text-sm text-[var(--foreground-muted)]">Unité</label>
+                    <label htmlFor="country-effect-unit" className="mb-1 block text-sm text-[var(--foreground-muted)]">Unité</label>
                     <select
+                      id="country-effect-unit"
                       value={effectTarget ?? ""}
                       onChange={(e) => setEffectTarget(e.target.value || null)}
-                      className="rounded border bg-[var(--background)] px-2 py-1.5 text-sm text-[var(--foreground)]"
+                      className="min-h-11 w-full rounded border bg-[var(--background)] px-3 py-2 text-sm text-[var(--foreground)] sm:w-auto"
                       style={{ borderColor: "var(--border)" }}
                     >
                       {rosterUnitsFlat.map((u) => (
@@ -828,11 +970,12 @@ export function CountryTabGeneral({
                 )}
                 {EFFECT_KINDS_WITH_COUNTRY_TARGET.has(effectKind) && (
                   <div>
-                    <label className="mb-1 block text-sm text-[var(--foreground-muted)]">Pays cible (relation bilatérale)</label>
+                    <label htmlFor="country-effect-target-country" className="mb-1 block text-sm text-[var(--foreground-muted)]">Pays cible (relation bilatérale)</label>
                     <select
+                      id="country-effect-target-country"
                       value={effectTarget ?? ""}
                       onChange={(e) => setEffectTarget(e.target.value || null)}
-                      className="rounded border bg-[var(--background)] px-2 py-1.5 text-sm text-[var(--foreground)] min-w-[12rem]"
+                      className="min-h-11 w-full min-w-0 rounded border bg-[var(--background)] px-3 py-2 text-sm text-[var(--foreground)] sm:w-auto sm:min-w-[12rem]"
                       style={{ borderColor: "var(--border)" }}
                       title="Pays cible de la relation bilatérale avec ce pays."
                     >
@@ -849,27 +992,29 @@ export function CountryTabGeneral({
                   </p>
                 )}
                 <div>
-                  <label className="mb-1 block text-sm text-[var(--foreground-muted)]">
+                  <label htmlFor="country-effect-value" className="mb-1 block text-sm text-[var(--foreground-muted)]">
                     {getEffectKindValueHelper(effectKind).valueLabel}
                     {effectKind === "budget_ministry_min_pct" ? " (dépense forcée, valeur positive uniquement)" : ""}
                   </label>
                   <input
+                    id="country-effect-value"
                     type="number"
                     step={effectKind === "budget_allocation_cap" ? 1 : getEffectKindValueHelper(effectKind).valueStep}
                     min={effectKind === "budget_ministry_min_pct" ? 0 : undefined}
                     value={effectValue}
                     onChange={(e) => setEffectValue(e.target.value)}
-                    className="w-32 rounded border bg-[var(--background)] px-2 py-1.5 text-sm font-mono text-[var(--foreground)]"
+                    className="min-h-11 w-full rounded border bg-[var(--background)] px-3 py-2 text-sm font-mono text-[var(--foreground)] sm:w-32"
                     style={{ borderColor: "var(--border)" }}
                   />
                 </div>
                 <div className="flex flex-wrap items-center gap-4">
                   <div>
-                    <label className="mb-1 block text-sm text-[var(--foreground-muted)]">Durée</label>
+                    <label htmlFor="country-effect-duration" className="mb-1 block text-sm text-[var(--foreground-muted)]">Durée</label>
                     <select
+                      id="country-effect-duration"
                       value={effectDurationKind}
                       onChange={(e) => setEffectDurationKind(e.target.value as "days" | "permanent")}
-                      className="rounded border bg-[var(--background)] px-2 py-1.5 text-sm text-[var(--foreground)]"
+                      className="min-h-11 w-full rounded border bg-[var(--background)] px-3 py-2 text-sm text-[var(--foreground)] sm:w-auto"
                       style={{ borderColor: "var(--border)" }}
                     >
                       <option value="days">Jours</option>
@@ -878,8 +1023,9 @@ export function CountryTabGeneral({
                   </div>
                   {effectDurationKind !== "permanent" && (
                   <div>
-                    <label className="mb-1 block text-sm text-[var(--foreground-muted)]">Nombre (max {DURATION_DAYS_MAX} jours)</label>
+                    <label htmlFor="country-effect-duration-days" className="mb-1 block text-sm text-[var(--foreground-muted)]">Nombre (max {DURATION_DAYS_MAX} jours)</label>
                     <input
+                      id="country-effect-duration-days"
                       type="number"
                       min={1}
                       max={DURATION_DAYS_MAX}
@@ -890,18 +1036,18 @@ export function CountryTabGeneral({
                         if (v === "" || (!Number.isNaN(n) && n >= 1 && n <= DURATION_DAYS_MAX)) setEffectDurationRemaining(v);
                         else if (!Number.isNaN(n) && n > DURATION_DAYS_MAX) setEffectDurationRemaining(String(DURATION_DAYS_MAX));
                       }}
-                      className="w-20 rounded border bg-[var(--background)] px-2 py-1.5 text-sm font-mono text-[var(--foreground)]"
+                      className="min-h-11 w-full rounded border bg-[var(--background)] px-3 py-2 text-sm font-mono text-[var(--foreground)] sm:w-20"
                       style={{ borderColor: "var(--border)" }}
                     />
                   </div>
                   )}
                 </div>
-                <div className="flex gap-2 pt-2">
+                <div className="flex flex-wrap gap-2 pt-2">
                   <button
                     type="button"
                     disabled={effectSaving || !effectName.trim()}
                     onClick={onSaveEffect}
-                    className="rounded py-2 px-4 text-sm font-medium disabled:opacity-50"
+                    className="min-h-11 rounded px-4 py-2 text-sm font-medium disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
                     style={{ background: "var(--accent)", color: "#0f1419" }}
                   >
                     {effectSaving ? "Enregistrement…" : editingEffect ? "Enregistrer" : "Ajouter"}
@@ -909,7 +1055,7 @@ export function CountryTabGeneral({
                   <button
                     type="button"
                     onClick={onCloseEffectForm}
-                    className="rounded border py-2 px-4 text-sm font-medium text-[var(--foreground)]"
+                    className="min-h-11 rounded border px-4 py-2 text-sm font-medium text-[var(--foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
                     style={{ borderColor: "var(--border)" }}
                   >
                     Annuler
@@ -925,17 +1071,17 @@ export function CountryTabGeneral({
       <section className={`relative overflow-hidden rounded-2xl ${panelClass}`} style={{ ...panelStyle, background: "transparent" }}>
         <div className="absolute inset-0 overflow-hidden rounded-2xl" aria-hidden>
           <div
-            className="absolute inset-0 bg-cover bg-no-repeat scale-105"
+            className="absolute inset-0 bg-cover bg-no-repeat"
             style={{
-              backgroundImage: "url(/images/site/stats-bg.png)",
+              backgroundImage: "url(/images/site/stats-bg.webp)",
               backgroundPosition: "top center",
-              filter: "blur(0.5px)",
             }}
           />
-          <div className="absolute inset-0 bg-[var(--background-panel)]/75" />
+          <div className="absolute inset-0 bg-[var(--background-panel)]/85" />
         </div>
-        <div className="relative z-10 p-6">
-          <div className="mb-8 flex flex-col gap-5 sm:flex-row sm:gap-6 sm:justify-center">
+        <div className="relative z-10 p-4 sm:p-6">
+          <h2 className={`mb-4 text-xl font-semibold sm:text-2xl ${glassTextClass}`}>Capacités nationales</h2>
+          <div className="mb-6 grid gap-3 sm:mb-8 sm:grid-cols-3">
             {[
               { key: "militarism" as const, label: "Militarisme", emoji: "🎖️", value: Number(country.militarism) },
               { key: "industry" as const, label: "Industrie", emoji: "🏭", value: Number(country.industry) },
@@ -943,8 +1089,8 @@ export function CountryTabGeneral({
             ].map(({ label, emoji, value }) => (
               <div
                 key={label}
-                className={`flex flex-col items-center gap-1 rounded-xl border px-6 py-4 min-w-[8rem] ${glassBorderClass}`}
-                style={{ background: "rgba(255,255,255,0.12)", backdropFilter: "blur(12px)" }}
+                className={`flex min-w-0 flex-col items-center gap-1 rounded-xl border px-4 py-4 ${glassBorderClass}`}
+                style={briefingSurfaceStyle}
               >
                 <span className={`text-center text-sm font-semibold ${glassMutedClass}`}>
                   {emoji} {label}
@@ -957,8 +1103,8 @@ export function CountryTabGeneral({
           </div>
 
           <div
-            className={`mt-10 max-w-4xl mx-auto rounded-xl border p-6 ${glassBorderClass}`}
-            style={{ background: "rgba(255,255,255,0.12)", backdropFilter: "blur(12px)" }}
+            className={`mx-auto max-w-4xl rounded-xl border p-4 sm:p-6 ${glassBorderClass}`}
+            style={briefingSurfaceStyle}
           >
             <div className="max-w-2xl mx-auto">
               <span className={`mb-2 block text-center text-sm font-semibold ${glassTextClass}`}>
@@ -994,7 +1140,7 @@ export function CountryTabGeneral({
                   </span>
                 </div>
               </div>
-              <div className="relative mt-6 h-8 w-full">
+              <div className="relative mt-6 hidden h-8 w-full sm:block">
                 {[
                   { n: -3, label: "Chaos" },
                   { n: -2, label: "État Failli" },
@@ -1015,6 +1161,11 @@ export function CountryTabGeneral({
                     <span className={glassMutedClass}>{label}</span>
                   </span>
                 ))}
+              </div>
+              <div className={`mt-5 flex justify-between text-xs sm:hidden ${glassMutedClass}`}>
+                <span>Chaos</span>
+                <span>Précaire</span>
+                <span>Prospère</span>
               </div>
             </div>
           </div>
@@ -1047,43 +1198,46 @@ export function CountryTabGeneral({
           <section className={`relative overflow-hidden rounded-2xl ${panelClass}`} style={{ ...panelStyle, background: "transparent" }}>
             <div className="absolute inset-0 overflow-hidden rounded-2xl" aria-hidden>
               <div
-                className="absolute inset-0 bg-cover bg-no-repeat scale-105"
+                className="absolute inset-0 bg-cover bg-no-repeat"
                 style={{
-                  backgroundImage: "url(/images/site/sphere-bg.png)",
+                  backgroundImage: "url(/images/site/sphere-bg.webp)",
                   backgroundPosition: "top center",
-                  filter: "blur(0.5px)",
                 }}
               />
-              <div className="absolute inset-0 bg-[var(--background-panel)]/75" />
+              <div className="absolute inset-0 bg-[var(--background-panel)]/85" />
             </div>
-            <div className="relative z-10 p-6">
-              <h3 className={`mb-4 text-lg font-semibold ${glassTextClass}`}>
+            <div className="relative z-10 p-4 sm:p-6">
+              <h2 className={`mb-4 text-xl font-semibold sm:text-2xl ${glassTextClass}`}>
                 Sphère
-              </h3>
+              </h2>
               <div
-                className={`mb-4 flex flex-wrap justify-center gap-10 rounded-xl border p-6 ${glassBorderClass}`}
-                style={{ background: "rgba(255,255,255,0.12)", backdropFilter: "blur(12px)" }}
+                className={`mb-4 flex flex-wrap justify-center gap-6 rounded-xl border p-4 sm:gap-10 sm:p-6 ${glassBorderClass}`}
+                style={briefingSurfaceStyle}
               >
                 <SpherePieChart slices={slicesPop} total={sphereData.totalPopulation} title="Population" showLegend={false} formatValue={formatNumber} glassContext />
                 <SpherePieChart slices={slicesGdp} total={sphereData.totalGdp} title="PIB" showLegend={false} formatValue={(v) => formatGdp(v)} glassContext />
                 <SpherePieChart slices={slicesInfluence} total={sphereData.totalInfluence} title="Influence" showLegend={false} formatValue={formatNumber} glassContext />
               </div>
-              <div className={`mb-6 rounded-xl border p-3 ${glassBorderClass}`} style={{ background: "rgba(255,255,255,0.12)", backdropFilter: "blur(12px)" }}>
+              <div className={`mb-6 rounded-xl border p-3 ${glassBorderClass}`} style={briefingSurfaceStyle}>
                 <p className={`mb-2 text-xs font-semibold ${glassMutedClass}`}>Légende</p>
-                <ul className="flex flex-wrap gap-x-6 gap-y-1 text-xs">
+                <ul className="flex flex-wrap gap-x-4 gap-y-1 text-xs">
                   {canonicalOrder.map((item) => (
-                    <li key={item.slug} className="flex items-center gap-2">
-                      <span
-                        className="h-3 w-3 shrink-0 rounded-sm"
-                        style={{ backgroundColor: SPHERE_PIE_COLORS[item.colorIndex % SPHERE_PIE_COLORS.length] }}
-                      />
-                      {item.flag_url ? (
-                        <Link href={`/pays/${item.slug}`} className="shrink-0">
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img src={item.flag_url} alt="" width={16} height={11} className="inline-block h-[11px] w-4 rounded object-cover align-middle" />
-                        </Link>
-                      ) : null}
-                      <Link href={`/pays/${item.slug}`} className={`${glassMutedClass} hover:text-[var(--accent)] hover:underline`}>
+                    <li key={item.slug}>
+                      <Link
+                        href={`/pays/${item.slug}`}
+                        className={`inline-flex min-h-11 items-center gap-2 rounded px-1 ${glassMutedClass} hover:text-[var(--accent)] hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]`}
+                      >
+                        <span
+                          className="h-3 w-3 shrink-0 rounded-sm"
+                          style={{ backgroundColor: SPHERE_PIE_COLORS[item.colorIndex % SPHERE_PIE_COLORS.length] }}
+                          aria-hidden
+                        />
+                        {item.flag_url ? (
+                          <>
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img src={item.flag_url} alt="" width={16} height={11} className="h-[11px] w-4 shrink-0 rounded object-cover" />
+                          </>
+                        ) : null}
                         {item.name}
                       </Link>
                     </li>
@@ -1091,7 +1245,7 @@ export function CountryTabGeneral({
                 </ul>
               </div>
               {sphereData.countries.length > 0 && (
-                <div className={`overflow-x-auto rounded-xl border ${glassBorderClass}`} style={{ background: "rgba(255,255,255,0.12)", backdropFilter: "blur(12px)" }}>
+                <div className={`overflow-x-auto rounded-xl border ${glassBorderClass}`} style={briefingSurfaceStyle}>
                   <table className="w-full min-w-[420px] text-left text-sm">
                     <thead>
                       <tr className={`border-b ${glassBorderClass}`}>
@@ -1106,17 +1260,18 @@ export function CountryTabGeneral({
                       {sortedCountries.map((c) => (
                         <tr key={c.id} className={`border-b last:border-b-0 ${glassBorderClass}`}>
                           <td className="p-3">
-                            <div className="flex items-center gap-2">
+                            <Link
+                              href={`/pays/${c.slug}`}
+                              className="inline-flex min-h-11 items-center gap-2 rounded font-medium text-[var(--accent)] hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
+                            >
                               {c.flag_url ? (
-                                <Link href={`/pays/${c.slug}`} className="shrink-0">
+                                <>
                                   {/* eslint-disable-next-line @next/next/no-img-element */}
-                                  <img src={c.flag_url} alt="" width={24} height={16} className={`h-4 w-6 rounded object-cover border ${glassBorderClass}`} />
-                                </Link>
+                                  <img src={c.flag_url} alt="" width={24} height={16} className={`h-4 w-6 shrink-0 rounded border object-cover ${glassBorderClass}`} />
+                                </>
                               ) : null}
-                              <Link href={`/pays/${c.slug}`} className="font-medium text-[var(--accent)] hover:underline">
-                                {c.name}
-                              </Link>
-                            </div>
+                              {c.name}
+                            </Link>
                           </td>
                           <td className={`p-3 ${glassMutedClass}`}>
                             {c.controlStatus}

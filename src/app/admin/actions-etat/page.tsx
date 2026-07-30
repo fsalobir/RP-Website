@@ -10,12 +10,12 @@ export default async function AdminActionsEtatPage() {
     .order("sort_order");
 
   return (
-    <div className="mx-auto max-w-6xl px-4 py-10">
-      <h1 className="mb-2 text-2xl font-bold text-[var(--foreground)]">
+    <div className="mx-auto max-w-7xl px-4 py-6">
+      <h1 className="mb-1 text-2xl font-bold text-[var(--foreground)]">
         Actions d'État
       </h1>
-      <p className="mb-8 text-[var(--foreground-muted)]">
-        Définir les coûts (en actions) et les paramètres pour chaque type d'action d'État.
+      <p className="mb-5 max-w-[72ch] text-sm leading-relaxed text-[var(--foreground-muted)]">
+        Comparez les actions par usage, puis réglez leur coût, leurs conditions et leur résultat.
       </p>
       <StateActionTypesForm types={(types ?? []) as StateActionType[]} />
     </div>

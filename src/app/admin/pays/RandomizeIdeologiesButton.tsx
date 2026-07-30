@@ -11,7 +11,7 @@ export function RandomizeIdeologiesButton() {
 
   async function handleClick() {
     const confirmed = window.confirm(
-      "Randomiser les idéologies de tous les pays pour les tests ?\n\n" +
+      "Attribuer des idéologies aléatoires à tous les pays pour les tests ?\n\n" +
         "Cela écrase les positions idéologiques actuelles et remet les dérives à zéro."
     );
     if (!confirmed) return;
@@ -38,7 +38,7 @@ export function RandomizeIdeologiesButton() {
         className="rounded py-2 px-4 text-sm font-medium opacity-90 hover:opacity-100 disabled:opacity-50"
         style={{ background: "var(--background-elevated)", color: "var(--foreground)", border: "1px solid var(--border)" }}
       >
-        {loading ? "En cours…" : "Randomiser idéologies"}
+        {loading ? "Attribution…" : "Attribuer des idéologies aléatoires"}
       </button>
       {message && (
         <span

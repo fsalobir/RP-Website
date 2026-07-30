@@ -4,6 +4,8 @@ import type { Editor } from "@tiptap/core";
 import type { JSONContent } from "@tiptap/core";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { DisclosureChevron } from "@/components/ui/DisclosureChevron";
+import { AdminSettingsGuide } from "@/components/admin/AdminSettingsUi";
 import {
   createWikiPageAction,
   deleteWikiPageAction,
@@ -12,6 +14,7 @@ import {
 } from "@/app/actions/wiki";
 import { WikiEditor } from "@/components/wiki/WikiEditor";
 import { buildWikiTree, getAncestorSlugs } from "@/lib/wiki/tree";
+import { matchesSearchText } from "@/lib/searchText";
 import type { WikiPageRow, WikiTreeNode } from "@/lib/wiki/types";
 
 const btnClass =
@@ -42,19 +45,15 @@ function AdminTreeRow({
           <button
             type="button"
             onClick={() => toggleExpand(node.slug)}
-            className="shrink-0 rounded p-1 text-[var(--foreground-muted)] hover:bg-[var(--background-elevated)] hover:text-[var(--foreground)]"
+            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-[var(--foreground-muted)] hover:bg-[var(--background-elevated)] hover:text-[var(--foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
             aria-expanded={expanded}
+            aria-label={`${expanded ? "Replier" : "Développer"} ${node.title}`}
             title={expanded ? "Replier" : "Développer"}
           >
-            <span
-              className={`inline-block text-xs transition-transform ${expanded ? "rotate-90" : ""}`}
-              aria-hidden
-            >
-              ▶
-            </span>
+            <DisclosureChevron open={expanded} direction="right" />
           </button>
         ) : (
-          <span className="inline-block w-7 shrink-0" aria-hidden />
+          <span className="inline-block w-11 shrink-0" aria-hidden />
         )}
         <button
           type="button"
@@ -95,6 +94,8 @@ export function WikiAdminClient({ initialPages }: { initialPages: WikiPageRow[] 
   const [editor, setEditor] = useState<Editor | null>(null);
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [query, setQuery] = useState("");
   const [expandedSlugs, setExpandedSlugs] = useState<Set<string>>(() => new Set());
 
   useEffect(() => {
@@ -102,6 +103,10 @@ export function WikiAdminClient({ initialPages }: { initialPages: WikiPageRow[] 
   }, [initialPages]);
 
   const tree = useMemo(() => buildWikiTree(pages), [pages]);
+  const searchResults = useMemo(
+    () => pages.filter((page) => matchesSearchText(query, [page.title, page.search_text])),
+    [pages, query]
+  );
 
   const toggleExpand = useCallback((slug: string) => {
     setExpandedSlugs((prev) => {
@@ -133,6 +138,7 @@ export function WikiAdminClient({ initialPages }: { initialPages: WikiPageRow[] 
 
   const clearSaveMessage = useCallback(() => {
     setMsg(null);
+    setError(null);
   }, []);
 
   const selectPage = useCallback(
@@ -141,6 +147,7 @@ export function WikiAdminClient({ initialPages }: { initialPages: WikiPageRow[] 
       const p = pages.find((x) => x.id === id);
       if (p) setTitle(p.title);
       setMsg(null);
+      setError(null);
     },
     [pages]
   );
@@ -149,6 +156,7 @@ export function WikiAdminClient({ initialPages }: { initialPages: WikiPageRow[] 
     if (!selectedPage || !editor) return;
     setSaving(true);
     setMsg(null);
+    setError(null);
     const rawDoc = editor.getJSON() as JSONContent;
     /**
      * Les Server Actions sérialisent les arguments (structured clone / RSC). Le JSON TipTap
@@ -163,7 +171,7 @@ export function WikiAdminClient({ initialPages }: { initialPages: WikiPageRow[] 
     });
     setSaving(false);
     if (!res.ok) {
-      setMsg(res.error);
+      setError(res.error);
       return;
     }
     setMsg("Enregistré.");
@@ -175,9 +183,10 @@ export function WikiAdminClient({ initialPages }: { initialPages: WikiPageRow[] 
     if (!name?.trim()) return;
     const res = await createWikiPageAction({ parent_id: null, title: name.trim() });
     if (!res.ok) {
-      alert(res.error);
+      setError(res.error);
       return;
     }
+    setError(null);
     router.refresh();
     setSelectedId(res.id);
   }, [router]);
@@ -188,9 +197,10 @@ export function WikiAdminClient({ initialPages }: { initialPages: WikiPageRow[] 
     if (!name?.trim()) return;
     const res = await createWikiPageAction({ parent_id: selectedPage.id, title: name.trim() });
     if (!res.ok) {
-      alert(res.error);
+      setError(res.error);
       return;
     }
+    setError(null);
     router.refresh();
     setSelectedId(res.id);
   }, [selectedPage, router]);
@@ -200,9 +210,10 @@ export function WikiAdminClient({ initialPages }: { initialPages: WikiPageRow[] 
     if (!window.confirm(`Supprimer « ${selectedPage.title} » et ses sous-pages éventuelles ?`)) return;
     const res = await deleteWikiPageAction(selectedPage.id);
     if (!res.ok) {
-      alert(res.error);
+      setError(res.error);
       return;
     }
+    setError(null);
     router.refresh();
     setSelectedId(null);
     setTitle("");
@@ -211,20 +222,28 @@ export function WikiAdminClient({ initialPages }: { initialPages: WikiPageRow[] 
   const handleMove = useCallback(
     async (dir: "up" | "down") => {
       if (!selectedPage) return;
-      await moveWikiPageAction(selectedPage.id, dir);
-      router.refresh();
+      setError(null);
+      const result = await moveWikiPageAction(selectedPage.id, dir);
+      if (!result.ok) setError(result.error);
+      else router.refresh();
     },
     [selectedPage, router]
   );
 
   return (
-    <div className="mx-auto max-w-6xl px-4 py-8">
-      <h1 className="mb-2 text-2xl font-semibold text-[var(--foreground)]">Wiki</h1>
-      <p className="mb-6 text-sm text-[var(--foreground-muted)]">
-        Éditez les pages du wiki public. Les images sont stockées dans le bucket « wiki-images » (max. 5 Mo).
+    <div className="admin-settings-form mx-auto max-w-6xl px-4 py-6">
+      <h1 className="mb-1 text-2xl font-semibold text-[var(--foreground)]">Wiki</h1>
+      <p className="mb-4 text-sm text-[var(--foreground-muted)]">
+        Éditez les pages visibles par les joueurs. Les images acceptées pèsent au maximum 5 Mo.
       </p>
+      <AdminSettingsGuide
+        purpose="L’éditeur montre le contenu tel qu’il sera publié."
+        impact="Enregistrer modifie immédiatement la page lue par les joueurs. Supprimer une section supprime aussi ses sous-sections."
+        check="Relisez le titre, la hiérarchie et le rendu dans l’éditeur avant d’enregistrer."
+      />
+      {error ? <p role="alert" className="mt-4 text-sm text-[var(--danger)]">{error}</p> : null}
 
-      <div className="flex flex-col gap-6 lg:flex-row">
+      <div className="mt-4 flex flex-col gap-4 lg:flex-row">
         <aside className="w-full shrink-0 lg:w-72">
           <div className="rounded-xl border border-[var(--border)] bg-[var(--background-panel)] p-3">
             <div className="mb-2 flex flex-wrap gap-2">
@@ -235,8 +254,38 @@ export function WikiAdminClient({ initialPages }: { initialPages: WikiPageRow[] 
                 + Sous-section
               </button>
             </div>
-            <ul className="max-h-[50vh] overflow-y-auto space-y-0.5">
-              {tree.length === 0 ? (
+            <label htmlFor="wiki-admin-search" className="sr-only">Rechercher une page du wiki</label>
+            <input
+              id="wiki-admin-search"
+              type="search"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Rechercher une page…"
+              className="mb-3 min-h-11 w-full rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 text-base text-[var(--foreground)]"
+            />
+            <ul className="max-h-[50vh] space-y-0.5 overflow-y-auto">
+              {query ? (
+                searchResults.length > 0 ? (
+                  searchResults.map((page) => (
+                    <li key={page.id}>
+                      <button
+                        type="button"
+                        onClick={() => selectPage(page.id)}
+                        className={`min-h-11 w-full rounded-lg px-2 py-1.5 text-left text-sm ${
+                          selectedId === page.id
+                            ? "bg-[var(--accent)]/25 font-medium text-[var(--foreground)]"
+                            : "text-[var(--foreground-muted)] hover:bg-[var(--background-elevated)]"
+                        }`}
+                      >
+                        <span className="block">{page.title}</span>
+                        <span className="block break-all text-xs text-[var(--foreground-muted)]">/{page.slug}</span>
+                      </button>
+                    </li>
+                  ))
+                ) : (
+                  <li className="px-2 py-4 text-sm text-[var(--foreground-muted)]">Aucune page trouvée.</li>
+                )
+              ) : tree.length === 0 ? (
                 <li className="text-sm text-[var(--foreground-muted)]">Aucune page. Créez-en une.</li>
               ) : (
                 tree.map((n) => (

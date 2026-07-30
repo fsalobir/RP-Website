@@ -32,12 +32,12 @@ export default async function AdminJoueursPage() {
   }));
 
   return (
-    <div className="mx-auto max-w-6xl px-4 py-10">
-      <h1 className="mb-2 text-2xl font-bold text-[var(--foreground)]">
-        Gestion Joueurs
+    <div className="mx-auto max-w-7xl px-4 py-6">
+      <h1 className="mb-1 text-2xl font-bold text-[var(--foreground)]">
+        Joueurs
       </h1>
-      <p className="mb-8 text-[var(--foreground-muted)]">
-        Créez des comptes joueurs (email / mot de passe) et assignez-les à un pays. Un joueur ne peut modifier que le pays auquel il est assigné (nom, régime, drapeau, budget).
+      <p className="mb-5 max-w-[72ch] text-sm leading-relaxed text-[var(--foreground-muted)]">
+        Créez les accès et attribuez un pays. Chaque joueur ne voit que les outils autorisés pour son pays.
       </p>
 
       <JoueursManager

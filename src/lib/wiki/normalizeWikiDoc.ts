@@ -52,7 +52,7 @@ export function normalizeWikiImageAttrs(attrs: Record<string, unknown>): Record<
     attrs.height = null;
   }
 
-  /** width/height à 0 ou négatif → <img width="0"> = point quasi invisible + object-fit cassé */
+  /** Une dimension nulle ou négative rend l’image quasi invisible et casse object-fit. */
   if (typeof attrs.width === "number" && (!Number.isFinite(attrs.width) || attrs.width <= 0)) {
     attrs.width = null;
   }

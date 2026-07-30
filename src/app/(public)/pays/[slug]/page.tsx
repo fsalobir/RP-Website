@@ -160,10 +160,17 @@ export default async function CountryPage({
   const backHref = isAdmin ? "/admin/pays" : "/";
 
   const supabase = await createClient();
-  const [updateLogsRes, assignedPlayerRes, countriesListRes, ideologyState] = await Promise.all([
+  const [updateLogsRes, previousSnapshotRes, assignedPlayerRes, countriesListRes, ideologyState] = await Promise.all([
     isAdmin
       ? supabase.from("country_update_logs").select("*").eq("country_id", country.id).order("run_at", { ascending: false }).limit(10)
       : Promise.resolve({ data: [] as CountryUpdateLog[] }),
+    supabase
+      .from("country_history")
+      .select("population, gdp, militarism, industry, science, stability")
+      .eq("country_id", country.id)
+      .order("date", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
     supabase.from("country_players").select("email, name").eq("country_id", country.id).maybeSingle(),
     supabase.from("countries").select("id, name").order("name"),
     fetchWorldIdeologyState(createServiceRoleClient()),
@@ -658,30 +665,24 @@ export default async function CountryPage({
 
   return (
     <div className="relative min-h-screen">
-      {/* Arrière-plan ancré sous le menu (h-14) et en haut de l'image pour garder le motif visible */}
-      <div className="fixed left-0 right-0 bottom-0 top-14 overflow-hidden" aria-hidden>
+      <div className="fixed inset-0 overflow-hidden" aria-hidden>
         <div
-          className="absolute inset-0 bg-cover bg-no-repeat scale-105"
+          className="absolute inset-0 bg-cover bg-no-repeat"
           style={{
-            backgroundImage: "url(/images/site/fiche-pays-bg.png)",
+            backgroundImage: "url(/images/site/fiche-pays-bg.webp)",
             backgroundPosition: "top center",
-            filter: "blur(0.5px)",
           }}
         />
         <div className="absolute inset-0 bg-[var(--background-panel)]/75" />
       </div>
-      <div className="relative z-10 mx-auto max-w-6xl px-4 py-10">
-        <div
-          className="mb-6 inline-block rounded-xl border border-white/25 px-4 py-2"
+      <div className="relative z-10 mx-auto max-w-6xl px-4 py-4 sm:py-8 lg:py-10">
+        <Link
+          href={backHref}
+          className="mb-4 inline-flex min-h-11 items-center rounded-xl border border-white/25 px-4 text-sm text-white/90 transition-colors hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] sm:mb-6"
           style={{ background: "rgba(255,255,255,0.12)", backdropFilter: "blur(12px)" }}
         >
-          <Link
-            href={backHref}
-            className="text-sm text-white/90 hover:text-white transition-colors"
-          >
-            ← Retour aux nations
-          </Link>
-        </div>
+          ← Retour aux nations
+        </Link>
 
         <CountryTabs
         country={country}
@@ -703,6 +704,7 @@ export default async function CountryPage({
         isPlayerForThisCountry={isPlayerForThisCountry}
         assignedPlayerEmail={assignedPlayerEmail}
         updateLogs={updateLogs}
+        previousSnapshot={previousSnapshotRes.data}
         ruleParametersByKey={ruleParametersByKey}
         worldAverages={worldAverages}
         rosterByBranch={foggedRoster ? { terre: [], air: [], mer: [], strategique: [] } : rosterByBranch}

@@ -10,11 +10,28 @@ import { getRelationColor, getRelationLabel } from "@/lib/relationScale";
 
 const ComposableMap = dynamic(
   () => import("react-simple-maps").then((m) => m.ComposableMap),
-  { ssr: false }
+  {
+    ssr: false,
+    loading: () => (
+      <div
+        className="flex aspect-[8/5] w-full items-center justify-center text-sm text-[var(--foreground-muted)]"
+        role="status"
+      >
+        Chargement de la carte…
+      </div>
+    ),
+  }
 );
 const Geographies = dynamic(
   () => import("react-simple-maps").then((m) => m.Geographies),
-  { ssr: false }
+  {
+    ssr: false,
+    loading: () => (
+      <text x="400" y="250" textAnchor="middle" fill="currentColor" fontSize="18">
+        Chargement de la carte…
+      </text>
+    ),
+  }
 );
 const Geography = dynamic(
   () => import("react-simple-maps").then((m) => m.Geography),
@@ -31,7 +48,6 @@ const sphereNeutralColor = "var(--background-elevated)";
 const MAP_WIDTH = 800;
 const MAP_HEIGHT = 500;
 const MAP_SCALE = 147;
-const MAP_CENTER: [number, number] = [0, 20];
 
 const styleInactive = {
   default: { fill: "var(--background-elevated)", outline: "none", ...borderStroke },
@@ -144,6 +160,10 @@ export function RelationMapClient({
 
   const selectedRegionName = selectedRegionId ? regionNames[selectedRegionId] ?? null : null;
   const selectedRegionCountries = selectedRegionId ? regionCountryNames[selectedRegionId] ?? [] : [];
+  const regionOptions = useMemo(
+    () => Object.entries(regionNames).sort((a, b) => a[1].localeCompare(b[1], "fr")),
+    [regionNames]
+  );
 
   const features = geoJson?.features ?? [];
   const hasData = features.length > 0;
@@ -154,7 +174,8 @@ export function RelationMapClient({
         <button
           type="button"
           onClick={() => setMapFilter("relations")}
-          className="rounded-lg border-2 px-5 py-2.5 text-base font-semibold transition-colors"
+          className="min-h-11 rounded-lg border-2 px-5 py-2.5 text-base font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--background)]"
+          aria-pressed={mapFilter === "relations"}
           style={{
             borderColor: mapFilter === "relations" ? "var(--accent)" : "var(--border)",
             background: mapFilter === "relations" ? "var(--accent-muted)" : "transparent",
@@ -166,7 +187,8 @@ export function RelationMapClient({
         <button
           type="button"
           onClick={() => setMapFilter("spheres")}
-          className="rounded-lg border-2 px-5 py-2.5 text-base font-semibold transition-colors"
+          className="min-h-11 rounded-lg border-2 px-5 py-2.5 text-base font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--background)]"
+          aria-pressed={mapFilter === "spheres"}
           style={{
             borderColor: mapFilter === "spheres" ? "var(--accent)" : "var(--border)",
             background: mapFilter === "spheres" ? "var(--accent-muted)" : "transparent",
@@ -181,6 +203,24 @@ export function RelationMapClient({
           side="bottom"
         />
       </div>
+      {!isSphereMode && (
+        <label className="block max-w-md text-sm font-medium text-[var(--foreground)]">
+          <span className="mb-2 block">Région observée</span>
+          <select
+            value={selectedRegionId ?? ""}
+            onChange={(event) => setSelectedRegionId(event.target.value || null)}
+            className="min-h-11 w-full rounded-lg border bg-[var(--background-panel)] px-3 text-base text-[var(--foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
+            style={{ borderColor: "var(--border)" }}
+          >
+            <option value="">Vue neutre</option>
+            {regionOptions.map(([id, name]) => (
+              <option key={id} value={id}>
+                {name}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
       {!hasData && (
         <p className="rounded border border-amber-500/50 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
           Données géographiques indisponibles. Vérifiez que le paquet <code className="rounded bg-black/20 px-1">world-atlas</code> est installé et que le serveur peut y accéder.
@@ -211,7 +251,7 @@ export function RelationMapClient({
                     className="block h-2.5 w-2.5 sm:h-4 sm:w-4 shrink-0 rounded-sm border border-[rgba(255,255,255,0.4)]"
                     style={{ background: empire.color }}
                   />
-                  <span className="font-medium truncate">{empire.name}</span>
+                  <span className="break-words font-medium [overflow-wrap:anywhere]">{empire.name}</span>
                 </div>
               ))}
               <div className="flex items-center gap-1 sm:gap-2 text-[10px] sm:text-xs text-[var(--foreground-muted)]">

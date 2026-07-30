@@ -3,6 +3,8 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { replacePlaceholders, getPreviewVars } from "@/lib/discord-format";
+import { AdminAnchorNav, AdminSettingsGuide } from "@/components/admin/AdminSettingsUi";
+import { matchesSearchText } from "@/lib/searchText";
 import {
   setDispatchTypeEnabled,
   setDispatchTypeDestination,
@@ -61,6 +63,9 @@ export function BotDiscordForm({
   const router = useRouter();
   const [channelError, setChannelError] = useState<string | null>(null);
   const [templateError, setTemplateError] = useState<string | null>(null);
+  const [settingsError, setSettingsError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
+  const [query, setQuery] = useState("");
   const [editingTemplateId, setEditingTemplateId] = useState<string | null>(null);
   const [previewState, setPreviewState] = useState<{
     template: Template;
@@ -110,18 +115,70 @@ export function BotDiscordForm({
   const dispatchByStateAction = stateActionTypes.map((sat) => ({
     stateAction: sat,
     accepted: dispatchTypes.find((d) => d.state_action_type_id === sat.id && d.outcome === "accepted"),
-  }));
+  })).filter(({ stateAction, accepted }) =>
+    matchesSearchText(query, [stateAction.label_fr, accepted?.label_fr ?? "", accepted?.destination ?? ""])
+  );
+  const visibleDispatchTypes = dispatchTypes
+    .filter((dispatch) => dispatch.state_action_type_id != null && dispatch.outcome === "accepted")
+    .filter((dispatch) =>
+      matchesSearchText(query, [
+        dispatch.label_fr,
+        ...templates
+          .filter((template) => template.dispatch_type_id === dispatch.id)
+          .flatMap((template) => [template.label_fr, template.body_template]),
+      ])
+    );
 
   return (
-    <div className="space-y-8">
+    <div className="admin-settings-form space-y-5">
+      <AdminSettingsGuide
+        purpose="Une publication nécessite un événement actif, un salon et au moins un modèle de message."
+        impact="Un changement d’activation ou de destination s’applique aux prochaines publications. Modifier un modèle change le texte que recevra Discord."
+        check="Ouvrez l’aperçu du message et vérifiez le salon choisi avant de quitter la page."
+        warning="Les identifiants de salon sont enregistrés quand vous quittez le champ."
+      />
+      <AdminAnchorNav
+        label="Sections des publications Discord"
+        items={[
+          { href: "#discord-status", label: "Connexion" },
+          { href: "#discord-channels", label: "Salons" },
+          { href: "#discord-events", label: "Événements" },
+          { href: "#discord-templates", label: "Messages" },
+        ]}
+      />
+      <div className="max-w-xl">
+        <label htmlFor="discord-settings-search" className="mb-1 block text-sm font-medium text-[var(--foreground)]">
+          Rechercher une action ou un modèle
+        </label>
+        <input
+          id="discord-settings-search"
+          type="search"
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+          placeholder="Influence, reconnaissance, mobilisation…"
+          className="min-h-11 w-full rounded-lg border bg-[var(--background)] px-3 text-base text-[var(--foreground)]"
+          style={{ borderColor: "var(--border)" }}
+        />
+      </div>
+      {settingsError && <p role="alert" className="text-sm text-[var(--danger)]">{settingsError}</p>}
+      {success && <p aria-live="polite" className="text-sm text-[var(--accent)]">{success}</p>}
       <section
-        className="rounded-lg border p-6"
-        style={{ borderColor: "var(--border)", background: "var(--background-panel)" }}
+        id="discord-status"
+        className="scroll-mt-20 border-t py-4"
+        style={{ borderColor: "var(--border)" }}
       >
         <h2 className="mb-2 text-lg font-semibold text-[var(--foreground)]">Configuration générale</h2>
         <p className="mb-2 text-sm text-[var(--foreground-muted)]">
-          Token Discord : {tokenConfigured ? "configuré" : "non configuré (ajoutez DISCORD_BOT_TOKEN sur Vercel)"}
+          Connexion à Discord : {tokenConfigured ? "prête" : "à configurer"}
         </p>
+        {!tokenConfigured ? (
+          <details className="mb-2 text-sm text-[var(--foreground-muted)]">
+            <summary className="cursor-pointer font-medium text-[var(--foreground)]">Voir la configuration technique</summary>
+            <p className="mt-2">
+              Ajoutez le secret <code>DISCORD_BOT_TOKEN</code> dans l’environnement du site.
+            </p>
+          </details>
+        ) : null}
         <a
           href="https://discord.com/developers/applications"
           target="_blank"
@@ -133,65 +190,78 @@ export function BotDiscordForm({
       </section>
 
       <section
-        className="rounded-lg border p-6"
-        style={{ borderColor: "var(--border)", background: "var(--background-panel)" }}
+        id="discord-channels"
+        className="scroll-mt-20 border-t py-4"
+        style={{ borderColor: "var(--border)" }}
       >
-        <h2 className="mb-4 text-lg font-semibold text-[var(--foreground)]">Canaux par continent</h2>
-        <p className="mb-4 text-sm text-[var(--foreground-muted)]">
-          Pour chaque continent, indiquez l’ID du canal Discord « national » et « international ». Les pays du continent sont routés selon la destination choisie par type de dispatch.
+        <h2 className="mb-2 text-lg font-semibold text-[var(--foreground)]">Salons par continent</h2>
+        <p className="mb-3 text-sm leading-snug text-[var(--foreground-muted)]">
+          Pour chaque continent, indiquez les salons utilisés pour les nouvelles nationales et internationales. L’identifiant se copie depuis Discord avec le mode développeur.
         </p>
-        {channelError && <p className="mb-2 text-sm text-[var(--danger)]">{channelError}</p>}
-        <div className="space-y-4">
+        {channelError && <p role="alert" className="mb-2 text-sm text-[var(--danger)]">{channelError}</p>}
+        <div className="space-y-2">
           {continents.map((c) => (
             <div
               key={c.id}
-              className="flex flex-wrap items-end gap-4 rounded border p-4"
+              className="grid grid-cols-1 items-end gap-3 rounded-lg border p-3 md:grid-cols-[7rem_minmax(0,1fr)_minmax(0,1fr)]"
               style={{ borderColor: "var(--border-muted)" }}
             >
               <span className="w-28 text-sm font-medium text-[var(--foreground)]">{c.label_fr}</span>
-              <div>
-                <label className="mb-1 block text-xs text-[var(--foreground-muted)]">ID canal national</label>
+              <div className="min-w-0">
+                <label htmlFor={`discord-national-${c.id}`} className="mb-1 block text-xs text-[var(--foreground-muted)]">Salon national</label>
                 <input
+                  id={`discord-national-${c.id}`}
                   type="text"
                   value={effectiveChannelValues[`${c.id}:national`] ?? ""}
                   onChange={(e) =>
                     setChannelValues((prev) => ({ ...prev, [`${c.id}:national`]: e.target.value }))
                   }
                   placeholder="1234567890123456789"
-                  className="rounded border bg-[var(--background)] px-2 py-1.5 text-sm text-[var(--foreground)]"
-                  style={{ borderColor: "var(--border)", minWidth: "220px" }}
+                  inputMode="numeric"
+                  className="w-full min-w-0 rounded border bg-[var(--background)] px-3 py-2 text-sm text-[var(--foreground)]"
+                  style={{ borderColor: "var(--border)" }}
                   onBlur={async () => {
                     setChannelError(null);
+                    setSuccess(null);
                     const err = await saveRegionChannel({
                       continent_id: c.id,
                       channel_kind: "national",
                       discord_channel_id: (effectiveChannelValues[`${c.id}:national`] ?? "").trim(),
                     });
                     if (err.error) setChannelError(err.error);
-                    else router.refresh();
+                    else {
+                      setSuccess(`Salon national de ${c.label_fr} enregistré.`);
+                      router.refresh();
+                    }
                   }}
                 />
               </div>
-              <div>
-                <label className="mb-1 block text-xs text-[var(--foreground-muted)]">ID canal international</label>
+              <div className="min-w-0">
+                <label htmlFor={`discord-international-${c.id}`} className="mb-1 block text-xs text-[var(--foreground-muted)]">Salon international</label>
                 <input
+                  id={`discord-international-${c.id}`}
                   type="text"
                   value={effectiveChannelValues[`${c.id}:international`] ?? ""}
                   onChange={(e) =>
                     setChannelValues((prev) => ({ ...prev, [`${c.id}:international`]: e.target.value }))
                   }
                   placeholder="1234567890123456789"
-                  className="rounded border bg-[var(--background)] px-2 py-1.5 text-sm text-[var(--foreground)]"
-                  style={{ borderColor: "var(--border)", minWidth: "220px" }}
+                  inputMode="numeric"
+                  className="w-full min-w-0 rounded border bg-[var(--background)] px-3 py-2 text-sm text-[var(--foreground)]"
+                  style={{ borderColor: "var(--border)" }}
                   onBlur={async () => {
                     setChannelError(null);
+                    setSuccess(null);
                     const err = await saveRegionChannel({
                       continent_id: c.id,
                       channel_kind: "international",
                       discord_channel_id: (effectiveChannelValues[`${c.id}:international`] ?? "").trim(),
                     });
                     if (err.error) setChannelError(err.error);
-                    else router.refresh();
+                    else {
+                      setSuccess(`Salon international de ${c.label_fr} enregistré.`);
+                      router.refresh();
+                    }
                   }}
                 />
               </div>
@@ -201,12 +271,13 @@ export function BotDiscordForm({
       </section>
 
       <section
-        className="rounded-lg border p-6"
-        style={{ borderColor: "var(--border)", background: "var(--background-panel)" }}
+        id="discord-events"
+        className="scroll-mt-20 border-t py-4"
+        style={{ borderColor: "var(--border)" }}
       >
-        <h2 className="mb-4 text-lg font-semibold text-[var(--foreground)]">Types de dispatch</h2>
-        <p className="mb-4 text-sm text-[var(--foreground-muted)]">
-          Un type par action d’État (acceptée). Activez ou désactivez l’envoi et choisissez la destination : National ou International.
+        <h2 className="mb-2 text-lg font-semibold text-[var(--foreground)]">Événements publiés</h2>
+        <p className="mb-3 text-sm text-[var(--foreground-muted)]">
+          Activez les actions à publier, puis choisissez leur salon : national ou international.
         </p>
         <ul className="space-y-3">
           {dispatchByStateAction.map(({ stateAction, accepted }) =>
@@ -215,26 +286,38 @@ export function BotDiscordForm({
                 <span className="text-sm font-medium text-[var(--foreground-muted)]">{stateAction.label_fr}</span>
                 <div className="flex flex-wrap items-center gap-4 pl-2">
                   <div className="flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      id={`type-${accepted.id}`}
-                      checked={accepted.enabled}
-                      onChange={async () => {
-                        await setDispatchTypeEnabled(accepted.id, !accepted.enabled);
-                        router.refresh();
-                      }}
-                      className="h-4 w-4 rounded border"
-                      style={{ borderColor: "var(--border)", accentColor: "var(--accent)" }}
-                    />
-                    <label htmlFor={`type-${accepted.id}`} className="text-sm text-[var(--foreground)]">
-                      {accepted.label_fr}
+                    <label className="inline-flex min-h-11 items-center gap-2 text-sm text-[var(--foreground)]">
+                      <input
+                        type="checkbox"
+                        checked={accepted.enabled}
+                        onChange={async () => {
+                          setSettingsError(null);
+                          setSuccess(null);
+                          const result = await setDispatchTypeEnabled(accepted.id, !accepted.enabled);
+                          if (result.error) setSettingsError(result.error);
+                          else {
+                            setSuccess(`${accepted.label_fr} ${accepted.enabled ? "désactivé" : "activé"}.`);
+                            router.refresh();
+                          }
+                        }}
+                        className="h-5 w-5 rounded border"
+                        style={{ borderColor: "var(--border)", accentColor: "var(--accent)" }}
+                      />
+                      <span>{accepted.label_fr}</span>
                     </label>
                     <select
+                      aria-label={`Destination Discord pour ${accepted.label_fr}`}
                       value={accepted.destination}
                       onChange={async (e) => {
                         const dest = e.target.value as "national" | "international";
-                        await setDispatchTypeDestination(accepted.id, dest);
-                        router.refresh();
+                        setSettingsError(null);
+                        setSuccess(null);
+                        const result = await setDispatchTypeDestination(accepted.id, dest);
+                        if (result.error) setSettingsError(result.error);
+                        else {
+                          setSuccess(`${accepted.label_fr} sera publié dans le salon ${dest}.`);
+                          router.refresh();
+                        }
                       }}
                       className="rounded border bg-[var(--background)] px-2 py-1 text-sm text-[var(--foreground)]"
                       style={{ borderColor: "var(--border)" }}
@@ -251,27 +334,27 @@ export function BotDiscordForm({
       </section>
 
       <section
-        className="rounded-lg border p-6"
-        style={{ borderColor: "var(--border)", background: "var(--background-panel)" }}
+        id="discord-templates"
+        className="scroll-mt-20 border-t py-4"
+        style={{ borderColor: "var(--border)" }}
       >
-        <h2 className="mb-4 text-lg font-semibold text-[var(--foreground)]">Templates</h2>
-        <p className="mb-4 text-sm text-[var(--foreground-muted)]">
-          Formules de texte (placeholders : {"{country_name}"}, {"{action_label}"}, {"{refusal_message}"}, {"{date}"}) et couleurs. Plusieurs templates par type = tirage aléatoire. Images : liste d’URLs (une au hasard).
+        <h2 className="mb-2 text-lg font-semibold text-[var(--foreground)]">Modèles de messages</h2>
+        <p className="mb-3 text-sm leading-snug text-[var(--foreground-muted)]">
+          Les éléments entre accolades sont remplacés automatiquement. Si plusieurs modèles existent pour une action, l’un d’eux est choisi au hasard.
         </p>
-        {templateError && <p className="mb-2 text-sm text-[var(--danger)]">{templateError}</p>}
-        {dispatchTypes
-          .filter((d) => d.state_action_type_id != null && d.outcome === "accepted")
+        {templateError && <p role="alert" className="mb-2 text-sm text-[var(--danger)]">{templateError}</p>}
+        {visibleDispatchTypes
           .map((type) => ({
             type,
             items: templates.filter((tpl) => tpl.dispatch_type_id === type.id),
           }))
           .map(({ type, items }) => (
-            <div key={type.id} className="mb-8">
+            <div key={type.id} className="mb-5">
               <h3 className="mb-2 text-sm font-medium text-[var(--foreground)]">{type.label_fr}</h3>
               {items.map((tpl) => (
                 <div
                   key={tpl.id}
-                  className="mb-4 rounded border p-4"
+                  className="mb-2 rounded border p-3"
                   style={{ borderColor: "var(--border-muted)" }}
                 >
                   {editingTemplateId === tpl.id ? (
@@ -295,17 +378,17 @@ export function BotDiscordForm({
                       onCancel={() => setEditingTemplateId(null)}
                     />
                   ) : (
-                    <div className="flex items-start justify-between gap-2">
-                      <div>
+                    <div className="flex flex-col items-stretch gap-3 sm:flex-row sm:items-start sm:justify-between">
+                      <div className="min-w-0">
                         <p className="text-sm font-medium text-[var(--foreground)]">{tpl.label_fr}</p>
-                        <p className="mt-1 truncate text-xs text-[var(--foreground-muted)]">{tpl.body_template}</p>
+                        <p className="mt-1 whitespace-pre-wrap break-words text-xs text-[var(--foreground-muted)] [overflow-wrap:anywhere]">{tpl.body_template}</p>
                         {tpl.embed_color && (
                           <span className="mt-1 inline-block text-xs text-[var(--foreground-muted)]">
                             Couleur : {tpl.embed_color}
                           </span>
                         )}
                       </div>
-                      <div className="flex gap-2">
+                      <div className="flex flex-wrap gap-2">
                         <button
                           type="button"
                           onClick={async () => {
@@ -326,9 +409,11 @@ export function BotDiscordForm({
                         <button
                           type="button"
                           onClick={async () => {
-                            if (confirm("Supprimer ce template ?")) {
-                              await deleteTemplate(tpl.id);
-                              router.refresh();
+                            if (confirm("Supprimer ce modèle ?")) {
+                              setTemplateError(null);
+                              const result = await deleteTemplate(tpl.id);
+                              if (result.error) setTemplateError(result.error);
+                              else router.refresh();
                             }
                           }}
                           className="text-xs text-[var(--danger)] hover:underline"
@@ -350,7 +435,7 @@ export function BotDiscordForm({
                 }}
                 className="text-sm text-[var(--accent)] hover:underline"
               >
-                + Ajouter un template
+                Ajouter un modèle
               </button>
             </div>
           ))}
@@ -430,7 +515,7 @@ function EmbedPreviewModal({
       onClick={onClose}
       role="dialog"
       aria-modal="true"
-      aria-label="Aperçu du template Discord"
+      aria-label="Aperçu du modèle Discord"
     >
       <div
         className="max-h-[90vh] w-full max-w-md overflow-auto rounded-lg border shadow-lg"
@@ -441,7 +526,7 @@ function EmbedPreviewModal({
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between border-b p-3" style={{ borderColor: "var(--border)" }}>
-          <h3 className="text-sm font-semibold text-[var(--foreground)]">Aperçu (données de démo)</h3>
+          <h3 className="text-sm font-semibold text-[var(--foreground)]">Aperçu avec des données d’exemple</h3>
           <div className="flex items-center gap-2">
             <button
               type="button"
@@ -466,7 +551,7 @@ function EmbedPreviewModal({
         </div>
         <div className="p-4">
           <p className="mb-2 text-xs text-[var(--foreground-muted)]">
-            Rendu type embed Discord (titre, description, couleur, image, footer).
+            Rendu envoyé dans Discord.
           </p>
           {loading && !snippets ? (
             <p className="text-sm text-[var(--foreground-muted)]">Chargement…</p>
@@ -562,8 +647,9 @@ function TemplateEditForm({
   return (
     <div className="space-y-3">
       <div>
-        <label className="mb-1 block text-xs text-[var(--foreground-muted)]">Libellé</label>
+        <label htmlFor={`template-${template.id}-label`} className="mb-1 block text-xs text-[var(--foreground-muted)]">Libellé</label>
         <input
+          id={`template-${template.id}-label`}
           type="text"
           value={labelFr}
           onChange={(e) => setLabelFr(e.target.value)}
@@ -572,8 +658,9 @@ function TemplateEditForm({
         />
       </div>
       <div>
-        <label className="mb-1 block text-xs text-[var(--foreground-muted)]">Texte (placeholders)</label>
+        <label htmlFor={`template-${template.id}-body`} className="mb-1 block text-xs text-[var(--foreground-muted)]">Texte du message</label>
         <textarea
+          id={`template-${template.id}-body`}
           value={bodyTemplate}
           onChange={(e) => setBodyTemplate(e.target.value)}
           rows={3}
@@ -582,8 +669,9 @@ function TemplateEditForm({
         />
       </div>
       <div>
-        <label className="mb-1 block text-xs text-[var(--foreground-muted)]">Couleur embed (hex, ex. 2e7d32)</label>
+        <label htmlFor={`template-${template.id}-color`} className="mb-1 block text-xs text-[var(--foreground-muted)]">Couleur du message (ex. 2e7d32)</label>
         <input
+          id={`template-${template.id}-color`}
           type="text"
           value={embedColor}
           onChange={(e) => setEmbedColor(e.target.value)}
@@ -593,8 +681,9 @@ function TemplateEditForm({
         />
       </div>
       <div>
-        <label className="mb-1 block text-xs text-[var(--foreground-muted)]">URLs d’images (une par ligne, une choisie au hasard)</label>
+        <label htmlFor={`template-${template.id}-images`} className="mb-1 block text-xs text-[var(--foreground-muted)]">URLs d’images (une par ligne, une choisie au hasard)</label>
         <textarea
+          id={`template-${template.id}-images`}
           value={imageUrlsText}
           onChange={(e) => setImageUrlsText(e.target.value)}
           rows={2}

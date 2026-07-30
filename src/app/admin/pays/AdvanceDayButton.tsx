@@ -11,8 +11,8 @@ export function AdvanceDayButton() {
 
   async function handleClick() {
     const confirmed = window.confirm(
-      "Lancer le cron de mise à jour (passer un jour) ?\n\n" +
-        "Snapshot dans l’historique, mise à jour population/PIB/stats, mobilisation, date du monde, etc."
+      "Appliquer un jour de simulation ?\n\n" +
+        "L’état actuel sera ajouté à l’historique, puis la population, le PIB, les statistiques, les lois et la date du monde seront mis à jour."
     );
     if (!confirmed) return;
 
@@ -38,7 +38,7 @@ export function AdvanceDayButton() {
         className="rounded py-2 px-4 text-sm font-medium opacity-90 hover:opacity-100 disabled:opacity-50"
         style={{ background: "var(--accent)", color: "#0f1419" }}
       >
-        {loading ? "En cours…" : "Passer jour"}
+        {loading ? "Mise à jour…" : "Appliquer un jour"}
       </button>
       {message && (
         <span

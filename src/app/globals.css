@@ -36,12 +36,42 @@ body {
   color: var(--foreground);
   font-family: var(--font-sans), system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
+  overflow-x: clip;
+}
+
+.admin-shell :where(button, input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]), select, textarea, summary) {
+  min-height: 2.75rem;
+}
+
+.admin-shell button {
+  min-width: 2.75rem;
+}
+
+.admin-shell label:has(> input[type="checkbox"], > input[type="radio"]) {
+  min-height: 2.75rem;
+}
+
+.admin-shell :where(a, button, input, select, textarea, summary):focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
 /* Au-dessus du menu public (sticky z-50) : les modales en createPortal ciblent ce nœud (sibling du shell). */
 #fon-modal-root {
   position: relative;
   z-index: 100000;
+}
+
+.admin-dialog::backdrop {
+  background: rgb(0 0 0 / 0.72);
+}
+
+.admin-horizontal-nav {
+  scrollbar-width: none;
+}
+
+.admin-horizontal-nav::-webkit-scrollbar {
+  display: none;
 }
 
 /* Panneaux type dashboard */
@@ -122,7 +152,7 @@ body {
 .wiki-tiptap .ProseMirror-focused {
   outline: none !important;
 }
-/* Nœud image = <img> atom : ProseMirror met la classe sur l’img, pas sur un parent. */
+/* Le nœud image est atomique : ProseMirror met la classe sur l’image, pas sur un parent. */
 .wiki-tiptap .ProseMirror-selectednode img.wiki-img,
 .wiki-tiptap .ProseMirror img.wiki-img.ProseMirror-selectednode {
   outline: 2px solid var(--accent, #22c55e);
@@ -160,4 +190,130 @@ body {
   clear: both;
   margin: 0.75rem 0;
   max-width: 100%;
+}
+
+@media (max-width: 639px) {
+  .country-interface :where(
+    button,
+    input:not([type="hidden"]):not([type="checkbox"]):not([type="radio"]),
+    select,
+    textarea
+  ) {
+    min-height: 2.75rem;
+  }
+
+  .country-interface :where(input, select, textarea) {
+    font-size: 1rem;
+  }
+}
+
+.admin-settings-form :where(
+  input:not([type="hidden"]):not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+  select,
+  textarea
+) {
+  min-height: 2.75rem;
+}
+
+.admin-settings-form :where(input, select, textarea):focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.admin-density > .mx-auto {
+  padding-top: 1.5rem;
+  padding-bottom: 2rem;
+}
+
+.admin-density > .mx-auto > h1 + p {
+  margin-bottom: 1.25rem;
+  max-width: 72ch;
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+
+.admin-density .admin-settings-form > * + * {
+  margin-top: 1rem;
+}
+
+@media (min-width: 640px) and (pointer: fine) {
+  .admin-shell :where(button, input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]), select, textarea, summary) {
+    min-height: 2.25rem;
+  }
+
+  .admin-shell button {
+    min-width: 2.25rem;
+  }
+
+  .admin-shell label:has(> input[type="checkbox"], > input[type="radio"]) {
+    min-height: 2.25rem;
+  }
+
+  .admin-settings-form :where(
+    input:not([type="hidden"]):not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+    select,
+    textarea
+  ) {
+    min-height: 2.25rem;
+    font-size: 0.875rem;
+  }
+}
+
+@media (max-width: 639px) {
+  .admin-settings-form :where(input, select, textarea) {
+    font-size: 1rem;
+  }
+}
+
+@media (max-width: 767px) {
+  .admin-responsive-table,
+  .admin-responsive-table tbody,
+  .admin-responsive-table tr,
+  .admin-responsive-table td {
+    display: block;
+    width: 100%;
+  }
+
+  .admin-responsive-table thead {
+    display: none;
+  }
+
+  .admin-responsive-table tbody tr {
+    padding: 0.625rem 0.75rem;
+    border: 1px solid var(--border);
+    border-radius: 0.75rem;
+    background: var(--background-elevated);
+  }
+
+  .admin-responsive-table tbody tr + tr {
+    margin-top: 0.625rem;
+  }
+
+  .admin-responsive-table td {
+    display: grid;
+    grid-template-columns: minmax(6.5rem, 38%) minmax(0, 1fr);
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.4rem 0;
+    border: 0;
+  }
+
+  .admin-responsive-table td::before {
+    content: attr(data-label);
+    color: var(--foreground-muted);
+    font-size: 0.75rem;
+    font-weight: 600;
+  }
+
+  .admin-responsive-table td[data-action] {
+    display: flex;
+    justify-content: flex-end;
+    padding-top: 0.65rem;
+    border-top: 1px solid var(--border-muted);
+    margin-top: 0.25rem;
+  }
+
+  .admin-responsive-table td[data-action]::before {
+    content: none;
+  }
 }

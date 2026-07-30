@@ -105,6 +105,7 @@ export function CountryTabs({
   isPlayerForThisCountry = false,
   assignedPlayerEmail = null,
   updateLogs,
+  previousSnapshot = null,
   ruleParametersByKey,
   worldAverages,
   rosterByBranch,
@@ -164,6 +165,7 @@ export function CountryTabs({
   isPlayerForThisCountry?: boolean;
   assignedPlayerEmail?: string | null;
   updateLogs: CountryUpdateLog[];
+  previousSnapshot?: Pick<Country, "population" | "gdp" | "militarism" | "industry" | "science" | "stability"> | null;
   ruleParametersByKey: Record<string, { value: unknown }>;
   worldAverages: { pop_avg: number; gdp_avg: number; mil_avg: number; ind_avg: number; sci_avg: number; stab_avg: number } | null;
   rosterByBranch: Record<MilitaryBranch, RosterRowByBranch[]>;
@@ -231,7 +233,7 @@ export function CountryTabs({
   const canSeeCabinetAndBudget = isAdmin || isPlayerForThisCountry;
   const rankEmoji = (r: number) => (r === 1 ? "👑" : r === 2 ? "🥈" : r === 3 ? "🥉" : null);
   const router = useRouter();
-  const [tab, setTab] = useState<"general" | "military" | "etat_major" | "perks" | "budget" | "laws" | "cabinet" | "state_actions" | "debug">(canSeeCabinetAndBudget ? "cabinet" : "general");
+  const [tab, setTab] = useState<"general" | "military" | "etat_major" | "perks" | "budget" | "laws" | "cabinet" | "state_actions" | "debug">("general");
   const [budgetFraction, setBudgetFraction] = useState(DEFAULT_BUDGET_FRACTION);
   const [pcts, setPcts] = useState<Record<BudgetPctKey, number>>(getDefaultPcts);
   const [budgetSaving, setBudgetSaving] = useState(false);
@@ -631,7 +633,7 @@ export function CountryTabs({
   }, [limitsByBranch, resolvedEffects]);
 
   const panelClass =
-    "rounded-lg border p-6";
+    "rounded-lg border p-4 sm:p-6";
   const panelStyle = {
     background: "var(--background-panel)",
     borderColor: "var(--border)",
@@ -901,11 +903,13 @@ export function CountryTabs({
   const glassPanelStyle = { background: "rgba(255,255,255,0.12)", backdropFilter: "blur(12px)" as const };
   const glassTextClass = "text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.4)]";
   const glassMutedClass = "text-white/90";
+  const tabButtonClass =
+    "min-h-11 rounded-lg border px-3 py-2 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]";
 
   return (
-    <div>
+    <div className="country-interface">
       <div
-        className={`mb-8 flex flex-wrap items-center gap-6 p-6 ${glassPanelClass}`}
+        className={`mb-4 flex flex-wrap items-center gap-4 p-4 sm:mb-8 sm:gap-6 sm:p-6 ${glassPanelClass}`}
         style={glassPanelStyle}
       >
         {country.flag_url ? (
@@ -915,13 +919,13 @@ export function CountryTabs({
             alt=""
             width={80}
             height={53}
-            className="h-[53px] w-20 rounded border border-white/25 object-cover"
+            className="h-11 w-16 rounded border border-white/25 object-cover sm:h-[53px] sm:w-20"
           />
         ) : (
-          <div className="h-[53px] w-20 rounded border border-white/25 bg-white/10" />
+          <div className="h-11 w-16 rounded border border-white/25 bg-white/10 sm:h-[53px] sm:w-20" />
         )}
         <div className="min-w-0 flex-1">
-          <h1 className={`text-2xl font-bold ${glassTextClass}`}>
+          <h1 className={`text-xl font-bold sm:text-2xl ${glassTextClass}`}>
             {country.name}
           </h1>
           {country.regime && (
@@ -934,7 +938,7 @@ export function CountryTabs({
           )}
         </div>
         {canEditCountry && !generalEditMode && (
-          <>
+          <div className="flex w-full gap-2 sm:w-auto">
             <button
               type="button"
               onClick={() => {
@@ -946,20 +950,20 @@ export function CountryTabs({
                 setGeneralError(null);
                 setGeneralEditMode(true);
               }}
-              className="shrink-0 rounded-lg border border-white/25 px-3 py-1.5 text-sm text-white/90 hover:text-white hover:bg-white/15 transition-colors"
+              className="inline-flex min-h-11 flex-1 items-center justify-center rounded-lg border border-white/25 px-4 text-sm text-white/90 transition-colors hover:bg-white/15 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] sm:flex-none"
               style={{ background: "rgba(255,255,255,0.08)" }}
             >
-              Éditer
+              Modifier
             </button>
             {isAdmin && (
               <Link
                 href={`/admin/pays/${country.id}`}
-                className="shrink-0 rounded-lg border border-[var(--accent)] bg-[var(--accent)] px-3 py-1.5 text-sm font-medium text-[#0f1419] hover:opacity-90"
+                className="inline-flex min-h-11 flex-1 items-center justify-center rounded-lg border border-[var(--accent)] bg-[var(--accent)] px-4 text-sm font-medium text-[#0f1419] hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white sm:flex-none"
               >
-                [Admin] Editer
+                Réglages complets
               </Link>
             )}
-          </>
+          </div>
         )}
       </div>
 
@@ -967,7 +971,7 @@ export function CountryTabs({
         generalEditMode &&
         createPortal(
           <div
-            className="fixed inset-0 overflow-y-auto bg-black/50"
+            className="country-interface fixed inset-0 overflow-y-auto bg-black/50"
             style={{ zIndex: 100001 }}
             role="dialog"
             aria-modal="true"
@@ -975,32 +979,34 @@ export function CountryTabs({
           >
             <div className="flex min-h-full items-center justify-center p-4 py-10">
               <div
-                className="w-full max-w-lg max-h-[min(85dvh,calc(100dvh-5rem))] overflow-y-auto overscroll-contain rounded-lg border p-6 shadow-lg"
+                className="max-h-[min(85dvh,calc(100dvh-5rem))] w-full max-w-lg overflow-y-auto overscroll-contain rounded-lg border p-4 shadow-lg sm:p-6"
                 style={{ background: "var(--background-panel)", borderColor: "var(--border)" }}
                 onClick={(e) => e.stopPropagation()}
               >
             <h2 id="general-edit-modal-title" className="mb-4 text-lg font-semibold text-[var(--foreground)]">
               Changer informations nationales
             </h2>
-            {generalError && <p className="mb-2 text-sm text-[var(--danger)]">{generalError}</p>}
+            {generalError && <p role="alert" className="mb-2 text-sm text-[var(--danger)]">{generalError}</p>}
             <div className="grid gap-3 sm:grid-cols-2">
               <div>
-                <label className="mb-1 block text-xs text-[var(--foreground-muted)]">Nom du pays</label>
+                <label htmlFor="country-general-name" className="mb-1 block text-xs text-[var(--foreground-muted)]">Nom du pays</label>
                 <input
+                  id="country-general-name"
                   type="text"
                   value={generalName}
                   onChange={(e) => setGeneralName(e.target.value)}
-                  className="w-full rounded border bg-[var(--background)] px-2 py-1.5 text-sm text-[var(--foreground)]"
+                  className="min-h-11 w-full rounded border bg-[var(--background)] px-3 py-2 text-sm text-[var(--foreground)]"
                   style={{ borderColor: "var(--border)" }}
                 />
               </div>
               <div>
-                <label className="mb-1 block text-xs text-[var(--foreground-muted)]">Régime</label>
+                <label htmlFor="country-general-regime" className="mb-1 block text-xs text-[var(--foreground-muted)]">Régime</label>
                 <input
+                  id="country-general-regime"
                   type="text"
                   value={generalRegime}
                   onChange={(e) => setGeneralRegime(e.target.value)}
-                  className="w-full rounded border bg-[var(--background)] px-2 py-1.5 text-sm text-[var(--foreground)]"
+                  className="min-h-11 w-full rounded border bg-[var(--background)] px-3 py-2 text-sm text-[var(--foreground)]"
                   style={{ borderColor: "var(--border)" }}
                 />
               </div>
@@ -1015,7 +1021,7 @@ export function CountryTabs({
                 />
                 <label
                   htmlFor="country-flag-upload-modal"
-                  className="inline-block cursor-pointer rounded border border-[var(--border)] bg-[var(--accent)] px-3 py-1.5 text-sm font-medium text-[#0f1419] hover:opacity-90"
+                  className="inline-flex min-h-11 cursor-pointer items-center rounded border border-[var(--border)] bg-[var(--accent)] px-3 py-2 text-sm font-medium text-[#0f1419] hover:opacity-90 focus-within:ring-2 focus-within:ring-[var(--accent)]"
                 >
                   Upload
                 </label>
@@ -1035,12 +1041,12 @@ export function CountryTabs({
                 )}
               </div>
             </div>
-            <div className="mt-4 flex gap-2">
+            <div className="mt-4 flex flex-wrap gap-2">
               <button
                 type="button"
                 disabled={generalSaving}
                 onClick={handleSaveGeneral}
-                className="rounded py-2 px-4 text-sm font-medium disabled:opacity-50"
+                className="min-h-11 rounded px-4 py-2 text-sm font-medium disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
                 style={{ background: "var(--accent)", color: "#0f1419" }}
               >
                 {generalSaving ? "Enregistrement…" : "Enregistrer"}
@@ -1048,7 +1054,7 @@ export function CountryTabs({
               <button
                 type="button"
                 onClick={handleCancelGeneralEdit}
-                className="rounded border border-[var(--border)] bg-[var(--background-elevated)] py-2 px-4 text-sm text-[var(--foreground-muted)] hover:text-[var(--foreground)]"
+                className="min-h-11 rounded border border-[var(--border)] bg-[var(--background-elevated)] px-4 py-2 text-sm text-[var(--foreground-muted)] hover:text-[var(--foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
                 style={{ borderColor: "var(--border)" }}
               >
                 Annuler
@@ -1060,15 +1066,26 @@ export function CountryTabs({
           getModalPortalRoot()
         )}
 
-      <div
-        className={`tab-list mb-6 flex flex-wrap items-center gap-2 rounded-xl border border-white/25 px-4 py-3`}
+      <nav
+        aria-label="Sections du pays"
+        className="mb-4 grid grid-cols-2 items-stretch gap-2 rounded-xl border border-white/25 p-2 sm:mb-6 sm:flex sm:flex-wrap sm:items-center sm:px-4 sm:py-3"
         style={glassPanelStyle}
       >
+        <button
+          type="button"
+          className={`${tabButtonClass} ${tab === "general" ? "border-[var(--accent)] text-[var(--accent)]" : `border-transparent ${glassMutedClass} hover:text-white`}`}
+          data-state={tab === "general" ? "active" : "inactive"}
+          aria-pressed={tab === "general"}
+          onClick={() => setTab("general")}
+        >
+          Situation générale
+        </button>
         {canSeeCabinetAndBudget && (
           <button
             type="button"
-            className={`tab rounded-lg border-b-2 px-3 py-2 text-sm transition-colors ${tab === "cabinet" ? "border-[var(--accent)] text-[var(--accent)]" : `border-transparent ${glassMutedClass} hover:text-white`}`}
+            className={`${tabButtonClass} ${tab === "cabinet" ? "border-[var(--accent)] text-[var(--accent)]" : `border-transparent ${glassMutedClass} hover:text-white`}`}
             data-state={tab === "cabinet" ? "active" : "inactive"}
+            aria-pressed={tab === "cabinet"}
             onClick={() => setTab("cabinet")}
           >
             Rapport du Cabinet
@@ -1076,16 +1093,9 @@ export function CountryTabs({
         )}
         <button
           type="button"
-          className={`tab rounded-lg border-b-2 px-3 py-2 text-sm transition-colors ${tab === "general" ? "border-[var(--accent)] text-[var(--accent)]" : `border-transparent ${glassMutedClass} hover:text-white`}`}
-          data-state={tab === "general" ? "active" : "inactive"}
-          onClick={() => setTab("general")}
-        >
-          Généralités
-        </button>
-        <button
-          type="button"
-          className={`tab rounded-lg border-b-2 px-3 py-2 text-sm transition-colors ${tab === "military" ? "border-[var(--accent)] text-[var(--accent)]" : `border-transparent ${glassMutedClass} hover:text-white`}`}
+          className={`${tabButtonClass} ${tab === "military" ? "border-[var(--accent)] text-[var(--accent)]" : `border-transparent ${glassMutedClass} hover:text-white`}`}
           data-state={tab === "military" ? "active" : "inactive"}
+          aria-pressed={tab === "military"}
           onClick={() => setTab("military")}
         >
           Militaire
@@ -1093,17 +1103,19 @@ export function CountryTabs({
         {canSeeCabinetAndBudget && (
           <button
             type="button"
-            className={`tab rounded-lg border-b-2 px-3 py-2 text-sm transition-colors ${tab === "etat_major" ? "border-[var(--accent)] text-[var(--accent)]" : `border-transparent ${glassMutedClass} hover:text-white`}`}
+            className={`${tabButtonClass} ${tab === "etat_major" ? "border-[var(--accent)] text-[var(--accent)]" : `border-transparent ${glassMutedClass} hover:text-white`}`}
             data-state={tab === "etat_major" ? "active" : "inactive"}
+            aria-pressed={tab === "etat_major"}
             onClick={() => setTab("etat_major")}
           >
-            État Major
+            État-major
           </button>
         )}
         <button
           type="button"
-          className={`tab rounded-lg border-b-2 px-3 py-2 text-sm transition-colors ${tab === "perks" ? "border-[var(--accent)] text-[var(--accent)]" : `border-transparent ${glassMutedClass} hover:text-white`}`}
+          className={`${tabButtonClass} ${tab === "perks" ? "border-[var(--accent)] text-[var(--accent)]" : `border-transparent ${glassMutedClass} hover:text-white`}`}
           data-state={tab === "perks" ? "active" : "inactive"}
+          aria-pressed={tab === "perks"}
           onClick={() => setTab("perks")}
         >
           Avantages
@@ -1111,8 +1123,9 @@ export function CountryTabs({
         {canSeeCabinetAndBudget && (
           <button
             type="button"
-            className={`tab rounded-lg border-b-2 px-3 py-2 text-sm transition-colors ${tab === "budget" ? "border-[var(--accent)] text-[var(--accent)]" : `border-transparent ${glassMutedClass} hover:text-white`}`}
+            className={`${tabButtonClass} ${tab === "budget" ? "border-[var(--accent)] text-[var(--accent)]" : `border-transparent ${glassMutedClass} hover:text-white`}`}
             data-state={tab === "budget" ? "active" : "inactive"}
+            aria-pressed={tab === "budget"}
             onClick={() => setTab("budget")}
           >
             Budget
@@ -1120,8 +1133,9 @@ export function CountryTabs({
         )}
         <button
           type="button"
-          className={`tab rounded-lg border-b-2 px-3 py-2 text-sm transition-colors ${tab === "laws" ? "border-[var(--accent)] text-[var(--accent)]" : `border-transparent ${glassMutedClass} hover:text-white`}`}
+          className={`${tabButtonClass} ${tab === "laws" ? "border-[var(--accent)] text-[var(--accent)]" : `border-transparent ${glassMutedClass} hover:text-white`}`}
           data-state={tab === "laws" ? "active" : "inactive"}
+          aria-pressed={tab === "laws"}
           onClick={() => setTab("laws")}
         >
           Lois
@@ -1129,8 +1143,9 @@ export function CountryTabs({
         {isPlayerForThisCountry && (
           <button
             type="button"
-            className={`tab rounded-lg border-b-2 px-3 py-2 text-sm transition-colors ${tab === "state_actions" ? "border-[var(--accent)] text-[var(--accent)]" : `border-transparent ${glassMutedClass} hover:text-white`}`}
+            className={`${tabButtonClass} ${tab === "state_actions" ? "border-[var(--accent)] text-[var(--accent)]" : `border-transparent ${glassMutedClass} hover:text-white`}`}
             data-state={tab === "state_actions" ? "active" : "inactive"}
+            aria-pressed={tab === "state_actions"}
             onClick={() => setTab("state_actions")}
           >
             Actions d'État
@@ -1139,14 +1154,15 @@ export function CountryTabs({
         {isAdmin && (
           <button
             type="button"
-            className={`tab rounded-lg border-b-2 px-3 py-2 text-sm transition-colors ${tab === "debug" ? "border-[var(--accent)] text-[var(--accent)]" : `border-transparent ${glassMutedClass} hover:text-white`}`}
+            className={`${tabButtonClass} ${tab === "debug" ? "border-[var(--accent)] text-[var(--accent)]" : `border-transparent ${glassMutedClass} hover:text-white`}`}
             data-state={tab === "debug" ? "active" : "inactive"}
+            aria-pressed={tab === "debug"}
             onClick={() => setTab("debug")}
           >
-            Debug
+            Diagnostic
           </button>
         )}
-      </div>
+      </nav>
 
       {tab === "general" && (
         <CountryTabGeneral
@@ -1196,6 +1212,10 @@ export function CountryTabs({
           ruleParametersByKey={ruleParametersByKey}
           otherCountriesForRelation={otherCountriesForRelation}
           resolvedEffects={resolvedEffects}
+          previousSnapshot={previousSnapshot}
+          worldDate={worldDate ?? null}
+          ownerMode={isPlayerForThisCountry}
+          onNavigate={(nextTab) => setTab(nextTab)}
         />
       )}
 

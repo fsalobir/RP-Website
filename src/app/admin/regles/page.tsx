@@ -2,8 +2,13 @@ import { createClient } from "@/lib/supabase/server";
 import { getAllRelationRows, relationRowsToMap } from "@/lib/relations";
 import { ReglesForm } from "@/components/admin/ReglesForm";
 
-export default async function AdminReglesPage() {
+export default async function AdminReglesPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ domaine?: string }>;
+}) {
   const supabase = await createClient();
+  const { domaine } = await searchParams;
   const AI_EVENT_ACTION_KEYS = [
     "insulte_diplomatique",
     "ouverture_diplomatique",
@@ -31,13 +36,14 @@ export default async function AdminReglesPage() {
   });
 
   return (
-    <div className="mx-auto max-w-6xl px-4 py-10">
+    <div className="mx-auto max-w-7xl px-4 py-6">
       <ReglesForm
         rules={rules}
         rosterUnits={rosterUnits}
         countries={countries}
         relationMap={relationMap}
         stateActionTypesForAi={stateActionTypesForAi}
+        initialDomain={domaine === "diplomatie" ? "diplomacy" : domaine}
       />
     </div>
   );

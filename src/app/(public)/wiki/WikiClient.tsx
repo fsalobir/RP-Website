@@ -2,6 +2,7 @@
 
 import { useState, useCallback, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
+import { DisclosureChevron } from "@/components/ui/DisclosureChevron";
 import { WikiPageBody } from "./WikiPageBody";
 import {
   buildWikiTree,
@@ -15,7 +16,7 @@ import type { WikiPageRow, WikiTreeNode } from "@/lib/wiki/types";
 
 const glassPanelClass = "rounded-2xl border border-white/25 bg-white/15 shadow-xl backdrop-blur-xl";
 const glassInputClass =
-  "w-full rounded-xl border border-white/25 bg-white/10 px-3 py-2 text-sm text-white placeholder:text-white/60 focus:border-white/50 focus:outline-none focus:ring-2 focus:ring-white/30";
+  "min-h-11 w-full rounded-xl border border-white/25 bg-white/10 px-3 py-2 text-sm text-white placeholder:text-white/60 focus:border-white/50 focus:outline-none focus:ring-2 focus:ring-white/30";
 
 function resolveSlugFromHash(hash: string, pages: WikiPageRow[], tree: WikiTreeNode[]): string {
   if (!pages.length) return "";
@@ -53,15 +54,14 @@ function TreeNav({
                 <button
                   type="button"
                   onClick={() => toggleExpand(node.slug)}
-                  className="shrink-0 rounded p-1 text-white/85 hover:text-white hover:bg-white/10"
+                  className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-white/85 hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60"
                   aria-expanded={expanded}
+                  aria-label={`${expanded ? "Replier" : "Développer"} ${node.title}`}
                   title={expanded ? "Replier" : "Développer"}
                 >
-                  <span className={`inline-block transition-transform ${expanded ? "rotate-90" : ""}`} aria-hidden>
-                    ▶
-                  </span>
+                  <DisclosureChevron open={expanded} direction="right" />
                 </button>
-              ) : null}
+              ) : <span className="inline-block w-11 shrink-0" aria-hidden />}
               <button
                 type="button"
                 onClick={() => {
@@ -201,9 +201,13 @@ export function WikiClient({ initialPages }: { initialPages: WikiPageRow[] }) {
         <input
           id="wiki-search"
           type="search"
-          placeholder="Rechercher dans le wiki…"
+          placeholder="Rechercher un sujet ou une règle…"
           value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
+          onChange={(e) => {
+            const value = e.target.value;
+            setSearchQuery(value);
+            if (value.trim()) setMenuOpen(true);
+          }}
           className={glassInputClass}
           aria-label="Rechercher dans le wiki"
         />
@@ -213,11 +217,12 @@ export function WikiClient({ initialPages }: { initialPages: WikiPageRow[] }) {
         <button
           type="button"
           onClick={() => setMenuOpen((o) => !o)}
-          className="w-full rounded-xl border border-white/25 bg-white/10 px-4 py-3 text-left text-sm font-medium text-white hover:bg-white/15"
+          className="flex min-h-11 w-full items-center justify-between gap-3 rounded-xl border border-white/25 bg-white/10 px-4 py-3 text-left text-sm font-medium text-white hover:bg-white/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60"
           aria-expanded={menuOpen}
           aria-controls="wiki-nav-drawer"
         >
-          {menuOpen ? "Fermer le menu" : "Sections du wiki"}
+          <span>{menuOpen ? "Fermer les sections" : "Sections du wiki"}</span>
+          <DisclosureChevron open={menuOpen} />
         </button>
       </div>
 
@@ -242,7 +247,7 @@ export function WikiClient({ initialPages }: { initialPages: WikiPageRow[] }) {
           </nav>
         </aside>
 
-        <main className="min-w-0 w-full flex-1">
+        <section className="min-w-0 w-full flex-1" aria-label="Article du wiki">
           <div className={glassPanelClass}>
             <article
               id={displayPage?.slug ?? displaySlug}
@@ -264,7 +269,7 @@ export function WikiClient({ initialPages }: { initialPages: WikiPageRow[] }) {
               )}
             </article>
           </div>
-        </main>
+        </section>
       </div>
     </div>
   );

@@ -11,7 +11,7 @@ export function ResetStatsButton() {
 
   async function handleClick() {
     const confirmed = window.confirm(
-      "Réinitialiser les stats de tous les pays ?\n\n" +
+      "Réinitialiser les valeurs de tous les pays ?\n\n" +
         "• Population : 50 Mio\n• PIB : 600 Bn\n• Stabilité : 0\n• Militarisme, Industrie, Science : 5\n\n" +
         "Cette action est irréversible."
     );
@@ -39,7 +39,7 @@ export function ResetStatsButton() {
         className="rounded py-2 px-4 text-sm font-medium opacity-90 hover:opacity-100 disabled:opacity-50"
         style={{ background: "var(--danger)", color: "#fff" }}
       >
-        {loading ? "En cours…" : "Réinitialiser les stats (tous les pays)"}
+        {loading ? "Réinitialisation…" : "Réinitialiser les valeurs des pays"}
       </button>
       {message && (
         <span

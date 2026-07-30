@@ -4,6 +4,7 @@ import { Fragment, useState } from "react";
 import type { MilitaryBranch } from "@/types/database";
 import { formatNumber } from "@/lib/format";
 import { Tooltip } from "@/components/ui/Tooltip";
+import { DisclosureChevron } from "@/components/ui/DisclosureChevron";
 import {
   formatEffectValue,
   getEffectiveMilitaryUnitCount,
@@ -212,7 +213,7 @@ export function CountryTabMilitary({
         <IntelGauge level={intelLevel} panelClass={glassPanelClass} panelStyle={glassPanelStyle} textClass={glassTextClass} mutedClass={glassMutedClass} />
         {canAdjustIntelForTesting && (
           <section className={glassPanelClass} style={glassPanelStyle}>
-            <h3 className={`mb-2 text-sm font-semibold ${glassTextClass}`}>Test - Ajuster le renseignement</h3>
+            <h2 className={`mb-2 text-sm font-semibold ${glassTextClass}`}>Test - Ajuster le renseignement</h2>
             <p className={`mb-3 text-xs ${glassMutedClass}`}>
               Outil temporaire de test. Delta exact appliqué sur le niveau de renseignement de ce pays.
             </p>
@@ -223,6 +224,7 @@ export function CountryTabMilitary({
                 max={100}
                 value={intelDeltaInput}
                 onChange={(e) => setIntelDeltaInput(e.target.value)}
+                aria-label="Ajustement du niveau de renseignement"
                 className="w-28 rounded border border-white/25 bg-white/10 px-2 py-1.5 text-sm text-white"
               />
               <button
@@ -241,20 +243,19 @@ export function CountryTabMilitary({
           <section className="relative overflow-hidden rounded-2xl border border-white/25" style={{ background: "transparent" }}>
             <div className="absolute inset-0 overflow-hidden rounded-2xl" aria-hidden>
               <div
-                className="absolute inset-0 bg-cover bg-no-repeat scale-105"
+                className="absolute inset-0 bg-cover bg-no-repeat"
                 style={{
-                  backgroundImage: "url(/images/site/renseignement-insuffisant-bg.png)",
+                  backgroundImage: "url(/images/site/renseignement-insuffisant-bg.webp)",
                   backgroundPosition: "top center",
-                  filter: "blur(0.5px)",
                 }}
               />
               <div className="absolute inset-0 bg-[var(--background-panel)]/75" />
             </div>
             <div className="relative z-10 flex flex-col items-center justify-center gap-4 py-12 px-6">
-              <span className="text-4xl opacity-40">🔍</span>
+              <span className="text-4xl opacity-40" aria-hidden>🔍</span>
+              <h2 className={`text-center text-lg font-semibold ${glassTextClass}`}>Renseignement insuffisant</h2>
               <p className={`text-center text-sm max-w-md ${glassMutedClass}`}>
-                Renseignement insuffisant. Les services de renseignement ne disposent d'aucune information
-                fiable sur les capacités militaires de ce pays.
+                Les services de renseignement ne disposent d&apos;aucune information fiable sur les capacités militaires de ce pays.
               </p>
               <p className={`text-center text-xs opacity-90 ${glassMutedClass}`}>
                 Lancez une opération d'espionnage pour en savoir plus.
@@ -334,15 +335,11 @@ export function CountryTabMilitary({
                       <button
                         type="button"
                         onClick={() => setMilitarySubtypeOpen((prev) => ({ ...prev, [subKey]: prev[subKey] === false }))}
+                        aria-expanded={isOpen}
                         className={`flex w-full items-center gap-2 py-1.5 px-3 text-left text-sm font-medium ${glassTextClass} hover:bg-white/10 transition-colors`}
                         style={{ background: "rgba(255,255,255,0.12)", backdropFilter: "blur(12px)" }}
                       >
-                        <span
-                          className="inline-block transition-transform duration-200 ease-out"
-                          style={{ transform: isOpen ? "rotate(90deg)" : "rotate(0deg)" }}
-                        >
-                          ▶
-                        </span>
+                        <DisclosureChevron open={isOpen} direction="right" />
                         <span>{label}</span>
                         <span className={glassMutedClass}>Personnel : {formatNumber(subPersonnel)}</span>
                       </button>
@@ -352,7 +349,7 @@ export function CountryTabMilitary({
                       >
                         <div className="overflow-hidden">
                           <div className="overflow-x-auto">
-                            <table className="w-full text-sm table-fixed">
+                            <table className="min-w-[680px] w-full table-fixed text-sm">
                               <thead>
                                 <tr className="border-b border-white/25">
                                   <th className={`w-12 pb-1.5 pt-1 px-2 text-center font-medium text-xs ${glassMutedClass}`}>Icône</th>
@@ -399,7 +396,7 @@ export function CountryTabMilitary({
                                         </div>
                                       </td>
                                       <td className="w-[20%] py-0.5 px-2 align-middle text-center">
-                                        <span className={`inline-block max-w-full truncate text-xs font-medium ${glassTextClass}`} title={row.unit.name_fr}>
+                                        <span className={`inline-block max-w-full break-words text-xs font-medium leading-tight ${glassTextClass}`}>
                                           {row.unit.name_fr}
                                         </span>
                                       </td>
@@ -408,6 +405,7 @@ export function CountryTabMilitary({
                                           <div className="flex flex-wrap items-center justify-center gap-0.5">
                                             <span className={`text-[10px] ${glassMutedClass}`}>{row.unit.base_count}+</span>
                                             <input
+                                              aria-label={`Effectif supplémentaire pour ${row.unit.name_fr}`}
                                               type="number"
                                               min={0}
                                               className="w-9 rounded border border-white/25 bg-white/10 px-0.5 py-0.5 text-[10px] font-mono text-white"
@@ -452,6 +450,7 @@ export function CountryTabMilitary({
                                           {isAdmin ? (
                                             <div className="flex items-center gap-1 flex-wrap justify-center">
                                               <input
+                                                aria-label={`Progression de ${row.unit.name_fr} en points`}
                                                 type="number"
                                                 min={0}
                                                 max={row.unit.level_count * 100}
@@ -566,17 +565,16 @@ export function CountryTabMilitary({
             )}
           </>
         );
-        const branchBg = branch === "mer" ? MER_BG : branch === "strategique" ? STRATEGIQUE_BG : null;
+        const branchBg = branch === "strategique" ? STRATEGIQUE_BG : null;
         return (
           <section key={branch} className="relative overflow-hidden rounded-2xl border border-white/25" style={{ background: "transparent" }}>
             <div className="absolute inset-0 overflow-hidden rounded-2xl" aria-hidden>
               {branchBg && (
                 <div
-                  className="absolute inset-0 bg-cover bg-no-repeat scale-105"
+                  className="absolute inset-0 bg-cover bg-no-repeat"
                   style={{
                     backgroundImage: `url(${branchBg})`,
                     backgroundPosition: "top center",
-                    filter: "blur(0.5px)",
                   }}
                 />
               )}
@@ -609,9 +607,8 @@ function getIntelMessage(level: number): string {
   return msg;
 }
 
-const RENSEIGNEMENT_BG = "/images/site/renseignement-insuffisant-bg.png";
-const MER_BG = "/images/site/mer-bg.png";
-const STRATEGIQUE_BG = "/images/site/strategique-bg.png";
+const RENSEIGNEMENT_BG = "/images/site/renseignement-insuffisant-bg.webp";
+const STRATEGIQUE_BG = "/images/site/strategique-bg.webp";
 
 function IntelGauge({
   level,
@@ -633,18 +630,23 @@ function IntelGauge({
     pct < 25 ? "var(--danger)" : pct < 50 ? "#e6a817" : pct < 75 ? "#d4a017" : "var(--accent)";
   const content = (
     <div className="flex items-center gap-4">
-      <span className="text-lg">🔍</span>
+      <span className="text-lg" aria-hidden>🔍</span>
       <div className="flex-1 min-w-0">
         <div className="flex items-baseline gap-2 mb-1.5">
-          <span className={`text-sm font-semibold ${textClass}`}>
+          <h2 className={`text-sm font-semibold ${textClass}`}>
             Niveau de renseignement
-          </span>
+          </h2>
           <span className="text-xs font-mono" style={{ color }}>
             {pct} %
           </span>
         </div>
         <div
           className="h-2 w-full rounded-full overflow-hidden bg-white/20"
+          role="progressbar"
+          aria-label="Niveau de renseignement"
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-valuenow={pct}
         >
           <div
             className="h-full rounded-full transition-all duration-500"
@@ -662,11 +664,10 @@ function IntelGauge({
       <section className="relative overflow-hidden rounded-2xl border border-white/25" style={{ background: "transparent" }}>
         <div className="absolute inset-0 overflow-hidden rounded-2xl" aria-hidden>
           <div
-            className="absolute inset-0 bg-cover bg-no-repeat scale-105"
+            className="absolute inset-0 bg-cover bg-no-repeat"
             style={{
               backgroundImage: `url(${backgroundImage})`,
               backgroundPosition: "top center",
-              filter: "blur(0.5px)",
             }}
           />
           <div className="absolute inset-0 bg-[var(--background-panel)]/75" />
@@ -711,7 +712,7 @@ function FoggedBranchView({
         Données fragmentaires — les fourchettes ci-dessous sont des estimations.
       </p>
       <div className="overflow-x-auto rounded-xl border border-white/25" style={{ background: "rgba(255,255,255,0.12)", backdropFilter: "blur(12px)" }}>
-        <table className="w-full text-sm">
+        <table className="min-w-[620px] w-full text-sm">
           <thead>
             <tr className="border-b border-white/25">
               <th className={`pb-2 px-3 text-left font-medium text-sm ${mutedClass}`}>Branche</th>
@@ -754,11 +755,10 @@ function FoggedBranchView({
       <section className="relative overflow-hidden rounded-2xl border border-white/25" style={{ background: "transparent" }}>
         <div className="absolute inset-0 overflow-hidden rounded-2xl" aria-hidden>
           <div
-            className="absolute inset-0 bg-cover bg-no-repeat scale-105"
+            className="absolute inset-0 bg-cover bg-no-repeat"
             style={{
               backgroundImage: `url(${backgroundImage})`,
               backgroundPosition: "top center",
-              filter: "blur(0.5px)",
             }}
           />
           <div className="absolute inset-0 bg-[var(--background-panel)]/75" />
@@ -801,7 +801,7 @@ function FoggedUnitView({
         {BRANCH_LABELS[branch]}
       </h2>
       <div className="overflow-x-auto rounded-xl border border-white/25" style={{ background: "rgba(255,255,255,0.12)", backdropFilter: "blur(12px)" }}>
-        <table className="w-full text-sm table-fixed">
+        <table className="min-w-[680px] w-full table-fixed text-sm">
           <thead>
             <tr className="border-b border-white/25">
               <th className={`w-12 pb-1.5 pt-1 px-2 text-center font-medium text-sm ${mutedClass}`}>Icône</th>
@@ -825,7 +825,7 @@ function FoggedUnitView({
                   </div>
                 </td>
                 <td className="py-0.5 px-2 align-middle text-center">
-                  <span className={`inline-block max-w-full truncate text-sm font-medium ${textClass}`} title={u.unitName}>
+                  <span className={`inline-block max-w-full break-words text-sm font-medium leading-tight ${textClass}`}>
                     {u.unitName}
                   </span>
                 </td>
@@ -852,11 +852,10 @@ function FoggedUnitView({
         <section key={key} className="relative overflow-hidden rounded-2xl border border-white/25" style={{ background: "transparent" }}>
           <div className="absolute inset-0 overflow-hidden rounded-2xl" aria-hidden>
             <div
-              className="absolute inset-0 bg-cover bg-no-repeat scale-105"
+              className="absolute inset-0 bg-cover bg-no-repeat"
               style={{
                 backgroundImage: `url(${backgroundImage})`,
                 backgroundPosition: "top center",
-                filter: "blur(0.5px)",
               }}
             />
             <div className="absolute inset-0 bg-[var(--background-panel)]/75" />

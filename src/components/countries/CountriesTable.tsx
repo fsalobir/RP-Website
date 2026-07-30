@@ -5,6 +5,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { formatNumber, formatGdp, formatPopulation } from "@/lib/format";
 import { InfoTooltipWithWikiLink } from "@/components/ui/InfoTooltipWithWikiLink";
+import { matchesSearchText } from "@/lib/searchText";
 
 const flagLoader = ({ src }: { src: string }) => src;
 
@@ -70,6 +71,7 @@ const ADMIN_COLUMNS = [
   { key: "player" as const, label: "Joueur" },
   { key: "continent" as const, label: "Continent" },
 ];
+const ADMIN_PAGE_SIZE = 25;
 
 function getSortValue(row: Row, key: SortKey): number | string | null {
   const c = row.country;
@@ -171,6 +173,9 @@ export function CountriesTable({
   const [continentPendingId, setContinentPendingId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [assignmentFilter, setAssignmentFilter] = useState<"all" | "assigned_only">("all");
+  const [adminPage, setAdminPage] = useState(1);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [actionSuccess, setActionSuccess] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
   const assignedSet = useMemo(() => new Set(assignedCountryIds), [assignedCountryIds]);
@@ -182,14 +187,14 @@ export function CountriesTable({
   const sortedRows = useMemo(() => {
     if (adminLayout) {
       let list = [...rows];
-      const q = searchQuery.trim().toLowerCase();
-      if (q) {
+      if (searchQuery.trim()) {
         list = list.filter((row) => {
           const c = row.country;
-          const name = (c.name ?? "").toLowerCase();
-          const player = (playerNameByCountryId[c.id] ?? "").toLowerCase();
-          const continent = (continentLabelById[c.continent_id ?? ""] ?? "").toLowerCase();
-          return name.includes(q) || player.includes(q) || continent.includes(q);
+          return matchesSearchText(searchQuery, [
+            c.name ?? "",
+            playerNameByCountryId[c.id] ?? "",
+            continentLabelById[c.continent_id ?? ""] ?? "",
+          ]);
         });
       }
       return list.sort((a, b) => {
@@ -203,12 +208,9 @@ export function CountriesTable({
       list = list.filter((row) => assignedSet.has(row.country.id));
     }
     if (showSearch && searchQuery.trim()) {
-      const q = searchQuery.trim().toLowerCase();
       list = list.filter((row) => {
         const c = row.country;
-        const name = (c.name ?? "").toLowerCase();
-        const regime = (c.regime ?? "").toLowerCase();
-        return name.includes(q) || regime.includes(q);
+        return matchesSearchText(searchQuery, [c.name ?? "", c.regime ?? ""]);
       });
     }
     return list.sort((a, b) => {
@@ -244,6 +246,12 @@ export function CountriesTable({
     : { background: "var(--background-panel)", border: "1px solid var(--border)", borderRadius: "var(--radius)" };
 
   if (adminLayout) {
+    const adminPageCount = Math.max(1, Math.ceil(sortedRows.length / ADMIN_PAGE_SIZE));
+    const effectiveAdminPage = Math.min(adminPage, adminPageCount);
+    const visibleAdminRows = sortedRows.slice(
+      (effectiveAdminPage - 1) * ADMIN_PAGE_SIZE,
+      effectiveAdminPage * ADMIN_PAGE_SIZE
+    );
     return (
       <div className="rounded-lg border" style={panelStyle}>
         <div className="p-3 border-b" style={{ borderColor: "var(--border)" }}>
@@ -251,11 +259,29 @@ export function CountriesTable({
             type="search"
             placeholder="Rechercher par pays, joueur ou continent…"
             value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full max-w-md rounded border bg-[var(--background)] px-3 py-2 text-sm text-[var(--foreground)] placeholder:text-[var(--foreground-muted)]"
+            onChange={(e) => {
+              setSearchQuery(e.target.value);
+              setAdminPage(1);
+            }}
+            className="min-h-11 w-full max-w-md rounded border bg-[var(--background)] px-3 py-2 text-sm text-[var(--foreground)] placeholder:text-[var(--foreground-muted)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
             style={{ borderColor: "var(--border)" }}
             aria-label="Rechercher dans la liste des pays"
           />
+          <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-xs text-[var(--foreground-muted)]">
+            <span>{sortedRows.length} pays trouvé{sortedRows.length > 1 ? "s" : ""}</span>
+            <span>Page {effectiveAdminPage} sur {adminPageCount}</span>
+          </div>
+          {actionError && (
+            <p role="alert" className="mt-3 rounded-lg border border-red-500/40 bg-red-500/10 px-3 py-2 text-sm text-[var(--danger)]">
+              {actionError}
+            </p>
+          )}
+          {!actionError && actionSuccess && (
+            <p aria-live="polite" className="mt-3 text-sm text-[var(--accent)]">{actionSuccess}</p>
+          )}
+          <p className="mt-2 text-xs text-[var(--foreground-muted)] sm:hidden">
+            Faites glisser le tableau pour voir toutes les colonnes.
+          </p>
         </div>
         <div className="overflow-x-auto">
         <table className="w-full min-w-[500px] text-left text-sm">
@@ -264,34 +290,38 @@ export function CountriesTable({
               {ADMIN_COLUMNS.map(({ key, label }) => (
                 <th
                   key={key}
-                  className="p-3 font-medium text-[var(--foreground-muted)] cursor-pointer select-none hover:text-[var(--foreground)] hover:bg-[var(--background-elevated)]"
+                  className="font-medium text-[var(--foreground-muted)]"
                   style={{ borderColor: "var(--border)" }}
-                  onClick={() => handleAdminHeaderClick(key)}
+                  aria-sort={adminSortKey === key ? (sortOrder === "asc" ? "ascending" : "descending") : "none"}
                 >
-                  <span className="inline-flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={() => handleAdminHeaderClick(key)}
+                    className="flex min-h-11 w-full items-center gap-1 p-2 text-left hover:bg-[var(--background-elevated)] hover:text-[var(--foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--accent)]"
+                  >
                     {label}
                     {adminSortKey === key && (
                       <span className="text-[var(--accent)]" aria-hidden>
                         {sortOrder === "asc" ? "↑" : "↓"}
                       </span>
                     )}
-                  </span>
+                  </button>
                 </th>
               ))}
               {showAiStatusColumn && (
-                <th className="p-3 w-32 font-medium text-[var(--foreground-muted)]" style={{ borderColor: "var(--border)" }}>
+                <th className="w-32 p-2 font-medium text-[var(--foreground-muted)]" style={{ borderColor: "var(--border)" }}>
                   Statut IA
                 </th>
               )}
               {showModifierButton && (
-                <th className="p-3 w-24 font-medium text-[var(--foreground-muted)]" style={{ borderColor: "var(--border)" }}>
+                <th className="w-24 p-2 font-medium text-[var(--foreground-muted)]" style={{ borderColor: "var(--border)" }}>
                   Actions
                 </th>
               )}
             </tr>
           </thead>
           <tbody>
-            {sortedRows.map((row) => {
+            {visibleAdminRows.map((row) => {
               const { country: c } = row;
               const playerName = playerNameByCountryId[c.id];
               const isContinentPending = continentPendingId === c.id;
@@ -301,10 +331,10 @@ export function CountriesTable({
                   className="border-b transition-colors hover:bg-[var(--background-elevated)]"
                   style={{ borderColor: "var(--border-muted)" }}
                 >
-                  <td className="p-3 relative align-middle">
+                  <td className="relative p-2 align-middle">
                     <Link
                       href={adminLayout ? `/admin/pays/${c.id}` : `/pays/${c.slug}`}
-                      className="flex items-center gap-3 font-medium text-[var(--foreground)] hover:text-[var(--accent)] cursor-pointer relative z-[1] min-h-[2rem]"
+                      className="relative z-[1] flex min-h-11 cursor-pointer items-center gap-3 font-medium text-[var(--foreground)] hover:text-[var(--accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
                       style={{ isolation: "isolate" }}
                     >
                       {c.flag_url ? (
@@ -328,24 +358,32 @@ export function CountriesTable({
                       </span>
                     </Link>
                   </td>
-                  <td className="p-3 text-[var(--foreground)]">
+                  <td className="p-2 text-[var(--foreground)]">
                     {playerName ?? "—"}
                   </td>
-                  <td className="p-3">
+                  <td className="p-2">
                     <select
+                      aria-label={`Continent de ${c.name}`}
                       value={c.continent_id ?? ""}
                       onChange={(e) => {
                         const v = e.target.value;
                         const continentId = v === "" ? null : v;
                         if (updateCountryContinentAction) {
                           setContinentPendingId(c.id);
+                          setActionError(null);
+                          setActionSuccess(null);
                           startTransition(() => {
-                            updateCountryContinentAction(c.id, continentId).finally(() => setContinentPendingId(null));
+                            void updateCountryContinentAction(c.id, continentId)
+                              .then((result) => {
+                                if (result.error) setActionError(`${c.name} : ${result.error}`);
+                                else setActionSuccess(`Continent de ${c.name} enregistré.`);
+                              })
+                              .finally(() => setContinentPendingId(null));
                           });
                         }
                       }}
                       disabled={isContinentPending}
-                      className="rounded border bg-[var(--background-elevated)] px-2 py-1 text-sm text-[var(--foreground)] min-w-[8rem]"
+                      className="min-h-11 min-w-[8rem] rounded border bg-[var(--background-elevated)] px-2 py-1 text-sm text-[var(--foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
                       style={{ borderColor: "var(--border)" }}
                     >
                       <option value="">—</option>
@@ -357,26 +395,34 @@ export function CountriesTable({
                     </select>
                   </td>
                   {showAiStatusColumn && (
-                    <td className="p-3">
+                    <td className="p-2">
                       {playedSet.has(c.id) ? (
                         <span className="text-sm text-[var(--foreground-muted)]" title="Pays assigné à un joueur">
                           {playerName ?? "Joué"}
                         </span>
                       ) : (
                         <select
+                          aria-label={`Statut IA de ${c.name}`}
                           value={c.ai_status ?? ""}
                           onChange={(e) => {
                             const v = e.target.value;
                             const aiStatus = v === "major" || v === "minor" ? v : null;
                             if (updateAiStatusAction) {
                               setPendingId(c.id);
+                              setActionError(null);
+                              setActionSuccess(null);
                               startTransition(() => {
-                                updateAiStatusAction(c.id, aiStatus).finally(() => setPendingId(null));
+                                void updateAiStatusAction(c.id, aiStatus)
+                                  .then((result) => {
+                                    if (result.error) setActionError(`${c.name} : ${result.error}`);
+                                    else setActionSuccess(`Statut IA de ${c.name} enregistré.`);
+                                  })
+                                  .finally(() => setPendingId(null));
                               });
                             }
                           }}
                           disabled={isPending && pendingId === c.id}
-                          className="rounded border bg-[var(--background-elevated)] px-2 py-1 text-sm text-[var(--foreground)]"
+                          className="min-h-11 rounded border bg-[var(--background-elevated)] px-2 py-1 text-sm text-[var(--foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
                           style={{ borderColor: "var(--border)" }}
                         >
                           <option value="">—</option>
@@ -387,10 +433,10 @@ export function CountriesTable({
                     </td>
                   )}
                   {showModifierButton && (
-                    <td className="p-3">
+                    <td className="p-2">
                       <Link
                         href={`/admin/pays/${c.id}`}
-                        className="inline-block rounded px-3 py-1.5 text-sm font-medium transition-opacity hover:opacity-90"
+                        className="inline-flex min-h-11 items-center rounded px-3 py-1.5 text-sm font-medium transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--warning)]"
                         style={{ background: "var(--warning)", color: "#0f1419" }}
                       >
                         Modifier
@@ -400,9 +446,45 @@ export function CountriesTable({
                 </tr>
               );
             })}
+            {visibleAdminRows.length === 0 && (
+              <tr>
+                <td
+                  colSpan={ADMIN_COLUMNS.length + Number(showAiStatusColumn) + Number(showModifierButton)}
+                  className="p-8 text-center text-[var(--foreground-muted)]"
+                >
+                  Aucun pays ne correspond à cette recherche.
+                </td>
+              </tr>
+            )}
           </tbody>
         </table>
         </div>
+        {sortedRows.length > ADMIN_PAGE_SIZE && (
+          <div className="flex items-center justify-between gap-3 border-t p-3" style={{ borderColor: "var(--border)" }}>
+            <button
+              type="button"
+              onClick={() => setAdminPage((page) => Math.max(1, page - 1))}
+              disabled={effectiveAdminPage === 1}
+              className="min-h-11 rounded-lg border px-4 text-sm font-medium text-[var(--foreground)] disabled:opacity-40"
+              style={{ borderColor: "var(--border)" }}
+            >
+              Précédent
+            </button>
+            <span className="text-sm text-[var(--foreground-muted)]">
+              {Math.min((effectiveAdminPage - 1) * ADMIN_PAGE_SIZE + 1, sortedRows.length)}–
+              {Math.min(effectiveAdminPage * ADMIN_PAGE_SIZE, sortedRows.length)} sur {sortedRows.length}
+            </span>
+            <button
+              type="button"
+              onClick={() => setAdminPage((page) => Math.min(adminPageCount, page + 1))}
+              disabled={effectiveAdminPage === adminPageCount}
+              className="min-h-11 rounded-lg border px-4 text-sm font-medium text-[var(--foreground)] disabled:opacity-40"
+              style={{ borderColor: "var(--border)" }}
+            >
+              Suivant
+            </button>
+          </div>
+        )}
       </div>
     );
   }
@@ -412,8 +494,11 @@ export function CountriesTable({
     : showSearch ? "rounded-lg border" : "overflow-x-auto rounded-lg border";
   const theadBorder = glassContext ? glassBorderClass : "";
   const thClass = glassContext
-    ? `p-3 font-medium ${glassMutedClass} cursor-pointer select-none hover:text-white hover:bg-white/10 border-b ${glassBorderClass}`
-    : "p-3 font-medium text-[var(--foreground-muted)] cursor-pointer select-none hover:text-[var(--foreground)] hover:bg-[var(--background-elevated)]";
+    ? `font-medium ${glassMutedClass} border-b ${glassBorderClass}`
+    : "font-medium text-[var(--foreground-muted)]";
+  const thButtonClass = glassContext
+    ? "flex min-h-11 items-center gap-1 text-left hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-white/70"
+    : "flex min-h-11 items-center gap-1 text-left hover:bg-[var(--background-elevated)] hover:text-[var(--foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--accent)]";
   const thStyle = glassContext ? undefined : { borderColor: "var(--border)" };
   const sortArrowClass = glassContext ? "text-white" : "text-[var(--accent)]";
   const trClass = glassContext
@@ -432,8 +517,8 @@ export function CountriesTable({
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className={glassContext
-                ? "w-full max-w-md rounded-xl border border-white/30 bg-white/20 px-3 py-2 text-sm text-white placeholder:text-white/60 focus:border-white/50 focus:outline-none focus:ring-2 focus:ring-white/30"
-                : "w-full max-w-md rounded border bg-[var(--background)] px-3 py-2 text-sm text-[var(--foreground)] placeholder:text-[var(--foreground-muted)]"}
+                ? "min-h-11 w-full max-w-md rounded-xl border border-white/30 bg-white/20 px-3 py-2 text-sm text-white placeholder:text-white/60 focus:border-white/50 focus:outline-none focus:ring-2 focus:ring-white/30"
+                : "min-h-11 w-full max-w-md rounded border bg-[var(--background)] px-3 py-2 text-sm text-[var(--foreground)] placeholder:text-[var(--foreground-muted)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]"}
               style={!glassContext ? { borderColor: "var(--border)" } : undefined}
               aria-label="Rechercher dans la liste des pays"
             />
@@ -443,7 +528,8 @@ export function CountriesTable({
                 <button
                   type="button"
                   onClick={() => setAssignmentFilter("all")}
-                  className={`rounded border px-3 py-1.5 text-sm font-medium transition-colors ${assignmentFilter === "all"
+                  aria-pressed={assignmentFilter === "all"}
+                  className={`min-h-11 rounded border px-3 py-1.5 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 ${assignmentFilter === "all"
                     ? glassContext ? "border-white/50 bg-white/25 text-white" : "border-[var(--accent)] bg-[var(--accent)]/10 text-[var(--accent)]"
                     : glassContext ? "border-white/30 text-white/80 hover:bg-white/15" : "border-[var(--border)] text-[var(--foreground-muted)] hover:border-[var(--border-muted)] hover:text-[var(--foreground)]"}`}
                   style={assignmentFilter !== "all" && !glassContext ? { borderColor: "var(--border)" } : undefined}
@@ -453,7 +539,8 @@ export function CountriesTable({
                 <button
                   type="button"
                   onClick={() => setAssignmentFilter("assigned_only")}
-                  className={`rounded border px-3 py-1.5 text-sm font-medium transition-colors ${assignmentFilter === "assigned_only"
+                  aria-pressed={assignmentFilter === "assigned_only"}
+                  className={`min-h-11 rounded border px-3 py-1.5 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 ${assignmentFilter === "assigned_only"
                     ? glassContext ? "border-white/50 bg-white/25 text-white" : "border-[var(--accent)] bg-[var(--accent)]/10 text-[var(--accent)]"
                     : glassContext ? "border-white/30 text-white/80 hover:bg-white/15" : "border-[var(--border)] text-[var(--foreground-muted)] hover:border-[var(--border-muted)] hover:text-[var(--foreground)]"}`}
                   style={assignmentFilter !== "assigned_only" && !glassContext ? { borderColor: "var(--border)" } : undefined}
@@ -463,6 +550,9 @@ export function CountriesTable({
               </div>
             )}
           </div>
+          <p className={`mt-2 text-xs sm:hidden ${glassContext ? "text-white/65" : "text-[var(--foreground-muted)]"}`}>
+            Faites glisser le tableau pour voir toutes les colonnes.
+          </p>
         </div>
       )}
       <div className={showSearch ? "overflow-x-auto" : ""}>
@@ -472,17 +562,23 @@ export function CountriesTable({
             <th
               className={thClass}
               style={thStyle}
-              onClick={() => handleHeaderClick("name")}
+              aria-sort={sortKey === "name" ? (sortOrder === "asc" ? "ascending" : "descending") : "none"}
             >
-              <span className="inline-flex items-center gap-1">
-                Pays
+              <div className="flex items-center gap-1 px-3">
+                <button
+                  type="button"
+                  onClick={() => handleHeaderClick("name")}
+                  className={`${thButtonClass} flex-1 py-2`}
+                >
+                  Pays
+                  {sortKey === "name" && (
+                    <span className={sortArrowClass} aria-hidden>
+                      {sortOrder === "asc" ? "↑" : "↓"}
+                    </span>
+                  )}
+                </button>
                 {showWikiTooltips && wikiAccueil}
-                {sortKey === "name" && (
-                  <span className={sortArrowClass} aria-hidden>
-                    {sortOrder === "asc" ? "↑" : "↓"}
-                  </span>
-                )}
-              </span>
+              </div>
             </th>
             <th className={glassContext ? `p-3 w-40 font-medium ${glassMutedClass} border-b ${glassBorderClass}` : "p-3 w-40 font-medium text-[var(--foreground-muted)]"} style={thStyle}>
               Sphère
@@ -492,16 +588,20 @@ export function CountriesTable({
                 key={key}
                 className={thClass}
                 style={thStyle}
-                onClick={() => handleHeaderClick(key)}
+                aria-sort={sortKey === key ? (sortOrder === "asc" ? "ascending" : "descending") : "none"}
               >
-                <span className="inline-flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => handleHeaderClick(key)}
+                  className={`${thButtonClass} w-full px-3 py-2`}
+                >
                   {label}
                   {sortKey === key && (
                     <span className={sortArrowClass} aria-hidden>
                       {sortOrder === "asc" ? "↑" : "↓"}
                     </span>
                   )}
-                </span>
+                </button>
               </th>
             ))}
             {showAiStatusColumn && (
@@ -524,7 +624,7 @@ export function CountriesTable({
               <td className="p-3 relative align-middle">
                 <Link
                   href={`/pays/${c.slug}`}
-                  className={`flex items-center gap-3 font-medium cursor-pointer relative z-[1] min-h-[2rem] ${glassContext ? "text-white hover:text-white/95" : "text-[var(--foreground)] hover:text-[var(--accent)]"}`}
+                  className={`relative z-[1] flex min-h-11 cursor-pointer items-center gap-3 font-medium focus-visible:outline-none focus-visible:ring-2 ${glassContext ? "text-white hover:text-white/95 focus-visible:ring-white/70" : "text-[var(--foreground)] hover:text-[var(--accent)] focus-visible:ring-[var(--accent)]"}`}
                   style={{ isolation: "isolate" }}
                 >
                   {c.flag_url ? (
@@ -552,7 +652,7 @@ export function CountriesTable({
               <SphereCell sphere={row.sphere} glass={glassContext} />
               <td className="p-3">
                 <span className={`font-mono tabular-nums ${glassContext ? "text-white" : "text-[var(--foreground)]"}`}>
-                  {row.influence != null && !Number.isNaN(row.influence) ? Number(row.influence).toLocaleString("fr-FR", { minimumFractionDigits: 0, maximumFractionDigits: 2 }) : "—"}
+                  {formatNumber(row.influence)}
                 </span>
               </td>
               <NumericVariationCell
@@ -578,6 +678,7 @@ export function CountriesTable({
                     </span>
                   ) : (
                     <select
+                      aria-label={`Statut IA de ${c.name}`}
                       value={c.ai_status ?? ""}
                       onChange={(e) => {
                         const v = e.target.value;
@@ -591,8 +692,8 @@ export function CountriesTable({
                       }}
                       disabled={isPending && pendingId === c.id}
                       className={glassContext
-                        ? "rounded-xl border border-white/30 bg-white/20 px-2 py-1 text-sm text-white focus:border-white/50 focus:outline-none"
-                        : "rounded border bg-[var(--background-elevated)] px-2 py-1 text-sm text-[var(--foreground)]"}
+                        ? "min-h-11 rounded-xl border border-white/30 bg-white/20 px-2 py-1 text-sm text-white focus:border-white/50 focus:outline-none"
+                        : "min-h-11 rounded border bg-[var(--background-elevated)] px-2 py-1 text-sm text-[var(--foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]"}
                       style={!glassContext ? { borderColor: "var(--border)" } : undefined}
                     >
                       <option value="">—</option>
@@ -606,7 +707,7 @@ export function CountriesTable({
                 <td className="p-3">
                   <Link
                     href={`/admin/pays/${c.id}`}
-                    className="inline-block rounded px-3 py-1.5 text-sm font-medium transition-opacity hover:opacity-90"
+                    className="inline-flex min-h-11 items-center rounded px-3 py-1.5 text-sm font-medium transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--warning)]"
                     style={{ background: "var(--warning)", color: "#0f1419" }}
                   >
                     Modifier
@@ -616,6 +717,16 @@ export function CountriesTable({
             </tr>
           );
           })}
+          {sortedRows.length === 0 && (
+            <tr>
+              <td
+                colSpan={6 + Number(showAiStatusColumn) + Number(showModifierButton)}
+                className={`p-8 text-center ${glassContext ? "text-white/70" : "text-[var(--foreground-muted)]"}`}
+              >
+                Aucun pays ne correspond aux filtres choisis.
+              </td>
+            </tr>
+          )}
         </tbody>
       </table>
       </div>
@@ -681,7 +792,7 @@ function SphereCell({ sphere, glass = false }: { sphere?: SphereEntry[]; glass?:
               key={entry.slug}
               href={`/pays/${entry.slug}`}
               title={`${entry.name} – ${tooltip}`}
-              className={`inline-block rounded border border-transparent transition-opacity hover:opacity-90 focus:opacity-90 ${glass ? "border-white/25" : ""}`}
+              className={`inline-flex h-11 w-11 items-center justify-center rounded border border-transparent transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 ${glass ? "border-white/25 focus-visible:ring-white/70" : "focus-visible:ring-[var(--accent)]"}`}
               style={!glass ? { borderColor: "var(--border-muted)" } : undefined}
             >
               {entry.flag_url ? (
@@ -731,7 +842,7 @@ function StatCell({
   return (
     <td className="p-3">
       <span className={`font-mono tabular-nums ${glass ? "text-white" : "text-[var(--foreground)]"}`}>
-        {num != null ? Number(num).toFixed(2) : "—"}
+        {formatNumber(num)}
       </span>
       {diffFormatted != null && diffFormatted !== 0 && (
         <span
@@ -739,7 +850,7 @@ function StatCell({
           style={{ color }}
           title={isUp ? "En hausse" : "En baisse"}
         >
-          ({isUp ? "+" : ""}{diffFormatted})
+          ({isUp ? "+" : ""}{formatNumber(diffFormatted)})
         </span>
       )}
     </td>

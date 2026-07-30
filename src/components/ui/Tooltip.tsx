@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
 type TooltipProps = {
@@ -12,6 +12,8 @@ type TooltipProps = {
   closeDelay?: number;
   /** Si true, le tooltip reste ouvert pour permettre de cliquer un lien à l’intérieur : pas de fermeture au leave du déclencheur ni du contenu, seulement au clic en dehors (ou au clic sur l’icône). */
   interactive?: boolean;
+  /** Nom annoncé par les lecteurs d’écran pour le déclencheur. */
+  label?: string;
 };
 
 /**
@@ -28,8 +30,10 @@ export function Tooltip({
   side = "top",
   closeDelay = DEFAULT_CLOSE_DELAY,
   interactive = false,
+  label = "Afficher l’explication",
 }: TooltipProps) {
   const [open, setOpen] = useState(false);
+  const tooltipId = useId();
   const [closing, setClosing] = useState(false);
   const wrapperRef = useRef<HTMLSpanElement>(null);
   const tooltipRef = useRef<HTMLSpanElement>(null);
@@ -174,9 +178,19 @@ export function Tooltip({
   return (
     <span
       ref={wrapperRef}
-      className="inline-flex cursor-help"
+      className="inline-flex min-h-11 min-w-11 cursor-help items-center justify-center rounded-md align-middle focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
+      role="button"
+      tabIndex={0}
+      aria-label={label}
+      aria-expanded={open}
+      aria-describedby={open ? tooltipId : undefined}
       onMouseEnter={openTooltip}
       onMouseLeave={handleTriggerLeave}
+      onFocus={openTooltip}
+      onBlur={requestClose}
+      onKeyDown={(event) => {
+        if (event.key === "Escape") requestClose();
+      }}
       onClick={(e) => {
         e.preventDefault();
         e.stopPropagation();
@@ -196,6 +210,7 @@ export function Tooltip({
       {open && typeof document !== "undefined"
         ? createPortal(
             <span
+              id={tooltipId}
               ref={tooltipRef}
               role="tooltip"
               onMouseEnter={handleTooltipContentEnter}

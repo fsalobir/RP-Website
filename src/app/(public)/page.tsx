@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import Link from "next/link";
+import { PublicPageHeader } from "@/components/ui/PublicPageHeader";
 import { CountriesTable } from "@/components/countries/CountriesTable";
 import { computeHardPowerByCountry } from "@/lib/hardPower";
 import { computeInfluenceForAll, applyInfluenceModifiers } from "@/lib/influence";
@@ -83,7 +84,7 @@ export default async function HomePage({
       <div className="relative w-full px-4 py-10">
         <div
           className="fixed inset-0 overflow-hidden pointer-events-none"
-          style={{ left: "50%", marginLeft: "-50vw", width: "100vw", zIndex: 0 }}
+          style={{ zIndex: 0 }}
           aria-hidden
         >
           <div className="absolute inset-0 bg-cover bg-center bg-no-repeat scale-105" style={{ backgroundImage: "url(/images/site/pays-accueil-bg.png)", filter: "blur(0.5px)" }} />
@@ -170,7 +171,7 @@ export default async function HomePage({
       {/* Arrière-plan fixe (parallaxe) : taille viewport, reste visible au scroll */}
       <div
         className="fixed inset-0 overflow-hidden pointer-events-none"
-        style={{ left: "50%", marginLeft: "-50vw", width: "100vw", zIndex: 0 }}
+        style={{ zIndex: 0 }}
         aria-hidden
       >
         <div
@@ -183,6 +184,7 @@ export default async function HomePage({
         <div className="absolute inset-0 bg-black/40" />
       </div>
       <div className="relative z-10 max-w-6xl mx-auto" style={{ isolation: "isolate" }}>
+        <PublicPageHeader title="Situation mondiale" icon="world" />
         {showUnauthorized && (
           <div className="mb-6 rounded-2xl border border-white/25 bg-white/15 px-4 py-3 shadow-xl backdrop-blur-xl">
             <p className="text-red-200">Compte non autorisé. Seuls les administrateurs et les joueurs assignés à un pays peuvent se connecter.</p>

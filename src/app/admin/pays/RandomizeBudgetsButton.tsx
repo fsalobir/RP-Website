@@ -38,7 +38,7 @@ export function RandomizeBudgetsButton() {
         className="rounded py-2 px-4 text-sm font-medium opacity-90 hover:opacity-100 disabled:opacity-50"
         style={{ background: "var(--background-elevated)", color: "var(--foreground)", border: "1px solid var(--border)" }}
       >
-        {loading ? "En cours…" : "Randomiser budgets nationaux"}
+        {loading ? "Attribution…" : "Attribuer des budgets aléatoires"}
       </button>
       {message && (
         <span
