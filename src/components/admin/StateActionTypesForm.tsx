@@ -499,19 +499,19 @@ function TypeRow({
       style={{ borderColor: dirty ? "var(--accent)" : "var(--border)", background: "var(--background-panel)" }}
     >
       <header className="flex min-h-14 items-center gap-3 border-b px-3 py-2" style={{ borderColor: "var(--border-muted)" }}>
-        <span className="min-w-0 flex-1">
-          <span className="flex flex-wrap items-center gap-2">
-            <span className="font-semibold text-[var(--foreground)]">{type.label_fr}</span>
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <h2 className="font-semibold text-[var(--foreground)]">{type.label_fr}</h2>
             {dirty ? (
               <span className="rounded-full bg-[var(--accent)] px-2 py-0.5 text-xs font-semibold text-[#0f1419]">
                 Modifié
               </span>
             ) : null}
-          </span>
-          <span className="mt-0.5 block text-xs leading-snug text-[var(--foreground-muted)] sm:text-sm">
+          </div>
+          <p className="mt-0.5 text-xs leading-snug text-[var(--foreground-muted)] sm:text-sm">
             {ACTION_DESCRIPTIONS[type.key] ?? "L’administration décide du résultat final de cette action."}
-          </span>
-        </span>
+          </p>
+        </div>
         <span className="hidden shrink-0 text-sm text-[var(--foreground-muted)] sm:block">
           {edit.cost} point{edit.cost > 1 ? "s" : ""} d’action
         </span>
@@ -862,9 +862,9 @@ export function StateActionTypesForm({ types }: { types: StateActionType[] }) {
   }));
 
   return (
-    <div className="space-y-4">
+    <div className="admin-settings-form space-y-4">
       <section className="min-w-0">
-        <div className="border-y py-3" style={{ borderColor: "var(--border)" }}>
+        <div className="border-y py-2" style={{ borderColor: "var(--border)" }}>
           <label className="block w-full sm:max-w-md">
             <span className="sr-only">Rechercher une action</span>
             <input
@@ -878,7 +878,7 @@ export function StateActionTypesForm({ types }: { types: StateActionType[] }) {
           </label>
         </div>
 
-        <div className="mt-4 grid min-w-0 grid-cols-[minmax(0,1fr)] gap-4 lg:grid-cols-[12rem_minmax(0,1fr)]">
+        <div className="mt-3 grid min-w-0 grid-cols-[minmax(0,1fr)] gap-3 lg:grid-cols-[12rem_minmax(0,1fr)]">
           <AdminSectionNav
             label="Familles d’actions"
             items={groupNavigationItems}
@@ -889,7 +889,7 @@ export function StateActionTypesForm({ types }: { types: StateActionType[] }) {
               setExpandedId(nextGroup?.types[0]?.id ?? null);
             }}
           />
-          <div className="grid min-w-0 gap-4 xl:grid-cols-[14rem_minmax(0,1fr)]">
+          <div className="grid min-w-0 gap-3 xl:grid-cols-[14rem_minmax(0,1fr)]">
             {activeTypes.length > 0 ? (
               <nav aria-label="Actions de la famille">
                 <label className="block xl:hidden">
@@ -922,7 +922,7 @@ export function StateActionTypesForm({ types }: { types: StateActionType[] }) {
                         type="button"
                         aria-current={active ? "page" : undefined}
                         onClick={() => setExpandedId(type.id)}
-                        className="flex min-h-12 items-center justify-between gap-3 rounded-lg px-3 text-left text-sm transition-colors"
+                        className="flex min-h-10 items-center justify-between gap-3 rounded-lg px-3 text-left text-sm transition-colors"
                         style={{
                           background: active ? "var(--background-elevated)" : "transparent",
                           color: active ? "var(--foreground)" : "var(--foreground-muted)",

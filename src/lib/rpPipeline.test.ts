@@ -81,6 +81,47 @@ describe("pipeline RP", () => {
       .toEqual(["official", "player"]);
   });
 
+  it("privilégie la pertinence directe avant l'autorité régionale", () => {
+    const direct = {
+      id: "direct",
+      source_kind: "official" as const,
+      source_platform: "discord" as const,
+      action_id: null,
+      countries: [{ country_id: "fr", relation_role: "author" as const }],
+      tags: [],
+      rp_year: 2040,
+      rp_month: 5,
+      rp_day: 1,
+      rp_week: 1,
+      real_published_at: "2026-07-01T00:00:00Z",
+      title: "Direct",
+      description: "x",
+      raw_content: "x",
+      clean_content: "x",
+      current_output: {},
+      embeds: [],
+      links: [],
+      discord_channel_id: "1",
+      discord_message_id: "1",
+      editorial_status: "approved" as const,
+      deleted_at: null,
+      nsfw_quarantined: false,
+    };
+    const regionalMj = {
+      ...direct,
+      id: "regional",
+      source_kind: "mj" as const,
+      countries: [{ country_id: "jp", relation_role: "author" as const, continent_id: "europe" }],
+    };
+    expect(
+      selectLoreContext([regionalMj, direct], {
+        countryIds: ["fr"],
+        regionIds: ["europe"],
+        maxArticles: 1,
+      }).articles[0]?.id,
+    ).toBe("direct");
+  });
+
   it("rejette les champs, mentions, nombres et contenus NSFW non autorisés", () => {
     const valid = JSON.stringify({
       title: "Accord régional",
@@ -95,7 +136,18 @@ describe("pipeline RP", () => {
       channel_id: "123",
     });
     expect(parseAndValidateMagnumOutput(invalid, { profile: "brief" }).errors.length).toBeGreaterThan(2);
+    expect(
+      parseAndValidateMagnumOutput(
+        JSON.stringify({
+          title: "Revers confirmé",
+          description: `${"La France publie un bilan prudent. ".repeat(12)} Échec majeur.`,
+        }),
+        { profile: "brief", allowedCountries: ["France"] },
+      ).errors,
+    ).toContain("Fait mécanique interdit.");
     expect(containsNsfwContent("Une violation du traité")).toBe(false);
+    expect(containsNsfwContent("Un accord violé")).toBe(false);
+    expect(containsNsfwContent("Un viol")).toBe(true);
     expect(
       parseAndValidateMagnumOutput(valid, {
         profile: "brief",

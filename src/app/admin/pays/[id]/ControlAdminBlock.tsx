@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { AdminConfirmDialog } from "@/components/admin/AdminConfirmDialog";
 import { upsertCountryControl, updateCountryControl, deleteCountryControl } from "./actions";
 
 type ControlRow = {
@@ -40,6 +41,7 @@ export function ControlAdminBlock({
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editSharePct, setEditSharePct] = useState("");
   const [editIsAnnexed, setEditIsAnnexed] = useState(false);
+  const [controlToDelete, setControlToDelete] = useState<ControlRow | null>(null);
 
   const status = deriveStatus(controls);
   const totalShare = controls.reduce((sum, row) => sum + Number(row.share_pct || 0), 0);
@@ -113,7 +115,6 @@ export function ControlAdminBlock({
 
   async function handleDelete(row: ControlRow) {
     const { id: controlId, controller_name: controllerName, updated_at: expectedUpdatedAt } = row;
-    if (!confirm(`Supprimer le contrôle exercé par ${controllerName} ?`)) return;
     setError(null);
     setSuccess(null);
     setSaving(true);
@@ -130,6 +131,7 @@ export function ControlAdminBlock({
       setError(`Impossible de supprimer le contrôle exercé par ${controllerName}. Vérifiez votre connexion puis réessayez.`);
     } finally {
       setSaving(false);
+      setControlToDelete(null);
     }
   }
 
@@ -219,7 +221,7 @@ export function ControlAdminBlock({
                 </button>
                 <button
                   type="button"
-                  onClick={() => handleDelete(row)}
+                  onClick={() => setControlToDelete(row)}
                   disabled={saving}
                   className="min-h-11 rounded-lg px-2 text-sm text-[var(--danger)] hover:bg-[var(--background-elevated)] disabled:opacity-50"
                 >
@@ -290,6 +292,20 @@ export function ControlAdminBlock({
 
       {error && <p className="mt-3 text-sm text-[var(--danger)]" role="alert">{error}</p>}
       {success && <p className="mt-3 text-sm text-[var(--accent)]" role="status">{success}</p>}
+      <AdminConfirmDialog
+        open={Boolean(controlToDelete)}
+        title="Supprimer ce contrôle territorial ?"
+        consequence={`Le contrôle exercé par ${controlToDelete?.controller_name ?? "ce pays"} sera retiré immédiatement.`}
+        confirmLabel="Supprimer le contrôle"
+        danger
+        busy={saving}
+        onConfirm={() => {
+          if (controlToDelete) void handleDelete(controlToDelete);
+        }}
+        onClose={() => {
+          if (!saving) setControlToDelete(null);
+        }}
+      />
     </div>
   );
 }

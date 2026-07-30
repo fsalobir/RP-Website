@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { AdminConfirmDialog } from "@/components/admin/AdminConfirmDialog";
 import { AdminDialog } from "@/components/admin/AdminDialog";
 import { matchesSearchText } from "@/lib/searchText";
 import {
@@ -22,6 +23,10 @@ type PlayerRow = {
 };
 
 type Country = { id: string; name: string; slug: string };
+type PlayerConfirmation = {
+  kind: "points" | "delete";
+  player: PlayerRow;
+} | null;
 
 const inputClass =
   "min-h-10 w-full rounded-lg border bg-[var(--background)] px-3 text-sm text-[var(--foreground)] disabled:opacity-50";
@@ -48,6 +53,7 @@ export function JoueursManager({
   } | null>(null);
   const [query, setQuery] = useState("");
   const [countryDrafts, setCountryDrafts] = useState<Record<string, string>>({});
+  const [confirmation, setConfirmation] = useState<PlayerConfirmation>(null);
 
   useEffect(() => {
     setCountryDrafts((drafts) => {
@@ -81,6 +87,49 @@ export function JoueursManager({
   function canCloseCreateDialog() {
     if (pendingAction === "create") return false;
     return !createDirty || confirm("Fermer sans créer ce joueur ?");
+  }
+
+  async function applyConfirmedAction() {
+    if (!confirmation || pendingAction) return;
+    const { kind, player } = confirmation;
+    const action = `${kind}:${player.user_id}`;
+    setPendingAction(action);
+    setFeedback(null);
+    try {
+      if (kind === "points") {
+        const result = await addStateActions(player.country_id, 25);
+        setFeedback(
+          result.error
+            ? { action, type: "error", message: result.error }
+            : {
+                action,
+                type: "success",
+                message: `25 points d’action ajoutés à ${player.countryName}.`,
+              }
+        );
+        if (!result.error) router.refresh();
+      } else {
+        const result = await deletePlayer(player.user_id);
+        if (result.error) {
+          setFeedback({ action, type: "error", message: result.error });
+        } else {
+          setNotice("Joueur supprimé.");
+          router.refresh();
+        }
+      }
+    } catch {
+      setFeedback({
+        action,
+        type: "error",
+        message:
+          kind === "points"
+            ? "Impossible d’ajouter les points d’action."
+            : "Impossible de supprimer le joueur.",
+      });
+    } finally {
+      setPendingAction(null);
+      setConfirmation(null);
+    }
   }
 
   return (
@@ -327,33 +376,7 @@ export function JoueursManager({
                           pendingAction !== null || assignedCountryId !== player.country_id
                         }
                         aria-label={`Ajouter 25 points d’action à ${player.countryName}`}
-                        onClick={async () => {
-                          if (
-                            pendingAction ||
-                            !confirm(`Ajouter 25 points d’action à ${player.countryName} ?`)
-                          ) {
-                            return;
-                          }
-                          setPendingAction(pointsAction);
-                          setFeedback(null);
-                          try {
-                            const result = await addStateActions(player.country_id, 25);
-                            setFeedback(
-                              result.error
-                                ? { action: pointsAction, type: "error", message: result.error }
-                                : {
-                                    action: pointsAction,
-                                    type: "success",
-                                    message: `25 points d’action ajoutés à ${player.countryName}.`,
-                                  }
-                            );
-                            if (!result.error) router.refresh();
-                          } catch {
-                            setFeedback({ action: pointsAction, type: "error", message: "Impossible d’ajouter les points d’action." });
-                          } finally {
-                            setPendingAction(null);
-                          }
-                        }}
+                        onClick={() => setConfirmation({ kind: "points", player })}
                         className="min-h-10 rounded-lg px-3 text-sm font-medium text-[var(--accent)] hover:bg-[var(--background-elevated)] disabled:opacity-50"
                       >
                         {pendingAction === pointsAction ? "Ajout…" : "+ 25 points"}
@@ -371,42 +394,14 @@ export function JoueursManager({
                           Renommer
                         </button>
                       ) : null}
-                      <form
-                        action={async () => {
-                          if (pendingAction) return;
-                          const playerLabel = player.name?.trim() || "ce joueur";
-                          if (
-                            !confirm(
-                              `Supprimer ${playerLabel} (${player.email}) ? Son compte de connexion sera supprimé définitivement.`
-                            )
-                          ) {
-                            return;
-                          }
-                          setPendingAction(deleteAction);
-                          setFeedback(null);
-                          try {
-                            const result = await deletePlayer(player.user_id);
-                            if (result.error) {
-                              setFeedback({ action: deleteAction, type: "error", message: result.error });
-                            } else {
-                              setNotice("Joueur supprimé.");
-                              router.refresh();
-                            }
-                          } catch {
-                            setFeedback({ action: deleteAction, type: "error", message: "Impossible de supprimer le joueur." });
-                          } finally {
-                            setPendingAction(null);
-                          }
-                        }}
+                      <button
+                        type="button"
+                        disabled={pendingAction !== null}
+                        onClick={() => setConfirmation({ kind: "delete", player })}
+                        className="min-h-10 rounded-lg px-3 text-sm text-[var(--danger)] hover:bg-[var(--background-elevated)] disabled:opacity-50"
                       >
-                        <button
-                          type="submit"
-                          disabled={pendingAction !== null}
-                          className="min-h-10 rounded-lg px-3 text-sm text-[var(--danger)] hover:bg-[var(--background-elevated)] disabled:opacity-50"
-                        >
-                          {pendingAction === deleteAction ? "Suppression…" : "Supprimer"}
-                        </button>
-                      </form>
+                        {pendingAction === deleteAction ? "Suppression…" : "Supprimer"}
+                      </button>
                     </div>
 
                     {rowFeedback ? (
@@ -561,6 +556,22 @@ export function JoueursManager({
           ) : null}
         </form>
       </AdminDialog>
+      <AdminConfirmDialog
+        open={Boolean(confirmation)}
+        title={confirmation?.kind === "delete" ? "Supprimer ce joueur ?" : "Ajouter 25 points d’action ?"}
+        consequence={
+          confirmation?.kind === "delete"
+            ? `Le compte de ${confirmation.player.name?.trim() || confirmation.player.email} sera supprimé définitivement.`
+            : `La réserve de ${confirmation?.player.countryName ?? "ce pays"} augmentera immédiatement de 25 points.`
+        }
+        confirmLabel={confirmation?.kind === "delete" ? "Supprimer le joueur" : "Ajouter les points"}
+        danger={confirmation?.kind === "delete"}
+        busy={Boolean(confirmation && pendingAction === `${confirmation.kind}:${confirmation.player.user_id}`)}
+        onConfirm={() => void applyConfirmedAction()}
+        onClose={() => {
+          if (!pendingAction) setConfirmation(null);
+        }}
+      />
     </div>
   );
 }

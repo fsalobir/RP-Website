@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useMemo, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import {
   getEffectKindOptionGroups,
@@ -60,6 +61,7 @@ export function AvantagesManager({
   perks: initialPerks,
   rosterUnits,
 }: AvantagesManagerProps) {
+  const router = useRouter();
   const [categories, setCategories] = useState(initialCategories);
   const [perks, setPerks] = useState(initialPerks);
   const [categoryFormOpen, setCategoryFormOpen] = useState(false);
@@ -153,6 +155,11 @@ export function AvantagesManager({
       if (perkIconPreviewUrl) URL.revokeObjectURL(perkIconPreviewUrl);
     };
   }, [perkIconPreviewUrl]);
+
+  useEffect(() => {
+    setCategories(initialCategories);
+    setPerks(initialPerks);
+  }, [initialCategories, initialPerks]);
 
   function openAddCategory() {
     setEditingCategoryId(null);
@@ -346,7 +353,12 @@ export function AvantagesManager({
         return;
       }
       setPerkFormOpen(false);
-      window.location.reload();
+      setEditingPerkId(null);
+      setOperationNotice({
+        type: "success",
+        message: editingPerkId ? "Avantage mis à jour." : "Avantage créé.",
+      });
+      router.refresh();
     } catch (err) {
       if (uploadedIconPath && !persistenceStarted) {
         await createClient().storage.from("avantages").remove([uploadedIconPath]);
@@ -776,7 +788,6 @@ export function AvantagesManager({
             onClose={closePerkDialog}
             beforeClose={canClosePerkDialog}
             title={editingPerkId ? "Modifier l’avantage" : "Nouvel avantage"}
-            description="Le résumé joueur se met à jour avant l’enregistrement."
             busy={saving}
             size="lg"
             actions={(
@@ -821,9 +832,16 @@ export function AvantagesManager({
           >
           <fieldset disabled={saving} aria-busy={saving || undefined} className="min-w-0 space-y-5">
             {perkError && <p role="alert" className="text-sm text-[var(--danger)]">{perkError}</p>}
-            <AdminImpactPreview
-              title="Aperçu joueur, avant enregistrement"
-            >
+            <details className="group rounded-lg border" style={{ borderColor: "var(--border)" }}>
+              <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 px-3 text-sm font-medium text-[var(--foreground)] [&::-webkit-details-marker]:hidden">
+                <span>Aperçu joueur</span>
+                <span className="flex items-center gap-2 text-xs text-[var(--foreground-muted)]">
+                  {perkRequirements.length} condition{perkRequirements.length > 1 ? "s" : ""} · {perkEffects.length} effet{perkEffects.length > 1 ? "s" : ""}
+                  <span aria-hidden className="transition-transform group-open:rotate-180">⌄</span>
+                </span>
+              </summary>
+              <div className="border-t p-2" style={{ borderColor: "var(--border)" }}>
+              <AdminImpactPreview title="Rendu avant enregistrement">
               <div className="flex items-start gap-3">
                 <div
                   className="flex shrink-0 items-center justify-center overflow-hidden rounded-lg border bg-[var(--background)] text-xl text-[var(--foreground-muted)]"
@@ -880,7 +898,9 @@ export function AvantagesManager({
                   )}
                 </div>
               </div>
-            </AdminImpactPreview>
+              </AdminImpactPreview>
+              </div>
+            </details>
             <div className="grid gap-3 sm:grid-cols-2">
               <div>
                 <label htmlFor="perk-title" className="mb-1 block text-xs text-[var(--foreground-muted)]">Nom de l’avantage</label>
@@ -935,8 +955,15 @@ export function AvantagesManager({
                       if (!f) setPerkIconUrl("");
                       e.target.value = "";
                     }}
-                    className="block w-full text-sm text-[var(--foreground-muted)] file:mr-2 file:rounded file:border-0 file:py-1.5 file:px-3 file:text-sm file:font-medium file:bg-[var(--accent)] file:text-[#0f1419]"
+                    className="sr-only"
                   />
+                  <label
+                    htmlFor="perk-icon-file"
+                    className="inline-flex min-h-11 cursor-pointer items-center rounded-lg border px-3 text-xs font-medium text-[var(--foreground)] hover:border-[var(--accent)] hover:text-[var(--accent)] sm:min-h-8"
+                    style={{ borderColor: "var(--border)" }}
+                  >
+                    {perkIconFile || perkIconUrl ? "Remplacer l’icône" : "Choisir une icône"}
+                  </label>
                   <p className="mt-0.5 text-xs text-[var(--foreground-muted)]">
                     Importez une image ou renseignez une adresse ci-contre.
                   </p>

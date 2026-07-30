@@ -82,7 +82,7 @@ export function AdminDialog({
       style={{ background: "var(--background-panel)", borderColor: "var(--border)" }}
     >
       <div className="flex h-full max-h-[calc(100dvh-1rem)] flex-col">
-        <header className="flex shrink-0 items-start justify-between gap-4 border-b px-4 py-3 sm:px-5" style={{ borderColor: "var(--border)" }}>
+        <header className="flex shrink-0 items-start justify-between gap-4 border-b px-4 py-3 sm:py-2.5" style={{ borderColor: "var(--border)" }}>
           <div className="min-w-0">
             <h2 id={titleId} className="text-lg font-semibold text-[var(--foreground)]">{title}</h2>
             {description ? (
@@ -99,9 +99,9 @@ export function AdminDialog({
             <span aria-hidden>×</span>
           </button>
         </header>
-        <div className="min-h-0 flex-1 overflow-y-auto p-4 sm:p-5">{children}</div>
+        <div className="min-h-0 flex-1 overflow-y-auto p-4">{children}</div>
         {actions ? (
-          <footer className="shrink-0 border-t bg-[var(--background-panel)] px-4 py-3 sm:px-5" style={{ borderColor: "var(--border)" }}>
+          <footer className="shrink-0 border-t bg-[var(--background-panel)] px-4 py-3 sm:py-2.5" style={{ borderColor: "var(--border)" }}>
             {actions}
           </footer>
         ) : null}

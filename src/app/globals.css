@@ -385,17 +385,17 @@ body {
   margin-top: 1rem;
 }
 
-@media (min-width: 640px) and (pointer: fine) {
+@media (min-width: 640px) and (pointer: fine), (min-width: 1024px) {
   .admin-shell :where(button, input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]), select, textarea, summary) {
-    min-height: 2.25rem;
+    min-height: 2rem;
   }
 
   .admin-shell button {
-    min-width: 2.25rem;
+    min-width: 2rem;
   }
 
   .admin-shell label:has(> input[type="checkbox"], > input[type="radio"]) {
-    min-height: 2.25rem;
+    min-height: 2rem;
   }
 
   .admin-settings-form :where(
@@ -403,8 +403,67 @@ body {
     select,
     textarea
   ) {
-    min-height: 2.25rem;
-    font-size: 0.875rem;
+    min-height: 2rem;
+    padding-block: 0.25rem;
+    font-size: 0.8125rem;
+  }
+
+  .admin-density .admin-settings-form > * + * {
+    margin-top: 0.75rem;
+  }
+
+  .admin-density .btn-primary {
+    padding: 0.375rem 0.75rem;
+    font-size: 0.8125rem;
+  }
+
+  .admin-density :where(.p-3) {
+    padding: 0.625rem;
+  }
+
+  .admin-density :where(.px-3) {
+    padding-inline: 0.625rem;
+  }
+
+  .admin-density :where(.py-3) {
+    padding-block: 0.625rem;
+  }
+
+  .admin-density :where(.p-4) {
+    padding: 0.875rem;
+  }
+
+  .admin-density :where(.px-4) {
+    padding-inline: 0.875rem;
+  }
+
+  .admin-density :where(.py-4) {
+    padding-block: 0.875rem;
+  }
+
+  .admin-density :where(.gap-3) {
+    gap: 0.625rem;
+  }
+
+  .admin-density :where(.gap-4) {
+    gap: 0.75rem;
+  }
+
+  .admin-density input[type="number"] {
+    max-width: 9rem;
+  }
+
+  .admin-density :where([role="table"] [role="row"]) {
+    padding-block: 0.375rem;
+  }
+
+  .admin-density :where(table th, table td) {
+    padding-top: 0.375rem;
+    padding-bottom: 0.375rem;
+  }
+
+  .admin-density :where(table, [role="table"]) :where(a, button, input, select) {
+    min-height: 2rem;
   }
 }
 

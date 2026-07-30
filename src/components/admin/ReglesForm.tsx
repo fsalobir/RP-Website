@@ -431,6 +431,33 @@ function CollapsibleBlock({
   const meta = id ? RULE_SECTION_META[id] : undefined;
   const visibleDescription = description ?? meta?.description;
   const visibleImpact = impact ?? meta?.impact;
+  const titleInfo = visibleDescription ? undefined : infoContent;
+  const heading = (
+    <span className="min-w-0">
+      <span className="flex flex-wrap items-center gap-2">
+        <span className={`${isSection ? "text-base font-semibold" : "text-sm font-medium"} text-[var(--foreground)]`}>
+          {titleInfo ? (
+            <TitleWithInfo
+              title={title}
+              tooltip={titleInfo}
+              warning={infoWarning ? "Ce réglage demande une attention particulière." : undefined}
+              side="bottom"
+            />
+          ) : title}
+        </span>
+        {visibleImpact ? (
+          <span className="rounded-full border px-2 py-0.5 text-xs font-medium text-[var(--foreground-muted)]" style={{ borderColor: "var(--border-muted)" }}>
+            {visibleImpact}
+          </span>
+        ) : null}
+      </span>
+      {visibleDescription ? (
+        <span className="mt-0.5 block max-w-[72ch] text-xs leading-snug text-[var(--foreground-muted)]">
+          {visibleDescription}
+        </span>
+      ) : null}
+    </span>
+  );
   return (
     <div
       id={id}
@@ -440,46 +467,42 @@ function CollapsibleBlock({
         background: bare ? undefined : isSection ? "var(--background-panel)" : undefined,
       }}
     >
-      {!bare ? <div
-        className={`flex items-stretch ${isSection ? "px-2" : "px-1"}`}
-        style={{ background: "var(--background-elevated)" }}
-      >
-        <button
-          type="button"
-          onClick={onToggle}
-          aria-expanded={open}
-          className={`flex min-w-0 flex-1 items-center justify-between gap-3 text-left transition-colors hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--accent)] ${isSection ? "px-2 py-3" : "px-2 py-2"}`}
-        >
-          <span className="min-w-0">
-            <span className="flex flex-wrap items-center gap-2">
-              <span className={`${isSection ? "text-base font-semibold" : "text-sm font-medium"} text-[var(--foreground)]`}>
-                {title}
-              </span>
-              {visibleImpact ? (
-                <span className="rounded-full border px-2 py-0.5 text-xs font-medium text-[var(--foreground-muted)]" style={{ borderColor: "var(--border-muted)" }}>
-                  {visibleImpact}
-                </span>
-              ) : null}
-            </span>
-            {visibleDescription ? (
-              <span className="mt-0.5 block max-w-[72ch] text-xs leading-snug text-[var(--foreground-muted)]">
-                {visibleDescription}
-              </span>
-            ) : null}
-          </span>
-          <DisclosureChevron open={open} className="shrink-0" />
-        </button>
-        {infoContent ? (
-          <div className="flex shrink-0 items-center">
-            <InfoTooltip
-              label={title}
-              side="bottom"
-              warning={infoWarning}
-              content={infoContent}
-            />
+      {!bare ? (
+        titleInfo ? (
+          <div
+            className={`flex items-stretch ${isSection ? "px-2" : "px-1"}`}
+            style={{ background: "var(--background-elevated)" }}
+          >
+            <div className={`min-w-0 flex-1 ${isSection ? "px-2 py-3" : "px-2 py-2"}`}>
+              {heading}
+            </div>
+            <button
+              type="button"
+              onClick={onToggle}
+              aria-expanded={open}
+              aria-label={`${open ? "Fermer" : "Ouvrir"} ${title}`}
+              className="min-h-11 min-w-11 shrink-0 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
+            >
+              <DisclosureChevron open={open} className="mx-auto" />
+            </button>
           </div>
-        ) : null}
-      </div> : null}
+        ) : (
+          <div
+            className={`flex items-stretch ${isSection ? "px-2" : "px-1"}`}
+            style={{ background: "var(--background-elevated)" }}
+          >
+            <button
+              type="button"
+              onClick={onToggle}
+              aria-expanded={open}
+              className={`flex min-w-0 flex-1 items-center justify-between gap-3 text-left transition-colors hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--accent)] ${isSection ? "px-2 py-3" : "px-2 py-2"}`}
+            >
+              {heading}
+              <DisclosureChevron open={open} className="shrink-0" />
+            </button>
+          </div>
+        )
+      ) : null}
       {(open || bare) && (
       <div className="grid">
         <div className="min-h-0 overflow-hidden">

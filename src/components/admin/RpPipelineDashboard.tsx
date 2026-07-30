@@ -142,6 +142,12 @@ export type RpPipelineDashboardData = {
   pipelineEnabled: boolean;
 };
 
+export function isPipelineActionActive(
+  action: Pick<RpPipelineActionView, "executionStatus">
+) {
+  return !["completed", "cancelled"].includes(action.executionStatus);
+}
+
 type TabId = "pipeline" | "bibliotheque" | "alertes" | "routage" | "reglages";
 
 const tabs: Array<{ id: TabId; label: string }> = [
@@ -256,7 +262,7 @@ function StageRail({ action }: { action: RpPipelineActionView }) {
       {stages.map((stage, index) => {
         const done = index + 1 <= reached;
         return (
-          <li key={stage} className="relative min-w-[6.5rem] flex-1 pt-5">
+          <li key={stage} className="relative min-w-[5.75rem] flex-1 pt-4">
             {index < stages.length - 1 ? (
               <span
                 aria-hidden
@@ -294,9 +300,9 @@ function EmptyState({ title, text }: { title: string; text: string }) {
 
 function Metric({ label, value, tone = "normal" }: { label: string; value: number; tone?: "normal" | "warning" }) {
   return (
-    <div className="rp-pipeline-metric px-4 py-3 sm:py-4">
+    <div className="rp-pipeline-metric px-3 py-2.5">
       <p className="text-[0.6875rem] font-semibold uppercase tracking-[0.07em] text-[var(--foreground-muted)]">{label}</p>
-      <p className={`stat-value mt-1 text-2xl font-semibold tracking-[-0.025em] ${tone === "warning" ? "text-amber-200" : "text-[var(--foreground)]"}`}>
+      <p className={`stat-value mt-0.5 text-xl font-semibold tracking-[-0.025em] ${tone === "warning" ? "text-amber-200" : "text-[var(--foreground)]"}`}>
         {value}
       </p>
     </div>
@@ -304,6 +310,13 @@ function Metric({ label, value, tone = "normal" }: { label: string; value: numbe
 }
 
 function PipelineView({ data }: { data: RpPipelineDashboardData }) {
+  const activeActions = data.actions.filter(
+    isPipelineActionActive
+  );
+  const completedActions = data.actions.filter(
+    (action) => !isPipelineActionActive(action)
+  );
+
   return (
     <div className="space-y-4">
       <details className="rounded-xl border border-[var(--border)] bg-[var(--background-elevated)]">
@@ -373,28 +386,25 @@ function PipelineView({ data }: { data: RpPipelineDashboardData }) {
       </details>
 
       <section className="overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--background-elevated)]" aria-labelledby="pipeline-title">
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--border)] px-4 py-3">
-          <div>
-            <h2 id="pipeline-title" className="font-semibold text-[var(--foreground)]">Actions en traitement</h2>
-            <p className="mt-0.5 text-xs text-[var(--foreground-muted)]">Chaque étape reste visible jusqu’à la livraison Discord.</p>
-          </div>
-          <span className="text-xs text-[var(--foreground-muted)]">{data.actions.length} action{data.actions.length > 1 ? "s" : ""}</span>
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--border)] px-3 py-2">
+          <h2 id="pipeline-title" className="font-semibold text-[var(--foreground)]">Actions en traitement</h2>
+          <span className="text-xs text-[var(--foreground-muted)]">{activeActions.length} action{activeActions.length > 1 ? "s" : ""}</span>
         </div>
-        {data.actions.length === 0 ? (
+        {activeActions.length === 0 ? (
           <EmptyState
-            title="Le pipeline est vide"
-            text="Les prochaines actions automatiques apparaîtront ici. Vous pouvez aussi créer une action narrative ci-dessus."
+            title="Aucune action en cours"
+            text="Les nouvelles actions apparaîtront ici."
           />
         ) : (
           <div className="divide-y divide-[var(--border)]">
-            {data.actions.map((action) => {
+            {activeActions.map((action) => {
               const currentJob = action.jobs.find((job) => ["warning", "review", "retry", "running"].includes(job.status)) ?? action.jobs[0];
               const publicationInFlight = action.jobs.some(
                 (job) => job.jobType === "publish_discord" && ["pending", "running", "retry"].includes(job.status),
               );
               return (
                 <details key={action.id} className="group">
-                  <summary className="cursor-pointer list-none px-4 py-4 marker:hidden">
+                  <summary className="cursor-pointer list-none px-3 py-3 marker:hidden">
                     <div className="flex flex-wrap items-start justify-between gap-3">
                       <div className="min-w-0">
                         <div className="flex flex-wrap items-center gap-2">
@@ -410,7 +420,7 @@ function PipelineView({ data }: { data: RpPipelineDashboardData }) {
                         Détails
                       </span>
                     </div>
-                    <div className="mt-4">
+                    <div className="mt-3">
                       <StageRail action={action} />
                     </div>
                   </summary>
@@ -622,6 +632,29 @@ function PipelineView({ data }: { data: RpPipelineDashboardData }) {
           </div>
         )}
       </section>
+
+      {completedActions.length > 0 ? (
+        <details className="group border-y" style={{ borderColor: "var(--border)" }}>
+          <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 px-1 text-sm font-medium text-[var(--foreground-muted)] hover:text-[var(--foreground)] [&::-webkit-details-marker]:hidden">
+            <span>Récemment terminées</span>
+            <span className="flex items-center gap-2">
+              {completedActions.length}
+              <span aria-hidden className="transition-transform group-open:rotate-180">⌄</span>
+            </span>
+          </summary>
+          <div className="divide-y border-t" style={{ borderColor: "var(--border)" }}>
+            {completedActions.slice(0, 20).map((action) => (
+              <div key={action.id} className="flex flex-wrap items-center justify-between gap-2 px-1 py-2.5 text-sm">
+                <span className="min-w-0">
+                  <span className="font-medium text-[var(--foreground)]">{action.countryName}</span>
+                  <span className="text-[var(--foreground-muted)]"> · {action.actionLabel}</span>
+                </span>
+                <span className="text-xs text-[var(--foreground-muted)]">{formatDate(action.createdAt)}</span>
+              </div>
+            ))}
+          </div>
+        </details>
+      ) : null}
     </div>
   );
 }
@@ -1217,7 +1250,7 @@ export function RpPipelineDashboard({
   const delivered = data.actions.filter((action) => action.jobs.some((job) => Boolean(job.discordMessageId))).length;
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-4">
       <section className="grid grid-cols-2 overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--background-elevated)] shadow-[0_10px_30px_rgba(0,0,0,0.18)] sm:grid-cols-4" aria-label="État du pipeline">
         <Metric label="Actions ouvertes" value={pending} />
         <Metric label="En génération" value={generating} />
@@ -1254,7 +1287,7 @@ export function RpPipelineDashboard({
             key={tab.id}
             href={`/admin/event-ia?tab=${tab.id}`}
             aria-current={activeTab === tab.id ? "page" : undefined}
-            className={`min-h-11 shrink-0 border-b-2 px-4 py-3 text-sm font-semibold transition-colors ${
+            className={`min-h-10 shrink-0 border-b-2 px-3 py-2 text-sm font-semibold transition-colors ${
               activeTab === tab.id
                 ? "border-[var(--accent)] text-[var(--accent)]"
                 : "border-transparent text-[var(--foreground-muted)] hover:text-[var(--foreground)]"

@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { AdminConfirmDialog } from "@/components/admin/AdminConfirmDialog";
 import { AdminDialog } from "@/components/admin/AdminDialog";
 import {
   acceptRequest,
@@ -634,7 +635,7 @@ export function DemandesList({ requests, rosterUnitIds, rosterUnits = [], target
                       onClick={() => toggleRequest(request.id)}
                       aria-pressed={isSelected}
                       aria-controls={isWideWorkspace ? "request-workspace-detail" : "request-detail"}
-                      className={`group w-full px-3 py-3 text-left transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[var(--accent)] ${
+                      className={`group w-full px-3 py-2.5 text-left transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[var(--accent)] ${
                         isSelected
                           ? "bg-[var(--background-elevated)]"
                           : "hover:bg-[color-mix(in_srgb,var(--background-elevated)_55%,transparent)]"
@@ -660,7 +661,7 @@ export function DemandesList({ requests, rosterUnitIds, rosterUnits = [], target
                           ›
                         </span>
                       </span>
-                      <span className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                      <span className="mt-1.5 flex flex-col gap-1.5 sm:flex-row sm:items-center sm:justify-between">
                         <span className="inline-flex min-w-0 flex-wrap items-center gap-1.5 text-sm text-[var(--foreground)]">
                           <span className="inline-flex min-w-0 items-center gap-1.5">
                             {request.country?.flag_url ? (
@@ -741,7 +742,7 @@ export function DemandesList({ requests, rosterUnitIds, rosterUnits = [], target
             <aside id="request-workspace-detail" className="flex min-h-[34rem] min-w-0 flex-col">
               {selected ? (
                 <>
-                  <header className="flex shrink-0 items-start justify-between gap-4 border-b px-4 py-3" style={{ borderColor: "var(--border)" }}>
+                  <header className="flex shrink-0 items-start justify-between gap-4 border-b px-3 py-2.5" style={{ borderColor: "var(--border)" }}>
                     <div className="min-w-0">
                       <h2 className="text-lg font-semibold text-[var(--foreground)]">{detailTitle}</h2>
                       <p className="mt-0.5 text-sm text-[var(--foreground-muted)]">{detailDescription}</p>
@@ -756,7 +757,7 @@ export function DemandesList({ requests, rosterUnitIds, rosterUnits = [], target
                       <span aria-hidden>×</span>
                     </button>
                   </header>
-                  <div className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto p-4 xl:max-h-[calc(100dvh-13rem)]">
+                  <div className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto p-3 xl:max-h-[calc(100dvh-13rem)]">
                     {detailBody}
                   </div>
                 </>
@@ -850,6 +851,7 @@ function RequestDetail({
   const [showEffectForm, setShowEffectForm] = useState(false);
   const [adminModifierStr, setAdminModifierStr] = useState("0");
   const [adminModifierLabel, setAdminModifierLabel] = useState("");
+  const [rollToReplace, setRollToReplace] = useState<"success" | "impact" | null>(null);
   const effectEntries = effectsList.map((effect, index) => ({ effect, index }));
   const durationEffectEntries = effectEntries.filter(({ effect }) => effect.application !== "immediate");
   const immediateEffectEntries = effectEntries.filter(({ effect }) => effect.application === "immediate");
@@ -1034,10 +1036,8 @@ function RequestDetail({
     if (canCloseEffectDraft()) closeEffectDraft();
   }
 
-  async function handleRoll(type: "success" | "impact") {
+  async function executeRoll(type: "success" | "impact") {
     if (loading) return;
-    const existingRoll = type === "success" ? request.dice_results?.success_roll : request.dice_results?.impact_roll;
-    if (existingRoll && !confirm("Relancer remplacera le résultat actuel. Continuer ?")) return;
     const value = parseModifierStr(adminModifierStr);
     setDecisionToConfirm(null);
     await runMutation(
@@ -1049,6 +1049,15 @@ function RequestDetail({
       ),
       onRefresh
     );
+  }
+
+  function handleRoll(type: "success" | "impact") {
+    const existingRoll = type === "success" ? request.dice_results?.success_roll : request.dice_results?.impact_roll;
+    if (existingRoll) {
+      setRollToReplace(type);
+      return;
+    }
+    void executeRoll(type);
   }
 
   async function handleRemoveImpactRoll() {
@@ -1143,6 +1152,19 @@ function RequestDetail({
           editing={editingIndex !== null}
         />
       </AdminDialog>
+      <AdminConfirmDialog
+        open={Boolean(rollToReplace)}
+        title={`Remplacer le jet de ${rollToReplace === "impact" ? "conséquence" : "réussite"} ?`}
+        consequence="Le résultat actuel sera remplacé par un nouveau jet."
+        confirmLabel="Relancer le jet"
+        onConfirm={() => {
+          if (!rollToReplace) return;
+          const type = rollToReplace;
+          setRollToReplace(null);
+          void executeRoll(type);
+        }}
+        onClose={() => setRollToReplace(null)}
+      />
 
       {adminCanRefuse ? (
         <section

@@ -4,6 +4,7 @@
 import { useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { AdminConfirmDialog } from "@/components/admin/AdminConfirmDialog";
 import { AdminDialog } from "@/components/admin/AdminDialog";
 import { matchesSearchText } from "@/lib/searchText";
 import { formatNumber } from "@/lib/format";
@@ -119,6 +120,7 @@ export function RosterEditor({
   const [csvImportErrors, setCsvImportErrors] = useState<string[]>([]);
   const [query, setQuery] = useState("");
   const [activeBranch, setActiveBranch] = useState<MilitaryBranch>("terre");
+  const [unitToDelete, setUnitToDelete] = useState<UnitRow | null>(null);
 
   const levelsByUnitId = useMemo(() => {
     const m = new Map<string, LevelRow[]>();
@@ -360,7 +362,6 @@ export function RosterEditor({
   async function deleteUnit(unit: UnitRow) {
     setError(null);
     setSuccess(null);
-    if (!confirm(`Supprimer l’unité “${unit.name_fr || "Sans nom"}” ?`)) return;
     setSavingId(unit.id);
     try {
       const supabase = createClient();
@@ -390,6 +391,7 @@ export function RosterEditor({
       setError(e instanceof Error ? e.message : "Erreur inconnue.");
     } finally {
       setSavingId(null);
+      setUnitToDelete(null);
     }
   }
 
@@ -881,7 +883,7 @@ export function RosterEditor({
                               <div className="flex flex-col-reverse gap-2 sm:flex-row sm:items-center sm:justify-between">
                                 <button
                                   type="button"
-                                  onClick={() => void deleteUnit(u)}
+                                  onClick={() => setUnitToDelete(u)}
                                   disabled={isSaving}
                                   className="min-h-10 rounded-lg border px-3 text-sm font-medium text-[var(--danger)] disabled:opacity-50"
                                   style={{ borderColor: "var(--border)" }}
@@ -932,7 +934,7 @@ export function RosterEditor({
                             ) : null}
                             <div className="text-xs sm:text-sm">
                               {/* Ligne 1 : Icône + Nom */}
-                              <div className="grid gap-3 sm:grid-cols-[auto,minmax(0,1fr)] items-center mb-3">
+                              <div className="mb-2 grid items-center gap-2 sm:grid-cols-[auto,minmax(0,1fr)]">
                                 <div>
                                   <label
                                     htmlFor={`roster-${u.id}-icon`}
@@ -958,7 +960,7 @@ export function RosterEditor({
                                         id={`roster-${u.id}-icon`}
                                         type="file"
                                         accept="image/jpeg,image/png,image/gif,image/webp"
-                                        className="block w-full text-[10px] text-[var(--foreground-muted)] file:mr-2 file:rounded file:border-0 file:bg-[var(--accent)] file:px-2 file:py-1 file:text-[#0f1419] file:text-xs file:font-medium"
+                                        className="sr-only"
                                         onChange={async (e) => {
                                           const f = e.target.files?.[0];
                                           if (!f) return;
@@ -980,6 +982,13 @@ export function RosterEditor({
                                         }}
                                         disabled={isSaving}
                                       />
+                                      <label
+                                        htmlFor={`roster-${u.id}-icon`}
+                                        className="inline-flex min-h-11 cursor-pointer items-center rounded-lg border px-3 text-xs font-medium text-[var(--foreground)] hover:border-[var(--accent)] hover:text-[var(--accent)] sm:min-h-8"
+                                        style={{ borderColor: "var(--border)" }}
+                                      >
+                                        {u.icon_url ? "Remplacer" : "Choisir une icône"}
+                                      </label>
                                       {u.icon_url && (
                                         <button
                                           type="button"
@@ -1019,7 +1028,7 @@ export function RosterEditor({
                               </div>
 
                               {/* Ligne 2 : Type + Sous-type */}
-                              <div className="grid gap-3 sm:grid-cols-2 mb-3">
+                              <div className="mb-2 grid gap-2 sm:grid-cols-2">
                                 <div>
                                   <label
                                     htmlFor={`roster-${u.id}-branch`}
@@ -1083,7 +1092,7 @@ export function RosterEditor({
                               </div>
 
                               {/* Ligne 3 : quantité commune + tri + niveaux */}
-                              <div className="grid gap-3 sm:grid-cols-3 mb-3">
+                              <div className="mb-2 grid gap-2 sm:grid-cols-3">
                                 <div>
                                   <label
                                     htmlFor={`roster-${u.id}-base`}
@@ -1095,7 +1104,7 @@ export function RosterEditor({
                                     id={`roster-${u.id}-base`}
                                     type="number"
                                     min={0}
-                                    className={`${inputClass} mt-1 font-mono w-24`}
+                                    className={`${inputClass} mt-1 max-w-36 font-mono`}
                                     style={inputStyle}
                                     value={u.base_count}
                                     onChange={(e) =>
@@ -1119,7 +1128,7 @@ export function RosterEditor({
                                   <input
                                     id={`roster-${u.id}-order`}
                                     type="number"
-                                    className={`${inputClass} mt-1 font-mono w-20`}
+                                    className={`${inputClass} mt-1 max-w-28 font-mono`}
                                     style={inputStyle}
                                     value={u.sort_order}
                                     onChange={(e) =>
@@ -1142,7 +1151,7 @@ export function RosterEditor({
                                     type="number"
                                     min={1}
                                     max={ROSTER_LEVEL_MAX}
-                                    className={`${inputClass} mt-1 font-mono w-20`}
+                                    className={`${inputClass} mt-1 max-w-28 font-mono`}
                                     style={inputStyle}
                                     value={u.level_count}
                                     onChange={(e) => {
@@ -1163,22 +1172,22 @@ export function RosterEditor({
                               </div>
 
                               <section
-                                className="border-t pt-4"
+                                className="border-t pt-3"
                                 style={{ borderColor: "var(--border-muted)" }}
                                 aria-labelledby={`roster-${u.id}-levels-title`}
                               >
-                                <h4
+                                <h3
                                   id={`roster-${u.id}-levels-title`}
                                   className="text-sm font-semibold text-[var(--foreground)]"
                                 >
                                   Valeurs par niveau
-                                </h4>
-                                <p className="mt-1 text-xs leading-snug text-[var(--foreground-muted)]">
+                                </h3>
+                                <p className="mt-0.5 text-xs leading-snug text-[var(--foreground-muted)]">
                                   Chaque ligne décrit un palier complet de
                                   l’unité.
                                 </p>
 
-                                <div className="mt-4 hidden grid-cols-[3.5rem_repeat(4,minmax(0,1fr))] gap-3 px-3 text-xs font-medium text-[var(--foreground-muted)] sm:grid">
+                                <div className="mt-3 hidden grid-cols-[3.5rem_repeat(4,minmax(0,1fr))] gap-2 px-2 text-[11px] font-medium text-[var(--foreground-muted)] sm:grid">
                                   <span>Niveau</span>
                                   <span>Personnel / unité</span>
                                   <span>Puissance par unité</span>
@@ -1192,7 +1201,7 @@ export function RosterEditor({
                                   {levelValues.map((level) => (
                                     <div
                                       key={level.level}
-                                      className="grid grid-cols-2 gap-2 p-2 sm:grid-cols-[3.5rem_repeat(4,minmax(0,1fr))] sm:items-end"
+                                      className="grid grid-cols-2 gap-2 px-2 py-1.5 sm:grid-cols-[3.5rem_repeat(4,minmax(0,1fr))] sm:items-center"
                                       style={{
                                         borderColor: "var(--border-muted)",
                                       }}
@@ -1210,7 +1219,7 @@ export function RosterEditor({
                                           id={`roster-${u.id}-manpower-${level.level}`}
                                           type="number"
                                           min={0}
-                                          className={`${inputClass} min-h-11 font-mono`}
+                                          className={`${inputClass} min-h-11 font-mono sm:min-h-8`}
                                           style={inputStyle}
                                           value={level.manpower}
                                           onChange={(event) =>
@@ -1239,7 +1248,7 @@ export function RosterEditor({
                                           id={`roster-${u.id}-power-${level.level}`}
                                           type="number"
                                           min={0}
-                                          className={`${inputClass} min-h-11 font-mono`}
+                                          className={`${inputClass} min-h-11 font-mono sm:min-h-8`}
                                           style={inputStyle}
                                           value={level.hardPower}
                                           onChange={(event) =>
@@ -1268,7 +1277,7 @@ export function RosterEditor({
                                           id={`roster-${u.id}-mobilisation-${level.level}`}
                                           type="number"
                                           min={0}
-                                          className={`${inputClass} min-h-11 font-mono`}
+                                          className={`${inputClass} min-h-11 font-mono sm:min-h-8`}
                                           style={inputStyle}
                                           value={level.mobilizationCost}
                                           onChange={(event) =>
@@ -1298,7 +1307,7 @@ export function RosterEditor({
                                           type="number"
                                           min={0}
                                           step={0.1}
-                                          className={`${inputClass} min-h-11 font-mono`}
+                                          className={`${inputClass} min-h-11 font-mono sm:min-h-8`}
                                           style={inputStyle}
                                           value={level.scienceRequired}
                                           onChange={(event) =>
@@ -1374,6 +1383,20 @@ export function RosterEditor({
           );
         },
       )}
+      <AdminConfirmDialog
+        open={Boolean(unitToDelete)}
+        title="Supprimer cette unité ?"
+        consequence={`« ${unitToDelete?.name_fr || "Sans nom"} » et tous ses niveaux seront supprimés.`}
+        confirmLabel="Supprimer l’unité"
+        danger
+        busy={Boolean(unitToDelete && savingId === unitToDelete.id)}
+        onConfirm={() => {
+          if (unitToDelete) void deleteUnit(unitToDelete);
+        }}
+        onClose={() => {
+          if (!savingId) setUnitToDelete(null);
+        }}
+      />
     </div>
   );
 }

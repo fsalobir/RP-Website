@@ -1384,11 +1384,12 @@ BEGIN
       v_min := 0; v_max := 100;
     END IF;
 
+    v_existed := false;
     EXECUTE format(
-      'SELECT %I::numeric FROM public.countries WHERE id = $1 FOR UPDATE',
+      'SELECT %I::numeric, true FROM public.countries WHERE id = $1 FOR UPDATE',
       v_column
-    ) INTO v_before USING v_country_id;
-    IF NOT FOUND THEN
+    ) INTO v_before, v_existed USING v_country_id;
+    IF NOT v_existed THEN
       RAISE EXCEPTION 'Pays introuvable : %', v_country_id;
     END IF;
     v_after := GREATEST(v_min, LEAST(v_max, v_before + v_delta));
@@ -1594,6 +1595,7 @@ DECLARE
   v_recrutement_points integer;
   v_procuration_points integer;
   v_stock_points integer;
+  v_country_found boolean;
 BEGIN
   IF p_target_table = 'country_relations' THEN
     v_country_a_id := (p_target_key->>'country_a_id')::uuid;
@@ -1668,11 +1670,12 @@ BEGIN
     ) THEN
       RAISE EXCEPTION 'Colonne pays non autorisée : %', v_column;
     END IF;
+    v_country_found := false;
     EXECUTE format(
-      'SELECT %I::numeric FROM public.countries WHERE id = $1 FOR UPDATE',
+      'SELECT %I::numeric, true FROM public.countries WHERE id = $1 FOR UPDATE',
       v_column
-    ) INTO v_current USING v_country_id;
-    IF NOT FOUND THEN
+    ) INTO v_current, v_country_found USING v_country_id;
+    IF NOT v_country_found THEN
       RAISE EXCEPTION 'Pays à annuler introuvable.';
     END IF;
     IF v_current IS DISTINCT FROM (p_after_state->>'value')::numeric THEN
@@ -2257,7 +2260,7 @@ DECLARE
   ];
 BEGIN
   PERFORM public.rp_d100_outcome(p_roll);
-  SELECT a
+  SELECT a.*
   INTO v_action
   FROM public.ai_event_requests a
   WHERE a.id = p_action_id;

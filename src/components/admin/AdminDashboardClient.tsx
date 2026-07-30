@@ -89,13 +89,13 @@ export function AdminDashboardClient({
               count={counts.requests}
             />
             <DecisionRow
-              href="/admin/event-ia"
+              href="/admin/event-ia?tab=alertes"
               icon="ai"
-              title="Événements IA"
+              title="Moteur RP"
               detail={
                 counts.aiEvents > 0
-                  ? `${formatNumber(counts.aiEvents)} événement${counts.aiEvents > 1 ? "s" : ""} à examiner`
-                  : "Aucun événement en attente"
+                  ? `${formatNumber(counts.aiEvents)} point${counts.aiEvents > 1 ? "s" : ""} à traiter`
+                  : "Aucun point à traiter"
               }
               count={counts.aiEvents}
             />

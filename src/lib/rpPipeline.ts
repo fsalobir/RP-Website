@@ -231,8 +231,8 @@ export function selectLoreContext(
     .filter(({ relevance }) => relevance > 0 || (!countryIds.length && !targetCountryIds.length && !regionIds.length && !tags.length))
     .sort(
       (a, b) =>
-        b.authority - a.authority ||
         b.relevance - a.relevance ||
+        b.authority - a.authority ||
         Number(a.age > preferredAge) - Number(b.age > preferredAge) ||
         a.age - b.age ||
         Date.parse(b.article.real_published_at ?? "") - Date.parse(a.article.real_published_at ?? ""),
@@ -253,12 +253,14 @@ export function selectLoreContext(
 const UNSAFE_MARKDOWN = /@everyone|@here|<@!?&?\d+>|<#\d+>|```/i;
 const FORBIDDEN_IDENTIFIER = /\b[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\b|\b\d{15,20}\b/i;
 const FORBIDDEN_MECHANICS =
-  /\b(?:d100|jet de (?:dé|dés)|modificateur|execution_version|consequence_plan|base de données|moteur de jeu|succès (?:mineur|majeur|critique)|échec (?:mineur|majeur|critique))\b/i;
+  /(?:^|[^\p{L}\p{N}_])(?:d100|jet de (?:dé|dés)|modificateur|execution_version|consequence_plan|base de données|moteur de jeu|succès (?:mineur|majeur|critique)|échec (?:mineur|majeur|critique))(?=$|[^\p{L}\p{N}_])/iu;
 const NSFW_WORDS =
-  /\b(?:porn(?:ographie|ographique|ographic)?s?|hentai|sex(?:e|es|uel(?:le)?s?|ual(?:ity)?)?|érot\w*|orgasm\w*|génital\w*|pénis|vagin\w*|masturb\w*|prostitut\w*|rape|raped|viols?|violer|violé(?:e|es|s)?|inceste|pédophil(?:e|ie)|nudités?|nudes?|explicit(?:e|es)?|nsfw)\b/i;
+  /\b(?:porn(?:ographie|ographique|graphic)?s?|hentai|sex(?:e|es|uel(?:le)?s?|ual(?:ity)?)?|erot\w*|orgasm\w*|genital\w*|penis|vagin\w*|masturb\w*|prostitut\w*|rape|raped|viols?|inceste|pedophil(?:e|ie)|nudites?|nudes?|explicit(?:e|es)?|nsfw)\b/i;
 
 export function containsNsfwContent(value: string): boolean {
-  return NSFW_WORDS.test(value.normalize("NFKC"));
+  return NSFW_WORDS.test(
+    value.normalize("NFKD").replace(/\p{Diacritic}/gu, ""),
+  );
 }
 
 export interface MagnumValidationOptions {

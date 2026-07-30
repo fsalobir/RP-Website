@@ -130,7 +130,7 @@ export function AdminHistoryList({ rows }: { rows: AdminHistoryRow[] }) {
 
   return (
     <>
-      <div className="flex flex-col gap-3 border-y py-3 sm:flex-row" style={{ borderColor: "var(--border)" }}>
+      <div className="flex flex-col gap-2 border-y py-2 sm:flex-row" style={{ borderColor: "var(--border)" }}>
         <label className="min-w-0 flex-1">
           <span className="sr-only">Rechercher dans l’historique</span>
           <input
@@ -172,7 +172,7 @@ export function AdminHistoryList({ rows }: { rows: AdminHistoryRow[] }) {
 
       <div className="mt-3 divide-y border-y" style={{ borderColor: "var(--border)" }}>
         {visibleRows.map((row) => (
-          <article key={row.id} className="grid gap-2 py-3 sm:grid-cols-[11rem_minmax(0,1fr)_auto] sm:items-center sm:gap-4">
+          <article key={row.id} className="grid gap-2 py-2.5 sm:grid-cols-[11rem_minmax(0,1fr)_auto] sm:items-center sm:gap-3">
             <div className="text-sm text-[var(--foreground-muted)]">
               <time dateTime={row.createdAt}>
                 {new Intl.DateTimeFormat("fr-FR", {
@@ -214,7 +214,9 @@ export function AdminHistoryList({ rows }: { rows: AdminHistoryRow[] }) {
         ))}
         {visibleRows.length === 0 ? (
           <p className="py-10 text-center text-sm text-[var(--foreground-muted)]">
-            Aucune modification ne correspond à cette recherche.
+            {query || tableFilter !== "all"
+              ? "Aucune modification ne correspond à ces filtres."
+              : "Aucune modification enregistrée."}
           </p>
         ) : null}
       </div>

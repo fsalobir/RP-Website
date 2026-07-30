@@ -1,6 +1,7 @@
 import { createClient, createServiceRoleClient } from "@/lib/supabase/server";
 import { AdminDashboardClient } from "@/components/admin/AdminDashboardClient";
 import { formatWorldDate, type WorldDateValue } from "@/lib/worldDate";
+import { loadRpPipelineAlertCount } from "@/app/admin/event-ia/pipeline-data";
 
 export default async function AdminDashboardPage() {
   const supabase = await createClient();
@@ -13,7 +14,7 @@ export default async function AdminDashboardPage() {
     perksRes,
     worldRes,
     pendingRequestsRes,
-    pendingAiEventsRes,
+    pipelineAlertCount,
   ] = await Promise.all([
     supabase.from("countries").select("id", { count: "exact", head: true }),
     supabase.from("rule_parameters").select("id", { count: "exact", head: true }),
@@ -28,10 +29,7 @@ export default async function AdminDashboardPage() {
       .from("state_action_requests")
       .select("id", { count: "exact", head: true })
       .eq("status", "pending"),
-    serviceSupabase
-      .from("ai_event_requests")
-      .select("id", { count: "exact", head: true })
-      .eq("status", "pending"),
+    loadRpPipelineAlertCount(),
   ]);
 
   const loadError = [
@@ -42,7 +40,6 @@ export default async function AdminDashboardPage() {
     perksRes,
     worldRes,
     pendingRequestsRes,
-    pendingAiEventsRes,
   ].find((result) => result.error)?.error;
   if (loadError) throw new Error(`Impossible de charger le tableau de bord : ${loadError.message}`);
 
@@ -73,7 +70,7 @@ export default async function AdminDashboardPage() {
           players: playersRes.count ?? 0,
           perks: perksRes.count ?? 0,
           requests: pendingRequestsRes.count ?? 0,
-          aiEvents: pendingAiEventsRes.count ?? 0,
+          aiEvents: pipelineAlertCount,
         }}
         world={{
           dateLabel: formatWorldDate(worldDateValue as WorldDateValue | null),

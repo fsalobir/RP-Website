@@ -77,6 +77,76 @@ function ledgerEntries(row: Row) {
   });
 }
 
+export async function loadRpPipelineAlertCount(): Promise<number> {
+  const supabase = await createClient();
+  const [
+    jobsResult,
+    alertArticlesResult,
+    discordChannelsResult,
+    pipelineConfigResult,
+    workerHeartbeatResult,
+  ] = await Promise.all([
+    supabase
+      .from("rp_pipeline_jobs")
+      .select("status, created_at, updated_at, locked_at, next_attempt_at")
+      .order("created_at", { ascending: false })
+      .limit(200),
+    supabase
+      .from("lore_articles")
+      .select("nsfw_quarantined, classification_status, deleted_at")
+      .or("nsfw_quarantined.eq.true,classification_status.in.(pending,ambiguous)")
+      .order("created_at", { ascending: false })
+      .limit(100),
+    supabase
+      .from("discord_rp_channels")
+      .select("sync_error, ingest_enabled, publish_enabled"),
+    supabase.from("rule_parameters").select("value").eq("key", "rp_pipeline_config").maybeSingle(),
+    supabase.from("rule_parameters").select("value").eq("key", "rp_pipeline_worker_heartbeat").maybeSingle(),
+  ]);
+  const error = [
+    jobsResult,
+    alertArticlesResult,
+    discordChannelsResult,
+    pipelineConfigResult,
+    workerHeartbeatResult,
+  ].find((result) => result.error)?.error;
+  if (error) throw new Error(`Impossible de compter les points à traiter : ${error.message}`);
+
+  const jobs = (jobsResult.data ?? []) as Row[];
+  const activeJobs = jobs.filter((row) =>
+    ["pending", "running", "retry"].includes(text(row, "status") ?? "")
+  );
+  const jobAlertCount = jobs.filter((row) =>
+    ["review", "warning"].includes(text(row, "status") ?? "")
+  ).length;
+  const articleAlertCount = ((alertArticlesResult.data ?? []) as Row[]).filter((row) =>
+    row.nsfw_quarantined === true ||
+    (!row.deleted_at && ["pending", "ambiguous"].includes(text(row, "classification_status") ?? ""))
+  ).length;
+  const channels = (discordChannelsResult.data ?? []) as Row[];
+  const pipelineConfig = object(pipelineConfigResult.data?.value);
+  const heartbeat = object(workerHeartbeatResult.data?.value);
+  const workerExpected = pipelineConfig.enabled === true ||
+    activeJobs.length > 0 ||
+    channels.some((row) => row.ingest_enabled === true || row.publish_enabled === true);
+  const lastSuccessAt = text(heartbeat, "last_success_at");
+  const lastSuccessMs = lastSuccessAt ? Date.parse(lastSuccessAt) : 0;
+  const workerStale = workerExpected &&
+    (!Number.isFinite(lastSuccessMs) || Date.now() - lastSuccessMs > 3 * 60_000);
+  const jobOverdue = !workerStale && activeJobs.some((row) => {
+    const reference = text(row, "status") === "running"
+      ? text(row, "locked_at", "updated_at")
+      : text(row, "next_attempt_at", "created_at");
+    const timestamp = reference ? Date.parse(reference) : Number.NaN;
+    return Number.isFinite(timestamp) && Date.now() - timestamp > 30 * 60_000;
+  });
+
+  return jobAlertCount +
+    articleAlertCount +
+    channels.filter((row) => Boolean(text(row, "sync_error"))).length +
+    (workerStale || jobOverdue ? 1 : 0);
+}
+
 export async function loadRpPipelineDashboard(
   isAdmin: boolean,
   options: { libraryQuery: string; libraryPage: number },
