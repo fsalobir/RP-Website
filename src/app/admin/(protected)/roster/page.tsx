@@ -17,15 +17,14 @@ export default async function AdminRosterPage() {
       .order("unit_id")
       .order("level"),
   ]);
+  const loadError = [unitsRes, levelsRes].find((result) => result.error)?.error;
+  if (loadError) throw new Error(`Impossible de charger les unités militaires : ${loadError.message}`);
 
   return (
-    <div className="mx-auto max-w-7xl px-4 py-6">
-      <h1 className="mb-1 text-2xl font-bold text-[var(--foreground)]">
+    <div className="mx-auto max-w-[100rem] px-4 py-6">
+      <h1 className="mb-5 text-2xl font-bold text-[var(--foreground)]">
         Unités militaires
       </h1>
-      <p className="mb-5 max-w-[72ch] text-sm leading-relaxed text-[var(--foreground-muted)]">
-        Définissez les modèles d’unités disponibles, leurs niveaux, leurs effectifs, leur puissance et leur coût.
-      </p>
 
       <RosterEditor initialUnits={unitsRes.data ?? []} initialLevels={levelsRes.data ?? []} />
     </div>
