@@ -21,5 +21,25 @@ export async function updateSession(request: NextRequest) {
   );
 
   await supabase.auth.getClaims();
+
+  const path = request.nextUrl.pathname;
+  const isProtectedAdmin =
+    path.startsWith("/admin") &&
+    path !== "/admin/connexion" &&
+    path !== "/admin/inscription";
+
+  if (isProtectedAdmin) {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (!user) {
+      const url = request.nextUrl.clone();
+      url.pathname = "/admin/connexion";
+      url.searchParams.set("redirect", path);
+      return NextResponse.redirect(url);
+    }
+  }
+
   return response;
 }
