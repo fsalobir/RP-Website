@@ -5,6 +5,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { formatNumber, formatGdp, formatPopulation } from "@/lib/format";
 import { InfoTooltipWithWikiLink } from "@/components/ui/InfoTooltipWithWikiLink";
+import { matchesSearchText } from "@/lib/searchText";
 
 const flagLoader = ({ src }: { src: string }) => src;
 
@@ -41,11 +42,12 @@ type Row = {
   hard_power_total?: number;
 };
 
-/** Style glass (arrière-plan bourse) pour panneaux et tableaux */
-const glassPanelClass = "rounded-2xl border border-white/25 bg-white/15 shadow-xl backdrop-blur-xl";
+/** Surface de lecture commune aux classements. */
+const glassPanelClass = "rounded-2xl border border-white/15 bg-[#091118]/90 shadow-[0_24px_70px_rgba(0,0,0,0.42)] backdrop-blur-md";
 const glassTitleClass = "text-lg font-semibold text-white drop-shadow-[0_2px_4px_rgba(0,0,0,0.6)]";
-const glassMutedClass = "text-white/85";
-const glassBorderClass = "border-white/20";
+const glassMutedClass = "text-white/70";
+const glassBorderClass = "border-white/10";
+const PAGE_SIZE = 30;
 
 function getNum(v: number | string | null | undefined): number {
   if (v == null || v === "") return 0;
@@ -116,6 +118,7 @@ function EvolutionCell({ rank, prev_rank, glass = false }: { rank: number; prev_
       <span className="text-lg leading-none" style={{ color }} aria-hidden>
         {up ? "▲" : "▼"}
       </span>
+      <span className="sr-only">{up ? "Rang en hausse" : "Rang en baisse"}</span>
     </td>
   );
 }
@@ -126,6 +129,8 @@ export function ClassementContent({ rows }: { rows: Row[] }) {
   const [mainTab, setMainTab] = useState<"global" | "militaire" | "economique">("global");
   const [militaireSub, setMilitaireSub] = useState<MilitaireSubKey>("militarism");
   const [economiqueSub, setEconomiqueSub] = useState<"population" | "gdp">("population");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [visibleRows, setVisibleRows] = useState(PAGE_SIZE);
 
   const rankedInfluence = useRanked(rows, "influence");
   const top3 = rankedInfluence.slice(0, 3);
@@ -141,10 +146,30 @@ export function ClassementContent({ rows }: { rows: Row[] }) {
   const rankedHPStrategique = useRanked(rows, "hard_power_strategique");
   const rankedPopulation = useRanked(rows, "population");
   const rankedGdp = useRanked(rows, "gdp");
+  const matchesCountry = (row: Row) =>
+    !searchQuery.trim() || matchesSearchText(searchQuery, [row.country.name]);
+  const globalSource = searchQuery.trim() ? rankedInfluence : rest;
+  const filteredGlobalRows = globalSource.filter(({ row }) => matchesCountry(row));
+  const displayedGlobalRows = filteredGlobalRows.slice(0, visibleRows);
+  const militarySource =
+    militaireSub === "militarism"
+      ? rankedMilitaire
+      : militaireSub === "terre"
+        ? rankedHPTerre
+        : militaireSub === "air"
+          ? rankedHPAir
+          : militaireSub === "mer"
+            ? rankedHPMer
+            : rankedHPStrategique;
+  const filteredMilitaryRows = militarySource.filter(({ row }) => matchesCountry(row));
+  const displayedMilitaryRows = filteredMilitaryRows.slice(0, visibleRows);
+  const economicSource = economiqueSub === "population" ? rankedPopulation : rankedGdp;
+  const filteredEconomicRows = economicSource.filter(({ row }) => matchesCountry(row));
+  const displayedEconomicRows = filteredEconomicRows.slice(0, visibleRows);
 
   const tabButtonClass = (active: boolean) =>
-    `min-h-11 rounded-xl px-3 py-2.5 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70 ${
-      active ? "bg-white/25 text-white shadow-inner" : "text-white/90 hover:bg-white/15 hover:text-white"
+    `min-h-11 rounded-xl px-2 py-2.5 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70 sm:px-3 sm:text-sm ${
+      active ? "bg-[var(--accent)] text-[#071016] shadow-[0_8px_22px_rgba(103,211,122,0.14)]" : "text-white/70 hover:bg-white/[0.07] hover:text-white"
     }`;
 
   return (
@@ -153,7 +178,10 @@ export function ClassementContent({ rows }: { rows: Row[] }) {
         <button
           type="button"
           className={tabButtonClass(mainTab === "global")}
-          onClick={() => setMainTab("global")}
+          onClick={() => {
+            setMainTab("global");
+            setVisibleRows(PAGE_SIZE);
+          }}
           aria-pressed={mainTab === "global"}
         >
           Classement
@@ -161,7 +189,10 @@ export function ClassementContent({ rows }: { rows: Row[] }) {
         <button
           type="button"
           className={tabButtonClass(mainTab === "militaire")}
-          onClick={() => setMainTab("militaire")}
+          onClick={() => {
+            setMainTab("militaire");
+            setVisibleRows(PAGE_SIZE);
+          }}
           aria-pressed={mainTab === "militaire"}
         >
           Militaire
@@ -169,11 +200,25 @@ export function ClassementContent({ rows }: { rows: Row[] }) {
         <button
           type="button"
           className={tabButtonClass(mainTab === "economique")}
-          onClick={() => setMainTab("economique")}
+          onClick={() => {
+            setMainTab("economique");
+            setVisibleRows(PAGE_SIZE);
+          }}
           aria-pressed={mainTab === "economique"}
         >
           Économique
         </button>
+        <input
+          type="search"
+          value={searchQuery}
+          onChange={(event) => {
+            setSearchQuery(event.target.value);
+            setVisibleRows(PAGE_SIZE);
+          }}
+          placeholder="Rechercher un pays…"
+          aria-label="Rechercher un pays dans le classement"
+          className="order-last min-h-11 w-full rounded-lg border border-white/15 bg-black/30 px-3 text-base text-white placeholder:text-white/45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] lg:order-none lg:ml-auto lg:max-w-xs"
+        />
         <span className="ml-auto inline-flex items-center" onClick={(e) => e.stopPropagation()}>
           <InfoTooltipWithWikiLink
             text="Rangs des pays par influence totale (influence propre + bonus de sphère), puissance militaire ou indicateurs économiques. Les flèches indiquent l'évolution du rang."
@@ -185,7 +230,7 @@ export function ClassementContent({ rows }: { rows: Row[] }) {
 
       {mainTab === "global" && (
         <div className="space-y-8">
-          <section className={`${glassPanelClass} p-6`}>
+          {!searchQuery.trim() && <section className={`${glassPanelClass} p-6`}>
             <h2 className={`mb-4 ${glassTitleClass}`}>
               Les 3 grandes puissances
             </h2>
@@ -197,9 +242,15 @@ export function ClassementContent({ rows }: { rows: Row[] }) {
                   <Link
                     key={row.country.id}
                     href={`/pays/${row.country.slug}`}
-                    className="flex items-center gap-4 rounded-xl border border-white/25 bg-white/10 p-4 backdrop-blur-sm transition-colors hover:bg-white/20 hover:border-white/35"
+                    className={`flex items-center gap-4 rounded-xl border p-4 transition-colors ${
+                      rank === 1
+                        ? "border-[var(--accent)]/55 bg-[var(--accent)]/[0.09] hover:bg-[var(--accent)]/[0.14]"
+                        : "border-white/10 bg-black/20 hover:border-white/20 hover:bg-white/[0.06]"
+                    }`}
                   >
-                    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-lg font-bold text-white/90 bg-white/20">
+                    <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-lg font-bold ${
+                      rank === 1 ? "bg-[var(--accent)] text-[#071016]" : "bg-white/10 text-white"
+                    }`}>
                       {rank}
                     </span>
                     {row.country.flag_url ? (
@@ -219,8 +270,8 @@ export function ClassementContent({ rows }: { rows: Row[] }) {
                 ))
               )}
             </div>
-          </section>
-          <section className={`${glassPanelClass} p-6`}>
+          </section>}
+          {!searchQuery.trim() && <section className={`${glassPanelClass} p-6`}>
             <h2 className={`mb-4 ${glassTitleClass}`}>
               Les 5 puissances moyennes
             </h2>
@@ -233,7 +284,7 @@ export function ClassementContent({ rows }: { rows: Row[] }) {
                     <Link
                       key={row.country.id}
                       href={`/pays/${row.country.slug}`}
-                      className="flex items-center gap-4 rounded-xl border border-white/25 bg-white/10 p-4 backdrop-blur-sm transition-colors hover:bg-white/20 hover:border-white/35"
+                      className="flex items-center gap-4 rounded-xl border border-white/10 bg-black/20 p-4 transition-colors hover:border-white/20 hover:bg-white/[0.06]"
                     >
                       <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-lg font-bold text-white/90 bg-white/20">
                         {rank}
@@ -260,7 +311,7 @@ export function ClassementContent({ rows }: { rows: Row[] }) {
                       <Link
                         key={row.country.id}
                         href={`/pays/${row.country.slug}`}
-                        className={`flex items-center gap-4 rounded-xl border border-white/25 bg-white/10 p-4 backdrop-blur-sm transition-colors hover:bg-white/20 hover:border-white/35 sm:col-span-2 ${idx === 0 ? "sm:col-start-2" : "sm:col-start-4"}`}
+                        className={`flex items-center gap-4 rounded-xl border border-white/10 bg-black/20 p-4 transition-colors hover:border-white/20 hover:bg-white/[0.06] sm:col-span-2 ${idx === 0 ? "sm:col-start-2" : "sm:col-start-4"}`}
                       >
                         <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-lg font-bold text-white/90 bg-white/20">
                           {rank}
@@ -284,13 +335,15 @@ export function ClassementContent({ rows }: { rows: Row[] }) {
                 )}
               </>
             )}
-          </section>
+          </section>}
           <section className={`${glassPanelClass} overflow-hidden`}>
             <h2 className={`mb-0 px-6 pt-6 pb-4 ${glassTitleClass}`}>
-              Les puissances mineures
+              {searchQuery.trim() ? "Résultats" : "Les puissances mineures"}
             </h2>
-            {rest.length === 0 ? (
-              <p className={`p-6 text-center ${glassMutedClass}`}>Aucune autre nation.</p>
+            {filteredGlobalRows.length === 0 ? (
+              <p className={`p-6 text-center ${glassMutedClass}`}>
+                {searchQuery.trim() ? "Aucun pays ne correspond à cette recherche." : "Aucune autre nation."}
+              </p>
             ) : (
               <table className="w-full text-left text-sm">
                 <thead>
@@ -302,17 +355,22 @@ export function ClassementContent({ rows }: { rows: Row[] }) {
                   </tr>
                 </thead>
                 <tbody>
-                  {rest.map(({ row, rank, prev_rank }) => (
+                  {displayedGlobalRows.map(({ row, rank, prev_rank }) => (
                     <tr key={row.country.id} className={`border-b ${glassBorderClass}`}>
                       <td className={`p-3 font-mono ${glassMutedClass}`}>{rank}</td>
                       <td className="p-3">
                         {prev_rank != null && prev_rank !== rank ? (
-                          <span
-                            className="text-lg leading-none"
-                            style={{ color: rank < prev_rank ? "#86efac" : "#fca5a5" }}
-                            aria-hidden
-                          >
-                            {rank < prev_rank ? "▲" : "▼"}
+                          <span title={rank < prev_rank ? "Rang en hausse" : "Rang en baisse"}>
+                            <span
+                              className="text-lg leading-none"
+                              style={{ color: rank < prev_rank ? "#86efac" : "#fca5a5" }}
+                              aria-hidden
+                            >
+                              {rank < prev_rank ? "▲" : "▼"}
+                            </span>
+                            <span className="sr-only">
+                              {rank < prev_rank ? "Rang en hausse" : "Rang en baisse"}
+                            </span>
                           </span>
                         ) : (
                           <span className={glassMutedClass}>—</span>
@@ -339,6 +397,15 @@ export function ClassementContent({ rows }: { rows: Row[] }) {
                 </tbody>
               </table>
             )}
+            {filteredGlobalRows.length > displayedGlobalRows.length && (
+              <button
+                type="button"
+                onClick={() => setVisibleRows((count) => count + PAGE_SIZE)}
+                className="m-4 min-h-11 rounded-xl border border-white/25 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-white/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70"
+              >
+                Afficher {Math.min(PAGE_SIZE, filteredGlobalRows.length - displayedGlobalRows.length)} pays de plus
+              </button>
+            )}
           </section>
         </div>
       )}
@@ -356,7 +423,10 @@ export function ClassementContent({ rows }: { rows: Row[] }) {
               <button
                 key={key}
                 type="button"
-                onClick={() => setMilitaireSub(key)}
+                onClick={() => {
+                  setMilitaireSub(key);
+                  setVisibleRows(PAGE_SIZE);
+                }}
                 aria-pressed={militaireSub === key}
                 className={`min-h-11 rounded-xl px-3 py-1.5 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70 ${
                   militaireSub === key ? "bg-white/25 text-white" : "text-white/85 hover:bg-white/15 hover:text-white"
@@ -376,7 +446,7 @@ export function ClassementContent({ rows }: { rows: Row[] }) {
               </tr>
             </thead>
             <tbody>
-              {(militaireSub === "militarism" ? rankedMilitaire : militaireSub === "terre" ? rankedHPTerre : militaireSub === "air" ? rankedHPAir : militaireSub === "mer" ? rankedHPMer : rankedHPStrategique).map(({ row, rank, prev_rank }) => (
+              {displayedMilitaryRows.map(({ row, rank, prev_rank }) => (
                 <tr key={row.country.id} className={`border-b ${glassBorderClass}`}>
                   <td className={`p-3 font-mono ${glassMutedClass}`}>{rank}</td>
                   <EvolutionCell rank={rank} prev_rank={prev_rank} glass />
@@ -399,8 +469,17 @@ export function ClassementContent({ rows }: { rows: Row[] }) {
               ))}
             </tbody>
           </table>
-          {rows.length === 0 && (
-            <p className={`p-6 text-center ${glassMutedClass}`}>Aucun pays.</p>
+          {filteredMilitaryRows.length === 0 && (
+            <p className={`p-6 text-center ${glassMutedClass}`}>Aucun pays ne correspond.</p>
+          )}
+          {filteredMilitaryRows.length > displayedMilitaryRows.length && (
+            <button
+              type="button"
+              onClick={() => setVisibleRows((count) => count + PAGE_SIZE)}
+              className="m-4 min-h-11 rounded-xl border border-white/25 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-white/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70"
+            >
+              Afficher {Math.min(PAGE_SIZE, filteredMilitaryRows.length - displayedMilitaryRows.length)} pays de plus
+            </button>
           )}
         </div>
       )}
@@ -412,7 +491,10 @@ export function ClassementContent({ rows }: { rows: Row[] }) {
               <button
                 key={cat}
                 type="button"
-                onClick={() => setEconomiqueSub(cat)}
+                onClick={() => {
+                  setEconomiqueSub(cat);
+                  setVisibleRows(PAGE_SIZE);
+                }}
                 aria-pressed={economiqueSub === cat}
                 className={`min-h-11 rounded-xl px-3 py-1.5 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70 ${
                   economiqueSub === cat ? "bg-white/25 text-white" : "text-white/85 hover:bg-white/15 hover:text-white"
@@ -433,7 +515,7 @@ export function ClassementContent({ rows }: { rows: Row[] }) {
             </thead>
             <tbody>
               {economiqueSub === "population" &&
-                rankedPopulation.map(({ row, rank, prev_rank }) => {
+                displayedEconomicRows.map(({ row, rank, prev_rank }) => {
                   const pop = row.country.population ?? 0;
                   const prevPop = row.prev ? getNum(row.prev.population) : null;
                   const diff = prevPop != null ? pop - prevPop : null;
@@ -473,7 +555,7 @@ export function ClassementContent({ rows }: { rows: Row[] }) {
                   );
                 })}
               {economiqueSub === "gdp" &&
-                rankedGdp.map(({ row, rank, prev_rank }) => (
+                displayedEconomicRows.map(({ row, rank, prev_rank }) => (
                   <tr key={row.country.id} className={`border-b ${glassBorderClass}`}>
                     <td className={`p-3 font-mono ${glassMutedClass}`}>{rank}</td>
                     <EvolutionCell rank={rank} prev_rank={prev_rank} glass />
@@ -494,8 +576,17 @@ export function ClassementContent({ rows }: { rows: Row[] }) {
                 ))}
             </tbody>
           </table>
-          {rows.length === 0 && (
-            <p className={`p-6 text-center ${glassMutedClass}`}>Aucun pays.</p>
+          {filteredEconomicRows.length === 0 && (
+            <p className={`p-6 text-center ${glassMutedClass}`}>Aucun pays ne correspond.</p>
+          )}
+          {filteredEconomicRows.length > displayedEconomicRows.length && (
+            <button
+              type="button"
+              onClick={() => setVisibleRows((count) => count + PAGE_SIZE)}
+              className="m-4 min-h-11 rounded-xl border border-white/25 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-white/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70"
+            >
+              Afficher {Math.min(PAGE_SIZE, filteredEconomicRows.length - displayedEconomicRows.length)} pays de plus
+            </button>
           )}
         </div>
       )}

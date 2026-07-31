@@ -88,21 +88,20 @@ export function CountryTabBudget({
   worldAverages,
   effectsForTick,
 }: CountryTabBudgetProps) {
-  const glassSectionClass = `${panelClass} border-white/25 bg-white/10 shadow-[0_8px_30px_rgba(0,0,0,0.25)] backdrop-blur-xl`;
+  const glassSectionClass = `${panelClass} border-white/15 bg-[#091118]/90 shadow-[0_24px_70px_rgba(0,0,0,0.38)] backdrop-blur-md`;
   const glassSectionStyle: React.CSSProperties = {
     ...panelStyle,
-    background: "rgba(255,255,255,0.10)",
-    borderColor: "rgba(255,255,255,0.25)",
+    background: "rgba(9,17,24,0.9)",
+    borderColor: "rgba(255,255,255,0.15)",
   };
   const glassInputClass =
-    "rounded-lg border border-white/25 bg-white/10 px-2 py-1.5 text-sm font-mono text-[var(--foreground)] shadow-[inset_0_1px_0_rgba(255,255,255,0.2)] backdrop-blur-sm disabled:opacity-60";
+    "rounded-lg border border-white/15 bg-black/30 px-2 py-1.5 text-sm font-mono text-[var(--foreground)] disabled:opacity-60";
   const glassSliderClass =
-    "h-2 w-full rounded-full border border-white/25 bg-white/10 accent-[var(--accent)] shadow-[inset_0_1px_0_rgba(255,255,255,0.2)]";
+    "h-2 w-full rounded-full border border-white/15 bg-black/30 accent-[var(--accent)]";
   const glassButtonStyle: React.CSSProperties = {
-    background: "linear-gradient(180deg, rgba(255,255,255,0.34) 0%, rgba(255,255,255,0.16) 100%)",
+    background: "rgba(255,255,255,0.07)",
     color: "var(--foreground)",
-    borderColor: "rgba(255,255,255,0.35)",
-    backdropFilter: "blur(8px)",
+    borderColor: "rgba(255,255,255,0.15)",
   };
 
   return (
@@ -112,14 +111,7 @@ export function CountryTabBudget({
           Budget d'état
         </h2>
         <div className="mb-4 space-y-3 text-sm text-white/80">
-          <p>
-            Choisissez la part du PIB consacrée à l’État, puis répartissez ce budget entre les ministères.
-            Ce sont ces pourcentages qui orientent l’évolution du pays.
-          </p>
-          <ul className="list-inside list-disc space-y-1 pl-1">
-            <li>Un ministère sous-financé peut pénaliser le pays.</li>
-            <li>Tout budget non réparti est perdu : visez le maximum autorisé.</li>
-          </ul>
+          <p>Répartissez le budget entre les ministères. Les minimums obligatoires sont signalés.</p>
           {allocationCap !== 100 && (
             <p className="text-sm text-[var(--foreground)]">
               Plafond d'allocation actuel : <strong>{allocationCap} %</strong>
@@ -174,6 +166,50 @@ export function CountryTabBudget({
         {budgetError && (
           <p role="alert" className="mb-4 text-sm text-[var(--danger)]">{budgetError}</p>
         )}
+        <div
+          className="sticky top-[9.5rem] z-20 -mx-3 mb-4 border-y border-white/20 bg-[var(--background-panel)]/95 px-3 py-2.5 shadow-lg backdrop-blur-xl lg:top-32"
+          aria-label="État de la répartition budgétaire"
+        >
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+            <div className="min-w-[8rem]">
+              <span className="text-xs text-[var(--foreground-muted)]">Total alloué</span>
+              <strong className={`ml-2 font-mono text-sm ${overAllocation ? "text-[var(--danger)]" : "text-[var(--foreground)]"}`}>
+                {totalPct.toFixed(1)} %
+              </strong>
+            </div>
+            <div className="min-w-[7rem]">
+              <span className="text-xs text-[var(--foreground-muted)]">Reste</span>
+              <strong className={`ml-2 font-mono text-sm ${overAllocation ? "text-[var(--danger)]" : "text-[var(--accent)]"}`}>
+                {(allocationCap - totalPct).toFixed(1)} %
+              </strong>
+            </div>
+            <div className="hidden h-2 min-w-32 flex-1 overflow-hidden rounded bg-white/10 sm:block">
+              <div
+                className="h-full rounded transition-all"
+                style={{
+                  width: `${allocationCap > 0 ? Math.min(100, (totalPct / allocationCap) * 100) : 0}%`,
+                  background: overAllocation ? "var(--danger)" : "var(--accent)",
+                }}
+              />
+            </div>
+            {canEditCountry ? (
+              <button
+                type="button"
+                disabled={budgetSaving || overAllocation}
+                onClick={onSaveBudget}
+                className="ml-auto min-h-11 rounded-lg border px-4 py-2 text-sm font-medium transition hover:bg-white/20 disabled:opacity-50"
+                style={glassButtonStyle}
+              >
+                {budgetSaving ? "Enregistrement…" : "Enregistrer"}
+              </button>
+            ) : null}
+          </div>
+          {overAllocation ? (
+            <p className="mt-2 text-sm text-[var(--danger)]">
+              Réduisez la répartition de {Math.abs(allocationCap - totalPct).toFixed(1)} % pour enregistrer.
+            </p>
+          ) : null}
+        </div>
         <div className="space-y-4">
           {[1, 2, 3].map((groupNum) => (
             <div key={groupNum}>
@@ -260,46 +296,6 @@ export function CountryTabBudget({
               })}
             </div>
           ))}
-        </div>
-        <div className="mt-4 space-y-3 border-t border-white/20 pt-4">
-          <div className="flex items-center gap-3">
-            <span className="w-24 shrink-0 text-sm text-[var(--foreground-muted)]">Total alloué</span>
-            <div className="h-4 flex-1 overflow-hidden rounded border border-white/25 bg-white/10">
-              <div
-                className="h-full rounded transition-all"
-                style={{
-                  width: `${Math.min(100, (totalPct / allocationCap) * 100)}%`,
-                  background: overAllocation ? "var(--danger)" : "var(--accent)",
-                }}
-              />
-            </div>
-            <span className={`w-14 shrink-0 text-right text-sm font-mono ${overAllocation ? "text-[var(--danger)]" : "text-[var(--foreground-muted)]"}`}>
-              {totalPct.toFixed(1)} %
-            </span>
-          </div>
-          {allocationCap !== 100 && (
-            <p className="text-xs text-[var(--foreground-muted)]">
-              Maximum autorisé : {allocationCap} %.
-            </p>
-          )}
-          {overAllocation && (
-            <p className="text-sm text-[var(--danger)]">
-              La somme ne doit pas dépasser {allocationCap} %. Réduisez les pourcentages pour pouvoir enregistrer.
-            </p>
-          )}
-          {canEditCountry && (
-            <div className="flex justify-end">
-              <button
-                type="button"
-                disabled={budgetSaving || overAllocation}
-                onClick={onSaveBudget}
-                className="rounded-lg border px-4 py-2 text-sm font-medium transition hover:bg-white/20 disabled:opacity-50"
-                style={glassButtonStyle}
-              >
-                {budgetSaving ? "Enregistrement…" : "Enregistrer"}
-              </button>
-            </div>
-          )}
         </div>
       </section>
 

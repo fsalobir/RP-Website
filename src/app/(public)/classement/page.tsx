@@ -8,6 +8,7 @@ import { getEffectiveSpherePct, type SphereInfluencePct } from "@/lib/ideology";
 import type { MilitaryBranch } from "@/types/database";
 import { PublicPageHeader } from "@/components/ui/PublicPageHeader";
 
+export const metadata = { title: "Classement" };
 export const revalidate = 3600;
 
 function normId(id: string | null | undefined): string {
@@ -222,7 +223,7 @@ export default async function ClassementPage() {
             filter: "blur(0.5px)",
           }}
         />
-        <div className="absolute inset-0 bg-black/40" />
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_0%,rgba(103,211,122,0.13),transparent_38%),linear-gradient(180deg,rgba(3,8,11,0.38)_0%,rgba(3,8,11,0.76)_48%,rgba(3,8,11,0.95)_100%)]" />
       </div>
       <div className="relative z-10 max-w-6xl mx-auto" style={{ isolation: "isolate" }}>
         <PublicPageHeader title="Rapport de puissance" icon="ranking" />

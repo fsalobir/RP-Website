@@ -1245,9 +1245,9 @@ export function CountryTabGeneral({
                 </ul>
               </div>
               {sphereData.countries.length > 0 && (
-                <div className={`overflow-x-auto rounded-xl border ${glassBorderClass}`} style={briefingSurfaceStyle}>
-                  <table className="w-full min-w-[420px] text-left text-sm">
-                    <thead>
+                <div className={`overflow-visible rounded-xl border sm:overflow-x-auto ${glassBorderClass}`} style={briefingSurfaceStyle}>
+                  <table className="w-full text-left text-sm sm:min-w-[420px]">
+                    <thead className="hidden sm:table-header-group">
                       <tr className={`border-b ${glassBorderClass}`}>
                         <th className={`p-3 font-semibold ${glassMutedClass}`}>Pays</th>
                         <th className={`p-3 font-semibold ${glassMutedClass}`}>Niveau</th>
@@ -1258,8 +1258,8 @@ export function CountryTabGeneral({
                     </thead>
                     <tbody>
                       {sortedCountries.map((c) => (
-                        <tr key={c.id} className={`border-b last:border-b-0 ${glassBorderClass}`}>
-                          <td className="p-3">
+                        <tr key={c.id} className={`grid grid-cols-2 gap-2 border-b p-3 last:border-b-0 sm:table-row sm:p-0 ${glassBorderClass}`}>
+                          <td className="col-span-2 sm:table-cell sm:p-3">
                             <Link
                               href={`/pays/${c.slug}`}
                               className="inline-flex min-h-11 items-center gap-2 rounded font-medium text-[var(--accent)] hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
@@ -1273,19 +1273,22 @@ export function CountryTabGeneral({
                               {c.name}
                             </Link>
                           </td>
-                          <td className={`p-3 ${glassMutedClass}`}>
+                          <td className={`col-span-2 text-xs sm:table-cell sm:p-3 sm:text-sm ${glassMutedClass}`}>
                             {c.controlStatus}
                             {c.controlStatus === "Contesté" && ` (${c.share_pct} %)`}
                             {c.controlStatus === "Occupé" && " (100 %)"}
                             {c.controlStatus === "Annexé" && " (100 %)"}
                           </td>
-                          <td className={`p-3 text-right font-mono ${glassTextClass}`} title="Part comptée dans la sphère (proportionnelle au % de contrôle).">
+                          <td className={`font-mono sm:table-cell sm:p-3 sm:text-right ${glassTextClass}`} title="Part comptée dans la sphère (proportionnelle au % de contrôle).">
+                            <span className={`block text-[10px] uppercase sm:hidden ${glassMutedClass}`}>Population</span>
                             {formatNumber(c.contributionPopulation)}
                           </td>
-                          <td className={`p-3 text-right font-mono ${glassTextClass}`} title="Part comptée dans la sphère (proportionnelle au % de contrôle).">
+                          <td className={`text-right font-mono sm:table-cell sm:p-3 ${glassTextClass}`} title="Part comptée dans la sphère (proportionnelle au % de contrôle).">
+                            <span className={`block text-[10px] uppercase sm:hidden ${glassMutedClass}`}>PIB</span>
                             {formatGdp(c.contributionGdp)}
                           </td>
-                          <td className={`p-3 text-right font-mono ${glassTextClass}`} title="Influence apportée = influence du pays × % contrôle × multiplicateur règle (Contesté/Occupé/Annexé).">
+                          <td className={`col-span-2 border-t border-white/15 pt-2 font-mono sm:table-cell sm:border-0 sm:p-3 sm:text-right ${glassTextClass}`} title="Influence apportée = influence du pays × % contrôle × multiplicateur règle (Contesté/Occupé/Annexé).">
+                            <span className={`sm:hidden ${glassMutedClass}`}>Influence apportée : </span>
                             {formatNumber(c.influenceGiven)}
                           </td>
                         </tr>

@@ -39,6 +39,7 @@ declare module "react-simple-maps" {
     onClick?: () => void;
     onMouseMove?: (e: React.MouseEvent) => void;
     onMouseLeave?: () => void;
+    tabIndex?: number;
     title?: string;
     className?: string;
   }>;

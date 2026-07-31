@@ -319,7 +319,7 @@ function LawCard({
               aria-hidden
             >
               <span
-                className="text-4xl animate-spin"
+                className="animate-spin text-4xl motion-reduce:animate-none"
                 style={{ filter: "drop-shadow(0 0 4px var(--background))" }}
                 title="Mise à jour en cours…"
               >

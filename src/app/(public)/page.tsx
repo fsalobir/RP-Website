@@ -8,6 +8,7 @@ import { getInfluenceModifiersByCountry } from "@/lib/countryEffects";
 import { getEffectiveSpherePct, type SphereInfluencePct } from "@/lib/ideology";
 import type { MilitaryBranch } from "@/types/database";
 
+export const metadata = { title: "Situation mondiale" };
 export const revalidate = 3600;
 
 export default async function HomePage({
@@ -88,9 +89,9 @@ export default async function HomePage({
           aria-hidden
         >
           <div className="absolute inset-0 bg-cover bg-center bg-no-repeat scale-105" style={{ backgroundImage: "url(/images/site/pays-accueil-bg.png)", filter: "blur(0.5px)" }} />
-          <div className="absolute inset-0 bg-black/40" />
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_0%,rgba(103,211,122,0.13),transparent_38%),linear-gradient(180deg,rgba(3,8,11,0.38)_0%,rgba(3,8,11,0.76)_48%,rgba(3,8,11,0.95)_100%)]" />
         </div>
-        <div className="relative z-10 max-w-6xl mx-auto rounded-2xl border border-white/25 bg-white/15 p-6 shadow-xl backdrop-blur-xl">
+        <div className="relative z-10 mx-auto max-w-6xl rounded-2xl border border-white/15 bg-[#091118]/90 p-6 shadow-[0_24px_70px_rgba(0,0,0,0.42)] backdrop-blur-md">
           <p className="text-red-200">Erreur lors du chargement des pays. Vérifiez que la migration Supabase a été exécutée.</p>
         </div>
       </div>
@@ -181,7 +182,7 @@ export default async function HomePage({
             filter: "blur(0.5px)",
           }}
         />
-        <div className="absolute inset-0 bg-black/40" />
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_0%,rgba(103,211,122,0.13),transparent_38%),linear-gradient(180deg,rgba(3,8,11,0.38)_0%,rgba(3,8,11,0.76)_48%,rgba(3,8,11,0.95)_100%)]" />
       </div>
       <div className="relative z-10 max-w-6xl mx-auto" style={{ isolation: "isolate" }}>
         <PublicPageHeader title="Situation mondiale" icon="world" />

@@ -73,6 +73,7 @@ const ADMIN_COLUMNS = [
   { key: "continent" as const, label: "Continent" },
 ];
 const ADMIN_PAGE_SIZE = 25;
+const PUBLIC_PAGE_SIZE = 30;
 
 function getSortValue(row: Row, key: SortKey): number | string | null {
   const c = row.country;
@@ -177,6 +178,7 @@ export function CountriesTable({
   const [assignmentFilter, setAssignmentFilter] = useState<"all" | "assigned_only">("all");
   const [adminStatusFilter, setAdminStatusFilter] = useState<AdminStatusFilter>("all");
   const [adminPage, setAdminPage] = useState(1);
+  const [visiblePublicRows, setVisiblePublicRows] = useState(PUBLIC_PAGE_SIZE);
   const [editingAdminCountryId, setEditingAdminCountryId] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [actionSuccess, setActionSuccess] = useState<string | null>(null);
@@ -241,8 +243,10 @@ export function CountriesTable({
     }),
     [rows, playedSet]
   );
+  const displayedPublicRows = sortedRows.slice(0, visiblePublicRows);
 
   function handleHeaderClick(key: SortKey) {
+    setVisiblePublicRows(PUBLIC_PAGE_SIZE);
     if (sortKey === key) {
       setSortOrder((o) => (o === "asc" ? "desc" : "asc"));
     } else {
@@ -292,9 +296,9 @@ export function CountriesTable({
     });
   }
 
-  const glassPanelClass = "rounded-2xl border border-white/25 bg-white/15 shadow-xl backdrop-blur-xl";
-  const glassBorderClass = "border-white/20";
-  const glassMutedClass = "text-white/85";
+  const glassPanelClass = "rounded-2xl border border-white/15 bg-[#091118]/90 shadow-[0_24px_70px_rgba(0,0,0,0.42)] backdrop-blur-md";
+  const glassBorderClass = "border-white/10";
+  const glassMutedClass = "text-white/70";
   const panelStyle = glassContext
     ? undefined
     : { background: "var(--background-panel)", border: "1px solid var(--border)", borderRadius: "var(--radius)" };
@@ -690,22 +694,25 @@ export function CountriesTable({
   const thStyle = glassContext ? undefined : { borderColor: "var(--border)" };
   const sortArrowClass = glassContext ? "text-white" : "text-[var(--accent)]";
   const trClass = glassContext
-    ? `border-b transition-colors hover:bg-white/10 ${glassBorderClass}`
+    ? `border-b transition-colors hover:bg-[var(--accent)]/[0.07] ${glassBorderClass}`
     : "border-b transition-colors hover:bg-[var(--background-elevated)]";
   const trStyle = glassContext ? undefined : { borderColor: "var(--border-muted)" };
 
   return (
     <div className={showSearch ? tableWrapperClass : `overflow-x-auto ${tableWrapperClass}`} style={panelStyle}>
       {showSearch && (
-        <div className={`p-3 border-b ${glassContext ? `border-white/20 ${glassMutedClass}` : ""}`} style={!glassContext ? { borderColor: "var(--border)" } : undefined}>
+        <div className={`border-b p-3 ${glassContext ? `border-white/10 ${glassMutedClass}` : ""}`} style={!glassContext ? { borderColor: "var(--border)" } : undefined}>
           <div className="flex flex-wrap items-center gap-3">
             <input
               type="search"
               placeholder="Rechercher par pays ou régime…"
               value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
+              onChange={(e) => {
+                setSearchQuery(e.target.value);
+                setVisiblePublicRows(PUBLIC_PAGE_SIZE);
+              }}
               className={glassContext
-                ? "min-h-11 w-full max-w-md rounded-xl border border-white/30 bg-white/20 px-3 py-2 text-sm text-white placeholder:text-white/60 focus:border-white/50 focus:outline-none focus:ring-2 focus:ring-white/30"
+                ? "min-h-11 w-full max-w-md rounded-lg border border-white/15 bg-black/30 px-3 py-2 text-sm text-white placeholder:text-white/45 focus:border-[var(--accent)] focus:outline-none focus:ring-2 focus:ring-[var(--accent)]/30"
                 : "min-h-11 w-full max-w-md rounded border bg-[var(--background)] px-3 py-2 text-sm text-[var(--foreground)] placeholder:text-[var(--foreground-muted)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]"}
               style={!glassContext ? { borderColor: "var(--border)" } : undefined}
               aria-label="Rechercher dans la liste des pays"
@@ -715,22 +722,28 @@ export function CountriesTable({
                 <span className="text-sm text-[var(--foreground-muted)]">Afficher :</span>
                 <button
                   type="button"
-                  onClick={() => setAssignmentFilter("all")}
+                  onClick={() => {
+                    setAssignmentFilter("all");
+                    setVisiblePublicRows(PUBLIC_PAGE_SIZE);
+                  }}
                   aria-pressed={assignmentFilter === "all"}
                   className={`min-h-11 rounded border px-3 py-1.5 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 ${assignmentFilter === "all"
-                    ? glassContext ? "border-white/50 bg-white/25 text-white" : "border-[var(--accent)] bg-[var(--accent)]/10 text-[var(--accent)]"
-                    : glassContext ? "border-white/30 text-white/80 hover:bg-white/15" : "border-[var(--border)] text-[var(--foreground-muted)] hover:border-[var(--border-muted)] hover:text-[var(--foreground)]"}`}
+                    ? glassContext ? "border-[var(--accent)] bg-[var(--accent)] text-[#071016]" : "border-[var(--accent)] bg-[var(--accent)]/10 text-[var(--accent)]"
+                    : glassContext ? "border-white/15 text-white/70 hover:bg-white/[0.07] hover:text-white" : "border-[var(--border)] text-[var(--foreground-muted)] hover:border-[var(--border-muted)] hover:text-[var(--foreground)]"}`}
                   style={assignmentFilter !== "all" && !glassContext ? { borderColor: "var(--border)" } : undefined}
                 >
                   Tous
                 </button>
                 <button
                   type="button"
-                  onClick={() => setAssignmentFilter("assigned_only")}
+                  onClick={() => {
+                    setAssignmentFilter("assigned_only");
+                    setVisiblePublicRows(PUBLIC_PAGE_SIZE);
+                  }}
                   aria-pressed={assignmentFilter === "assigned_only"}
                   className={`min-h-11 rounded border px-3 py-1.5 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 ${assignmentFilter === "assigned_only"
-                    ? glassContext ? "border-white/50 bg-white/25 text-white" : "border-[var(--accent)] bg-[var(--accent)]/10 text-[var(--accent)]"
-                    : glassContext ? "border-white/30 text-white/80 hover:bg-white/15" : "border-[var(--border)] text-[var(--foreground-muted)] hover:border-[var(--border-muted)] hover:text-[var(--foreground)]"}`}
+                    ? glassContext ? "border-[var(--accent)] bg-[var(--accent)] text-[#071016]" : "border-[var(--accent)] bg-[var(--accent)]/10 text-[var(--accent)]"
+                    : glassContext ? "border-white/15 text-white/70 hover:bg-white/[0.07] hover:text-white" : "border-[var(--border)] text-[var(--foreground-muted)] hover:border-[var(--border-muted)] hover:text-[var(--foreground)]"}`}
                   style={assignmentFilter !== "assigned_only" && !glassContext ? { borderColor: "var(--border)" } : undefined}
                 >
                   Assignés uniquement
@@ -738,12 +751,109 @@ export function CountriesTable({
               </div>
             )}
           </div>
-          <p className={`mt-2 text-xs sm:hidden ${glassContext ? "text-white/65" : "text-[var(--foreground-muted)]"}`}>
-            Faites glisser le tableau pour voir toutes les colonnes.
-          </p>
         </div>
       )}
-      <div className={showSearch ? "overflow-x-auto" : ""}>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:hidden">
+        {displayedPublicRows.map((row) => {
+          const c = row.country;
+          return (
+            <article
+              key={c.id}
+              className={`space-y-3 border-b p-3 transition-colors sm:border-r ${glassContext ? "border-white/10 hover:bg-[var(--accent)]/[0.06]" : "border-[var(--border-muted)]"}`}
+            >
+              <div className="flex items-start justify-between gap-3">
+                <Link
+                  href={`/pays/${c.slug}`}
+                  className={`flex min-h-11 min-w-0 items-center gap-3 font-medium focus-visible:outline-none focus-visible:ring-2 ${glassContext ? "text-white focus-visible:ring-white/70" : "text-[var(--foreground)] focus-visible:ring-[var(--accent)]"}`}
+                >
+                  {c.flag_url ? (
+                    <Image
+                      loader={flagLoader}
+                      unoptimized
+                      src={c.flag_url}
+                      alt=""
+                      width={40}
+                      height={27}
+                      className="h-7 w-10 shrink-0 rounded object-cover"
+                    />
+                  ) : (
+                    <span className={`h-7 w-10 shrink-0 rounded ${glassContext ? "bg-white/20" : "bg-[var(--background-elevated)]"}`} />
+                  )}
+                  <span className="min-w-0">
+                    <span className="block truncate">{c.name}</span>
+                    <span className={`block truncate text-xs font-normal ${glassContext ? glassMutedClass : "text-[var(--foreground-muted)]"}`}>
+                      {c.regime ?? "—"}
+                    </span>
+                  </span>
+                </Link>
+                <div className="shrink-0 text-right">
+                  <span className={`block text-[10px] uppercase tracking-wide ${glassContext ? glassMutedClass : "text-[var(--foreground-muted)]"}`}>Influence</span>
+                  <span className={`font-mono font-semibold tabular-nums ${glassContext ? "text-white" : "text-[var(--foreground)]"}`}>
+                    {formatNumber(row.influence)}
+                  </span>
+                </div>
+              </div>
+              <dl className="grid grid-cols-3 gap-2 text-sm">
+                <div>
+                  <dt className={`text-xs ${glassContext ? glassMutedClass : "text-[var(--foreground-muted)]"}`}>PIB</dt>
+                  <dd className="font-mono tabular-nums">{c.gdp != null ? formatGdp(c.gdp) : "—"}</dd>
+                </div>
+                <div>
+                  <dt className={`text-xs ${glassContext ? glassMutedClass : "text-[var(--foreground-muted)]"}`}>Population</dt>
+                  <dd className="font-mono tabular-nums">{c.population != null ? formatPopulation(c.population) : "—"}</dd>
+                </div>
+                <div>
+                  <dt className={`text-xs ${glassContext ? glassMutedClass : "text-[var(--foreground-muted)]"}`}>Stabilité</dt>
+                  <dd className="font-mono tabular-nums">{c.stability != null ? formatNumber(c.stability) : "—"}</dd>
+                </div>
+              </dl>
+              {row.sphere?.length ? (
+                <p className={`text-xs ${glassContext ? glassMutedClass : "text-[var(--foreground-muted)]"}`}>
+                  Sphère : {row.sphere.length} pays
+                </p>
+              ) : null}
+              {showAiStatusColumn && !playedSet.has(c.id) ? (
+                <select
+                  aria-label={`Rôle automatique de ${c.name} lorsqu’aucun joueur ne le contrôle`}
+                  value={c.ai_status ?? ""}
+                  onChange={(event) => {
+                    const value = event.target.value;
+                    const aiStatus = value === "major" || value === "minor" ? value : null;
+                    if (updateAiStatusAction) {
+                      setPendingId(c.id);
+                      startTransition(() => {
+                        updateAiStatusAction(c.id, aiStatus).finally(() => setPendingId(null));
+                      });
+                    }
+                  }}
+                  disabled={isPending && pendingId === c.id}
+                  className="min-h-11 w-full rounded border bg-[var(--background-elevated)] px-3 text-sm"
+                  style={{ borderColor: "var(--border)" }}
+                >
+                  <option value="">Aucune gestion automatique</option>
+                  <option value="major">Grande puissance</option>
+                  <option value="minor">Puissance secondaire</option>
+                </select>
+              ) : null}
+              {showModifierButton ? (
+                <Link
+                  href={`/admin/pays/${c.id}`}
+                  className="inline-flex min-h-11 items-center rounded px-3 py-2 text-sm font-medium"
+                  style={{ background: "var(--warning)", color: "#0f1419" }}
+                >
+                  Modifier
+                </Link>
+              ) : null}
+            </article>
+          );
+        })}
+        {sortedRows.length === 0 && (
+          <p className={`p-6 text-center ${glassContext ? "text-white/70" : "text-[var(--foreground-muted)]"}`}>
+            Aucun pays ne correspond aux filtres choisis.
+          </p>
+        )}
+      </div>
+      <div className="hidden overflow-x-auto lg:block">
       <table className="w-full min-w-[800px] text-left text-sm">
         <thead>
           <tr className={`border-b ${theadBorder}`} style={!glassContext ? { borderColor: "var(--border)" } : undefined}>
@@ -805,7 +915,7 @@ export function CountriesTable({
           </tr>
         </thead>
         <tbody>
-          {sortedRows.map((row) => {
+          {displayedPublicRows.map((row) => {
             const { country: c, prev } = row;
             return (
             <tr key={c.id} className={trClass} style={trStyle}>
@@ -918,6 +1028,24 @@ export function CountriesTable({
         </tbody>
       </table>
       </div>
+      {sortedRows.length > displayedPublicRows.length && (
+        <div className={`flex flex-wrap items-center justify-between gap-3 border-t p-3 ${glassContext ? "border-white/20" : "border-[var(--border)]"}`}>
+          <p className={`text-sm ${glassContext ? glassMutedClass : "text-[var(--foreground-muted)]"}`}>
+            {displayedPublicRows.length} pays affichés sur {sortedRows.length}
+          </p>
+          <button
+            type="button"
+            onClick={() => setVisiblePublicRows((count) => count + PUBLIC_PAGE_SIZE)}
+            className={`min-h-11 rounded-lg border px-4 py-2 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 ${
+              glassContext
+                ? "border-white/30 text-white hover:bg-white/15 focus-visible:ring-white/70"
+                : "border-[var(--border)] text-[var(--foreground)] hover:bg-[var(--background-elevated)] focus-visible:ring-[var(--accent)]"
+            }`}
+          >
+            Afficher {Math.min(PUBLIC_PAGE_SIZE, sortedRows.length - displayedPublicRows.length)} pays de plus
+          </button>
+        </div>
+      )}
     </div>
   );
 }

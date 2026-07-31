@@ -23,6 +23,7 @@ import type {
   CountryMilitaryUnit,
 } from "@/types/database";
 
+export const metadata = { title: "Pays" };
 const RULE_KEYS = [
   "global_growth_effects",
   "budget_sante",
@@ -687,15 +688,14 @@ export async function CountryWorkspace({
               backgroundPosition: "top center",
             }}
           />
-          <div className="absolute inset-0 bg-[var(--background-panel)]/75" />
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_0%,rgba(103,211,122,0.1),transparent_35%),linear-gradient(180deg,rgba(3,8,11,0.58)_0%,rgba(3,8,11,0.9)_62%,rgba(3,8,11,0.97)_100%)]" />
         </div>
       )}
       <div className={embedded ? "" : "relative z-10 mx-auto max-w-6xl px-4 py-4 sm:py-8 lg:py-10"}>
         {!embedded && (
           <Link
             href={backHref}
-            className="mb-4 inline-flex min-h-11 items-center rounded-xl border border-white/25 px-4 text-sm text-white/90 transition-colors hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] sm:mb-6"
-            style={{ background: "rgba(255,255,255,0.12)", backdropFilter: "blur(12px)" }}
+            className="mb-4 inline-flex min-h-11 items-center rounded-lg border border-white/15 bg-[#091118]/85 px-4 text-sm text-white/70 transition-colors hover:border-white/25 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] sm:mb-6"
           >
             ← Retour aux nations
           </Link>

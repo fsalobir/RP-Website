@@ -68,9 +68,8 @@ export function CountryTabPerks({
   panelClass,
   panelStyle,
 }: CountryTabPerksProps) {
-  const [filter, setFilter] = useState<FilterChoice>("all");
+  const [filter, setFilter] = useState<FilterChoice>("active");
 
-  const categoryById = new Map(perkCategories.map((c) => [c.id, c]));
   const sortedCategories = [...perkCategories].sort((a, b) => a.sort_order - b.sort_order);
 
   function matchesFilter(p: PerkDef): boolean {
@@ -90,6 +89,7 @@ export function CountryTabPerks({
       perksByCategoryId.set(p.category_id, list);
     }
   }
+  const visiblePerksCount = perksDef.filter(matchesFilter).length;
 
   if (perksDef.length === 0) {
     return (
@@ -229,7 +229,7 @@ export function CountryTabPerks({
           type="button"
           onClick={() => setFilter("all")}
           aria-pressed={filter === "all"}
-          className={`rounded border px-3 py-1.5 text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] ${filter === "all" ? "border-[var(--accent)] bg-[var(--accent)]/10 text-[var(--accent)]" : "border-[var(--border)] text-[var(--foreground-muted)] hover:border-[var(--border-muted)] hover:text-[var(--foreground)]"}`}
+          className={`min-h-11 rounded border px-3 py-1.5 text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] ${filter === "all" ? "border-[var(--accent)] bg-[var(--accent)]/10 text-[var(--accent)]" : "border-[var(--border)] text-[var(--foreground-muted)] hover:border-[var(--border-muted)] hover:text-[var(--foreground)]"}`}
         >
           Tous
         </button>
@@ -237,7 +237,7 @@ export function CountryTabPerks({
           type="button"
           onClick={() => setFilter("active")}
           aria-pressed={filter === "active"}
-          className={`rounded border px-3 py-1.5 text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] ${filter === "active" ? "border-[var(--accent)] bg-[var(--accent)]/10 text-[var(--accent)]" : "border-[var(--border)] text-[var(--foreground-muted)] hover:border-[var(--border-muted)] hover:text-[var(--foreground)]"}`}
+          className={`min-h-11 rounded border px-3 py-1.5 text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] ${filter === "active" ? "border-[var(--accent)] bg-[var(--accent)]/10 text-[var(--accent)]" : "border-[var(--border)] text-[var(--foreground-muted)] hover:border-[var(--border-muted)] hover:text-[var(--foreground)]"}`}
         >
           Activés
         </button>
@@ -245,11 +245,28 @@ export function CountryTabPerks({
           type="button"
           onClick={() => setFilter("inactive")}
           aria-pressed={filter === "inactive"}
-          className={`rounded border px-3 py-1.5 text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] ${filter === "inactive" ? "border-[var(--accent)] bg-[var(--accent)]/10 text-[var(--accent)]" : "border-[var(--border)] text-[var(--foreground-muted)] hover:border-[var(--border-muted)] hover:text-[var(--foreground)]"}`}
+          className={`min-h-11 rounded border px-3 py-1.5 text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] ${filter === "inactive" ? "border-[var(--accent)] bg-[var(--accent)]/10 text-[var(--accent)]" : "border-[var(--border)] text-[var(--foreground-muted)] hover:border-[var(--border-muted)] hover:text-[var(--foreground)]"}`}
         >
           Désactivés
         </button>
       </div>
+
+      {visiblePerksCount === 0 && (
+        <div className={panelClass} style={panelStyle}>
+          <p className="text-sm text-[var(--foreground-muted)]">
+            {filter === "active" ? "Aucun avantage actif." : "Aucun avantage dans cette sélection."}
+          </p>
+          {filter === "active" && (
+            <button
+              type="button"
+              onClick={() => setFilter("all")}
+              className="mt-3 min-h-11 rounded border border-[var(--border)] px-3 py-2 text-sm font-medium text-[var(--foreground)]"
+            >
+              Voir tous les avantages
+            </button>
+          )}
+        </div>
+      )}
 
       {sortedCategories.map((cat) => {
         const perks = perksByCategoryId.get(cat.id) ?? [];

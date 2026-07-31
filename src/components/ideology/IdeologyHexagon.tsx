@@ -58,11 +58,6 @@ const LABEL_OFFSET_TOP_BOTTOM = 0.04;
 const CENTER_X = 0.5;
 const CENTER_Y = 0.5;
 
-/** Polygon pour clip-path CSS (même forme que l’hexagone), en pourcentages. */
-const HEX_CLIP_POLYGON = HEX_VERTICES.map(
-  (v) => `${(CENTER_X + v.x * HEX_RADIUS) * 100}% ${(CENTER_Y - v.y * HEX_RADIUS) * 100}%`
-).join(", ");
-
 function formatScore(value: number): string {
   return Number(value).toLocaleString("fr-FR", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
 }
@@ -162,9 +157,9 @@ function HexagonSvg() {
   );
 }
 
-const INFOBOX_FADEOUT_MS = 180;
+const INFOBOX_FADEOUT_MS = 260;
 /** Durée du fondu infobulle / drapeaux (ms), alignée sur la classe Tailwind du panneau. */
-const INFOBOX_OPACITY_TRANSITION_MS = 160;
+const INFOBOX_OPACITY_TRANSITION_MS = 240;
 
 export type IdeologyEffectEntry = { ideology_id: string; effect_kind: string; effect_target: string | null; value: number };
 
@@ -175,11 +170,11 @@ export function IdeologyHexagon({
   entries: IdeologyHexagonEntry[];
   ideologyEffectsConfig?: IdeologyEffectEntry[];
 }) {
-  const glassPanelStyle: React.CSSProperties = { background: "rgba(255,255,255,0.12)", backdropFilter: "blur(12px)" };
-  const glassPanelClass = "rounded-xl border border-white/25";
-  const glassSubStyle: React.CSSProperties = { background: "rgba(255,255,255,0.08)" };
+  const glassPanelStyle: React.CSSProperties = { background: "rgba(9,17,24,0.9)" };
+  const glassPanelClass = "rounded-2xl border border-white/15 shadow-[0_24px_70px_rgba(0,0,0,0.42)]";
+  const glassSubStyle: React.CSSProperties = { background: "rgba(0,0,0,0.22)" };
   const glassTextClass = "text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.4)]";
-  const glassMutedClass = "text-white/90";
+  const glassMutedClass = "text-white/70";
 
   const [showPlayers, setShowPlayers] = useState(true);
   const [showAiMajor, setShowAiMajor] = useState(true);
@@ -353,23 +348,23 @@ export function IdeologyHexagon({
             </div>
             {displayedIdeology && (
               <div
-                className="absolute inset-0 z-[200] flex flex-col border shadow-lg transition-opacity"
+                className="fixed inset-4 top-20 z-[200] flex flex-col overflow-hidden rounded-xl border shadow-2xl transition-[opacity,transform] sm:absolute sm:inset-[8%]"
                 style={{
                   transitionDuration: `${INFOBOX_OPACITY_TRANSITION_MS}ms`,
-                  clipPath: `polygon(${HEX_CLIP_POLYGON})`,
-                  WebkitClipPath: `polygon(${HEX_CLIP_POLYGON})`,
                   borderColor: "rgba(255,255,255,0.25)",
-                  background: "rgba(255,255,255,0.12)",
-                  backdropFilter: "blur(12px)",
+                  background: "rgba(9,17,24,0.96)",
+                  backdropFilter: "blur(10px)",
                   color: "#fff",
                   opacity: infoboxFadingOut ? 0 : infoboxFadeIn ? 1 : 0,
-                  overflow: "hidden",
+                  transform: infoboxFadingOut || !infoboxFadeIn ? "scale(0.97)" : "scale(1)",
                 }}
+                role="dialog"
+                aria-label={`Détail : ${IDEOLOGY_LABELS[displayedIdeology]}`}
               >
                 <button
                   type="button"
                   onClick={handleIdeologyLeave}
-                  className="absolute left-1/2 top-[16%] z-10 flex h-10 w-10 -translate-x-1/2 items-center justify-center rounded-full border border-white/30 bg-black/65 text-white transition-colors hover:bg-black/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
+                  className="absolute right-3 top-3 z-10 flex h-10 w-10 items-center justify-center rounded-full border border-white/30 bg-black/65 text-white transition-colors hover:bg-black/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
                   aria-label="Fermer le détail de l’idéologie"
                 >
                   <svg
@@ -394,16 +389,15 @@ export function IdeologyHexagon({
                       {headerImage && (
                         <div
                           className="relative shrink-0 overflow-hidden border-b"
-                          style={{ borderColor: "rgba(255,255,255,0.25)", height: "40%" }}
+                          style={{ borderColor: "rgba(255,255,255,0.25)", height: "34%" }}
                         >
                           <Image src={headerImage} alt="" fill className="object-cover object-top" sizes="(max-width: 640px) 256px, 320px" />
                         </div>
                       )}
                       <div
-                        className="flex min-h-0 min-w-0 flex-1 justify-center overflow-y-auto overflow-x-hidden p-2"
-                        style={{ maxHeight: headerImage ? "60%" : "100%" }}
+                        className="flex min-h-0 min-w-0 flex-1 justify-center overflow-y-auto overflow-x-hidden p-4"
                       >
-                        <div className="w-full text-center text-xs" style={{ maxWidth: "calc(62% + 10px)" }}>
+                        <div className="w-full text-center text-xs">
                           {longDesc && (
                             <p className="text-white/90 leading-tight break-words" style={{ overflowWrap: "break-word", wordBreak: "break-word" }}>
                               {longDesc}

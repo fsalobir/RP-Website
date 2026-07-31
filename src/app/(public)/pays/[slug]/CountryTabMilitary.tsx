@@ -174,10 +174,10 @@ export function CountryTabMilitary({
   canAdjustIntelForTesting = false,
   countrySlug,
 }: CountryTabMilitaryProps) {
-  const glassPanelClass = "rounded-2xl border border-white/25 p-6";
-  const glassPanelStyle: React.CSSProperties = { background: "rgba(255,255,255,0.12)", backdropFilter: "blur(12px)" };
+  const glassPanelClass = "rounded-2xl border border-white/15 p-6 shadow-[0_24px_70px_rgba(0,0,0,0.38)]";
+  const glassPanelStyle: React.CSSProperties = { background: "rgba(9,17,24,0.9)", backdropFilter: "blur(8px)" };
   const glassTextClass = "text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.4)]";
-  const glassMutedClass = "text-white/90";
+  const glassMutedClass = "text-white/70";
   const [intelDeltaInput, setIntelDeltaInput] = useState("0");
   const [intelUpdating, setIntelUpdating] = useState(false);
   const [intelAdjustError, setIntelAdjustError] = useState<string | null>(null);
@@ -325,19 +325,19 @@ export function CountryTabMilitary({
               <div className="space-y-1">
                 {groups.map(({ subType, label, rows: subRows }) => {
                   const subKey = `${branch}_${subType ?? "__none__"}`;
-                  const isOpen = militarySubtypeOpen[subKey] !== false;
+                  const isOpen = militarySubtypeOpen[subKey] === true;
                   const subPersonnel = subRows.reduce(
                     (sum, row) => sum + rosterRowPersonnel(row, militaryEdit[row.unit.id] ?? defaultMilitaryEdit(row), effects),
                     0,
                   );
                   return (
-                    <div key={subKey} className="rounded-xl border border-white/25 overflow-hidden" style={{ background: "rgba(255,255,255,0.12)", backdropFilter: "blur(12px)" }}>
+                    <div key={subKey} className="overflow-hidden rounded-xl border border-white/10" style={{ background: "rgba(0,0,0,0.22)" }}>
                       <button
                         type="button"
-                        onClick={() => setMilitarySubtypeOpen((prev) => ({ ...prev, [subKey]: prev[subKey] === false }))}
+                        onClick={() => setMilitarySubtypeOpen((prev) => ({ ...prev, [subKey]: !prev[subKey] }))}
                         aria-expanded={isOpen}
                         className={`flex w-full items-center gap-2 py-1.5 px-3 text-left text-sm font-medium ${glassTextClass} hover:bg-white/10 transition-colors`}
-                        style={{ background: "rgba(255,255,255,0.12)", backdropFilter: "blur(12px)" }}
+                        style={{ background: "rgba(0,0,0,0.22)" }}
                       >
                         <DisclosureChevron open={isOpen} direction="right" />
                         <span>{label}</span>
@@ -348,9 +348,9 @@ export function CountryTabMilitary({
                         style={{ gridTemplateRows: isOpen ? "1fr" : "0fr" }}
                       >
                         <div className="overflow-hidden">
-                          <div className="overflow-x-auto">
-                            <table className="min-w-[680px] w-full table-fixed text-sm">
-                              <thead>
+                          <div className="overflow-visible sm:overflow-x-auto">
+                            <table className="w-full text-sm sm:min-w-[680px] sm:table-fixed">
+                              <thead className="hidden sm:table-header-group">
                                 <tr className="border-b border-white/25">
                                   <th className={`w-12 pb-1.5 pt-1 px-2 text-center font-medium text-xs ${glassMutedClass}`}>Icône</th>
                                   <th className={`w-[20%] pb-1.5 pt-1 px-2 text-center font-medium text-xs ${glassMutedClass}`}>Nom</th>
@@ -384,8 +384,8 @@ export function CountryTabMilitary({
 
                                   return (
                                     <Fragment key={row.unit.id}>
-                                    <tr className="border-b border-white/25">
-                                      <td className="w-12 py-0.5 px-2 align-middle text-center">
+                                    <tr className="mb-2 grid grid-cols-[44px_1fr_auto] items-center gap-x-2 gap-y-1 border-b border-white/25 p-2 last:mb-0 sm:mb-0 sm:table-row sm:p-0">
+                                      <td className="row-span-2 w-11 py-0.5 align-middle text-center sm:table-cell sm:w-12 sm:px-2">
                                         <div className="inline-block h-9 w-9 overflow-hidden rounded border border-white/25 bg-white/10">
                                           {row.unit.icon_url ? (
                                             // eslint-disable-next-line @next/next/no-img-element
@@ -395,12 +395,13 @@ export function CountryTabMilitary({
                                           )}
                                         </div>
                                       </td>
-                                      <td className="w-[20%] py-0.5 px-2 align-middle text-center">
-                                        <span className={`inline-block max-w-full break-words text-xs font-medium leading-tight ${glassTextClass}`}>
+                                      <td className="min-w-0 py-0.5 align-middle sm:table-cell sm:w-[20%] sm:px-2 sm:text-center">
+                                        <span className={`inline-block max-w-full break-words text-sm font-semibold leading-tight sm:text-xs sm:font-medium ${glassTextClass}`}>
                                           {row.unit.name_fr}
                                         </span>
                                       </td>
-                                      <td className="w-[14%] py-0.5 px-2 align-middle text-center">
+                                      <td className="py-0.5 text-right align-middle sm:table-cell sm:w-[14%] sm:px-2 sm:text-center">
+                                        <span className={`mb-0.5 block text-[10px] uppercase tracking-wide sm:hidden ${glassMutedClass}`}>Unités</span>
                                         {isAdmin ? (
                                           <div className="flex flex-wrap items-center justify-center gap-0.5">
                                             <span className={`text-[10px] ${glassMutedClass}`}>{row.unit.base_count}+</span>
@@ -408,7 +409,7 @@ export function CountryTabMilitary({
                                               aria-label={`Effectif supplémentaire pour ${row.unit.name_fr}`}
                                               type="number"
                                               min={0}
-                                              className="w-9 rounded border border-white/25 bg-white/10 px-0.5 py-0.5 text-[10px] font-mono text-white"
+                                              className="h-11 w-14 rounded border border-white/25 bg-white/10 px-1 text-sm font-mono text-white sm:h-auto sm:w-9 sm:px-0.5 sm:py-0.5 sm:text-[10px]"
                                               value={edit.extra_count}
                                               onChange={(e) => {
                                                 const n = Math.max(0, Math.floor(Number(e.target.value) || 0));
@@ -442,10 +443,10 @@ export function CountryTabMilitary({
                                           </span>
                                         )}
                                       </td>
-                                      <td className={`w-[12%] py-0.5 px-2 font-mono text-xs align-middle text-center ${glassTextClass}`}>
-                                        {formatNumber(personnel)}
+                                      <td className={`col-start-2 py-0.5 text-xs align-middle sm:table-cell sm:w-[12%] sm:px-2 sm:text-center ${glassTextClass}`}>
+                                        <span className={glassMutedClass}>Personnel : </span>{formatNumber(personnel)}
                                       </td>
-                                      <td className="py-0.5 px-2 align-middle">
+                                      <td className="col-span-3 mt-1 border-t border-white/15 pt-2 align-middle sm:table-cell sm:border-0 sm:px-2 sm:py-0.5">
                                         <div className="flex justify-center">
                                           {isAdmin ? (
                                             <div className="flex items-center gap-1 flex-wrap justify-center">
@@ -454,7 +455,7 @@ export function CountryTabMilitary({
                                                 type="number"
                                                 min={0}
                                                 max={row.unit.level_count * 100}
-                                                className="w-12 rounded border border-white/25 bg-white/10 px-1 py-0.5 text-[10px] font-mono text-white"
+                                                className="h-11 w-20 rounded border border-white/25 bg-white/10 px-2 text-sm font-mono text-white sm:h-auto sm:w-12 sm:px-1 sm:py-0.5 sm:text-[10px]"
                                                 value={edit.current_level}
                                                 onChange={(e) => {
                                                   const n = Math.max(
@@ -520,8 +521,8 @@ export function CountryTabMilitary({
                                       </td>
                                     </tr>
                                     {isAdmin && adminRosterExtraBreakdownOpen[row.unit.id] ? (
-                                      <tr className="border-b border-white/25 bg-black/35">
-                                        <td colSpan={5} className="px-3 py-2 align-top text-left">
+                                      <tr className="block border-b border-white/25 bg-black/35 sm:table-row">
+                                        <td colSpan={5} className="block px-3 py-2 align-top text-left sm:table-cell">
                                           <AdminRosterExtraBreakdown
                                             baseCount={row.unit.base_count}
                                             storedExtra={storedExtra}
@@ -551,12 +552,12 @@ export function CountryTabMilitary({
               </div>
             )}
             {isAdmin && canEditCountry && (
-              <div className="mt-4 flex justify-end">
+              <div className="sticky bottom-2 z-20 mt-4 flex justify-end">
                 <button
                   type="button"
                   disabled={militarySavingAll}
                   onClick={onSaveAllMilitaryUnits}
-                  className="rounded-lg border border-[var(--accent)] px-3 py-1.5 text-sm font-medium disabled:opacity-50"
+                  className="min-h-11 rounded-lg border border-[var(--accent)] px-4 py-2 text-sm font-medium shadow-lg disabled:opacity-50"
                   style={{ background: "var(--accent)", color: "#0f1419" }}
                 >
                   {militarySavingAll ? "Enregistrement…" : "Enregistrer toutes les modifications"}
@@ -580,7 +581,7 @@ export function CountryTabMilitary({
               )}
               <div className="absolute inset-0 bg-[var(--background-panel)]/75" />
             </div>
-            <div className="relative z-10 p-6">{sectionContent}</div>
+            <div className="relative z-10 p-3 sm:p-6">{sectionContent}</div>
           </section>
         );
       })}
@@ -711,9 +712,9 @@ function FoggedBranchView({
       <p className={`mb-4 text-sm ${mutedClass}`}>
         Données fragmentaires — les fourchettes ci-dessous sont des estimations.
       </p>
-      <div className="overflow-x-auto rounded-xl border border-white/25" style={{ background: "rgba(255,255,255,0.12)", backdropFilter: "blur(12px)" }}>
-        <table className="min-w-[620px] w-full text-sm">
-          <thead>
+      <div className="overflow-visible rounded-xl border border-white/10 sm:overflow-x-auto" style={{ background: "rgba(9,17,24,0.9)", backdropFilter: "blur(8px)" }}>
+        <table className="w-full text-sm sm:min-w-[620px]">
+          <thead className="hidden sm:table-header-group">
             <tr className="border-b border-white/25">
               <th className={`pb-2 px-3 text-left font-medium text-sm ${mutedClass}`}>Branche</th>
               <th className={`pb-2 px-3 text-center font-medium text-sm ${mutedClass}`}>Unités (est.)</th>
@@ -723,17 +724,20 @@ function FoggedBranchView({
           </thead>
           <tbody>
             {branches.map((b) => (
-              <tr key={b.branch} className="border-b border-white/25">
-                <td className={`py-2 px-3 font-medium text-sm ${textClass}`}>
+              <tr key={b.branch} className="grid grid-cols-3 gap-2 border-b border-white/25 p-3 sm:table-row sm:p-0">
+                <td className={`col-span-3 font-semibold sm:table-cell sm:px-3 sm:py-2 sm:text-sm ${textClass}`}>
                   {BRANCH_LABELS[b.branch]}
                 </td>
-                <td className={`py-2 px-3 text-center font-mono text-sm font-semibold ${textClass}`}>
+                <td className={`font-mono text-sm font-semibold sm:table-cell sm:px-3 sm:py-2 sm:text-center ${textClass}`}>
+                  <span className={`block text-[10px] font-normal uppercase sm:hidden ${mutedClass}`}>Unités</span>
                   {formatFogRange(b.unitCountRange)}
                 </td>
-                <td className={`py-2 px-3 text-center font-mono text-sm font-semibold ${textClass}`}>
+                <td className={`font-mono text-sm font-semibold sm:table-cell sm:px-3 sm:py-2 sm:text-center ${textClass}`}>
+                  <span className={`block text-[10px] font-normal uppercase sm:hidden ${mutedClass}`}>Personnel</span>
                   {formatFogRange(b.personnelRange)}
                 </td>
-                <td className={`py-2 px-3 text-center text-sm ${mutedClass}`}>
+                <td className={`text-sm sm:table-cell sm:px-3 sm:py-2 sm:text-center ${mutedClass}`}>
+                  <span className="block text-[10px] uppercase sm:hidden">Technologie</span>
                   {b.techLevel ?? "—"}
                 </td>
               </tr>
@@ -800,9 +804,9 @@ function FoggedUnitView({
       <h2 className={`mb-3 text-xl font-semibold ${textClass}`}>
         {BRANCH_LABELS[branch]}
       </h2>
-      <div className="overflow-x-auto rounded-xl border border-white/25" style={{ background: "rgba(255,255,255,0.12)", backdropFilter: "blur(12px)" }}>
-        <table className="min-w-[680px] w-full table-fixed text-sm">
-          <thead>
+      <div className="overflow-visible rounded-xl border border-white/10 sm:overflow-x-auto" style={{ background: "rgba(9,17,24,0.9)", backdropFilter: "blur(8px)" }}>
+        <table className="w-full text-sm sm:min-w-[680px] sm:table-fixed">
+          <thead className="hidden sm:table-header-group">
             <tr className="border-b border-white/25">
               <th className={`w-12 pb-1.5 pt-1 px-2 text-center font-medium text-sm ${mutedClass}`}>Icône</th>
               <th className={`w-[22%] pb-1.5 pt-1 px-2 text-center font-medium text-sm ${mutedClass}`}>Nom</th>
@@ -813,8 +817,8 @@ function FoggedUnitView({
           </thead>
           <tbody>
             {branchUnits.map((u) => (
-              <tr key={u.unitId} className="border-b border-white/25">
-                <td className="w-12 py-0.5 px-2 align-middle text-center">
+              <tr key={u.unitId} className="grid grid-cols-[44px_1fr_1fr] items-center gap-x-2 gap-y-1 border-b border-white/25 p-2 sm:table-row sm:p-0">
+                <td className="row-span-2 w-11 py-0.5 align-middle text-center sm:table-cell sm:w-12 sm:px-2">
                   <div className="inline-block h-9 w-9 overflow-hidden rounded border border-white/25 bg-white/10">
                     {u.iconUrl ? (
                       // eslint-disable-next-line @next/next/no-img-element
@@ -824,18 +828,21 @@ function FoggedUnitView({
                     )}
                   </div>
                 </td>
-                <td className="py-0.5 px-2 align-middle text-center">
+                <td className="col-span-2 py-0.5 align-middle sm:table-cell sm:px-2 sm:text-center">
                   <span className={`inline-block max-w-full break-words text-sm font-medium leading-tight ${textClass}`}>
                     {u.unitName}
                   </span>
                 </td>
-                <td className={`py-0.5 px-2 align-middle text-center font-mono text-sm font-semibold ${textClass}`}>
+                <td className={`col-start-2 py-0.5 align-middle font-mono text-sm font-semibold sm:table-cell sm:px-2 sm:text-center ${textClass}`}>
+                  <span className={`block text-[10px] font-normal uppercase sm:hidden ${mutedClass}`}>Unités</span>
                   {formatFogRange(u.countRange)}
                 </td>
-                <td className={`py-0.5 px-2 align-middle text-center font-mono text-sm font-semibold ${textClass}`}>
+                <td className={`py-0.5 align-middle font-mono text-sm font-semibold sm:table-cell sm:px-2 sm:text-center ${textClass}`}>
+                  <span className={`block text-[10px] font-normal uppercase sm:hidden ${mutedClass}`}>Personnel</span>
                   {formatFogRange(u.personnelRange)}
                 </td>
-                <td className={`py-0.5 px-2 align-middle text-center text-sm ${mutedClass}`}>
+                <td className={`col-span-3 border-t border-white/15 pt-1 text-sm sm:table-cell sm:border-0 sm:px-2 sm:py-0.5 sm:text-center ${mutedClass}`}>
+                  <span className="sm:hidden">Technologie : </span>
                   {u.techLevel ?? "—"}
                 </td>
               </tr>

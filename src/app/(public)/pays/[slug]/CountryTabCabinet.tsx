@@ -1,5 +1,5 @@
 "use client";
-import { formatNumber, formatGdp, formatPopulation } from "@/lib/format";
+import { formatGdp, formatPopulation } from "@/lib/format";
 import { formatWorldDate } from "@/lib/worldDate";
 import { getCabinetPhrases } from "@/lib/cabinetReport";
 import type { TickBreakdown } from "@/lib/tickBreakdown";
@@ -51,16 +51,6 @@ function getTrend(current: number, next: number, isRate = false): Trend {
       : "down";
 }
 
-function TrendIcon({ trend }: { trend: Trend }) {
-  if (trend === "up") {
-    return <span className="ml-1 inline-block text-emerald-500 dark:text-emerald-400" aria-hidden>▲</span>;
-  }
-  if (trend === "down") {
-    return <span className="ml-1 inline-block text-red-500 dark:text-red-400" aria-hidden>▼</span>;
-  }
-  return <span className="ml-1 inline-block text-[var(--foreground-muted)]" aria-hidden>−</span>;
-}
-
 function TrendInline({ trend }: { trend: Trend }) {
   if (trend === "up") {
     return <span className="text-emerald-500 dark:text-emerald-400" aria-hidden>▲</span>;
@@ -94,7 +84,14 @@ function SummaryMetric({
       <span className={labelClassName}>{label}</span>
       <span className={valueClassName}>
         {value}
-        {trend ? <> (<TrendInline trend={trend} />)</> : null}
+        {trend ? (
+          <>
+            {" "}(<TrendInline trend={trend} />)
+            <span className="sr-only">
+              {trend === "up" ? " en hausse" : trend === "down" ? " en baisse" : " stable"}
+            </span>
+          </>
+        ) : null}
       </span>
     </div>
   );
@@ -141,6 +138,14 @@ export function CountryTabCabinet({
       : [];
 
   const reportTitleDate = worldDate ? formatWorldDate(worldDate) : "—";
+  const cabinetHighlights = cabinetBlocks
+    .map((block) => ({
+      ...block,
+      paragraphs: block.paragraphs.filter(
+        (paragraph) => !paragraph.text.toLocaleLowerCase("fr").startsWith("les dotations sont au-delà du minimum requis"),
+      ),
+    }))
+    .filter((block) => block.paragraphs.length > 0);
 
   const summaryTrends =
     expected && breakdown
@@ -168,9 +173,9 @@ export function CountryTabCabinet({
         }
       : null;
 
-  const glassPanelClass = "rounded-2xl border border-white/25 bg-white/15 shadow-xl backdrop-blur-xl";
-  const glassMutedClass = "text-white/85";
-  const glassBorderClass = "border-white/20";
+  const glassPanelClass = "rounded-2xl border border-white/15 bg-[#091118]/90 shadow-[0_24px_70px_rgba(0,0,0,0.38)] backdrop-blur-md";
+  const glassMutedClass = "text-white/70";
+  const glassBorderClass = "border-white/10";
 
   /* Image en fond de toute la box bleue (visible partout, y compris à droite du rapport) */
   const boxStyle = { ...panelStyle, background: "transparent" };
@@ -200,25 +205,23 @@ export function CountryTabCabinet({
               Aucun rapport ministériel à afficher pour cette période.
             </p>
           ) : (
-            /* Box du rapport : centrée, taille naturelle (pas de scroll) */
-            <div className="max-w-3xl mx-auto w-full rounded-2xl">
-              <article className={`${glassPanelClass} px-4 py-5 sm:px-6 sm:py-6`} style={{ fontFamily: "Georgia, 'Times New Roman', serif" }}>
-                <header className={`mb-6 border-b pb-4 sm:mb-8 ${glassBorderClass}`}>
-                <h2 className="text-center text-lg font-semibold tracking-wide text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)] sm:text-xl">
-                  Rapport ministériel pour {reportTitleDate}
-                </h2>
-              </header>
+            <div className="mx-auto w-full max-w-5xl rounded-2xl">
+              <article className={`${glassPanelClass} px-4 py-4 sm:px-6 sm:py-5`}>
+                <header className={`mb-4 flex flex-wrap items-baseline justify-between gap-2 border-b pb-3 ${glassBorderClass}`}>
+                  <h2 className="text-lg font-semibold text-white sm:text-xl">Rapport du Cabinet</h2>
+                  <span className={glassMutedClass}>{reportTitleDate}</span>
+                </header>
 
               {summaryTrends && (
-                <div className="mb-6 flex flex-col items-center">
-                  <div className="mb-5 grid w-full max-w-2xl grid-cols-1 gap-5 text-center sm:grid-cols-3">
-                    <div className={`sm:border-r sm:pr-6 ${glassBorderClass}`}>
+                <div className="mb-5">
+                  <div className="grid w-full grid-cols-3 gap-2 text-center">
+                    <div className={`border-r pr-2 ${glassBorderClass}`}>
                       <SummaryMetric label="PIB" value={formatGdp(snapshot.gdp)} trend={summaryTrends.gdp} valueClassName="text-base font-semibold text-white" labelClassName={glassMutedClass} />
                     </div>
-                    <div className={`sm:border-r sm:pr-6 ${glassBorderClass}`}>
+                    <div className={`border-r px-2 ${glassBorderClass}`}>
                       <SummaryMetric label="Population" value={formatPopulation(snapshot.population)} trend={summaryTrends.population} valueClassName="text-base font-semibold text-white" labelClassName={glassMutedClass} />
                     </div>
-                    <div className="sm:pr-0">
+                    <div className="pl-2">
                       <SummaryMetric
                         label="Influence"
                         value={formatSummaryStat(influenceValue)}
@@ -228,8 +231,8 @@ export function CountryTabCabinet({
                       />
                     </div>
                   </div>
-                  <div className={`grid w-full max-w-2xl grid-cols-2 gap-4 text-center text-sm sm:grid-cols-4`}>
-                    <div className={`sm:border-r sm:pr-6 ${glassBorderClass}`}>
+                  <div className={`mt-4 grid w-full grid-cols-2 gap-2 border-t pt-4 text-center text-sm sm:grid-cols-4 ${glassBorderClass}`}>
+                    <div>
                       <SummaryMetric
                         label="Militarisme"
                         value={formatSummaryStat(snapshot.militarism)}
@@ -238,7 +241,7 @@ export function CountryTabCabinet({
                         labelClassName={glassMutedClass}
                       />
                     </div>
-                    <div className={`sm:border-r sm:pr-6 ${glassBorderClass}`}>
+                    <div>
                       <SummaryMetric
                         label="Science"
                         value={formatSummaryStat(snapshot.science)}
@@ -247,7 +250,7 @@ export function CountryTabCabinet({
                         labelClassName={glassMutedClass}
                       />
                     </div>
-                    <div className={`sm:border-r sm:pr-6 ${glassBorderClass}`}>
+                    <div>
                       <SummaryMetric
                         label="Industrie"
                         value={formatSummaryStat(snapshot.industry)}
@@ -256,7 +259,7 @@ export function CountryTabCabinet({
                         labelClassName={glassMutedClass}
                       />
                     </div>
-                    <div className="sm:pr-0">
+                    <div>
                       <SummaryMetric
                         label="Stabilité"
                         value={formatSummaryStat(snapshot.stability)}
@@ -266,21 +269,20 @@ export function CountryTabCabinet({
                       />
                     </div>
                   </div>
-                  <div className={`mt-2 w-full border-b pb-6 ${glassBorderClass}`} role="separator" aria-hidden />
                 </div>
               )}
 
-              <div className="space-y-6 text-[15px] leading-relaxed">
-                {cabinetBlocks.map((block) => (
-                  <section key={block.ministryKey} className="space-y-2">
-                    <h3 className="text-base font-semibold text-white" style={{ fontFamily: "inherit" }}>
+              <div className={`divide-y border-y ${glassBorderClass}`}>
+                {cabinetHighlights.map((block) => (
+                  <section key={block.ministryKey} className="grid gap-2 py-3 sm:grid-cols-[13rem_minmax(0,1fr)] sm:gap-4">
+                    <h3 className="text-sm font-semibold text-white">
                       {block.ministryLabel}
                     </h3>
-                    <div className="space-y-2 pl-0 text-left sm:text-justify">
+                    <ul className="space-y-1.5 text-sm leading-5">
                       {block.paragraphs.map((p, i) => (
-                        <p
+                        <li
                           key={i}
-                          className={`indent-0 first-letter:capitalize ${
+                          className={`flex gap-2 first-letter:capitalize ${
                             p.tone === "positive"
                               ? "text-emerald-300"
                               : p.tone === "negative"
@@ -288,12 +290,16 @@ export function CountryTabCabinet({
                                 : "text-amber-200"
                           }`}
                         >
-                          {p.text}
-                        </p>
+                          <span aria-hidden className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-current" />
+                          <span>{p.text}</span>
+                        </li>
                       ))}
-                    </div>
+                    </ul>
                   </section>
                 ))}
+                {cabinetHighlights.length === 0 ? (
+                  <p className={`py-4 text-sm ${glassMutedClass}`}>Aucun changement notable sur la période.</p>
+                ) : null}
               </div>
             </article>
             </div>
@@ -302,7 +308,7 @@ export function CountryTabCabinet({
         {lastUpdateLog && (
             <section className={`mt-6 p-4 ${glassPanelClass}`}>
               <h3 className={`mb-2 text-sm font-semibold uppercase ${glassMutedClass}`}>
-                Dernier passage du cron
+                Dernière évolution enregistrée
               </h3>
               <p className={`mb-3 text-xs ${glassMutedClass}`}>
                 {new Date(lastUpdateLog.run_at).toLocaleString("fr-FR", {

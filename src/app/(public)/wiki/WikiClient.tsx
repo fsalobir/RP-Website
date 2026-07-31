@@ -14,9 +14,9 @@ import {
 } from "@/lib/wiki/tree";
 import type { WikiPageRow, WikiTreeNode } from "@/lib/wiki/types";
 
-const glassPanelClass = "rounded-2xl border border-white/25 bg-white/15 shadow-xl backdrop-blur-xl";
+const glassPanelClass = "rounded-2xl border border-white/15 bg-[#091118]/90 shadow-[0_24px_70px_rgba(0,0,0,0.42)] backdrop-blur-md";
 const glassInputClass =
-  "min-h-11 w-full rounded-xl border border-white/25 bg-white/10 px-3 py-2 text-sm text-white placeholder:text-white/60 focus:border-white/50 focus:outline-none focus:ring-2 focus:ring-white/30";
+  "min-h-11 w-full rounded-lg border border-white/15 bg-black/30 px-3 py-2 text-sm text-white placeholder:text-white/45 focus:border-[var(--accent)] focus:outline-none focus:ring-2 focus:ring-[var(--accent)]/30";
 
 function resolveSlugFromHash(hash: string, pages: WikiPageRow[], tree: WikiTreeNode[]): string {
   if (!pages.length) return "";
@@ -69,8 +69,8 @@ function TreeNav({
                 }}
                 className={`flex-1 rounded px-3 py-2 text-left text-sm transition-colors ${
                   isActive
-                    ? "border-l-[3px] border-l-[var(--accent)] bg-white/20 text-white"
-                    : "border-l-[3px] border-l-transparent text-white/85 hover:bg-white/10 hover:text-white"
+                    ? "border-l-[3px] border-l-[var(--accent)] bg-[var(--accent)]/10 text-white"
+                    : "border-l-[3px] border-l-transparent text-white/70 hover:bg-white/[0.07] hover:text-white"
                 }`}
                 style={{ paddingLeft: hasChildren ? undefined : 28 + depth * 4 }}
               >
@@ -193,8 +193,8 @@ export function WikiClient({ initialPages }: { initialPages: WikiPageRow[] }) {
   }
 
   return (
-    <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6">
-      <div className={`mb-4 p-3 ${glassPanelClass}`}>
+    <div className="mx-auto max-w-7xl px-4 pb-10 sm:px-6">
+      <div className={`mb-5 p-3 ${glassPanelClass}`}>
         <label htmlFor="wiki-search" className="sr-only">
           Rechercher dans le wiki
         </label>

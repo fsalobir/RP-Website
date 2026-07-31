@@ -3,6 +3,7 @@ export type PublicPageIcon =
   | "map"
   | "ranking"
   | "ideology"
+  | "wiki"
   | "rules"
   | "budget"
   | "law"
@@ -32,6 +33,13 @@ const iconPaths: Record<PublicPageIcon, React.ReactNode> = {
       <path d="m12 3 7.8 4.5v9L12 21l-7.8-4.5v-9L12 3Z" />
       <path d="M12 8v8M8.5 10l7 4M15.5 10l-7 4" />
       <circle cx="12" cy="12" r="1.5" />
+    </>
+  ),
+  wiki: (
+    <>
+      <path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H11v16H6.5A2.5 2.5 0 0 0 4 21V5.5Z" />
+      <path d="M20 5.5A2.5 2.5 0 0 0 17.5 3H13v16h4.5A2.5 2.5 0 0 1 20 21V5.5Z" />
+      <path d="M7 7h2M15 7h2M7 11h2M15 11h2" />
     </>
   ),
   rules: (
@@ -94,16 +102,17 @@ export function PublicPageHeader({
   icon: PublicPageIcon;
 }) {
   return (
-    <header className="mb-6 flex items-center gap-3 text-white">
+    <header className="mb-8 flex items-center gap-4 border-b border-white/15 pb-5 text-white">
       <span
-        className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-white/25 bg-black/25 shadow-[0_8px_24px_rgba(0,0,0,0.24)]"
+        className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl border border-[var(--accent)]/45 bg-[#081117]/90 shadow-[0_12px_32px_rgba(0,0,0,0.4)]"
         aria-hidden
       >
-        <PublicPageIconGlyph icon={icon} className="h-6 w-6 text-[var(--accent)]" />
+        <PublicPageIconGlyph icon={icon} className="h-7 w-7 text-[var(--accent)]" />
       </span>
-      <h1 className="text-balance text-2xl font-bold tracking-[-0.02em] drop-shadow-[0_2px_6px_rgba(0,0,0,0.65)] sm:text-3xl">
+      <h1 className="text-balance text-3xl font-bold tracking-[-0.035em] drop-shadow-[0_2px_8px_rgba(0,0,0,0.75)] sm:text-4xl">
         {title}
       </h1>
+      <span className="hidden h-px flex-1 bg-gradient-to-r from-[var(--accent)]/40 to-transparent sm:block" aria-hidden />
     </header>
   );
 }

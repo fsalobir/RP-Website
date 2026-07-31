@@ -91,6 +91,7 @@ export function RelationMapClient({
   sphereData?: SphereData;
 }) {
   const [selectedRegionId, setSelectedRegionId] = useState<string | null>(defaultSelectedRegionId ?? null);
+  const [comparedRegionId, setComparedRegionId] = useState("");
   const [tooltip, setTooltip] = useState<{ x: number; y: number; content: string } | null>(null);
   const [mapFilter, setMapFilter] = useState<"relations" | "spheres">("relations");
 
@@ -160,6 +161,10 @@ export function RelationMapClient({
 
   const selectedRegionName = selectedRegionId ? regionNames[selectedRegionId] ?? null : null;
   const selectedRegionCountries = selectedRegionId ? regionCountryNames[selectedRegionId] ?? [] : [];
+  const comparedRelation =
+    selectedRegionId && comparedRegionId
+      ? getRegionRelationFromMap(map, selectedRegionId, comparedRegionId)
+      : null;
   const regionOptions = useMemo(
     () => Object.entries(regionNames).sort((a, b) => a[1].localeCompare(b[1], "fr")),
     [regionNames]
@@ -169,7 +174,7 @@ export function RelationMapClient({
   const hasData = features.length > 0;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 rounded-2xl border border-white/15 bg-[#091118]/90 p-4 shadow-[0_24px_70px_rgba(0,0,0,0.42)] backdrop-blur-md sm:p-6">
       <div className="flex flex-wrap items-center gap-3">
         <button
           type="button"
@@ -178,8 +183,8 @@ export function RelationMapClient({
           aria-pressed={mapFilter === "relations"}
           style={{
             borderColor: mapFilter === "relations" ? "var(--accent)" : "var(--border)",
-            background: mapFilter === "relations" ? "var(--accent-muted)" : "transparent",
-            color: "var(--foreground)",
+            background: mapFilter === "relations" ? "var(--accent)" : "transparent",
+            color: mapFilter === "relations" ? "#0f1419" : "var(--foreground)",
           }}
         >
           Relations
@@ -191,8 +196,8 @@ export function RelationMapClient({
           aria-pressed={mapFilter === "spheres"}
           style={{
             borderColor: mapFilter === "spheres" ? "var(--accent)" : "var(--border)",
-            background: mapFilter === "spheres" ? "var(--accent-muted)" : "transparent",
-            color: "var(--foreground)",
+            background: mapFilter === "spheres" ? "var(--accent)" : "transparent",
+            color: mapFilter === "spheres" ? "#0f1419" : "var(--foreground)",
           }}
         >
           Sphères d&apos;influence
@@ -208,7 +213,10 @@ export function RelationMapClient({
           <span className="mb-2 block">Région observée</span>
           <select
             value={selectedRegionId ?? ""}
-            onChange={(event) => setSelectedRegionId(event.target.value || null)}
+            onChange={(event) => {
+              setSelectedRegionId(event.target.value || null);
+              setComparedRegionId("");
+            }}
             className="min-h-11 w-full rounded-lg border bg-[var(--background-panel)] px-3 text-base text-[var(--foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
             style={{ borderColor: "var(--border)" }}
           >
@@ -231,22 +239,57 @@ export function RelationMapClient({
           className="rounded border px-4 py-2 text-sm"
           style={{ borderColor: "var(--border)", background: "var(--background-panel)" }}
         >
-          Région sélectionnée : <strong style={{ color: "#2563eb" }}>{selectedRegionName}</strong>
+          Région sélectionnée : <strong className="text-[var(--accent)]">{selectedRegionName}</strong>
           {selectedRegionCountries.length > 0 && (
             <span className="text-[var(--foreground-muted)]"> — Pays : {selectedRegionCountries.join(", ")}</span>
           )}
         </p>
       )}
+      {selectedRegionId && !isSphereMode && (
+        <div
+          className="grid gap-3 rounded-lg border bg-[var(--background-panel)] p-3 sm:grid-cols-2 sm:items-end"
+          style={{ borderColor: "var(--border)" }}
+        >
+          <label className="block text-sm font-medium text-[var(--foreground)]">
+            <span className="mb-2 block">Comparer avec</span>
+            <select
+              value={comparedRegionId}
+              onChange={(event) => setComparedRegionId(event.target.value)}
+              className="min-h-11 w-full rounded-lg border bg-[var(--background)] px-3 text-base text-[var(--foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
+              style={{ borderColor: "var(--border)" }}
+            >
+              <option value="">Choisir une région</option>
+              {regionOptions
+                .filter(([id]) => id !== selectedRegionId)
+                .map(([id, name]) => (
+                  <option key={id} value={id}>
+                    {name}
+                  </option>
+                ))}
+            </select>
+          </label>
+          <p
+            className="min-h-11 rounded-lg bg-[var(--background)] px-3 py-2.5 text-sm text-[var(--foreground-muted)]"
+            aria-live="polite"
+          >
+            {comparedRelation == null
+              ? "Choisissez une région pour lire la relation exacte."
+              : `${getRelationLabel(comparedRelation)} : ${comparedRelation > 0 ? "+" : ""}${comparedRelation}`}
+          </p>
+        </div>
+      )}
       <div
         className="relative overflow-hidden rounded-lg border"
         style={{ borderColor: "var(--border)", background: "var(--background-panel)" }}
+        role="img"
+        aria-label={selectedRegionName ? `Carte des relations de ${selectedRegionName}` : "Carte mondiale des relations"}
       >
         {/* Légende dans le container, en bas à gauche — taille réduite sur petit écran */}
         <div className="absolute bottom-1.5 left-1.5 sm:bottom-3 sm:left-3 z-20 max-w-[55vw] sm:max-w-none rounded-md sm:rounded-lg border border-[var(--border)] bg-[var(--background-panel)]/95 px-1.5 py-1 sm:px-3 sm:py-2 shadow-lg backdrop-blur-sm">
           {isSphereMode ? (
             <div className="flex flex-col gap-0.5 sm:gap-1">
               {(sphereData?.empires ?? []).map((empire) => (
-                <div key={empire.id} className="flex items-center gap-1 sm:gap-2 text-[10px] sm:text-xs text-[var(--foreground-muted)]">
+                <div key={empire.id} className="flex items-center gap-1.5 text-xs text-[var(--foreground-muted)] sm:gap-2">
                   <span
                     className="block h-2.5 w-2.5 sm:h-4 sm:w-4 shrink-0 rounded-sm border border-[rgba(255,255,255,0.4)]"
                     style={{ background: empire.color }}
@@ -254,7 +297,7 @@ export function RelationMapClient({
                   <span className="break-words font-medium [overflow-wrap:anywhere]">{empire.name}</span>
                 </div>
               ))}
-              <div className="flex items-center gap-1 sm:gap-2 text-[10px] sm:text-xs text-[var(--foreground-muted)]">
+              <div className="flex items-center gap-1.5 text-xs text-[var(--foreground-muted)] sm:gap-2">
                 <span
                   className="block h-2.5 w-2.5 sm:h-4 sm:w-4 shrink-0 rounded-sm border border-[rgba(255,255,255,0.4)]"
                   style={{ background: sphereNeutralColor }}
@@ -263,10 +306,10 @@ export function RelationMapClient({
               </div>
             </div>
           ) : (
-            <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 sm:gap-x-4 sm:gap-y-1 text-[10px] sm:text-xs text-[var(--foreground-muted)]">
-              <span style={{ color: getRelationColor(-100) }}>−100</span>
-              <span style={{ color: getRelationColor(0) }}>0</span>
-              <span style={{ color: getRelationColor(100) }}>+100</span>
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-[var(--foreground-muted)] sm:gap-x-4">
+              <span style={{ color: getRelationColor(-100) }}>Hostile −100</span>
+              <span style={{ color: getRelationColor(0) }}>Neutre 0</span>
+              <span style={{ color: getRelationColor(100) }}>Allié +100</span>
             </div>
           )}
         </div>
@@ -328,6 +371,7 @@ export function RelationMapClient({
                       key={key}
                       geography={geo}
                       style={styleInactive}
+                      tabIndex={-1}
                       title={name ? `${name} (non présent en base)` : undefined}
                     />
                   );
@@ -400,7 +444,11 @@ export function RelationMapClient({
                     <Geography
                       geography={geo}
                       style={sphereStyle}
-                      onClick={isSphereMode ? undefined : () => setSelectedRegionId((prev) => (prev === regionId ? null : regionId))}
+                      tabIndex={-1}
+                      onClick={isSphereMode ? undefined : () => {
+                        setSelectedRegionId((prev) => (prev === regionId ? null : regionId));
+                        setComparedRegionId("");
+                      }}
                       onMouseMove={(e) => setTooltip({ x: e.clientX, y: e.clientY, content: tooltipContent })}
                       onMouseLeave={() => setTooltip(null)}
                       title={

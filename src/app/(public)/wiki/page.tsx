@@ -1,5 +1,6 @@
 import { WikiClient } from "./WikiClient";
 import { fetchWikiPages } from "@/lib/wiki/queries";
+import { PublicPageHeader } from "@/components/ui/PublicPageHeader";
 
 export const metadata = {
   title: "Wiki",
@@ -23,9 +24,12 @@ export default async function WikiPage() {
             filter: "blur(0.5px)",
           }}
         />
-        <div className="absolute inset-0 bg-black/40" />
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_0%,rgba(103,211,122,0.13),transparent_38%),linear-gradient(180deg,rgba(3,8,11,0.38)_0%,rgba(3,8,11,0.76)_48%,rgba(3,8,11,0.95)_100%)]" />
       </div>
       <div className="relative z-10" style={{ isolation: "isolate" }}>
+        <div className="mx-auto max-w-7xl px-4 pt-10 sm:px-6">
+          <PublicPageHeader title="Wiki" icon="wiki" />
+        </div>
         <WikiClient initialPages={pages} />
       </div>
     </div>

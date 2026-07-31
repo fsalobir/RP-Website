@@ -432,12 +432,9 @@ export function CountryTabStateActions({
             style={{ borderColor: "var(--border)" }}
           />
         </div>
-        <p className="mb-2 text-xs text-[var(--foreground-muted)] sm:hidden">
-          Faites glisser le tableau pour voir toutes les colonnes.
-        </p>
-        <div className="overflow-x-auto">
-          <table className="min-w-[680px] w-full text-sm">
-            <thead>
+        <div className="overflow-visible sm:overflow-x-auto">
+          <table className="w-full text-sm sm:min-w-[680px]">
+            <thead className="hidden sm:table-header-group">
               <tr style={{ borderColor: "var(--border)" }}>
                 <th className="border-b p-2 text-left font-medium text-[var(--foreground-muted)]">Date</th>
                 <th className="border-b p-2 text-left font-medium text-[var(--foreground-muted)]">Type</th>
@@ -468,26 +465,26 @@ export function CountryTabStateActions({
                       role="button"
                       aria-expanded={isExpanded}
                       aria-label={`${isExpanded ? "Masquer" : "Afficher"} le détail de ${r.state_action_types?.label_fr ?? "la demande"}`}
-                      className="cursor-pointer transition-colors hover:bg-[var(--background)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--accent)]"
+                      className="mb-2 grid cursor-pointer grid-cols-2 gap-x-3 gap-y-2 rounded-lg border p-3 transition-colors hover:bg-[var(--background)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--accent)] sm:mb-0 sm:table-row sm:rounded-none sm:border-0 sm:p-0"
                       style={{
                         borderColor: "var(--border)",
                         background: isExpanded ? "var(--background-elevated)" : undefined,
                       }}
                     >
-                      <td className="border-b p-2 text-[var(--foreground)]">
+                      <td className="text-xs text-[var(--foreground-muted)] sm:border-b sm:p-2 sm:text-[var(--foreground)]">
                         {new Date(r.created_at).toLocaleString("fr-FR")}
                       </td>
-                      <td className="border-b p-2 text-[var(--foreground)]">
+                      <td className="text-right font-semibold text-[var(--foreground)] sm:border-b sm:p-2 sm:text-left sm:font-normal">
                         {r.state_action_types?.label_fr ?? r.action_type_id}
                       </td>
-                      <td className="border-b p-2 text-[var(--foreground)]">{summary}</td>
-                      <td className="border-b p-2">
+                      <td className="self-center text-[var(--foreground)] sm:border-b sm:p-2">{summary}</td>
+                      <td className="justify-self-end sm:border-b sm:p-2">
                         <StatusBadge status={r.status} request={r} types={types} />
                       </td>
                     </tr>
                     {isExpanded && (
-                      <tr style={{ borderColor: "var(--border)" }}>
-                        <td colSpan={4} className="border-b bg-[var(--background)] p-4">
+                      <tr className="block sm:table-row" style={{ borderColor: "var(--border)" }}>
+                        <td colSpan={4} className="block border-b bg-[var(--background)] p-4 sm:table-cell">
                           <RequestDetailView
                             request={r}
                             countriesForTarget={countriesForTarget}

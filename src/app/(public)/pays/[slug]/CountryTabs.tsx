@@ -1040,12 +1040,12 @@ export function CountryTabs({
     setBudgetSaving(false);
   };
 
-  const glassPanelClass = "rounded-2xl border border-white/25";
-  const glassPanelStyle = { background: "rgba(255,255,255,0.12)", backdropFilter: "blur(12px)" as const };
+  const glassPanelClass = "rounded-2xl border border-white/15 shadow-[0_24px_70px_rgba(0,0,0,0.38)]";
+  const glassPanelStyle = { background: "rgba(9,17,24,0.9)", backdropFilter: "blur(8px)" as const };
   const glassTextClass = "text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.4)]";
-  const glassMutedClass = "text-white/90";
+  const glassMutedClass = "text-white/70";
   const tabButtonClass =
-    "min-h-11 rounded-lg border px-3 py-2 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]";
+    "min-h-11 min-w-0 rounded-lg border px-1.5 py-2 text-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] lg:px-3 lg:text-sm";
 
   return (
     <div className="country-interface">
@@ -1211,42 +1211,42 @@ export function CountryTabs({
 
       <nav
         aria-label="Sections du pays"
-        className="mb-4 grid grid-cols-2 items-stretch gap-2 rounded-xl border border-white/25 p-2 sm:mb-6 sm:flex sm:flex-wrap sm:items-center sm:px-4 sm:py-3"
+        className="sticky top-16 z-30 mb-4 grid grid-cols-4 items-stretch gap-1 rounded-xl border border-white/15 p-1.5 shadow-[0_16px_40px_rgba(0,0,0,0.3)] lg:mb-6 lg:flex lg:flex-wrap lg:items-center lg:gap-2 lg:px-4 lg:py-3"
         style={glassPanelStyle}
       >
         <button
           type="button"
-          className={`${tabButtonClass} ${tab === "general" ? "border-[var(--accent)] text-[var(--accent)]" : `border-transparent ${glassMutedClass} hover:text-white`}`}
+          className={`${tabButtonClass} ${tab === "general" ? "border-[var(--accent)] bg-[var(--accent)] text-[#071016]" : `border-transparent ${glassMutedClass} hover:bg-white/[0.06] hover:text-white`}`}
           data-state={tab === "general" ? "active" : "inactive"}
           aria-pressed={tab === "general"}
           onClick={() => setTab("general")}
         >
-          Situation générale
+          Situation
         </button>
         {canSeeCabinetAndBudget && (
           <button
             type="button"
-            className={`${tabButtonClass} ${tab === "cabinet" ? "border-[var(--accent)] text-[var(--accent)]" : `border-transparent ${glassMutedClass} hover:text-white`}`}
+            className={`${tabButtonClass} ${tab === "cabinet" ? "border-[var(--accent)] bg-[var(--accent)] text-[#071016]" : `border-transparent ${glassMutedClass} hover:bg-white/[0.06] hover:text-white`}`}
             data-state={tab === "cabinet" ? "active" : "inactive"}
             aria-pressed={tab === "cabinet"}
             onClick={() => setTab("cabinet")}
           >
-            Rapport du Cabinet
+            Cabinet
           </button>
         )}
         <button
           type="button"
-          className={`${tabButtonClass} ${tab === "military" ? "border-[var(--accent)] text-[var(--accent)]" : `border-transparent ${glassMutedClass} hover:text-white`}`}
+          className={`${tabButtonClass} ${tab === "military" ? "border-[var(--accent)] bg-[var(--accent)] text-[#071016]" : `border-transparent ${glassMutedClass} hover:bg-white/[0.06] hover:text-white`}`}
           data-state={tab === "military" ? "active" : "inactive"}
           aria-pressed={tab === "military"}
           onClick={() => setTab("military")}
         >
-          Militaire
+          Forces
         </button>
         {canSeeCabinetAndBudget && (
           <button
             type="button"
-            className={`${tabButtonClass} ${tab === "etat_major" ? "border-[var(--accent)] text-[var(--accent)]" : `border-transparent ${glassMutedClass} hover:text-white`}`}
+            className={`${tabButtonClass} ${tab === "etat_major" ? "border-[var(--accent)] bg-[var(--accent)] text-[#071016]" : `border-transparent ${glassMutedClass} hover:bg-white/[0.06] hover:text-white`}`}
             data-state={tab === "etat_major" ? "active" : "inactive"}
             aria-pressed={tab === "etat_major"}
             onClick={() => setTab("etat_major")}
@@ -1256,7 +1256,7 @@ export function CountryTabs({
         )}
         <button
           type="button"
-          className={`${tabButtonClass} ${tab === "perks" ? "border-[var(--accent)] text-[var(--accent)]" : `border-transparent ${glassMutedClass} hover:text-white`}`}
+          className={`${tabButtonClass} ${tab === "perks" ? "border-[var(--accent)] bg-[var(--accent)] text-[#071016]" : `border-transparent ${glassMutedClass} hover:bg-white/[0.06] hover:text-white`}`}
           data-state={tab === "perks" ? "active" : "inactive"}
           aria-pressed={tab === "perks"}
           onClick={() => setTab("perks")}
@@ -1266,7 +1266,7 @@ export function CountryTabs({
         {canSeeCabinetAndBudget && (
           <button
             type="button"
-            className={`${tabButtonClass} ${tab === "budget" ? "border-[var(--accent)] text-[var(--accent)]" : `border-transparent ${glassMutedClass} hover:text-white`}`}
+            className={`${tabButtonClass} ${tab === "budget" ? "border-[var(--accent)] bg-[var(--accent)] text-[#071016]" : `border-transparent ${glassMutedClass} hover:bg-white/[0.06] hover:text-white`}`}
             data-state={tab === "budget" ? "active" : "inactive"}
             aria-pressed={tab === "budget"}
             onClick={() => setTab("budget")}
@@ -1276,7 +1276,7 @@ export function CountryTabs({
         )}
         <button
           type="button"
-          className={`${tabButtonClass} ${tab === "laws" ? "border-[var(--accent)] text-[var(--accent)]" : `border-transparent ${glassMutedClass} hover:text-white`}`}
+          className={`${tabButtonClass} ${tab === "laws" ? "border-[var(--accent)] bg-[var(--accent)] text-[#071016]" : `border-transparent ${glassMutedClass} hover:bg-white/[0.06] hover:text-white`}`}
           data-state={tab === "laws" ? "active" : "inactive"}
           aria-pressed={tab === "laws"}
           onClick={() => setTab("laws")}
@@ -1286,18 +1286,18 @@ export function CountryTabs({
         {isPlayerForThisCountry && (
           <button
             type="button"
-            className={`${tabButtonClass} ${tab === "state_actions" ? "border-[var(--accent)] text-[var(--accent)]" : `border-transparent ${glassMutedClass} hover:text-white`}`}
+            className={`${tabButtonClass} ${tab === "state_actions" ? "border-[var(--accent)] bg-[var(--accent)] text-[#071016]" : `border-transparent ${glassMutedClass} hover:bg-white/[0.06] hover:text-white`}`}
             data-state={tab === "state_actions" ? "active" : "inactive"}
             aria-pressed={tab === "state_actions"}
             onClick={() => setTab("state_actions")}
           >
-            Actions d'État
+            Actions
           </button>
         )}
         {isAdmin && (
           <button
             type="button"
-            className={`${tabButtonClass} ${tab === "debug" ? "border-[var(--accent)] text-[var(--accent)]" : `border-transparent ${glassMutedClass} hover:text-white`}`}
+            className={`${tabButtonClass} ${tab === "debug" ? "border-[var(--accent)] bg-[var(--accent)] text-[#071016]" : `border-transparent ${glassMutedClass} hover:bg-white/[0.06] hover:text-white`}`}
             data-state={tab === "debug" ? "active" : "inactive"}
             aria-pressed={tab === "debug"}
             onClick={() => setTab("debug")}
