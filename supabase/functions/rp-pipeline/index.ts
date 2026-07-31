@@ -1,4 +1,5 @@
 import { createClient, type SupabaseClient } from "npm:@supabase/supabase-js@2";
+import { getRelationLabel } from "../../../src/lib/relationScale.ts";
 
 const MODEL = "anthracite-org-magnum-v4-72b-FP8-Dynamic";
 const MAGNUM_URL = Deno.env.get("INFERMATIC_API_URL") ??
@@ -9,7 +10,7 @@ const MAX_JOBS = 2;
 const RESCAN_DAYS = 7;
 const DISCORD_TIMEOUT_MS = 30_000;
 const ARTICLE_LIMITS = {
-  brief: { min: 400, max: 800, maxTokens: 700 },
+  brief: { min: 250, max: 650, maxTokens: 500 },
   standard: { min: 900, max: 1_800, maxTokens: 1_300 },
   dossier: { min: 2_000, max: 3_500, maxTokens: 2_200 },
 } as const;
@@ -74,6 +75,30 @@ type ContextArticle = {
     | null;
   deleted_at?: string | null;
   nsfw_quarantined?: boolean;
+};
+type DiscordCountry = {
+  id: string;
+  name: string;
+  slug?: string | null;
+  flag_url?: string | null;
+  continent_id?: string | null;
+  discord_role_id?: string | null;
+};
+type ConsequenceLedgerRow = {
+  sequence_no?: number;
+  operation_kind?: string;
+  target_table?: string;
+  target_key?: Record<string, unknown> | null;
+  before_state?: Record<string, unknown> | null;
+  after_state?: Record<string, unknown> | null;
+  reverted_at?: string | null;
+};
+type DiscordEmbed = {
+  title?: string;
+  description: string;
+  fields?: Array<{ name: string; value: string }>;
+  color: number;
+  image?: { url: string };
 };
 
 class PipelineError extends Error {
@@ -141,6 +166,362 @@ function cleanDiscordText(value: string): string {
     .trim();
 }
 
+function safeDiscordLabel(value: unknown, fallback: string): string {
+  const label = cleanDiscordText(String(value ?? "")).slice(0, 100);
+  return label &&
+      !containsNsfw(label) &&
+      !UNSAFE_DISCORD_MARKDOWN.test(label) &&
+      !FORBIDDEN_IDENTIFIER.test(label)
+    ? label
+    : fallback;
+}
+
+export function countryFlagEmoji(
+  country: Pick<DiscordCountry, "slug" | "flag_url"> | null | undefined,
+): string {
+  const flagUrl = String(country?.flag_url ?? "");
+  const slug = String(country?.slug ?? "").toLocaleLowerCase("fr");
+  const urlCode = flagUrl.match(
+    /flagcdn\.com\/(?:[a-z0-9]+\/)*([a-z]{2})\.(?:png|webp|jpe?g)(?:[?#]|$)/i,
+  )?.[1];
+  // Le seul drapeau actuel hors FlagCDN est celui de la Russie.
+  const code = urlCode ?? (/^[a-z]{2}$/.test(slug) ? slug : null) ??
+    (slug === "russie" ? "ru" : null);
+  return code
+    ? String.fromCodePoint(
+      ...code.toUpperCase().split("").map((letter) =>
+        letter.charCodeAt(0) + 127397
+      ),
+    )
+    : "";
+}
+
+function countryLabel(country: DiscordCountry | null | undefined): string {
+  if (!country) return "Pays non identifié";
+  return [
+    countryFlagEmoji(country),
+    safeDiscordLabel(country.name, "Pays non identifié"),
+  ].filter(Boolean).join(" ");
+}
+
+export function discordCountryHeader(
+  countries: DiscordCountry[],
+  publicAttribution = true,
+): string {
+  const labels = countries.slice(0, 3).map(countryLabel);
+  if (countries.length > 3) labels.push(`+${countries.length - 3} pays`);
+  if (!publicAttribution) labels.unshift("🕵️ Auteur non attribué");
+  return labels.join("  •  ") || "🌐 Actualité internationale";
+}
+
+const COUNTRY_STAT_LABELS: Record<string, string> = {
+  militarism: "Militarisme",
+  industry: "Industrie",
+  science: "Science",
+  stability: "Stabilité",
+  ideology_germanic_monarchy: "Monarchisme Germanique",
+  ideology_merina_monarchy: "Monarchisme Mérinais",
+  ideology_french_republicanism: "Républicanisme Français",
+  ideology_mughal_republicanism: "Républicanisme Moghol",
+  ideology_nilotique_cultism: "Cultisme Nilotique",
+  ideology_satoiste_cultism: "Cultisme Satoiste",
+};
+
+function numericValue(value: unknown): number | null {
+  if (value === null || value === undefined || value === "") return null;
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
+}
+
+function formatMechanicNumber(value: unknown): string {
+  const number = numericValue(value);
+  return number === null
+    ? "indisponible"
+    : new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 2 }).format(
+      number,
+    ).replace(/^-/, "−");
+}
+
+function formatMechanicalChange(
+  before: unknown,
+  after: unknown,
+  delta: unknown,
+  options: {
+    unit?: string;
+    stateLabel?: string;
+    increaseLabel?: string;
+    decreaseLabel?: string;
+  } = {},
+): string {
+  const beforeNumber = numericValue(before);
+  const afterNumber = numericValue(after);
+  const deltaNumber = numericValue(delta);
+  if (
+    beforeNumber === null || afterNumber === null || deltaNumber === null
+  ) {
+    return "détail indisponible";
+  }
+  const unit = options.unit ?? "";
+  const stateUnit = options.stateLabel ? "" : unit;
+  const finalState = options.stateLabel
+    ? `${options.stateLabel} (${formatMechanicNumber(afterNumber)})`
+    : `${formatMechanicNumber(afterNumber)}${stateUnit}`;
+  if (deltaNumber === 0) {
+    return `**${finalState}**\nÉvolution : aucun changement (limite atteinte)`;
+  }
+  const direction = deltaNumber > 0
+    ? options.increaseLabel ?? "hausse"
+    : options.decreaseLabel ?? "baisse";
+  return `**${finalState}**\nÉvolution : ${direction} de ${
+    formatMechanicNumber(Math.abs(deltaNumber))
+  }${unit} (auparavant ${formatMechanicNumber(beforeNumber)}${stateUnit})`;
+}
+
+function publicEffectDescription(after: Record<string, unknown>): string {
+  const kind = String(after.effect_kind ?? "");
+  const target = String(after.effect_target ?? "");
+  const label = kind === "stat_delta"
+    ? COUNTRY_STAT_LABELS[target] ?? "Statistique"
+    : kind === "gdp_growth_base"
+    ? "Croissance du PIB"
+    : kind === "population_growth_base"
+    ? "Croissance de la population"
+    : kind.startsWith("military_unit_")
+    ? "Capacité militaire"
+    : kind.startsWith("influence_modifier_")
+    ? "Influence"
+    : kind.startsWith("ideology_")
+    ? "Idéologie"
+    : "Effet temporaire";
+  const value = numericValue(after.value);
+  const valueText = value === null
+    ? ""
+    : ` : ${value > 0 ? "+" : value < 0 ? "−" : ""}${
+      formatMechanicNumber(Math.abs(value))
+    }`;
+  const duration = numericValue(after.duration_remaining);
+  const durationKind = {
+    days: "jour",
+    months: "mois",
+    turns: "tour",
+  }[String(after.duration_kind ?? "")] ?? "unité";
+  const durationText = duration === null
+    ? ""
+    : ` (${formatMechanicNumber(duration)} ${durationKind}${
+      duration > 1 && durationKind !== "mois" ? "s" : ""
+    })`;
+  return `${label}${valueText}${durationText}`;
+}
+
+export function formatDiscordConsequences(
+  rows: ConsequenceLedgerRow[],
+  countries: DiscordCountry[],
+  rosterUnits: Array<{ id: string; name_fr?: string | null }> = [],
+  publicAttribution = true,
+): string {
+  const activeRows = rows.filter((row) => !row.reverted_at).sort((a, b) =>
+    Number(a.sequence_no ?? 0) - Number(b.sequence_no ?? 0)
+  );
+  if (!activeRows.length) return "Aucune conséquence appliquée.";
+  if (!publicAttribution) {
+    return "Les conséquences de cette opération ne sont pas publiques.";
+  }
+  const countriesById = new Map(countries.map((country) => [
+    country.id,
+    country,
+  ]));
+  const unitsById = new Map(rosterUnits.map((unit) => [
+    unit.id,
+    safeDiscordLabel(unit.name_fr, "Unité militaire"),
+  ]));
+  const namedCountry = (value: unknown) =>
+    countryLabel(countriesById.get(String(value)) ?? null);
+  const lines = activeRows.map((row) => {
+    const key = row.target_key ?? {};
+    const before = row.before_state ?? {};
+    const after = row.after_state ?? {};
+    const pair = `${row.operation_kind ?? ""}:${row.target_table ?? ""}`;
+    if (pair === "relation_delta:country_relations") {
+      const afterValue = numericValue(after.value);
+      return `**${namedCountry(key.country_a_id)} et ${
+        namedCountry(key.country_b_id)
+      }**\nRelations diplomatiques : ${
+        formatMechanicalChange(
+          before.value,
+          after.value,
+          after.applied_delta,
+          {
+            unit: " points",
+            stateLabel: afterValue === null
+              ? undefined
+              : getRelationLabel(afterValue),
+            increaseLabel: "amélioration",
+            decreaseLabel: "dégradation",
+          },
+        )
+      }`;
+    }
+    if (pair === "control_delta:country_control") {
+      return `**${namedCountry(key.controller_country_id)} sur ${
+        namedCountry(key.country_id)
+      }**\nContrôle territorial : ${
+        formatMechanicalChange(
+          before.share_pct,
+          after.share_pct,
+          after.applied_delta,
+          { unit: " %" },
+        )
+      }`;
+    }
+    if (pair === "country_delta:countries") {
+      const stat = COUNTRY_STAT_LABELS[String(key.column ?? "")] ??
+        "Statistique";
+      return `**${namedCountry(key.country_id)}**\n${stat} : ${
+        formatMechanicalChange(
+          before.value,
+          after.value,
+          after.applied_delta,
+        )
+      }`;
+    }
+    if (pair === "military_unit_delta:country_military_units") {
+      const changes = [];
+      if (
+        numericValue(after.applied_current_level_delta) !== 0 ||
+        numericValue(before.current_level) !== numericValue(after.current_level)
+      ) {
+        changes.push(
+          `Progression : ${
+            formatMechanicalChange(
+              before.current_level,
+              after.current_level,
+              after.applied_current_level_delta,
+            )
+          }`,
+        );
+      }
+      if (
+        numericValue(after.applied_extra_count_delta) !== 0 ||
+        numericValue(before.extra_count) !== numericValue(after.extra_count)
+      ) {
+        changes.push(
+          `Unités : ${
+            formatMechanicalChange(
+              before.extra_count,
+              after.extra_count,
+              after.applied_extra_count_delta,
+            )
+          }`,
+        );
+      }
+      return `**${namedCountry(key.country_id)} — ${
+        unitsById.get(String(key.roster_unit_id)) ?? "Unité militaire"
+      }**\nCapacité militaire\n${
+        changes.join("\n") || "Aucun changement effectif"
+      }`;
+    }
+    if (pair === "intel_delta:country_intel") {
+      return `**${namedCountry(key.observer_country_id)} sur ${
+        namedCountry(key.target_country_id)
+      }**\nRenseignement : ${
+        formatMechanicalChange(
+          before.intel_level,
+          after.intel_level,
+          after.applied_delta,
+        )
+      }`;
+    }
+    if (pair === "effect_insert:country_effects") {
+      return `**${namedCountry(after.country_id)}**\nEffet temporaire : **${
+        safeDiscordLabel(after.name, "Effet temporaire")
+      }**\n${publicEffectDescription(after)}`;
+    }
+    return "**Conséquence**\nDétail non reconnu.";
+  });
+  return lines.join("\n\n");
+}
+
+function embedTextLength(embed: DiscordEmbed): number {
+  return (embed.title?.length ?? 0) +
+    embed.description.length +
+    (embed.fields ?? []).reduce(
+      (total, field) => total + field.name.length + field.value.length,
+      0,
+    );
+}
+
+function spaceDiscordParagraphs(value: string): string {
+  const text = cleanDiscordText(value);
+  if (text.length < 240 || /\n\s*\n/.test(text)) return text;
+  // ponytail: simple fallback for legacy one-block articles; Magnum's own
+  // paragraph breaks remain authoritative.
+  const boundaries = [...text.matchAll(
+    /[.!?…][»”"']?(?=\s+\p{Lu})/gu,
+  )].map((match) => (match.index ?? 0) + match[0].length).filter((index) =>
+    index >= text.length * 0.3 && index <= text.length * 0.7
+  );
+  if (!boundaries.length) return text;
+  const splitAt = boundaries.reduce((best, candidate) =>
+    Math.abs(candidate - text.length / 2) <
+        Math.abs(best - text.length / 2)
+      ? candidate
+      : best
+  );
+  return `${text.slice(0, splitAt).trim()}\n\n${text.slice(splitAt).trim()}`;
+}
+
+function fitDiscordDescription(value: string, maximum: number): string {
+  if (value.length <= maximum) return value;
+  const suffix = "\n_… autres conséquences non affichées._";
+  const lines = value.split("\n");
+  const kept: string[] = [];
+  for (const line of lines) {
+    if ([...kept, line].join("\n").length + suffix.length > maximum) break;
+    kept.push(line);
+  }
+  return kept.length
+    ? `${kept.join("\n")}${suffix}`
+    : `${value.slice(0, Math.max(0, maximum - 1))}…`;
+}
+
+export function buildDiscordEmbeds(params: {
+  title: string;
+  description: string;
+  sections: Array<{ name: string; value: string }>;
+  color: number;
+  countryHeader: string;
+  imageUrl?: string | null;
+  consequences: string;
+}): DiscordEmbed[] {
+  const articleEmbed: DiscordEmbed = {
+    description: [
+      `**${params.countryHeader.slice(0, 256)}**`,
+      `### ${params.title}`,
+      "\u200B",
+      spaceDiscordParagraphs(params.description),
+    ].join("\n\n"),
+    fields: params.sections,
+    color: params.color,
+    ...(params.imageUrl ? { image: { url: params.imageUrl } } : {}),
+  };
+  const consequenceTitle = "Conséquences";
+  const available = Math.min(
+    4_096,
+    Math.max(
+      80,
+      6_000 - embedTextLength(articleEmbed) - consequenceTitle.length - 8,
+    ),
+  );
+  return [
+    articleEmbed,
+    {
+      title: consequenceTitle,
+      description: fitDiscordDescription(params.consequences, available),
+      color: 0xb58900,
+    },
+  ];
+}
+
 export function sameDiscordSections(
   actual: Array<{ title: string; body: string }>,
   expected: unknown,
@@ -170,13 +551,32 @@ export function containsNsfw(value: string): boolean {
 }
 
 function textMentionsCountry(text: string, country: string): boolean {
-  const escaped = country.toLocaleLowerCase("fr").replace(
+  const normalize = (value: string) =>
+    value.normalize("NFKD").replace(/\p{Diacritic}/gu, "")
+      .toLocaleLowerCase("fr");
+  const normalizedText = normalize(text);
+  const normalizedCountry = normalize(country);
+  const escaped = normalizedCountry.replace(
     /[.*+?^${}()|[\]\\]/g,
     "\\$&",
   );
-  return new RegExp(`(^|[^\\p{L}])${escaped}($|[^\\p{L}])`, "u").test(
-    text.toLocaleLowerCase("fr"),
-  );
+  if (
+    new RegExp(`(^|[^\\p{L}])${escaped}($|[^\\p{L}])`, "u").test(
+      normalizedText,
+    )
+  ) {
+    return true;
+  }
+  // ponytail: heuristique de gentilé; passer à des alias pays stockés en base si les faux positifs deviennent mesurables.
+  return (normalizedCountry.match(/\p{L}+/gu) ?? [])
+    .filter((token) => token.length >= 5)
+    .some((token) => {
+      const stem = token.slice(0, token.length - (token.length >= 7 ? 2 : 1));
+      return new RegExp(
+        `(^|[^\\p{L}])${stem}[\\p{L}-]*($|[^\\p{L}])`,
+        "u",
+      ).test(normalizedText);
+    });
 }
 
 export function parseArticle(
@@ -248,7 +648,12 @@ export function parseArticle(
       : "",
     ...(sections?.length ? { sections } : {}),
   };
-  if (output.title.length > 256) errors.push("Titre trop long");
+  const titleLimit = profile === "brief"
+    ? 120
+    : profile === "standard"
+    ? 160
+    : 200;
+  if (output.title.length > titleLimit) errors.push("Titre trop long");
   if (output.description.length > 4_096) errors.push("Description trop longue");
   if ((output.sections?.length ?? 0) > 25) errors.push("Trop de sections");
   if (
@@ -441,7 +846,7 @@ export function selectContext(
         Number(source[2])
       : 10_000;
   };
-  const ranked = rows
+  const scored = rows
     .filter(
       (row) =>
         !row.deleted_at &&
@@ -472,7 +877,7 @@ export function selectContext(
       ];
       const relevance = countries.filter((id) =>
             wantedCountries.has(id)
-          ).length * 10 +
+          ).length * 100 +
         (row.region_ids ?? []).filter((id) => wantedRegions.has(id)).length *
           4 +
         tags.filter((tag) => wantedTags.has(tag)).length * 6;
@@ -480,8 +885,19 @@ export function selectContext(
         ? `${row.rp_year}-${String(row.rp_month).padStart(2, "0")}`
         : null;
       return { row, relevance, age: monthDistance(rpDate) };
-    })
-    .filter(({ relevance }) => relevance > 0)
+    });
+  // ponytail: seuil relatif simple; passer aux embeddings seulement si le rappel mesuré devient insuffisant.
+  const relevanceFloor = Math.max(
+    1,
+    Math.ceil(
+      scored.reduce(
+        (maximum, { relevance }) => Math.max(maximum, relevance),
+        0,
+      ) * 0.6,
+    ),
+  );
+  const ranked = scored
+    .filter(({ relevance }) => relevance >= relevanceFloor)
     .sort(
       (a, b) =>
         b.relevance - a.relevance ||
@@ -575,10 +991,20 @@ thématique uniquement parce qu'il figure parmi les sources de contexte.`;
 export function editorialVoiceInstruction(value: unknown): string {
   return value === "state_agency_belligerent"
     ? `Adopte le style d'une agence de presse d'État très combative et propagandiste.
-Le ton peut être hargneux, accusateur et triomphaliste, mais le style seulement change :
+Évite le ton neutre d'une dépêche. Privilégie des titres incisifs, des verbes
+chargés, des phrases courtes et des transitions mordantes. Les métaphores
+éditoriales sont permises si elles ne sont pas présentées comme des faits ou
+des citations. Le style seulement change :
 n'ajoute aucune accusation, menace, citation, victime, opération, réaction ou conséquence absente des faits fournis.
 Toutes les règles de sûreté et de fidélité factuelle précédentes priment sur cette voix.`
     : "";
+}
+
+export function editorialVoiceForStage(
+  stage: GenerationStage,
+  value: unknown,
+): string {
+  return stage === "analysis" ? "" : editorialVoiceInstruction(value);
 }
 
 async function hashText(value: string): Promise<string> {
@@ -689,30 +1115,65 @@ export function validateEditorialAnalysis(
 export function factSheetForPrompt(
   factSheet: Record<string, unknown>,
 ): Record<string, unknown> {
-  const parameters = factSheet.intention_et_paramètres;
-  if (
-    !parameters || typeof parameters !== "object" ||
-    Array.isArray(parameters) ||
-    (parameters as Record<string, unknown>).attribution_publique !== false
-  ) {
-    return factSheet;
-  }
-  const sanitized = structuredClone(factSheet);
-  const authorId = sanitized.pays_auteur_id;
-  delete sanitized.pays_auteur_id;
-  if (typeof authorId === "string" && Array.isArray(sanitized.pays)) {
-    sanitized.pays = sanitized.pays.filter((country) =>
-      !country || typeof country !== "object" || Array.isArray(country) ||
-      (country as Record<string, unknown>).id !== authorId
-    );
-  }
-  const snapshot = sanitized.photographie_initiale_du_monde;
-  if (snapshot && typeof snapshot === "object" && !Array.isArray(snapshot)) {
-    delete (snapshot as Record<string, unknown>).emitter;
-  }
-  sanitized.confidentialité =
-    "L'auteur de l'action n'est pas établi publiquement. Ne l'attribue à aucun pays, même par déduction.";
-  return sanitized;
+  const parameters = factSheet.intention_et_paramètres &&
+      typeof factSheet.intention_et_paramètres === "object" &&
+      !Array.isArray(factSheet.intention_et_paramètres)
+    ? factSheet.intention_et_paramètres as Record<string, unknown>
+    : {};
+  const publicAttribution = parameters.attribution_publique !== false;
+  const authorId = factSheet.pays_auteur_id;
+  const targetId = factSheet.pays_cible_id ?? factSheet.cible_id;
+  const countries = Array.isArray(factSheet.pays)
+    ? factSheet.pays.flatMap((country) => {
+      if (!country || typeof country !== "object" || Array.isArray(country)) {
+        return [];
+      }
+      const row = country as Record<string, unknown>;
+      if (
+        typeof row.name !== "string" ||
+        (!publicAttribution && row.id === authorId)
+      ) {
+        return [];
+      }
+      return [{
+        rôle: row.id === targetId
+          ? "cible"
+          : row.id === authorId
+          ? "auteur"
+          : "mentionné",
+        nom: row.name,
+      }];
+    })
+    : [];
+  const actionType = factSheet.type_action &&
+      typeof factSheet.type_action === "object" &&
+      !Array.isArray(factSheet.type_action)
+    ? (factSheet.type_action as Record<string, unknown>).libellé
+    : factSheet.type_action;
+  const intention = factSheet.intention ?? parameters.intent;
+  const stakes = factSheet.enjeux ?? parameters.stakes;
+  return {
+    ...(typeof actionType === "string" ? { action: actionType } : {}),
+    ...(typeof factSheet.date_rp === "string"
+      ? { date_rp: factSheet.date_rp }
+      : {}),
+    ...(countries.length ? { pays: countries } : {}),
+    ...(typeof intention === "string" && intention.trim()
+      ? { intention: intention.trim() }
+      : {}),
+    ...(typeof stakes === "string" && stakes.trim()
+      ? { enjeux: stakes.trim() }
+      : {}),
+    ...(typeof factSheet.interdictions === "string"
+      ? { interdictions: factSheet.interdictions }
+      : {}),
+    ...(!publicAttribution
+      ? {
+        confidentialité:
+          "L'auteur de l'action n'est pas établi publiquement. Ne l'attribue à aucun pays, même par déduction.",
+      }
+      : {}),
+  };
 }
 
 async function preparePromptData(params: {
@@ -781,6 +1242,41 @@ function countriesAllowedByPrompt(
   );
 }
 
+export function finalEditorialFacts(
+  analysis: string,
+  input: string,
+): Record<string, unknown> {
+  try {
+    const parsedAnalysis = JSON.parse(
+      analysis.trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, ""),
+    ) as Record<string, unknown>;
+    const parsedInput = JSON.parse(input) as {
+      fiche_factuelle?: Record<string, unknown>;
+      sources?: unknown[];
+    };
+    return {
+      canon: {
+        fiche_factuelle: parsedInput.fiche_factuelle ?? {},
+        sources: Array.isArray(parsedInput.sources) ? parsedInput.sources : [],
+      },
+      plan_editorial_non_canonique: {
+        angle: parsedAnalysis.angle,
+        faits_utilisables: parsedAnalysis.faits_utilisables,
+        chronologie: parsedAnalysis.chronologie,
+        contradictions: parsedAnalysis.contradictions,
+        interdictions: parsedAnalysis.interdictions,
+      },
+    };
+  } catch {
+    return {
+      canon: {},
+      plan_editorial_non_canonique: {
+        interdictions: ["Aucun fait exploitable : ne rien inventer."],
+      },
+    };
+  }
+}
+
 async function runGenerationStage(params: {
   stage: GenerationStage;
   input: string;
@@ -792,6 +1288,7 @@ async function runGenerationStage(params: {
   sourceIds: string[];
   analysis?: string;
   draft?: string;
+  previousErrors?: string[];
 }): Promise<{
   content: string;
   blockedNsfw: boolean;
@@ -803,23 +1300,53 @@ async function runGenerationStage(params: {
     throw new PipelineError("Secret INFERMATIC_API_KEY manquant.", "warning");
   }
   const limits = ARTICLE_LIMITS[params.profile];
-  const voiceInstruction = editorialVoiceInstruction(params.editorialVoice);
+  const targetChars = Math.round(
+    limits.min + (limits.max - limits.min) / 3,
+  );
+  const voiceInstruction = editorialVoiceForStage(
+    params.stage,
+    params.editorialVoice,
+  );
   const systemBase = voiceInstruction
     ? `${SAFE_SYSTEM_BASE}\n${voiceInstruction}`
     : SAFE_SYSTEM_BASE;
+  const lengthRetry =
+    params.previousErrors?.some((error) =>
+      error === "Longueur hors profil" || error === "Section trop longue"
+    ) ?? false;
+  const sectionGuidance = lengthRetry && params.profile === "brief"
+    ? 'Correction de longueur : renvoie sections:[] et une description de 300 à 500 caractères, en deux courts paragraphes séparés par "\\n\\n" dans la chaîne JSON.'
+    : params.profile === "brief"
+    ? 'Pour cette brève : renvoie sections:[] et exactement deux courts paragraphes dans description, séparés par "\\n\\n" dans la chaîne JSON.'
+    : params.profile === "standard"
+    ? "Pour ce format standard : deux ou trois sections maximum."
+    : "Pour ce dossier : trois à cinq sections maximum.";
+  const retryInstruction = params.previousErrors?.length
+    ? `\nCorrection impérative après une tentative refusée : ${
+      [...new Set(params.previousErrors)].join("; ")
+    }.`
+    : "";
+  let finalAllowedNumbers = params.allowedNumbers;
+  let finalAllowedCountries = params.allowedCountries;
   let raw: string;
   if (params.stage === "analysis") {
     raw = await callMagnum({
       apiKey,
       temperature: 0.15,
       topK: 24,
-      maxTokens: 900,
+      maxTokens: 1_400,
       system: `${systemBase}
 Réponds en JSON avec exactement:
 {"angle":string,"faits_utilisables":string[],"chronologie":string[],"contradictions":[{"sources":string[],"désaccord":string}],"interdictions":string[]}.
+Reste compact : huit faits, six étapes chronologiques, trois contradictions et
+six interdictions au maximum. Chaque élément tient en une phrase courte.
 Dans contradictions, cite uniquement les identifiants de sources fournis.
 Signale les contradictions sans choisir arbitrairement une version.
-Dans faits_utilisables, conserve seulement les faits directement utiles à l'action décrite.`,
+Dans faits_utilisables, conserve seulement les faits explicitement écrits dans
+la fiche ou les sources et directement utiles à l'action. Le type d'action
+n'établit ni lieu, ni scène, ni paroles exactes, ni réaction, ni motif, ni
+historique des relations. N'infère aucun de ces éléments. Ton analyse est un
+plan éditorial, jamais une nouvelle source de faits.`,
       user:
         `Prépare l'analyse éditoriale de cet article.\n<données>\n${params.input}\n</données>`,
     });
@@ -832,8 +1359,18 @@ Dans faits_utilisables, conserve seulement les faits directement utiles à l'act
       useCreativePreset: true,
       system: `${systemBase}
 Rédige un article de ${limits.min} à ${limits.max} caractères hors titre.
+Vise environ ${targetChars} caractères et ne descends jamais sous ${limits.min}.
+Le titre doit rester sous ${params.profile === "brief" ? 90 : 140} caractères
+et partir du détail concret le plus marquant, pas du libellé générique de l'action.
+Le plafond de ${limits.max} caractères est absolu et couvre le chapeau plus
+tous les corps de sections. ${sectionGuidance}${retryInstruction}
+Mentionne au moins une fois les pays auteur et cible par leur nom complet tel
+qu'il apparaît dans la fiche factuelle.
 Chaque phrase factuelle doit provenir directement des données. N'ajoute aucun
 contexte géopolitique générique, institution, personne, projection ou conséquence.
+Chaque paragraphe doit apporter un détail concret différent tiré des sources :
+ne répète pas le titre sous plusieurs formulations. Transforme ces détails en
+un récit vif, avec un rythme et une structure variés, sans altérer les faits.
 Réponds uniquement en JSON avec exactement:
 {"title":string,"description":string,"sections":[{"title":string,"body":string}]}
 Les sections sont facultatives. Markdown Discord simple seulement. Aucune mention Discord.`,
@@ -844,6 +1381,20 @@ Les sections sont facultatives. Markdown Discord simple seulement. Aucune mentio
       }\n</analyse_rédactionnelle>`,
     });
   } else {
+    const finalFacts = finalEditorialFacts(
+      params.analysis ?? "",
+      params.input,
+    );
+    const finalFactsText = JSON.stringify(finalFacts, null, 2);
+    const canonicalFacts = finalFacts.canon &&
+        typeof finalFacts.canon === "object" &&
+        !Array.isArray(finalFacts.canon)
+      ? finalFacts.canon
+      : {};
+    finalAllowedNumbers = collectNumbers(canonicalFacts);
+    finalAllowedCountries = params.knownCountries.filter((country) =>
+      textMentionsCountry(JSON.stringify(canonicalFacts), country)
+    );
     const draftBlocked = containsNsfw(params.draft ?? "");
     const draftValidation = draftBlocked
       ? { errors: ["Contenu NSFW bloqué"] }
@@ -856,23 +1407,34 @@ Les sections sont facultatives. Markdown Discord simple seulement. Aucune mentio
       );
     raw = await callMagnum({
       apiKey,
-      temperature: 0.15,
-      topK: 24,
-      maxTokens: limits.maxTokens,
+      temperature: voiceInstruction ? 0.3 : 0.15,
+      topK: voiceInstruction ? 32 : 24,
+      maxTokens: lengthRetry && params.profile === "brief"
+        ? 300
+        : limits.maxTokens,
       system: `${systemBase}
-Tu es le réviseur final. Réécris l'article depuis zéro à partir de la fiche et
-de l'analyse validée. Le brouillon sert uniquement d'inspiration stylistique :
-ne conserve aucune de ses affirmations sans appui explicite dans les faits validés.
+Tu es le réviseur final. Révise le brouillon contre le bloc canon, qui est la
+seule autorité factuelle. Le plan éditorial peut contenir des erreurs : il sert
+uniquement à organiser le récit. Préserve le ton, le rythme et les détails
+concrets du brouillon lorsqu'ils sont explicitement appuyés par le canon.
 Vérifie chaque phrase séparément. Supprime tout contexte général, nom d'institution
 ou de personne, causalité, interprétation, prédiction, réaction ou conséquence qui
 n'est pas explicitement fourni. En cas de doute, supprime la phrase au lieu de la compléter.
 Respecte ${limits.min} à ${limits.max} caractères hors titre.
+Vise environ ${targetChars} caractères et ne descends jamais sous ${limits.min}.
+Le titre doit rester sous ${params.profile === "brief" ? 90 : 140} caractères
+et partir du détail concret le plus marquant, pas du libellé générique de l'action.
+Le plafond de ${limits.max} caractères est absolu et couvre le chapeau plus
+tous les corps de sections. ${sectionGuidance}${retryInstruction}
+Mentionne au moins une fois les pays auteur et cible par leur nom complet tel
+qu'il apparaît dans la fiche factuelle.
+Chaque paragraphe doit faire avancer le récit avec un fait distinct, sans
+paraphraser plusieurs fois la même information.
 Réponds uniquement en JSON avec exactement:
 {"title":string,"description":string,"sections":[{"title":string,"body":string}]}
 Les sections sont facultatives. Aucun autre champ, identifiant, rôle, salon, image ou fait mécanique.`,
-      user: `Réécris cet article.
-<données>\n${params.input}\n</données>
-<analyse_validée>\n${cleanDiscordText(params.analysis ?? "")}\n</analyse_validée>
+      user: `Révise cet article uniquement avec le canon fourni.
+<canon_et_plan>\n${finalFactsText}\n</canon_et_plan>
 <brouillon_style_uniquement>\n${
         cleanDiscordText(params.draft ?? "")
       }\n</brouillon_style_uniquement>
@@ -888,8 +1450,8 @@ Les sections sont facultatives. Aucun autre champ, identifiant, rôle, salon, im
     ? blockedNsfw ? { errors: ["Contenu NSFW bloqué"] } : parseArticle(
       content,
       params.profile,
-      params.allowedNumbers,
-      params.allowedCountries,
+      finalAllowedNumbers,
+      finalAllowedCountries,
       params.knownCountries,
     )
     : undefined;
@@ -1178,6 +1740,14 @@ async function loadGenerationInput(supabase: SupabaseClient, job: Job) {
     ),
     cible_id: targetId,
     intention_et_paramètres: action.payload,
+    intention: action.intent ??
+      (typeof action.payload?.intent === "string"
+        ? action.payload.intent
+        : null),
+    enjeux: action.stakes ??
+      (typeof action.payload?.stakes === "string"
+        ? action.payload.stakes
+        : null),
     ligne_editoriale: typeof action.payload?.editorial_voice === "string"
       ? action.payload.editorial_voice
       : null,
@@ -1195,14 +1765,14 @@ async function loadGenerationInput(supabase: SupabaseClient, job: Job) {
     .filter((name: unknown): name is string =>
       typeof name === "string" && name.length > 0
     );
-    return {
-      action,
-      profile,
-      context,
-      factSheet,
-      knownCountries,
-      editorialVoice: action.payload?.editorial_voice,
-    };
+  return {
+    action,
+    profile,
+    context,
+    factSheet,
+    knownCountries,
+    editorialVoice: action.payload?.editorial_voice,
+  };
 }
 
 async function storeGeneratedArticle(
@@ -1258,7 +1828,9 @@ async function storeGeneratedArticle(
       .single();
     if (existingError || !existing) {
       throw new PipelineError(
-        `Recherche de l'article impossible: ${existingError?.message ?? "article absent"}`,
+        `Recherche de l'article impossible: ${
+          existingError?.message ?? "article absent"
+        }`,
       );
     }
     existingVersion = Number(existing.current_version ?? 0);
@@ -1788,6 +2360,9 @@ async function processGeneration(
       ? payload.analysis
       : undefined,
     draft: typeof payload.draft === "string" ? payload.draft : undefined,
+    previousErrors: history.flatMap(({ errors }) =>
+      Array.isArray(errors) ? errors : []
+    ),
   });
   const blockedNsfw = payload.blocked_nsfw === true || result.blockedNsfw;
   if (stage === "analysis") {
@@ -1887,11 +2462,9 @@ async function processGeneration(
       status: "pending",
       payload: {
         ...payload,
-        stage: "analysis",
+        stage: "final",
         editorial_attempt: 2,
         editorial_history: attempts,
-        analysis: null,
-        draft: null,
         blocked_nsfw: blockedNsfw,
       },
     };
@@ -2051,10 +2624,31 @@ async function verifyDiscordWebhook(
   }
 }
 
-export async function findDiscordMessageByMarker(
+function sameDiscordEmbedContent(
+  actual: unknown,
+  expected: DiscordEmbed,
+): boolean {
+  if (!actual || typeof actual !== "object") return false;
+  const embed = actual as Record<string, unknown>;
+  if (String(embed.description ?? "") !== expected.description) return false;
+  const actualFields = Array.isArray(embed.fields) ? embed.fields : [];
+  const expectedFields = expected.fields ?? [];
+  return actualFields.length === expectedFields.length &&
+    actualFields.every((field, index) => {
+      if (!field || typeof field !== "object") return false;
+      const expectedField = expectedFields[index];
+      if (!expectedField) return false;
+      return String((field as Record<string, unknown>).name ?? "") ===
+          expectedField.name &&
+        String((field as Record<string, unknown>).value ?? "") ===
+          expectedField.value;
+    });
+}
+
+export async function findDiscordMessageByEmbed(
   token: string,
   channelId: string,
-  marker: string,
+  expectedEmbed: DiscordEmbed,
   oldestTimestamp = 0,
 ): Promise<string | null> {
   const cutoff = Number.isFinite(oldestTimestamp)
@@ -2084,16 +2678,7 @@ export async function findDiscordMessageByMarker(
       (cutoff === 0 ||
         discordSnowflakeTimestamp(String(message.id ?? "")) >= cutoff) &&
       (Array.isArray(message.embeds) ? message.embeds : []).some(
-        (embed: unknown) => {
-          if (!embed || typeof embed !== "object") return false;
-          const footer = (embed as Record<string, unknown>).footer;
-          return Boolean(
-            footer &&
-              typeof footer === "object" &&
-              typeof (footer as Record<string, unknown>).text === "string" &&
-              String((footer as Record<string, unknown>).text).includes(marker),
-          );
-        },
+        (embed: unknown) => sameDiscordEmbedContent(embed, expectedEmbed),
       )
     );
     if (match && typeof match.id === "string") return match.id;
@@ -2243,42 +2828,102 @@ async function processPublication(
     : typeof action.payload?.target_country_id === "string"
     ? action.payload.target_country_id
     : null;
-  const mentionedCountryIds = [action.country_id, targetCountryId].filter((
-    id,
-  ): id is string => Boolean(id));
-  const { data: countries, error: countryError } = await supabase
-    .from("countries")
-    .select("id,name,continent_id,discord_role_id")
-    .in("id", mentionedCountryIds);
-  const country = (countries ?? []).find((row: { id: string }) =>
-    row.id === action.country_id
-  );
+  const publicAttribution = action.payload?.attribution_publique !== false;
+  const { data: ledgerData, error: ledgerError } = await supabase
+    .from("action_execution_ledger")
+    .select(
+      "sequence_no,operation_kind,target_table,target_key,before_state,after_state,reverted_at",
+    )
+    .eq("action_id", action.id)
+    .eq("execution_version", executionVersion)
+    .is("reverted_at", null)
+    .order("sequence_no", { ascending: true });
+  if (ledgerError) {
+    throw new PipelineError(
+      `Conséquences indisponibles: ${ledgerError.message}`,
+    );
+  }
+  const ledgerRows = (ledgerData ?? []) as ConsequenceLedgerRow[];
+  const ledgerCountryIds = new Set<string>();
+  const rosterUnitIds = new Set<string>();
+  for (const row of ledgerRows) {
+    for (const state of [row.target_key, row.after_state]) {
+      if (!state || typeof state !== "object") continue;
+      for (const [key, value] of Object.entries(state)) {
+        if (
+          key.endsWith("country_id") &&
+          typeof value === "string" &&
+          /^[0-9a-f-]{36}$/i.test(value)
+        ) {
+          ledgerCountryIds.add(value);
+        }
+        if (
+          key === "roster_unit_id" &&
+          typeof value === "string" &&
+          /^[0-9a-f-]{36}$/i.test(value)
+        ) {
+          rosterUnitIds.add(value);
+        }
+      }
+    }
+  }
+  const countryIds = [
+    ...new Set([
+      action.country_id,
+      targetCountryId,
+      ...ledgerCountryIds,
+    ].filter((id): id is string => typeof id === "string" && Boolean(id))),
+  ];
+  const [
+    { data: countries, error: countryError },
+    { data: routes, error: routesError },
+    { data: articleConfig, error: articleConfigError },
+    { data: rosterUnits, error: rosterError },
+  ] = await Promise.all([
+    supabase
+      .from("countries")
+      .select("id,name,slug,flag_url,continent_id,discord_role_id")
+      .in("id", countryIds),
+    supabase
+      .from("discord_rp_channels")
+      .select("*")
+      .eq("is_public", true),
+    supabase
+      .from("action_automation_configs")
+      .select("discord_destination,embed_color,image_urls")
+      .eq("action_type_id", action.action_type_id)
+      .maybeSingle(),
+    rosterUnitIds.size
+      ? supabase
+        .from("military_roster_units")
+        .select("id,name_fr")
+        .in("id", [...rosterUnitIds])
+      : Promise.resolve({ data: [], error: null }),
+  ]);
+  const countryRows = (countries ?? []) as DiscordCountry[];
+  const country = countryRows.find((row) => row.id === action.country_id);
   if (countryError || !country) {
     throw new PipelineError(
       `Pays introuvable: ${countryError?.message}`,
       "warning",
     );
   }
-  const { data: routes, error: routesError } = await supabase
-    .from("discord_rp_channels")
-    .select("*")
-    .eq("is_public", true);
   if (routesError) {
     throw new PipelineError(
       `Routage Discord indisponible: ${routesError.message}`,
     );
   }
-  const { data: articleConfig, error: articleConfigError } = await supabase
-    .from("action_automation_configs")
-    .select("discord_destination,embed_color,image_urls")
-    .eq("action_type_id", action.action_type_id)
-    .maybeSingle();
   if (articleConfigError || !articleConfig) {
     throw new PipelineError(
       `Configuration de publication absente: ${
         articleConfigError?.message ?? action.action_type_id
       }`,
       "warning",
+    );
+  }
+  if (rosterError) {
+    throw new PipelineError(
+      `Référentiel militaire indisponible: ${rosterError.message}`,
     );
   }
   const destination = articleConfig?.discord_destination ?? "international";
@@ -2290,7 +2935,7 @@ async function processPublication(
     {
       countryId: action.country_id,
       actionTypeId: action.action_type_id,
-      continentId: country.continent_id,
+      continentId: country.continent_id ?? null,
     },
   );
   const existingRoute = typeof article.discord_route_id === "string"
@@ -2333,10 +2978,22 @@ async function processPublication(
   }
   await verifyDiscordRoute(discordToken, route);
   await verifyDiscordWebhook(webhookUrl, route);
+  const publicCountryIds = publicAttribution
+    ? [
+      ...new Set([
+        action.country_id,
+        targetCountryId,
+        ...ledgerCountryIds,
+      ].filter((id): id is string => typeof id === "string" && Boolean(id))),
+    ]
+    : [targetCountryId].filter((id): id is string => Boolean(id));
+  const publicCountries = publicCountryIds
+    .map((id) => countryRows.find((row) => row.id === id))
+    .filter((row): row is DiscordCountry => Boolean(row));
   const roleIds = [
     ...new Set(
-      (countries ?? [])
-        .map((row: { discord_role_id?: string | null }) => row.discord_role_id)
+      publicCountries
+        .map((row) => row.discord_role_id)
         .filter((id): id is string =>
           typeof id === "string" && /^\d+$/.test(id)
         ),
@@ -2346,25 +3003,41 @@ async function processPublication(
     name: String(section.title),
     value: String(section.body),
   }));
-  const dateRp = article.rp_year && article.rp_month
-    ? `${article.rp_year}-${String(article.rp_month).padStart(2, "0")}-${
-      String(article.rp_day ?? 1).padStart(2, "0")
-    }`
-    : "Date RP inconnue";
   const imageUrls = Array.isArray(articleConfig?.image_urls)
     ? articleConfig.image_urls.filter((url: unknown): url is string =>
       typeof url === "string" && /^https:\/\//.test(url)
     )
     : [];
-  const imageUrl = imageUrls.length
-    ? imageUrls[Math.floor(Math.random() * imageUrls.length)]
+  const publicationHash = await contentHash(
+    `${action.id}:${article.id}:${executionVersion}`,
+  );
+  const targetCountry = targetCountryId
+    ? countryRows.find((row) => row.id === targetCountryId) ?? null
     : null;
-  const marker = `FON-${
-    (await contentHash(`${action.id}:${article.id}:${executionVersion}`)).slice(
-      0,
-      16,
-    )
-  }`;
+  const imageUrl = imageUrls.length
+    ? imageUrls[
+      Number.parseInt(publicationHash.slice(0, 8), 16) % imageUrls.length
+    ]
+    : publicAttribution
+    ? country.flag_url
+    : targetCountry?.flag_url ?? null;
+  const embeds = buildDiscordEmbeds({
+    title: articleTitle,
+    description: articleDescription,
+    sections,
+    color: Number(articleConfig?.embed_color ?? 0x4f7655),
+    countryHeader: discordCountryHeader(
+      publicCountries,
+      publicAttribution,
+    ),
+    imageUrl,
+    consequences: formatDiscordConsequences(
+      ledgerRows,
+      countryRows,
+      (rosterUnits ?? []) as Array<{ id: string; name_fr?: string | null }>,
+      publicAttribution,
+    ),
+  });
   const payload = {
     content: roleIds.map((id) => `<@&${id}>`).join(" "),
     allowed_mentions: {
@@ -2373,16 +3046,7 @@ async function processPublication(
       users: [],
       replied_user: false,
     },
-    embeds: [
-      {
-        title: articleTitle,
-        description: articleDescription,
-        fields: sections,
-        color: Number(articleConfig?.embed_color ?? 0x4f7655),
-        footer: { text: `Fates of Nations · ${dateRp} · ${marker}` },
-        ...(imageUrl ? { image: { url: imageUrl } } : {}),
-      },
-    ],
+    embeds,
   };
   const { data: freshArticle, error: freshArticleError } = await supabase
     .from("lore_articles")
@@ -2489,10 +3153,10 @@ async function processPublication(
     return;
   }
   if (!existingMessageId) {
-    existingMessageId = await findDiscordMessageByMarker(
+    existingMessageId = await findDiscordMessageByEmbed(
       discordToken,
       String(route.channel_id),
-      marker,
+      embeds[0],
       Date.parse(String(action.created_at ?? "")),
     );
   }

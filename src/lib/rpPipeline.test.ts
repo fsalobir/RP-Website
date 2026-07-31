@@ -112,14 +112,34 @@ describe("pipeline RP", () => {
       id: "regional",
       source_kind: "mj" as const,
       countries: [{ country_id: "jp", relation_role: "author" as const, continent_id: "europe" }],
+      tags: ["diplomatie"],
+    };
+    const bilateral = {
+      ...direct,
+      id: "bilateral",
+      countries: [
+        { country_id: "fr", relation_role: "author" as const },
+        { country_id: "de", relation_role: "target" as const },
+      ],
     };
     expect(
-      selectLoreContext([regionalMj, direct], {
+      selectLoreContext([regionalMj, direct, bilateral], {
         countryIds: ["fr"],
+        targetCountryIds: ["de"],
         regionIds: ["europe"],
-        maxArticles: 1,
+        tags: ["diplomatie"],
+        maxArticles: 2,
       }).articles[0]?.id,
-    ).toBe("direct");
+    ).toBe("bilateral");
+    expect(
+      selectLoreContext([regionalMj, direct, bilateral], {
+        countryIds: ["fr"],
+        targetCountryIds: ["de"],
+        regionIds: ["europe"],
+        tags: ["diplomatie"],
+        maxArticles: 2,
+      }).articles,
+    ).toHaveLength(1);
   });
 
   it("rejette les champs, mentions, nombres et contenus NSFW non autorisés", () => {

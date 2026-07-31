@@ -4,7 +4,7 @@
  */
 
 const RELATION_PALIERS: { value: number; label: string }[] = [
-  { value: -100, label: "Archnemesis" },
+  { value: -100, label: "Ennemi juré" },
   { value: -80, label: "Haine" },
   { value: -60, label: "Hostilité" },
   { value: -40, label: "Animosité" },

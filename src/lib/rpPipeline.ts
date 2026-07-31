@@ -9,7 +9,7 @@ export const MAGNUM_MODEL = "anthracite-org-magnum-v4-72b-FP8-Dynamic";
 export const MAGNUM_CONTEXT_LIMIT = 24_000;
 
 export const ARTICLE_PROFILE_LIMITS: Record<ArticleProfile, { min: number; max: number }> = {
-  brief: { min: 400, max: 800 },
+  brief: { min: 250, max: 650 },
   standard: { min: 900, max: 1_800 },
   dossier: { min: 2_000, max: 3_500 },
 };
@@ -192,7 +192,8 @@ export function selectLoreContext(
   const maxArticles = query.maxArticles ?? 8;
   const maxTokens = Math.min(query.maxTokens ?? MAGNUM_CONTEXT_LIMIT, MAGNUM_CONTEXT_LIMIT);
 
-  const ranked = articles
+  const hasFilters = Boolean(countryIds.length || targetCountryIds.length || regionIds.length || tags.length);
+  const scored = articles
     .filter(
       (article) =>
         !article.deleted_at &&
@@ -205,14 +206,11 @@ export function selectLoreContext(
       const allCountries = [
         ...article.countries.map(({ country_id }) => country_id),
       ];
+      const wantedCountries = new Set([...countryIds, ...targetCountryIds]);
       const relevance =
-        (intersects(allCountries, countryIds) ? 10 : 0) +
-        (intersects(
-          article.countries.filter(({ relation_role }) => relation_role === "target").map(({ country_id }) => country_id),
-          targetCountryIds,
-        )
-          ? 8
-          : 0) +
+        [...new Set(allCountries)].filter((id) => wantedCountries.has(id))
+            .length *
+          100 +
         (intersects(
           article.countries
             .map(({ continent_id }) => continent_id)
@@ -227,8 +225,18 @@ export function selectLoreContext(
           ? monthDistance(query.roleplayDate, `${article.rp_year}-${String(article.rp_month).padStart(2, "0")}`)
           : Number.POSITIVE_INFINITY;
       return { article, relevance, age, authority: AUTHORITY_SCORE[article.source_kind] };
-    })
-    .filter(({ relevance }) => relevance > 0 || (!countryIds.length && !targetCountryIds.length && !regionIds.length && !tags.length))
+    });
+  // ponytail: seuil relatif simple; passer aux embeddings seulement si le rappel mesuré devient insuffisant.
+  const relevanceFloor = hasFilters
+    ? Math.max(
+        1,
+        Math.ceil(
+          scored.reduce((maximum, { relevance }) => Math.max(maximum, relevance), 0) * 0.6,
+        ),
+      )
+    : 0;
+  const ranked = scored
+    .filter(({ relevance }) => relevance >= relevanceFloor)
     .sort(
       (a, b) =>
         b.relevance - a.relevance ||
