@@ -15,6 +15,10 @@ import {
   ROSTER_DISPLAY_BRANCH_ORDER,
 } from "@/lib/rosterCsv";
 import { useUnsavedChangesGuard } from "@/hooks/useUnsavedChangesGuard";
+import {
+  executeValidatedGameAction,
+  executeValidatedGameActions,
+} from "@/app/actions/validatedGameActions";
 import type {
   MilitaryBranch,
   MilitaryRosterUnit,
@@ -250,14 +254,15 @@ export function RosterEditor({
       let persistedUnit: UnitRow;
 
       if (isNew) {
-        const { data, error: err } = await supabase
-          .from("military_roster_units")
-          .insert(clean)
-          .select("*")
-          .single();
-        if (err) throw new Error(err.message);
-        unitId = data.id as string;
-        persistedUnit = data as UnitRow;
+        const result = await executeValidatedGameAction({
+          id: "roster.unit.create",
+          parameters: { values: clean },
+          reason: "Création depuis l'éditeur d'unités",
+          risk: "reversible",
+        });
+        if (result.error || !result.data) throw new Error(result.error ?? "Création impossible.");
+        unitId = String(result.data.id);
+        persistedUnit = result.data as UnitRow;
 
         setUnits((prev) =>
           prev.map((u) => (u.id === unit.id ? { ...u, id: unitId } : u)),
@@ -269,20 +274,14 @@ export function RosterEditor({
         );
       } else {
         const expectedUpdatedAt = savedUnits.find((row) => row.id === unit.id)?.updated_at ?? "";
-        const { data, error: err } = await supabase
-          .from("military_roster_units")
-          .update(clean)
-          .eq("id", unit.id)
-          .eq("updated_at", expectedUpdatedAt)
-          .select("*")
-          .maybeSingle();
-        if (err) throw new Error(err.message);
-        if (!data) {
-          throw new Error(
-            "Un autre administrateur a modifié cette unité. Rechargez la page avant de recommencer.",
-          );
-        }
-        persistedUnit = data as UnitRow;
+        const result = await executeValidatedGameAction({
+          id: "roster.unit.update",
+          parameters: { rosterUnitId: unit.id, expectedUpdatedAt, values: clean },
+          reason: "Modification depuis l'éditeur d'unités",
+          risk: "reversible",
+        });
+        if (result.error || !result.data) throw new Error(result.error ?? "Modification impossible.");
+        persistedUnit = result.data as UnitRow;
       }
 
       const unitLevels = (levelsByUnitId.get(unit.id) ?? [])
@@ -315,12 +314,22 @@ export function RosterEditor({
         });
       }
 
-      const { error: lvlErr } = await supabase
-        .from("military_roster_unit_levels")
-        .upsert(toUpsert, {
-          onConflict: "unit_id,level",
-        });
-      if (lvlErr) throw new Error(lvlErr.message);
+      const levelResult = await executeValidatedGameActions(toUpsert.map((level) => ({
+        id: "roster.level.save",
+        parameters: {
+          unitId: level.unit_id,
+          level: level.level,
+          values: {
+            manpower: level.manpower,
+            hard_power: level.hard_power,
+            mobilization_cost: level.mobilization_cost,
+            science_required: level.science_required,
+          },
+        },
+        reason: "Enregistrement d'un niveau d'unité",
+        risk: "reversible" as const,
+      })));
+      if (levelResult.error) throw new Error(levelResult.error);
 
       // Recharger les niveaux de cette unité pour éviter les incohérences locales
       const { data: newLevels, error: reloadErr } = await supabase
@@ -364,22 +373,15 @@ export function RosterEditor({
     setSuccess(null);
     setSavingId(unit.id);
     try {
-      const supabase = createClient();
       if (!unit.id.startsWith("new_")) {
         const expectedUpdatedAt = savedUnits.find((row) => row.id === unit.id)?.updated_at ?? "";
-        const { data, error: err } = await supabase
-          .from("military_roster_units")
-          .delete()
-          .eq("id", unit.id)
-          .eq("updated_at", expectedUpdatedAt)
-          .select("id")
-          .maybeSingle();
-        if (err) throw new Error(err.message);
-        if (!data) {
-          throw new Error(
-            "Un autre administrateur a modifié cette unité. Rechargez la page avant de la supprimer.",
-          );
-        }
+        const result = await executeValidatedGameAction({
+          id: "roster.unit.delete",
+          parameters: { rosterUnitId: unit.id, expectedUpdatedAt },
+          reason: "Suppression depuis l'éditeur d'unités",
+          risk: "isolated",
+        });
+        if (result.error) throw new Error(result.error);
       }
       setUnits((prev) => prev.filter((u) => u.id !== unit.id));
       setLevels((prev) => prev.filter((l) => l.unit_id !== unit.id));
@@ -491,18 +493,6 @@ export function RosterEditor({
       const supabase = createClient();
 
       for (const r of parsed.units) {
-        const { error: uErr } = await supabase
-          .from("military_roster_units")
-          .update({
-            name_fr: r.nom.trim(),
-            base_count: r.base,
-            level_count: r.niveaux,
-          })
-          .eq("id", r.id_unite);
-        if (uErr) {
-          throw new Error(`« ${r.nom} » (${r.id_unite}) : ${uErr.message}`);
-        }
-
         const { data: orphanRows, error: selErr } = await supabase
           .from("military_roster_unit_levels")
           .select("id")
@@ -511,17 +501,6 @@ export function RosterEditor({
         if (selErr) {
           throw new Error(`« ${r.nom} » : ${selErr.message}`);
         }
-        if (orphanRows && orphanRows.length > 0) {
-          const ids = orphanRows.map((o) => o.id as string);
-          const { error: delErr } = await supabase
-            .from("military_roster_unit_levels")
-            .delete()
-            .in("id", ids);
-          if (delErr) {
-            throw new Error(`« ${r.nom} » : ${delErr.message}`);
-          }
-        }
-
         const toUpsert = [];
         for (let lvl = 1; lvl <= r.niveaux; lvl++) {
           const L = r.levelsByNumber.get(lvl);
@@ -539,14 +518,42 @@ export function RosterEditor({
             science_required: L.science_requise,
           });
         }
-        const { error: upErr } = await supabase
-          .from("military_roster_unit_levels")
-          .upsert(toUpsert, {
-            onConflict: "unit_id,level",
-          });
-        if (upErr) {
-          throw new Error(`« ${r.nom} » : ${upErr.message}`);
-        }
+        const expectedUpdatedAt = savedUnits.find((unit) => unit.id === r.id_unite)?.updated_at;
+        const actions = [
+          {
+            id: "roster.unit.update",
+            parameters: {
+              rosterUnitId: r.id_unite,
+              ...(expectedUpdatedAt ? { expectedUpdatedAt } : {}),
+              values: { name_fr: r.nom.trim(), base_count: r.base, level_count: r.niveaux },
+            },
+            reason: "Import CSV d'une unité",
+            risk: "reversible" as const,
+          },
+          ...(orphanRows ?? []).map((orphan) => ({
+            id: "roster.level.delete",
+            parameters: { levelId: String(orphan.id) },
+            reason: "Suppression d'un niveau absent de l'import CSV",
+            risk: "reversible" as const,
+          })),
+          ...toUpsert.map((level) => ({
+            id: "roster.level.save",
+            parameters: {
+              unitId: level.unit_id,
+              level: level.level,
+              values: {
+                manpower: level.manpower,
+                hard_power: level.hard_power,
+                mobilization_cost: level.mobilization_cost,
+                science_required: level.science_required,
+              },
+            },
+            reason: "Import CSV d'un niveau d'unité",
+            risk: "reversible" as const,
+          })),
+        ];
+        const result = await executeValidatedGameActions(actions);
+        if (result.error) throw new Error(`« ${r.nom} » : ${result.error}`);
       }
 
       await refetchRosterFromDb();

@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import type { Country } from "@/types/database";
 import { formatGdp, formatNumber } from "@/lib/format";
 import { useUnsavedChangesGuard } from "@/hooks/useUnsavedChangesGuard";
+import { executeValidatedGameAction } from "@/app/actions/validatedGameActions";
 
 function slugify(s: string) {
   return s
@@ -195,35 +196,33 @@ export function CountryForm({
       gdp: Number(form.gdp),
     };
     if (isEdit && country) {
-      const { data: updated, error: err } = await supabase
-        .from("countries")
-        .update(row)
-        .eq("id", country.id)
-        .eq("updated_at", country.updated_at)
-        .select("id")
-        .maybeSingle();
-      if (err) {
+      const result = await executeValidatedGameAction({
+        id: "country.update",
+        parameters: { countryId: country.id, expectedUpdatedAt: country.updated_at, values: row },
+        reason: "Modification depuis le formulaire pays",
+        risk: "reversible",
+      });
+      if (result.error) {
         if (uploadedFlagPath) await supabase.storage.from("flags").remove([uploadedFlagPath]);
-        setError(err.message);
-        setSaving(false);
-        return;
-      }
-      if (!updated) {
-        if (uploadedFlagPath) await supabase.storage.from("flags").remove([uploadedFlagPath]);
-        setError("Un autre administrateur a modifié ce pays. Rechargez la page avant de recommencer.");
+        setError(result.error);
         setSaving(false);
         return;
       }
       router.push("/admin/pays");
     } else {
-      const { data, error: err } = await supabase.from("countries").insert(row).select("id").single();
-      if (err) {
+      const result = await executeValidatedGameAction({
+        id: "country.create",
+        parameters: { values: row },
+        reason: "Création depuis le formulaire pays",
+        risk: "reversible",
+      });
+      if (result.error || !result.data?.id) {
         if (uploadedFlagPath) await supabase.storage.from("flags").remove([uploadedFlagPath]);
-        setError(err.message);
+        setError(result.error ?? "Le pays n'a pas pu être créé.");
         setSaving(false);
         return;
       }
-      router.push(`/admin/pays/${data.id}`);
+      router.push(`/admin/pays/${String(result.data.id)}`);
     }
     router.refresh();
     setSaving(false);

@@ -48,6 +48,7 @@ import { CountryTabCabinet } from "./CountryTabCabinet";
 import { CountryTabStateActions } from "./CountryTabStateActions";
 import { CountryTabLaws } from "./CountryTabLaws";
 import { CountryTabEtatMajor } from "./CountryTabEtatMajor";
+import { executeValidatedGameAction } from "@/app/actions/validatedGameActions";
 /** Subset of CountryEtatMajorFocus used by the page (only the 4 focus roster ids). */
 export type EtatMajorFocusForTabs = Pick<
   import("@/types/database").CountryEtatMajorFocus,
@@ -729,26 +730,26 @@ export function CountryTabs({
       const { data: urlData } = supabase.storage.from("flags").getPublicUrl(path);
       flagUrl = urlData.publicUrl;
     }
-    const { data: updated, error } = await supabase
-      .from("countries")
-      .update({
-        name: generalName.trim() || country.name,
-        regime: generalRegime.trim() || null,
-        flag_url: flagUrl,
-      })
-      .eq("id", country.id)
-      .eq("updated_at", country.updated_at)
-      .select("id")
-      .maybeSingle();
-    if (error || !updated) {
+    const result = await executeValidatedGameAction({
+      id: "country.update",
+      parameters: {
+        countryId: country.id,
+        expectedUpdatedAt: country.updated_at,
+        values: {
+          name: generalName.trim() || country.name,
+          regime: generalRegime.trim() || null,
+          flag_url: flagUrl,
+        },
+      },
+      reason: "Modification depuis la fiche pays",
+      risk: "reversible",
+    });
+    if (result.error || !result.data) {
       if (uploadedFlagPath) await supabase.storage.from("flags").remove([uploadedFlagPath]);
-      setGeneralError(
-        error?.message ??
-          "Un autre administrateur a modifié ce pays. Rechargez la page avant de recommencer."
-      );
+      setGeneralError(result.error ?? "Le pays n'a pas pu être modifié.");
     }
     setGeneralSaving(false);
-    if (!error && updated) {
+    if (!result.error && result.data) {
       setGeneralFlagFile(null);
       setGeneralFlagPreview(null);
       setGeneralEditMode(false);
@@ -780,22 +781,14 @@ export function CountryTabs({
   const handleDeleteEffect = async (e: CountryEffect) => {
     if (!confirm("Supprimer cet effet ?")) return;
     setEffectError(null);
-    const supabase = createClient();
-    const { data, error } = await supabase
-      .from("country_effects")
-      .delete()
-      .eq("id", e.id)
-      .eq("updated_at", e.updated_at)
-      .select("id")
-      .maybeSingle();
-    if (error) {
-      setEffectError(error.message || "La suppression a échoué.");
-      return;
-    }
-    if (!data) {
-      setEffectError(
-        "Un autre administrateur a modifié cet effet. Rechargez la page avant de le supprimer."
-      );
+    const result = await executeValidatedGameAction({
+      id: "country.effect.delete",
+      parameters: { effectId: e.id, expectedUpdatedAt: e.updated_at },
+      reason: "Suppression depuis la fiche pays",
+      risk: "reversible",
+    });
+    if (result.error) {
+      setEffectError(result.error);
       return;
     }
     router.refresh();
@@ -840,7 +833,6 @@ export function CountryTabs({
     }
     const durationNum = isPermanent ? 0 : Math.min(DURATION_DAYS_MAX, Math.max(1, Math.floor(durationRaw)));
     const valueToStore = getEffectKindValueHelper(effect_kind).displayToStored(valueNum);
-    const supabase = createClient();
     const row = {
       name: effectName.trim(),
       effect_kind,
@@ -852,20 +844,21 @@ export function CountryTabs({
     };
     let err: string | null = null;
     if (editingEffect) {
-      const { data, error } = await supabase
-        .from("country_effects")
-        .update(row)
-        .eq("id", editingEffect.id)
-        .eq("updated_at", editingEffect.updated_at)
-        .select("id")
-        .maybeSingle();
-      if (error) err = error.message;
-      else if (!data) {
-        err = "Un autre administrateur a modifié cet effet. Rechargez la page avant de recommencer.";
-      }
+      const result = await executeValidatedGameAction({
+        id: "country.effect.update",
+        parameters: { effectId: editingEffect.id, expectedUpdatedAt: editingEffect.updated_at, values: row },
+        reason: "Modification depuis la fiche pays",
+        risk: "reversible",
+      });
+      err = result.error ?? null;
     } else {
-      const { error } = await supabase.from("country_effects").insert({ ...row, country_id: country.id });
-      if (error) err = error.message;
+      const result = await executeValidatedGameAction({
+        id: "country.effect.create",
+        parameters: { values: { ...row, country_id: country.id } },
+        reason: "Ajout depuis la fiche pays",
+        risk: "reversible",
+      });
+      err = result.error ?? null;
     }
     if (!err && !editingEffect) {
       if (effect_kind === "budget_ministry_min_pct" && effect_target) {
@@ -897,15 +890,17 @@ export function CountryTabs({
           }
           total = BUDGET_MINISTRIES.reduce((s, m) => s + (curPcts[m.key] ?? 0), 0);
         }
-        if (current?.id) {
-          await supabase.from("country_budget").update({ ...curPcts, updated_at: new Date().toISOString() }).eq("id", current.id);
-        } else {
-          await supabase.from("country_budget").insert({
-            country_id: country.id,
-            budget_fraction: DEFAULT_BUDGET_FRACTION,
-            ...curPcts,
-          });
-        }
+        const budgetResult = await executeValidatedGameAction({
+          id: "country.budget.update",
+          parameters: {
+            countryId: country.id,
+            ...(current?.updated_at ? { expectedUpdatedAt: current.updated_at } : {}),
+            values: { budget_fraction: current?.budget_fraction ?? DEFAULT_BUDGET_FRACTION, ...curPcts },
+          },
+          reason: "Ajustement requis par un effet",
+          risk: "reversible",
+        });
+        if (budgetResult.error) err = budgetResult.error;
       } else if (effect_kind === "budget_allocation_cap" && valueNum < 0) {
         const cap = 100 + valueNum;
         const current = budget;
@@ -926,11 +921,13 @@ export function CountryTabs({
           if (total > 0) {
             const scale = cap / total;
             BUDGET_MINISTRIES.forEach((m) => { curPcts[m.key] = curPcts[m.key] * scale; });
-            const { error: budgetErr } = await supabase
-              .from("country_budget")
-              .update({ ...curPcts, updated_at: new Date().toISOString() })
-              .eq("id", current.id);
-            if (budgetErr && !err) err = budgetErr.message;
+            const budgetResult = await executeValidatedGameAction({
+              id: "country.budget.update",
+              parameters: { countryId: country.id, expectedUpdatedAt: current.updated_at, values: curPcts },
+              reason: "Ajustement requis par un plafond budgétaire",
+              risk: "reversible",
+            });
+            if (budgetResult.error && !err) err = budgetResult.error;
           }
         }
       }
@@ -998,44 +995,25 @@ export function CountryTabs({
     }
     setBudgetError(null);
     setBudgetSaving(true);
-    const supabase = createClient();
-    if (budgetRecordId) {
-      const toUpdate: Record<string, unknown> = { ...pcts, updated_at: new Date().toISOString() };
-      if (isAdmin) toUpdate.budget_fraction = budgetFraction;
-      let query = supabase.from("country_budget").update(toUpdate).eq("id", budgetRecordId);
-      if (budgetVersion) query = query.eq("updated_at", budgetVersion);
-      const { data: updated, error } = await query.select("id, updated_at").maybeSingle();
-      if (error) {
-        setBudgetError(error.message);
-      } else if (!updated) {
-        setBudgetError("Un autre administrateur a modifié ce budget. Rechargez la page avant de recommencer.");
-      } else {
-        setBudgetVersion(updated.updated_at);
-        setBudgetBaseline({ fraction: budgetFraction, pcts: { ...pcts } });
-        router.refresh();
-      }
+    const values: Record<string, unknown> = { ...pcts };
+    if (isAdmin || !budgetRecordId) values.budget_fraction = isAdmin ? budgetFraction : DEFAULT_BUDGET_FRACTION;
+    const result = await executeValidatedGameAction({
+      id: "country.budget.update",
+      parameters: {
+        countryId: country.id,
+        ...(budgetVersion ? { expectedUpdatedAt: budgetVersion } : {}),
+        values,
+      },
+      reason: "Enregistrement du budget national",
+      risk: "reversible",
+    });
+    if (result.error || !result.data) {
+      setBudgetError(result.error ?? "Le budget n'a pas pu être enregistré.");
     } else {
-      const { data: inserted, error } = await supabase
-        .from("country_budget")
-        .insert({
-          country_id: country.id,
-          budget_fraction: isAdmin ? budgetFraction : DEFAULT_BUDGET_FRACTION,
-          ...pcts,
-        })
-        .select("id, updated_at")
-        .single();
-      if (error) {
-        setBudgetError(
-          error.code === "23505"
-            ? "Un autre administrateur vient de créer ce budget. Rechargez la page."
-            : error.message
-        );
-      } else {
-        setBudgetRecordId(inserted.id);
-        setBudgetVersion(inserted.updated_at);
-        setBudgetBaseline({ fraction: budgetFraction, pcts: { ...pcts } });
-        router.refresh();
-      }
+      setBudgetRecordId(String(result.data.id));
+      setBudgetVersion(String(result.data.updated_at));
+      setBudgetBaseline({ fraction: budgetFraction, pcts: { ...pcts } });
+      router.refresh();
     }
     setBudgetSaving(false);
   };

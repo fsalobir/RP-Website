@@ -26,7 +26,8 @@
     "backup:rp-pipeline": "node --env-file=.env.local scripts/export-rp-pipeline-backup.mjs",
     "wiki:generate-seed": "node scripts/generate-wiki-seed-sql.mjs",
     "wiki:generate-subsections": "node scripts/generate-wiki-subsections-sql.mjs",
-    "test:db:reset": "npm run supabase -- db reset --local"
+    "test:db:reset": "npm run supabase -- db reset --local",
+    "ai-worker:start": "node scripts/ai-worker/worker.mjs"
   },
   "dependencies": {
     "@supabase/ssr": "^0.8.0",

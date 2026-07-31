@@ -158,6 +158,14 @@ export const ADMIN_NAVIGATION_ITEMS: readonly AdminNavigationItem[] = [
     keywords: ["journal", "modifications", "restaurer", "annuler", "administrateurs"],
   },
   {
+    href: "/admin/assistants-ia",
+    label: "Assistants IA",
+    description: "Piloter le relais local, le Secrétaire, le budget et les retours.",
+    group: "system",
+    icon: "ai",
+    keywords: ["assistant", "secrétaire", "codex", "relais", "openai", "budget", "retours"],
+  },
+  {
     href: "/",
     label: "Voir le site joueur",
     description: "Contrôler la partie telle qu’elle apparaît aux joueurs.",

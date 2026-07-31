@@ -1,6 +1,8 @@
 import { createClient } from "@/lib/supabase/server";
 import { getCachedAuth } from "@/lib/auth-server";
 import { PublicNav } from "@/components/layout/PublicNav";
+import { PlayerAssistant } from "@/components/ai/PlayerAssistant";
+import { getAiSettings } from "@/lib/ai/budget";
 
 export default async function PublicLayout({
   children,
@@ -11,6 +13,7 @@ export default async function PublicLayout({
   const { user, isAdmin, playerCountryId } = auth;
 
   let playerCountrySlug: string | null = null;
+  let playerAssistantEnabled = false;
   if (user && !isAdmin && playerCountryId) {
     const supabase = await createClient();
     const { data: country } = await supabase
@@ -19,6 +22,7 @@ export default async function PublicLayout({
       .eq("id", playerCountryId)
       .single();
     playerCountrySlug = country?.slug ?? null;
+    playerAssistantEnabled = await getAiSettings().then((settings) => settings.player_enabled).catch(() => false);
   }
 
   return (
@@ -30,6 +34,7 @@ export default async function PublicLayout({
         playerCountrySlug={playerCountrySlug}
       />
       <main className="flex-1">{children}</main>
+      {playerAssistantEnabled && <PlayerAssistant />}
     </>
   );
 }

@@ -25,7 +25,7 @@ function isActivePath(pathname: string, searchParams: URLSearchParams, href: str
   return pathname === route || pathname.startsWith(`${route}/`);
 }
 
-export function AdminNav() {
+export function AdminNav({ aiReportCount = 0 }: { aiReportCount?: number }) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const [query, setQuery] = useState("");
@@ -130,6 +130,11 @@ export function AdminNav() {
                           <AdminNavigationIcon name={item.icon} className="h-4 w-4" />
                         </span>
                         <span className="truncate">{item.label}</span>
+                        {item.href === "/admin/assistants-ia" && aiReportCount > 0 && (
+                          <span className="ml-auto min-w-5 rounded-full bg-red-500 px-1.5 py-0.5 text-center text-[0.65rem] font-bold text-white" aria-label={`${aiReportCount} signalement${aiReportCount > 1 ? "s" : ""}`}>
+                            {aiReportCount > 99 ? "99+" : aiReportCount}
+                          </span>
+                        )}
                       </Link>
                     );
                   })}
