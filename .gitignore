@@ -29,6 +29,10 @@ scripts/create-admin-user.js
 
 # outils locaux (CLI, binaires)
 /tools/
+/.codex-remote-attachments/
+/.impeccable/
+/artifacts/
+/fon-inventaire/
 
 # debug
 npm-debug.log*
