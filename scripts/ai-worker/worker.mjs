@@ -3,7 +3,7 @@ import { copyFileSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSy
 import { tmpdir } from "node:os";
 import { basename, dirname, isAbsolute, join, normalize, relative, resolve, sep } from "node:path";
 
-const WORKER_VERSION = "1.0.0";
+const WORKER_VERSION = "1.0.1";
 const POLL_MS = 3_000;
 const HEARTBEAT_MS = 20_000;
 const TASK_TIMEOUT_MS = 10 * 60_000;
@@ -17,7 +17,7 @@ function configPath() {
   return join(process.env.LOCALAPPDATA, "FatesOfNations", "ai-worker", "config.json");
 }
 
-const configuration = JSON.parse(readFileSync(configPath(), "utf8"));
+const configuration = JSON.parse(readFileSync(configPath(), "utf8").replace(/^\uFEFF/, ""));
 const siteUrl = String(configuration.siteUrl ?? "").replace(/\/$/, "");
 const token = String(configuration.token ?? "");
 const repoPath = resolve(String(configuration.repoPath ?? ""));
@@ -25,14 +25,18 @@ if (!siteUrl || !/^fonw_[A-Za-z0-9_-]{40,60}$/.test(token) || !existsSync(join(r
   throw new Error("Configuration du relais invalide.");
 }
 
+const codexCommand = process.platform === "win32" ? "cmd.exe" : "codex";
+const codexPrefix = process.platform === "win32" ? ["/d", "/s", "/c", "codex.cmd"] : [];
+
 function codexVersion() {
-  return execFileSync("codex", ["--version"], { encoding: "utf8", windowsHide: true }).trim().slice(0, 120);
+  return execFileSync(codexCommand, [...codexPrefix, "--version"], { encoding: "utf8", windowsHide: true }).trim().slice(0, 120);
 }
 
 function verifyElevatedSandbox() {
-  const output = execFileSync("codex", [
+  const output = execFileSync(codexCommand, [...codexPrefix,
     "-c", 'windows.sandbox="elevated"',
     "sandbox",
+    "--permission-profile", ":read-only",
     "-C", repoPath,
     "cmd.exe", "/d", "/c", "echo FON_CODEX_SANDBOX_OK",
   ], { encoding: "utf8", timeout: 60_000, windowsHide: true });
@@ -112,7 +116,7 @@ function runCodex(job, snapshot) {
   ];
 
   return new Promise((resolvePromise, rejectPromise) => {
-    const child = spawn("codex", args, { cwd: snapshot, windowsHide: true, stdio: ["pipe", "pipe", "ignore"] });
+    const child = spawn(codexCommand, [...codexPrefix, ...args], { cwd: snapshot, windowsHide: true, stdio: ["pipe", "pipe", "ignore"] });
     let output = "";
     const timer = setTimeout(() => {
       child.kill();
@@ -187,4 +191,7 @@ async function main() {
   }
 }
 
-main().catch(() => process.exit(1));
+main().catch((error) => {
+  console.error(error instanceof Error ? error.message : error);
+  process.exit(1);
+});

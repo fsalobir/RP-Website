@@ -18,7 +18,7 @@ $codexCommand = Get-Command codex -ErrorAction Stop
 & $codexCommand.Source login status | Out-Null
 if ($LASTEXITCODE -ne 0) { throw "Connectez d'abord Codex avec « codex login »." }
 
-$sandboxOutput = & $codexCommand.Source -c 'windows.sandbox="elevated"' sandbox -C $RepoPath cmd.exe /d /c "echo FON_CODEX_SANDBOX_OK"
+$sandboxOutput = & $codexCommand.Source -c 'windows.sandbox="elevated"' sandbox --permission-profile ':read-only' -C $RepoPath cmd.exe /d /c "echo FON_CODEX_SANDBOX_OK"
 if ($LASTEXITCODE -ne 0 -or $sandboxOutput -notmatch 'FON_CODEX_SANDBOX_OK') {
   throw "Le bac à sable Windows élevé est indisponible. Le relais reste désactivé."
 }
@@ -43,10 +43,10 @@ New-Item -ItemType Directory -Path $workerRoot -Force | Out-Null
 & icacls.exe $workerRoot /inheritance:r /grant:r "${env:USERNAME}:(OI)(CI)F" | Out-Null
 if ($LASTEXITCODE -ne 0) { throw "Impossible de protéger le jeton local." }
 
-$taskName = "Fates of Nations - Relais Codex"
 $taskCommand = "powershell.exe -WindowStyle Hidden -NoProfile -ExecutionPolicy Bypass -File `"$launchPath`""
-& schtasks.exe /Create /SC ONLOGON /RL LIMITED /F /TN $taskName /TR $taskCommand | Out-Null
-if ($LASTEXITCODE -ne 0) { throw "Impossible d'enregistrer le démarrage automatique." }
+$runKey = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run"
+New-Item -Path $runKey -Force | Out-Null
+Set-ItemProperty -LiteralPath $runKey -Name "FatesOfNationsAiWorker" -Value $taskCommand
 
 Start-Process -FilePath "powershell.exe" -ArgumentList @("-WindowStyle", "Hidden", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $launchPath) -WindowStyle Hidden
 Write-Host "Relais installé. Son état apparaîtra dans Assistants IA sous une minute."
