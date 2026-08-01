@@ -1155,7 +1155,7 @@ function AutomationSettingsView({
                     Format d’article
                     <select name="article_profile" defaultValue={config.articleProfile} className="w-full rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 text-sm text-[var(--foreground)]">
                       <option value="brief">Brève · 250–650</option>
-                      <option value="standard">Standard · 900–1 800</option>
+                      <option value="standard">Standard · 450–1 200</option>
                       <option value="dossier">Dossier · 2 000–3 500</option>
                     </select>
                   </label>

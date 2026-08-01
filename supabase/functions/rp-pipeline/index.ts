@@ -11,7 +11,7 @@ const RESCAN_DAYS = 7;
 const DISCORD_TIMEOUT_MS = 30_000;
 const ARTICLE_LIMITS = {
   brief: { min: 250, max: 650, maxTokens: 500 },
-  standard: { min: 900, max: 1_800, maxTokens: 1_300 },
+  standard: { min: 450, max: 1_200, maxTokens: 900 },
   dossier: { min: 2_000, max: 3_500, maxTokens: 2_200 },
 } as const;
 
@@ -52,9 +52,19 @@ type CriticIssue = {
   code: string;
   detail: string;
 };
+type CriticClaim = {
+  claim_id: string;
+  text: string;
+  support: "contract" | "source" | "creative" | "unsupported";
+  support_ref?: string;
+  source_id?: string;
+  support_quote?: string;
+  category?: string;
+};
 type CriticReport = {
   verdict: "pass" | "repair";
   issues: CriticIssue[];
+  claims: CriticClaim[];
   creative_facts: Array<{ text: string; category: string }>;
   used_source_ids: string[];
 };
@@ -598,7 +608,7 @@ export function containsNsfw(value: string): boolean {
   );
 }
 
-function textMentionsCountry(text: string, country: string): boolean {
+function textNamesCountry(text: string, country: string): boolean {
   const normalize = (value: string) =>
     value.normalize("NFKD").replace(/\p{Diacritic}/gu, "")
       .toLocaleLowerCase("fr");
@@ -608,13 +618,18 @@ function textMentionsCountry(text: string, country: string): boolean {
     /[.*+?^${}()|[\]\\]/g,
     "\\$&",
   );
-  if (
-    new RegExp(`(^|[^\\p{L}])${escaped}($|[^\\p{L}])`, "u").test(
-      normalizedText,
-    )
-  ) {
-    return true;
-  }
+  return new RegExp(`(^|[^\\p{L}])${escaped}($|[^\\p{L}])`, "u").test(
+    normalizedText,
+  );
+}
+
+function textMentionsCountry(text: string, country: string): boolean {
+  if (textNamesCountry(text, country)) return true;
+  const normalize = (value: string) =>
+    value.normalize("NFKD").replace(/\p{Diacritic}/gu, "")
+      .toLocaleLowerCase("fr");
+  const normalizedText = normalize(text);
+  const normalizedCountry = normalize(country);
   const countryTokens = normalizedCountry.match(/\p{L}+/gu) ?? [];
   // Le dernier mot porte le gentilé des noms composés (« saoudite », « tchèque »).
   // Tester « république », « nouvelle » ou « afrique » créait des pays fantômes.
@@ -761,7 +776,7 @@ export function parseArticle(
     errors.push("Aucun pays autorisé n'est mentionné");
   }
   const forbiddenKnownCountries = knownCountries.filter((country) =>
-    textMentionsCountry(fullText, country) &&
+    textNamesCountry(fullText, country) &&
     !allowedCountries.some((allowed) =>
       allowed.localeCompare(country, "fr", { sensitivity: "base" }) === 0
     )
@@ -1104,7 +1119,7 @@ export function editorialVoiceForStage(
   stage: GenerationStage,
   value: unknown,
 ): string {
-  return ["draft", "final", "repair"].includes(stage)
+  return ["draft", "final"].includes(stage)
     ? editorialVoiceInstruction(value)
     : "";
 }
@@ -1271,7 +1286,7 @@ export function validateEditorialAnalysis(
         : undefined;
       if (
         typeof evidence.excerpt === "string" &&
-        evidence.excerpt.length > (sourceRole === "exact_pair" ? 500 : 240)
+        evidence.excerpt.length > 1_000
       ) errors.push("Extrait de contexte trop long");
       if (
         sourceId && evidence.use === "continuity" &&
@@ -1415,12 +1430,7 @@ export function buildNarrativeContract(
     ? factSheet.type_action as Record<string, unknown>
     : {};
   const permissions = creativeLicense === "controlled"
-    ? [
-      "atmosphère non factuelle",
-      "type générique de scène compatible avec l'action",
-      "réaction collective anonyme",
-      "discours indirect sans citation exacte",
-    ]
+    ? ["atmosphère sensorielle locale sans acteur ni conséquence"]
     : ["style, rythme et agencement uniquement"];
   return {
     version: 1,
@@ -1541,18 +1551,31 @@ export function finalEditorialFacts(
     const parsedInput = JSON.parse(input) as {
       fiche_factuelle?: Record<string, unknown>;
     };
+    const evidence = Array.isArray(parsedAnalysis.evidence)
+      ? parsedAnalysis.evidence.filter((item): item is Record<string, unknown> =>
+        Boolean(item) && typeof item === "object" && !Array.isArray(item)
+      )
+      : [];
     return {
       canon: {
         fiche_factuelle: parsedInput.fiche_factuelle ?? {},
-        preuves: Array.isArray(parsedAnalysis.evidence)
-          ? parsedAnalysis.evidence
-          : [],
+        preuves_de_continuite: evidence.filter((item) =>
+          item.use === "continuity"
+        ),
+        déclarations_contradictoires_à_attribuer: evidence.filter((item) =>
+          item.use === "contradiction"
+        ),
       },
       plan_editorial_non_canonique: {
         angle: parsedAnalysis.angle,
         event: parsedAnalysis.event,
         contradictions: parsedAnalysis.contradictions,
         exclusions: parsedAnalysis.exclusions,
+        contexte_de_reference: evidence.filter((item) =>
+          item.use === "background"
+        ),
+        règle:
+          "Le contexte de référence décrit le passé ou l'environnement. Il ne prouve aucun détail de l'événement courant.",
       },
     };
   } catch {
@@ -1574,10 +1597,163 @@ function contractFromFactSheet(
     : buildNarrativeContract(factSheet);
 }
 
+const CONTRACT_SUPPORT_REFS = new Set([
+  "action",
+  "date_rp",
+  "participants",
+  "outcome",
+  "effects",
+  "intent",
+  "stakes",
+  "narrative_guidance",
+]);
+
+function articleClaimTexts(raw: string): string[] {
+  try {
+    const parsed = JSON.parse(
+      raw.trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, ""),
+    ) as Record<string, unknown>;
+    const segmenter = new Intl.Segmenter("fr", { granularity: "sentence" });
+    const sentences = (value: unknown) =>
+      typeof value === "string"
+        ? [...segmenter.segment(value)].map(({ segment }) => segment.trim()).filter(
+          Boolean,
+        )
+        : [];
+    const sections = Array.isArray(parsed.sections)
+      ? parsed.sections.filter((section): section is Record<string, unknown> =>
+        Boolean(section) && typeof section === "object" && !Array.isArray(section)
+      )
+      : [];
+    return [
+      ...(typeof parsed.title === "string" ? [parsed.title.trim()] : []),
+      ...sentences(parsed.description),
+      ...sections.flatMap((section) => [
+        ...(typeof section.title === "string" ? [section.title.trim()] : []),
+        ...sentences(section.body),
+      ]),
+    ].filter(Boolean);
+  } catch {
+    return [];
+  }
+}
+
+function evidenceBySource(raw: string): Map<string, string[]> {
+  try {
+    const parsed = JSON.parse(
+      raw.trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, ""),
+    ) as Record<string, unknown>;
+    const result = new Map<string, string[]>();
+    for (const item of Array.isArray(parsed.evidence) ? parsed.evidence : []) {
+      if (!item || typeof item !== "object" || Array.isArray(item)) continue;
+      const evidence = item as Record<string, unknown>;
+      if (
+        typeof evidence.source_id !== "string" ||
+        typeof evidence.excerpt !== "string" ||
+        !["continuity", "contradiction"].includes(String(evidence.use))
+      ) continue;
+      result.set(evidence.source_id, [
+        ...(result.get(evidence.source_id) ?? []),
+        evidence.excerpt,
+      ]);
+    }
+    return result;
+  } catch {
+    return new Map();
+  }
+}
+
+function safeCreativeClaim(text: string, contract: NarrativeContract): boolean {
+  const normalized = normalizeEvidence(text);
+  if (
+    !normalized || text.length > 180 || /\d|[«»"]/.test(text) ||
+    contract.participants.some(({ name }) => textMentionsCountry(text, name))
+  ) return false;
+  return !/\b(?:pays|état|gouvernement|diplomat|délégation|armée|population|opinion|région|relation|réputation|image|accord|alliance|traité|sanction|guerre|conflit|crise|protest|condamn|soutien|menac|départ|arriv|annonce|déclar|affirm|jug|perç|provoqu|entraîn|condui|risqu|pourr|devr|désormais|dorénavant|fragil|renfor|dégrad|amélior|terni)\w*/iu.test(
+    normalized,
+  );
+}
+
+const CLAIM_STOP_WORDS = new Set([
+  "alors",
+  "apres",
+  "avant",
+  "avec",
+  "cette",
+  "comme",
+  "dans",
+  "depuis",
+  "des",
+  "deux",
+  "donc",
+  "elle",
+  "entre",
+  "leur",
+  "leurs",
+  "mais",
+  "pour",
+  "sans",
+  "selon",
+  "sous",
+  "tandis",
+  "toute",
+  "vers",
+]);
+const CLAIM_NEUTRAL_WORDS = new Set([
+  "actuel",
+  "annonce",
+  "bilateral",
+  "chapitre",
+  "clairement",
+  "confirme",
+  "contexte",
+  "decisif",
+  "diplomatie",
+  "diplomatique",
+  "dossier",
+  "entame",
+  "episode",
+  "incident",
+  "limite",
+  "majeur",
+  "marque",
+  "mineur",
+  "nouveau",
+  "objectif",
+  "officiel",
+  "ouverture",
+  "pays",
+  "public",
+  "relation",
+  "significatif",
+  "tentative",
+]);
+
+function claimVocabulary(value: string): string[] {
+  return (normalizeEvidence(value).match(/\p{L}{4,}/gu) ?? [])
+    .filter((word) => !CLAIM_STOP_WORDS.has(word))
+    .map((word) => word.slice(0, 5));
+}
+
+function vocabularySupportsClaim(
+  claim: string,
+  evidence: string,
+  contract: NarrativeContract,
+): boolean {
+  const allowed = new Set([
+    ...claimVocabulary(evidence),
+    ...contract.participants.flatMap(({ name }) => claimVocabulary(name)),
+    ...[...CLAIM_NEUTRAL_WORDS].map((word) => word.slice(0, 5)),
+  ]);
+  return claimVocabulary(claim).every((word) => allowed.has(word));
+}
+
 export function parseCriticReport(
   raw: string,
   contract: NarrativeContract,
   allowedSourceIds: string[],
+  articleRaw = "",
+  analysisRaw = "",
 ): { report?: CriticReport; errors: string[] } {
   let parsed: unknown;
   try {
@@ -1625,39 +1801,150 @@ export function parseCriticReport(
   if (!Array.isArray(value.issues) || issues.length !== value.issues.length) {
     errors.push("Problèmes critiques invalides");
   }
-  const creativeFacts = Array.isArray(value.creative_facts)
-    ? value.creative_facts.flatMap((item) => {
+  const allowedCreativeCategories = new Set(contract.creative_permissions);
+  const evidence = evidenceBySource(analysisRaw);
+  const expectedClaims = articleClaimTexts(articleRaw).map((text, index) => ({
+    claim_id: `c${index + 1}`,
+    text,
+  }));
+  const expectedById = new Map(expectedClaims.map((claim) => [
+    claim.claim_id,
+    claim.text,
+  ]));
+  const claims = Array.isArray(value.claims)
+    ? value.claims.flatMap((item): CriticClaim[] => {
       if (!item || typeof item !== "object" || Array.isArray(item)) return [];
-      const fact = item as Record<string, unknown>;
-      return typeof fact.text === "string" && typeof fact.category === "string"
-        ? [{ text: fact.text.trim(), category: fact.category }]
+      const claim = item as Record<string, unknown>;
+      const claimId = typeof claim.claim_id === "string" ? claim.claim_id : "";
+      const text = expectedById.get(claimId) ?? "";
+      const support = String(claim.support ?? "");
+      const sourceId = typeof claim.source_id === "string"
+        ? claim.source_id
+        : undefined;
+      const supportQuote = typeof claim.support_quote === "string"
+        ? claim.support_quote.trim()
+        : undefined;
+      const supportRef = typeof claim.support_ref === "string"
+        ? claim.support_ref
+        : undefined;
+      const category = typeof claim.category === "string"
+        ? claim.category
+        : undefined;
+      const sourceValid = support === "source" && sourceId && supportQuote &&
+        allowedSourceIds.includes(sourceId) &&
+        (evidence.get(sourceId) ?? []).some((excerpt) =>
+          normalizeEvidence(excerpt).includes(normalizeEvidence(supportQuote))
+        ) && vocabularySupportsClaim(text, supportQuote, contract);
+      const contractValid = support === "contract" && supportRef &&
+        CONTRACT_SUPPORT_REFS.has(supportRef) &&
+        vocabularySupportsClaim(
+          text,
+          JSON.stringify(
+            (contract as unknown as Record<string, unknown>)[supportRef],
+          ) ?? "",
+          contract,
+        );
+      const creativeValid = support === "creative" && category &&
+        contract.creative_license === "controlled" &&
+        allowedCreativeCategories.has(category) &&
+        safeCreativeClaim(text, contract);
+      const unsupportedValid = support === "unsupported";
+      const fallbackSource = !unsupportedValid && support !== "source"
+        ? [...evidence.entries()].flatMap(([id, excerpts]) =>
+          allowedSourceIds.includes(id)
+            ? excerpts.map((quote) => ({ id, quote }))
+            : []
+        ).find(({ quote }) => vocabularySupportsClaim(text, quote, contract))
+        : undefined;
+      const fallbackContractRef = !unsupportedValid && support !== "source"
+        ? [...CONTRACT_SUPPORT_REFS].find((ref) =>
+          vocabularySupportsClaim(
+            text,
+            JSON.stringify(
+              (contract as unknown as Record<string, unknown>)[ref],
+            ) ?? "",
+            contract,
+          )
+        )
+        : undefined;
+      const resolvedSupport = sourceValid
+        ? "source"
+        : contractValid
+        ? "contract"
+        : creativeValid
+        ? "creative"
+        : fallbackSource
+        ? "source"
+        : fallbackContractRef
+        ? "contract"
+        : "unsupported";
+      const resolvedSourceId = sourceValid ? sourceId : fallbackSource?.id;
+      const resolvedQuote = sourceValid ? supportQuote : fallbackSource?.quote;
+      const resolvedContractRef = contractValid
+        ? supportRef
+        : fallbackContractRef;
+      return text
+        ? [{
+          claim_id: claimId,
+          text,
+          support: resolvedSupport as CriticClaim["support"],
+          ...(resolvedSupport === "source" && resolvedSourceId
+            ? { source_id: resolvedSourceId }
+            : {}),
+          ...(resolvedSupport === "source" && resolvedQuote
+            ? { support_quote: resolvedQuote }
+            : {}),
+          ...(resolvedSupport === "contract" && resolvedContractRef
+            ? { support_ref: resolvedContractRef }
+            : {}),
+          ...(creativeValid && category ? { category } : {}),
+        }]
         : [];
     })
     : [];
+  const reportedClaimIds = claims.map(({ claim_id }) => claim_id);
   if (
-    !Array.isArray(value.creative_facts) ||
-    creativeFacts.length !== value.creative_facts.length ||
-    (contract.creative_license === "strict" && creativeFacts.length)
-  ) errors.push("Détails créatifs invalides");
-  const usedSourceIds = Array.isArray(value.used_source_ids)
-    ? value.used_source_ids.filter((id): id is string =>
-      typeof id === "string" && allowedSourceIds.includes(id)
-    )
-    : [];
-  if (
-    !Array.isArray(value.used_source_ids) ||
-    usedSourceIds.length !== value.used_source_ids.length
-  ) errors.push("Sources de critique invalides");
-  if (String(value.verdict) === "pass" && issues.length) {
+    !Array.isArray(value.claims) || claims.length !== value.claims.length ||
+    (expectedClaims.length &&
+      (expectedClaims.length !== reportedClaimIds.length ||
+        expectedClaims.some(({ claim_id }) =>
+          !reportedClaimIds.includes(claim_id)
+        )))
+  ) errors.push("Justification des affirmations invalide");
+  const unsupportedClaims = claims.filter(({ support }) =>
+    support === "unsupported"
+  );
+  const reportIssues = [
+    ...issues,
+    ...unsupportedClaims.map(({ claim_id }) => ({
+      code: "unsupported_claim",
+      detail: `${claim_id} n'est pas entièrement soutenue par sa justification.`,
+    })),
+  ].filter((issue, index, all) =>
+    all.findIndex((candidate) =>
+      candidate.code === issue.code && candidate.detail === issue.detail
+    ) === index
+  );
+  const reportVerdict = unsupportedClaims.length
+    ? "repair"
+    : value.verdict as "pass" | "repair";
+  const creativeFacts = claims.flatMap(({ text, support, category }) =>
+    support === "creative" && category ? [{ text, category }] : []
+  );
+  const usedSourceIds = [...new Set(claims.flatMap(({ support, source_id }) =>
+    support === "source" && source_id ? [source_id] : []
+  ))];
+  if (reportVerdict === "pass" && reportIssues.length) {
     errors.push("Une critique réussie ne peut contenir de problème");
   }
-  if (String(value.verdict) === "repair" && !issues.length) {
+  if (reportVerdict === "repair" && !reportIssues.length) {
     errors.push("Une réparation doit nommer au moins un problème");
   }
   return errors.length ? { errors } : {
     report: {
-      verdict: value.verdict as "pass" | "repair",
-      issues,
+      verdict: reportVerdict,
+      issues: reportIssues,
+      claims,
       creative_facts: creativeFacts,
       used_source_ids: usedSourceIds,
     },
@@ -1699,7 +1986,7 @@ function validateNarrativeArticle(
     )
   );
   for (const country of thirdCountries) {
-    if (textMentionsCountry(lead, country)) {
+    if (textNamesCountry(lead, country)) {
       errors.push(`Pays de contexte placé au premier plan: ${country}`);
     }
   }
@@ -1768,6 +2055,10 @@ async function runGenerationStage(params: {
     params.input,
   );
   const editorialFactsText = JSON.stringify(editorialFacts, null, 2);
+  const canonicalFactsText = JSON.stringify(editorialFacts.canon ?? {}, null, 2);
+  const claimsForCritic = articleClaimTexts(params.final ?? "").map(
+    (text, index) => ({ claim_id: `c${index + 1}`, text }),
+  );
   if (params.stage === "analysis") {
     raw = await callMagnum({
       apiKey,
@@ -1784,7 +2075,7 @@ utiles. Une liste vide est préférable à un contexte forcé. Cite uniquement l
 identifiants fournis. Le rôle continuity est réservé à une source exact_pair.
 Une source background décrit seulement l'arrière-plan : elle ne prouve jamais
 un motif, une cause ou un lien avec l'événement courant. Limite chaque extrait
-background à 240 caractères et chaque extrait exact_pair à 500. Signale les
+background et exact_pair à 500 caractères. Signale les
 contradictions sans les résoudre.`,
       user:
         `Prépare l'analyse éditoriale de cet article.\n<données>\n${params.input}\n</données>`,
@@ -1819,7 +2110,9 @@ Le premier paragraphe raconte exclusivement l'événement courant. Les pays aute
 et cible publics y apparaissent par leur nom complet. Le contexte historique ne
 dépasse jamais un quart de l'article et aucun pays tiers n'apparaît dans le titre
 ou le premier paragraphe. Une preuve background ne devient jamais la cause ou le
-motif de l'action. Chaque paragraphe apporte un détail distinct.
+motif de l'action. Elle ne fournit jamais non plus le lieu, l'heure, le geste,
+les paroles ou les participants de l'événement courant. Si tu l'emploies, présente-la
+explicitement comme un fait antérieur distinct. Chaque paragraphe apporte un détail distinct.
 Réponds uniquement en JSON avec exactement:
 {"title":string,"description":string,"sections":[{"title":string,"body":string}]}
 Les sections sont facultatives. Markdown Discord simple seulement. Aucune mention Discord.`,
@@ -1852,15 +2145,17 @@ Les sections sont facultatives. Markdown Discord simple seulement. Aucune mentio
         ? 300
         : limits.maxTokens,
       system: `${systemBase}
-Tu es le réviseur final. Révise le brouillon contre le bloc canon, qui est la
-seule autorité factuelle. Le plan éditorial peut contenir des erreurs : il sert
-uniquement à organiser le récit. Préserve le ton, le rythme et les détails
-concrets du brouillon lorsqu'ils sont explicitement appuyés par le canon.
+Tu es le rédacteur final. Le bloc canon est la seule autorité factuelle. Rédige
+une version neuve depuis ce canon. Le brouillon
+créatif n'est volontairement pas transmis : aucun de ses détails ne doit survivre
+sans apparaître dans le canon. Le plan éditorial sert seulement à organiser le récit.
 Applique littéralement la consigne narrative du contrat : une ouverture, une
 insulte, un accord, une alliance ou une guerre ne sont jamais interchangeables.
 Vérifie chaque phrase séparément. Supprime tout contexte général, nom d'institution
 ou de personne, causalité, interprétation, prédiction, réaction ou conséquence qui
 n'est pas explicitement fourni. En cas de doute, supprime la phrase au lieu de la compléter.
+Un élément du contexte de référence ne peut jamais fournir le lieu, l'heure, le geste,
+les paroles ou les participants de l'événement courant. Il reste un antécédent explicite.
 Respecte ${limits.min} à ${limits.max} caractères hors titre.
 Vise environ ${targetChars} caractères et ne descends jamais sous ${limits.min}.
 Le titre doit rester sous ${params.profile === "brief" ? 90 : 140} caractères
@@ -1874,11 +2169,8 @@ paraphraser plusieurs fois la même information.
 Réponds uniquement en JSON avec exactement:
 {"title":string,"description":string,"sections":[{"title":string,"body":string}]}
 Les sections sont facultatives. Aucun autre champ, identifiant, rôle, salon, image ou fait mécanique.`,
-      user: `Révise cet article uniquement avec le canon fourni.
-<canon_et_plan>\n${editorialFactsText}\n</canon_et_plan>
-<brouillon_style_uniquement>\n${
-        cleanDiscordText(params.draft ?? "")
-      }\n</brouillon_style_uniquement>
+      user: `Rédige l'article final uniquement avec le canon fourni.
+<canon>\n${canonicalFactsText}\n</canon>
 <erreurs_serveur>\n${
         draftValidation.errors.join("; ") || "aucune"
       }\n</erreurs_serveur>`,
@@ -1888,7 +2180,11 @@ Les sections sont facultatives. Aucun autre champ, identifiant, rôle, salon, im
       apiKey,
       temperature: 0.05,
       topK: 16,
-      maxTokens: 1_200,
+      maxTokens: params.profile === "dossier"
+        ? 3_500
+        : params.profile === "standard"
+        ? 2_400
+        : 1_200,
       system: `${SAFE_SYSTEM_BASE}
 Tu es un contrôleur indépendant, pas un rédacteur. Compare chaque affirmation
 de l'article au contrat et aux preuves. Vérifie surtout acteur, cible, action,
@@ -1896,14 +2192,32 @@ résultat, sens des effets, confidentialité, pays tiers, contexte dominant,
 invention hors licence, faux lien causal, platitude et répétition.
 La consigne narrative du contrat est normative : toute escalade qu'elle exclut
 impose wrong_action ou unsupported_claim.
+Une catégorie créative décrit la nature réelle de la phrase, pas l'étiquette choisie
+par le rédacteur. Une perception, une réputation ternie, une opinion prêtée à des pays
+tiers ou un effet régional est une conséquence factuelle : sans preuve explicite,
+signale unsupported_claim. La seule création autorisée est une atmosphère sensorielle
+locale, sans acteur, opinion, réaction ni conséquence. Si un détail background devient le lieu, l'heure,
+le geste, les paroles ou les participants de l'événement courant, signale
+context_replaces_event. Recopie chaque catégorie créative mot pour mot depuis
+creative_permissions ; toute autre catégorie impose creative_scope_violation.
+Contrôle chaque entrée fournie dans affirmations_a_controler et recopie seulement
+son claim_id exactement une fois dans claims. Pour chaque entrée, indique une seule justification : contract avec support_ref parmi action,
+date_rp, participants, outcome, effects, intent, stakes, narrative_guidance ; source
+avec source_id et support_quote copié exactement depuis une preuve ; creative avec
+la catégorie exacte autorisée ; ou unsupported. Un support_quote doit établir toute
+l'affirmation, pas seulement un mot voisin. Toute claim unsupported impose verdict
+repair et un problème unsupported_claim.
 Réponds en JSON avec exactement:
-{"verdict":"pass"|"repair","issues":[{"code":string,"detail":string}],"creative_facts":[{"text":string,"category":string}],"used_source_ids":string[]}.
+{"verdict":"pass"|"repair","issues":[{"code":string,"detail":string}],"claims":[{"claim_id":string,"support":"contract"|"source"|"creative"|"unsupported","support_ref":string|null,"source_id":string|null,"support_quote":string|null,"category":string|null}]}.
 Codes autorisés : wrong_actor, wrong_target, wrong_action, wrong_outcome,
 wrong_effect_direction, secret_leak, unsupported_claim, context_replaces_event,
 third_country_dominates, creative_scope_violation, contradiction_hidden,
 style_flat, repetition, length. Un verdict pass impose issues:[].`,
-      user: `<contrat_et_preuves>\n${editorialFactsText}\n</contrat_et_preuves>
+      user: `<contrat_et_preuves>\n${canonicalFactsText}\n</contrat_et_preuves>
 <article>\n${cleanDiscordText(params.final ?? "")}\n</article>
+<affirmations_a_controler>\n${
+        JSON.stringify(claimsForCritic, null, 2)
+      }\n</affirmations_a_controler>
 <erreurs_serveur>\n${
         params.previousErrors?.join("; ") || "aucune"
       }\n</erreurs_serveur>`,
@@ -1911,19 +2225,26 @@ style_flat, repetition, length. Un verdict pass impose issues:[].`,
   } else {
     raw = await callMagnum({
       apiKey,
-      temperature: voiceInstruction ? 0.3 : 0.15,
-      topK: voiceInstruction ? 32 : 24,
+      temperature: 0.05,
+      topK: 16,
       maxTokens: limits.maxTokens,
       system: `${systemBase}
-Répare l'article selon tous les problèmes listés. Le contrat est la seule
+Jette le texte précédent et réécris l'article depuis zéro selon tous les
+problèmes listés. Ne fais pas de correction locale. Le contrat est la seule
 autorité sur l'événement et les preuves sont les seules sources de contexte.
 Respecte littéralement la consigne narrative du contrat et supprime toute
 escalade vers un accord, une alliance, un conflit ou un effet non autorisé.
-Conserve la vivacité du texte mais supprime toute affirmation non soutenue.
+Une phrase doit pouvoir être rattachée entièrement à un seul champ du contrat
+ou à une citation exacte. Supprime toute phrase qui mélange fait établi et
+déduction. N'ajoute ni lieu, cause, acteur, réaction, calendrier, secteur,
+institution, citation, intention ou conséquence pour remplir la longueur.
+Préfère une description courte sans sections si les preuves sont rares.
+Un détail du contexte de référence ne décrit jamais la scène courante : garde-le
+seulement comme antécédent explicite, sinon supprime-le.
 Respecte ${limits.min} à ${limits.max} caractères hors titre. ${sectionGuidance}
 Réponds uniquement en JSON avec exactement:
 {"title":string,"description":string,"sections":[{"title":string,"body":string}]}.`,
-      user: `<contrat_et_preuves>\n${editorialFactsText}\n</contrat_et_preuves>
+      user: `<contrat_et_preuves>\n${canonicalFactsText}\n</contrat_et_preuves>
 <article_a_reparer>\n${
         cleanDiscordText(params.final ?? "")
       }\n</article_a_reparer>
@@ -1954,7 +2275,13 @@ Réponds uniquement en JSON avec exactement:
     )
     : undefined;
   const criticReport = params.stage === "critic"
-    ? parseCriticReport(content, params.contract, params.sourceIds)
+    ? parseCriticReport(
+      content,
+      params.contract,
+      params.sourceIds,
+      params.final ?? "",
+      params.analysis ?? "",
+    )
     : undefined;
   return {
     content,
@@ -2734,7 +3061,7 @@ async function processGeneration(
     const { data: article, error: articleError } = await supabase
       .from("lore_articles")
       .select(
-        "editorial_status,approved_for_execution_version,current_version,discord_message_id,narrative_certified_at",
+        "editorial_status,approved_for_execution_version,current_version,published_version,discord_message_id,narrative_certified_at",
       )
       .eq("id", job.lore_article_id)
       .single();
@@ -2761,6 +3088,13 @@ async function processGeneration(
       );
     }
     if (job.payload?.article_only_repair === true) {
+      if (
+        article.editorial_status === "published" &&
+        Number(article.published_version) === Number(article.current_version) &&
+        article.narrative_certified_at
+      ) {
+        return { status: "succeeded" };
+      }
       if (
         !action.consequences_applied_at ||
         Number(action.execution_version) !== targetVersion ||
@@ -2793,7 +3127,7 @@ async function processGeneration(
         );
       }
       if (activePublication?.status === "running") {
-        throw new PipelineError("Une livraison Discord est encore en cours.");
+        return { status: "succeeded" };
       }
       if (activePublication) {
         const { error } = await supabase.from("rp_pipeline_jobs").update({
@@ -3174,6 +3508,8 @@ async function processGeneration(
             ...payload,
             stage: "critic",
             critic_attempt: 2,
+            critic_debug: result.content,
+            critic_validation_errors: result.criticReport?.errors ?? [],
             blocked_nsfw: blockedNsfw,
           },
         };
@@ -3191,7 +3527,8 @@ async function processGeneration(
       )
       : [];
     if (
-      result.criticReport.report.verdict === "repair" || serverErrors.length
+      (result.criticReport.report.verdict === "repair" || serverErrors.length) &&
+      payload.post_repair !== true
     ) {
       const report = result.criticReport.report;
       const critic = JSON.stringify({
@@ -3215,6 +3552,23 @@ async function processGeneration(
         },
       };
     }
+  }
+
+  if (stage === "repair" && result.validation?.output) {
+    return {
+      status: "pending",
+      payload: {
+        ...payload,
+        stage: "critic",
+        final: result.content,
+        repair: result.content,
+        critic: null,
+        critic_attempt: 1,
+        post_repair: true,
+        final_validation_errors: [],
+        blocked_nsfw: blockedNsfw,
+      },
+    };
   }
 
   const finalRaw = stage === "repair"
@@ -3245,6 +3599,8 @@ async function processGeneration(
       criticRaw,
       contractFromFactSheet(factSheet),
       prompt.sourceIds,
+      finalRaw,
+      typeof payload.analysis === "string" ? payload.analysis : "",
     ).report;
   const currentAttempt: EditorialAttempt = {
     attemptNo: editorialAttempt,
@@ -3252,7 +3608,11 @@ async function processGeneration(
     draft: typeof payload.draft === "string" ? payload.draft : "",
     final: typeof payload.final === "string" ? payload.final : finalRaw,
     critic: criticRaw,
-    repair: stage === "repair" ? result.content : "",
+    repair: payload.post_repair === true && typeof payload.repair === "string"
+      ? payload.repair
+      : stage === "repair"
+      ? result.content
+      : "",
     errors: finalValidation?.errors ?? ["Article final absent"],
   };
   const attempts = [...history, currentAttempt];
@@ -3261,11 +3621,11 @@ async function processGeneration(
     attempts,
     sourceIds,
     blockedNsfw: finalValidation?.output ? false : blockedNsfw,
-    ...(finalValidation?.output && criticReport
+    ...(finalValidation?.output && criticReport?.verdict === "pass"
       ? {
         provenance: {
           certified: true,
-          repaired: stage === "repair",
+          repaired: payload.post_repair === true || stage === "repair",
           contract: contractFromFactSheet(factSheet),
           evidence: (() => {
             try {
@@ -3298,7 +3658,9 @@ async function processGeneration(
     roleplayDate,
     nextExecutionVersion,
   );
-  if (!generated.output || action.validation_mode === "mj") {
+  if (
+    !generated.output || !generated.provenance || action.validation_mode === "mj"
+  ) {
     const { error: reviewStatusError } = await supabase
       .from("ai_event_requests")
       .update({
@@ -3559,9 +3921,18 @@ export function validatePublicationState(
       0,
     ) +
     100;
+  const provenance = article.narrative_provenance &&
+      typeof article.narrative_provenance === "object"
+    ? article.narrative_provenance as Record<string, any>
+    : {};
+  const narrativeCertified = Boolean(article.narrative_certified_at) &&
+    provenance.certified === true &&
+    (provenance.method === "manual_review" ||
+      provenance.critic?.verdict === "pass");
   const valid = article.action_id === action.id &&
     article.source_platform === "engine" &&
     article.source_kind === "engine" &&
+    narrativeCertified &&
     ["approved", "published"].includes(String(article.editorial_status)) &&
     article.nsfw_quarantined !== true &&
     !containsNsfw(articleText) &&

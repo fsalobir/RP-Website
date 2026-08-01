@@ -10,7 +10,7 @@ export const MAGNUM_CONTEXT_LIMIT = 24_000;
 
 export const ARTICLE_PROFILE_LIMITS: Record<ArticleProfile, { min: number; max: number }> = {
   brief: { min: 250, max: 650 },
-  standard: { min: 900, max: 1_800 },
+  standard: { min: 450, max: 1_200 },
   dossier: { min: 2_000, max: 3_500 },
 };
 

@@ -40,8 +40,9 @@ Deno.test("la voix belliqueuse reste une consigne de style fermée", () => {
   assert(
     editorialVoiceForStage("draft", "state_agency_belligerent").length > 0 &&
       editorialVoiceForStage("analysis", "state_agency_belligerent") === "" &&
-      editorialVoiceForStage("final", "state_agency_belligerent").length > 0,
-    "la voix créative doit survivre à la révision sans contaminer l'analyse",
+      editorialVoiceForStage("final", "state_agency_belligerent").length > 0 &&
+      editorialVoiceForStage("repair", "state_agency_belligerent") === "",
+    "la voix créative doit survivre à la révision sans contaminer les contrôles",
   );
 });
 
@@ -164,6 +165,45 @@ Deno.test("la révision finale ne conserve que les preuves citées", () => {
   );
 });
 
+Deno.test("un arrière-plan ne devient jamais une preuve de l'événement courant", () => {
+  const facts = finalEditorialFacts(
+    JSON.stringify({
+      evidence: [
+        {
+          source_id: "source-continuite",
+          excerpt: "Les deux délégations reprennent le dialogue.",
+          use: "continuity",
+        },
+        {
+          source_id: "source-contexte",
+          excerpt: "Une autre délégation quitte le forum à 09 h 11.",
+          use: "background",
+        },
+        {
+          source_id: "source-contradictoire",
+          excerpt: "Le Japon dément la rupture du canal.",
+          use: "contradiction",
+        },
+      ],
+    }),
+    JSON.stringify({ fiche_factuelle: { date_rp: "2040-05-01" } }),
+  );
+  const canon = JSON.stringify(facts.canon);
+  const plan = JSON.stringify(facts.plan_editorial_non_canonique);
+  assert(
+    canon.includes("reprennent le dialogue"),
+    "une continuité exacte doit rester canonique",
+  );
+  assert(
+    !canon.includes("09 h 11") && plan.includes("09 h 11"),
+    "un arrière-plan doit rester hors du canon courant",
+  );
+  assert(
+    canon.includes("dément la rupture"),
+    "une contradiction attribuable doit rester disponible dans le canon",
+  );
+});
+
 Deno.test("un jet raté impose une tentative empêchée", () => {
   const contract = buildNarrativeContract({
     type_action: { libellé: "Insulte diplomatique" },
@@ -189,16 +229,33 @@ Deno.test("la critique doit être structurée et respecter la licence créative"
     type_action: { libellé: "Ouverture diplomatique" },
     jet: { outcome: "minor_success" },
   });
+  const article = JSON.stringify({
+    title: "Ouverture diplomatique",
+    description: "L'objectif est atteint.",
+    sections: [],
+  });
+  const supportedClaims = [
+    {
+      claim_id: "c1",
+      support: "contract",
+      support_ref: "action",
+    },
+    {
+      claim_id: "c2",
+      support: "contract",
+      support_ref: "outcome",
+    },
+  ];
   assert(
     parseCriticReport(
       JSON.stringify({
         verdict: "pass",
         issues: [],
-        creative_facts: [],
-        used_source_ids: ["source-a"],
+        claims: supportedClaims,
       }),
       contract,
-      ["source-a"],
+      [],
+      article,
     ).errors.length === 0,
     "une critique propre doit passer",
   );
@@ -207,11 +264,11 @@ Deno.test("la critique doit être structurée et respecter la licence créative"
       JSON.stringify({
         verdict: "repair",
         issues: [{ code: "code_inventé", detail: "Erreur" }],
-        creative_facts: [],
-        used_source_ids: [],
+        claims: supportedClaims,
       }),
       contract,
       [],
+      article,
     ).errors.length > 0,
     "un code critique libre ne doit pas contourner le contrôle",
   );
@@ -220,16 +277,184 @@ Deno.test("la critique doit être structurée et respecter la licence créative"
       JSON.stringify({
         verdict: "pass",
         issues: [],
-        creative_facts: [{
-          text: "Une foule applaudit.",
-          category: "réaction",
+        claims: [{
+          claim_id: "c1",
+          support: "creative",
+          category: "atmosphère sensorielle locale sans acteur ni conséquence",
         }],
-        used_source_ids: [],
       }),
       contract,
       [],
-    ).errors.includes("Détails créatifs invalides"),
+      JSON.stringify({ title: "Une foule applaudit.", description: "", sections: [] }),
+    ).report?.verdict === "repair",
     "la licence stricte doit interdire tout détail créatif déclaré",
+  );
+  const controlled = buildNarrativeContract(
+    { type_action: { libellé: "Ouverture diplomatique" } },
+    "controlled",
+  );
+  assert(
+    parseCriticReport(
+      JSON.stringify({
+        verdict: "pass",
+        issues: [],
+        claims: [{
+          claim_id: "c1",
+          support: "creative",
+          category: "atmosphère sensorielle locale sans acteur ni conséquence",
+        }],
+      }),
+      controlled,
+      [],
+      JSON.stringify({
+        title: "Un silence bref précède la réponse.",
+        description: "",
+        sections: [],
+      }),
+    ).errors.length === 0,
+    "une catégorie explicitement autorisée doit passer",
+  );
+  assert(
+    parseCriticReport(
+      JSON.stringify({
+        verdict: "pass",
+        issues: [],
+        claims: [{
+          claim_id: "c1",
+          support: "creative",
+          category: "réaction",
+        }],
+      }),
+      controlled,
+      [],
+      JSON.stringify({
+        title: "La région condamne l'annonce.",
+        description: "",
+        sections: [],
+      }),
+    ).report?.verdict === "repair",
+    "une catégorie libre ne doit pas contourner les permissions",
+  );
+  assert(
+    parseCriticReport(
+      JSON.stringify({
+        verdict: "pass",
+        issues: [],
+        claims: supportedClaims.slice(0, 1),
+      }),
+      contract,
+      [],
+      article,
+    ).errors.includes("Justification des affirmations invalide"),
+    "chaque phrase doit être justifiée",
+  );
+  assert(
+    parseCriticReport(
+      JSON.stringify({
+        verdict: "pass",
+        issues: [],
+        claims: [{
+          claim_id: "c1",
+          support: "contract",
+          support_ref: "narrative_guidance",
+        }],
+      }),
+      controlled,
+      [],
+      JSON.stringify({
+        title: "Une poignée de main historique au palais Hofburg",
+        description: "",
+        sections: [],
+      }),
+    ).report?.verdict === "repair",
+    "une consigne d'ouverture ne doit pas justifier une scène inventée",
+  );
+  const sourceArticle = JSON.stringify({
+    title: "La délégation quitte la séance.",
+    description: "",
+    sections: [],
+  });
+  const sourceAnalysis = JSON.stringify({
+    evidence: [{
+      source_id: "source-a",
+      excerpt: "La délégation quitte la séance avant la clôture.",
+      use: "continuity",
+    }],
+  });
+  assert(
+    parseCriticReport(
+      JSON.stringify({
+        verdict: "pass",
+        issues: [],
+        claims: [{
+          claim_id: "c1",
+          support: "source",
+          source_id: "source-a",
+          support_quote: "La délégation quitte la séance avant la clôture.",
+        }],
+      }),
+      contract,
+      ["source-a"],
+      sourceArticle,
+      sourceAnalysis,
+    ).errors.length === 0,
+    "une citation exacte d'une preuve doit justifier une affirmation",
+  );
+  assert(
+    parseCriticReport(
+      JSON.stringify({
+        verdict: "pass",
+        issues: [],
+        claims: [{
+          claim_id: "c1",
+          support: "contract",
+          support_ref: "action",
+        }],
+      }),
+      contract,
+      ["source-a"],
+      sourceArticle,
+      sourceAnalysis,
+    ).report?.used_source_ids.includes("source-a"),
+    "le serveur doit retrouver une preuve canonique même si Magnum cite le mauvais champ",
+  );
+  assert(
+    parseCriticReport(
+      JSON.stringify({
+        verdict: "pass",
+        issues: [],
+        claims: [{
+          claim_id: "c1",
+          support: "source",
+          source_id: "source-a",
+          support_quote: "La délégation quitte la séance avant la clôture.",
+        }],
+      }),
+      contract,
+      ["source-a"],
+      sourceArticle,
+      sourceAnalysis.replace('"continuity"', '"background"'),
+    ).report?.verdict === "repair",
+    "un arrière-plan ne doit jamais devenir une preuve par recherche automatique",
+  );
+  assert(
+    parseCriticReport(
+      JSON.stringify({
+        verdict: "pass",
+        issues: [],
+        claims: [{
+          claim_id: "c1",
+          support: "source",
+          source_id: "source-a",
+          support_quote: "Une sanction est annoncée.",
+        }],
+      }),
+      contract,
+      ["source-a"],
+      sourceArticle,
+      sourceAnalysis,
+    ).report?.verdict === "repair",
+    "une fausse citation ne doit pas certifier l'article",
   );
 });
 
@@ -295,6 +520,11 @@ Deno.test("la validation Magnum accepte les nombres sourcés et bloque les sorti
     parseArticle(valid, "brief", new Set(["2040"]), ["France"]).errors
       .length === 0,
     "une sortie factuelle valide doit passer",
+  );
+  assert(
+    parseArticle(valid, "standard", new Set(["2040"]), ["France"]).errors
+      .length === 0,
+    "un article standard factuel ne doit pas être artificiellement gonflé",
   );
   const unsafe = JSON.stringify({
     title: "@everyone",
@@ -428,6 +658,22 @@ Deno.test("la validation Magnum accepte les nombres sourcés et bloque les sorti
       error.includes("Pays absent des faits")
     ),
     "les mots génériques d'un nom de pays ne doivent pas créer de pays fantômes",
+  );
+  const personNotCountry = parseArticle(
+    JSON.stringify({
+      title: "Ouverture entre l'Autriche et l'Angola",
+      description:
+        "L'Autriche et l'Angola ouvrent un dialogue en présence de Georges Chikoti. "
+          .repeat(7),
+    }),
+    "brief",
+    new Set(),
+    ["Autriche", "Angola"],
+    ["Autriche", "Angola", "Géorgie"],
+  );
+  assert(
+    !personNotCountry.errors.some((error) => error.includes("Géorgie")),
+    "un prénom ne doit pas être confondu avec un gentilé",
   );
 });
 
@@ -606,7 +852,7 @@ Deno.test("l'analyse ne peut remplacer l'action ni inventer une preuve", () => {
     ).includes("Continuité réservée aux sources du couple exact"),
     "une archive concernant seulement la cible ne doit pas devenir la suite directe de l'action",
   );
-  const longExcerpt = "Contexte diplomatique ancien. ".repeat(12);
+  const longExcerpt = "Contexte diplomatique ancien. ".repeat(40);
   assert(
     validateEditorialAnalysis(
       JSON.stringify({
@@ -822,6 +1068,11 @@ Deno.test("Discord ne reçoit que l'article approuvé de la version mécaniqueme
     source_kind: "engine",
     editorial_status: "approved",
     approved_for_execution_version: 2,
+    narrative_certified_at: "2026-07-30T10:05:00Z",
+    narrative_provenance: {
+      certified: true,
+      critic: { verdict: "pass" },
+    },
     nsfw_quarantined: false,
     title: "Accord régional",
     description: "Texte",
@@ -857,6 +1108,24 @@ Deno.test("Discord ne reçoit que l'article approuvé de la version mécaniqueme
       clean_content: "La France constate un échec majeur.",
     }, 2).valid,
     "un libellé mécanique accentué doit être refusé",
+  );
+  assert(
+    !validatePublicationState(action, {
+      ...article,
+      narrative_certified_at: null,
+      narrative_provenance: {},
+    }, 2).valid,
+    "un article non certifié ne doit jamais atteindre Discord",
+  );
+  assert(
+    !validatePublicationState(action, {
+      ...article,
+      narrative_provenance: {
+        certified: true,
+        critic: { verdict: "repair" },
+      },
+    }, 2).valid,
+    "un verdict de réparation ne vaut pas certification",
   );
 });
 

@@ -152,6 +152,7 @@ describe("pipeline RP", () => {
       description: "La France confirme une coopération prudente. ".repeat(11),
     });
     expect(parseAndValidateMagnumOutput(valid, { profile: "brief", allowedCountries: ["France"] }).errors).toEqual([]);
+    expect(parseAndValidateMagnumOutput(valid, { profile: "standard", allowedCountries: ["France"] }).errors).toEqual([]);
     expect(parseAndValidateMagnumOutput(valid, { profile: "brief", allowedCountries: ["Japon"] }).errors)
       .toContain("Aucun pays autorisé n'est mentionné.");
     const invalid = JSON.stringify({
