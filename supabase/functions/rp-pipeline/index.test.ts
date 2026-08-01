@@ -401,6 +401,34 @@ Deno.test("la validation Magnum accepte les nombres sourcés et bloque les sorti
     demonyms.errors.length === 0,
     "les gentilés évidents doivent compter comme références aux pays",
   );
+  const genericGeography = parseArticle(
+    JSON.stringify({
+      title: "Ouverture entre l'Autriche et l'Angola",
+      description:
+        "La République d'Autriche et l'Angola ouvrent un nouveau dialogue. Le lien rapproche l'Europe centrale de l'Afrique subsaharienne. "
+          .repeat(4),
+    }),
+    "brief",
+    new Set(),
+    ["Autriche", "Angola"],
+    [
+      "Autriche",
+      "Angola",
+      "Papouasie-Nouvelle-Guinée",
+      "République tchèque",
+      "Nouvelle-Zélande",
+      "République centrafricaine",
+      "République dominicaine",
+      "Afrique du Sud",
+      "Nouvelle-Calédonie",
+    ],
+  );
+  assert(
+    !genericGeography.errors.some((error) =>
+      error.includes("Pays absent des faits")
+    ),
+    "les mots génériques d'un nom de pays ne doivent pas créer de pays fantômes",
+  );
 });
 
 Deno.test("les contradictions ne référencent que les sources fournies", () => {

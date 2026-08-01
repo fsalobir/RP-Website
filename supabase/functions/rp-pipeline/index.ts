@@ -34,6 +34,7 @@ type NarrativeParticipant = {
 };
 type NarrativeContract = {
   version: 1;
+  action_key: string;
   action: string;
   date_rp: string | null;
   participants: NarrativeParticipant[];
@@ -614,8 +615,13 @@ function textMentionsCountry(text: string, country: string): boolean {
   ) {
     return true;
   }
-  // ponytail: heuristique de gentilé; passer à des alias pays stockés en base si les faux positifs deviennent mesurables.
-  return (normalizedCountry.match(/\p{L}+/gu) ?? [])
+  const countryTokens = normalizedCountry.match(/\p{L}+/gu) ?? [];
+  // Le dernier mot porte le gentilé des noms composés (« saoudite », « tchèque »).
+  // Tester « république », « nouvelle » ou « afrique » créait des pays fantômes.
+  const demonymTokens = countryTokens.length > 1
+    ? countryTokens.slice(-1)
+    : countryTokens;
+  return demonymTokens
     .filter((token) => token.length >= 5)
     .some((token) => {
       const stem = token.slice(0, token.length - (token.length >= 7 ? 2 : 1));
@@ -1418,6 +1424,7 @@ export function buildNarrativeContract(
     : ["style, rythme et agencement uniquement"];
   return {
     version: 1,
+    action_key: String(actionType.key ?? "unknown"),
     action: String(actionType.libellé ?? factSheet.type_action ?? "Action"),
     date_rp: typeof factSheet.date_rp === "string" ? factSheet.date_rp : null,
     participants,
@@ -1799,6 +1806,9 @@ victime, dégât, unité, traité, sanction ou conséquence.`
       useCreativePreset: true,
       system: `${systemBase}
 ${creativeInstruction}
+La consigne narrative du contrat définit strictement ce que cette action signifie.
+Tout accord, engagement ou escalade qu'elle exclut est interdit, même si le
+brouillon ou une archive le suggère.
 Rédige un article de ${limits.min} à ${limits.max} caractères hors titre.
 Vise environ ${targetChars} caractères et ne descends jamais sous ${limits.min}.
 Le titre doit rester sous ${params.profile === "brief" ? 90 : 140} caractères
@@ -1846,6 +1856,8 @@ Tu es le réviseur final. Révise le brouillon contre le bloc canon, qui est la
 seule autorité factuelle. Le plan éditorial peut contenir des erreurs : il sert
 uniquement à organiser le récit. Préserve le ton, le rythme et les détails
 concrets du brouillon lorsqu'ils sont explicitement appuyés par le canon.
+Applique littéralement la consigne narrative du contrat : une ouverture, une
+insulte, un accord, une alliance ou une guerre ne sont jamais interchangeables.
 Vérifie chaque phrase séparément. Supprime tout contexte général, nom d'institution
 ou de personne, causalité, interprétation, prédiction, réaction ou conséquence qui
 n'est pas explicitement fourni. En cas de doute, supprime la phrase au lieu de la compléter.
@@ -1882,6 +1894,8 @@ Tu es un contrôleur indépendant, pas un rédacteur. Compare chaque affirmation
 de l'article au contrat et aux preuves. Vérifie surtout acteur, cible, action,
 résultat, sens des effets, confidentialité, pays tiers, contexte dominant,
 invention hors licence, faux lien causal, platitude et répétition.
+La consigne narrative du contrat est normative : toute escalade qu'elle exclut
+impose wrong_action ou unsupported_claim.
 Réponds en JSON avec exactement:
 {"verdict":"pass"|"repair","issues":[{"code":string,"detail":string}],"creative_facts":[{"text":string,"category":string}],"used_source_ids":string[]}.
 Codes autorisés : wrong_actor, wrong_target, wrong_action, wrong_outcome,
@@ -1903,6 +1917,8 @@ style_flat, repetition, length. Un verdict pass impose issues:[].`,
       system: `${systemBase}
 Répare l'article selon tous les problèmes listés. Le contrat est la seule
 autorité sur l'événement et les preuves sont les seules sources de contexte.
+Respecte littéralement la consigne narrative du contrat et supprime toute
+escalade vers un accord, une alliance, un conflit ou un effet non autorisé.
 Conserve la vivacité du texte mais supprime toute affirmation non soutenue.
 Respecte ${limits.min} à ${limits.max} caractères hors titre. ${sectionGuidance}
 Réponds uniquement en JSON avec exactement:
