@@ -32,14 +32,20 @@ type NarrativeParticipant = {
   role: "author" | "target" | "affected";
   name: string;
 };
+type NarrativePublicFact = {
+  text: string;
+  origin: "engine" | "mechanics" | "mj";
+  attribution?: string;
+};
 type NarrativeContract = {
-  version: 1;
+  version: 2;
   action_key: string;
   action: string;
   date_rp: string | null;
   participants: NarrativeParticipant[];
   public_attribution: boolean;
   outcome: NarrativeOutcome;
+  public_facts: NarrativePublicFact[];
   effects: string[];
   intent?: string;
   stakes?: string;
@@ -52,21 +58,9 @@ type CriticIssue = {
   code: string;
   detail: string;
 };
-type CriticClaim = {
-  claim_id: string;
-  text: string;
-  support: "contract" | "source" | "creative" | "unsupported";
-  support_ref?: string;
-  source_id?: string;
-  support_quote?: string;
-  category?: string;
-};
 type CriticReport = {
   verdict: "pass" | "repair";
   issues: CriticIssue[];
-  claims: CriticClaim[];
-  creative_facts: Array<{ text: string; category: string }>;
-  used_source_ids: string[];
 };
 type JobStatus =
   | "pending"
@@ -107,7 +101,7 @@ type GeneratedArticleResult = {
   blockedNsfw: boolean;
   provenance?: Record<string, unknown>;
 };
-type GenerationStage = "analysis" | "draft" | "final" | "critic" | "repair";
+type GenerationStage = "analysis" | "final" | "critic" | "repair";
 type ContextArticle = {
   id: string;
   source_kind: string;
@@ -755,7 +749,7 @@ export function parseArticle(
     ) +
     100;
   const limits = ARTICLE_LIMITS[profile];
-  if (body.length < limits.min || body.length > limits.max) {
+  if (body.length > limits.max) {
     errors.push("Longueur hors profil");
   }
   if (discordEmbedLength > 6_000) errors.push("Article trop long pour Discord");
@@ -1119,7 +1113,7 @@ export function editorialVoiceForStage(
   stage: GenerationStage,
   value: unknown,
 ): string {
-  return ["draft", "final"].includes(stage)
+  return stage === "final"
     ? editorialVoiceInstruction(value)
     : "";
 }
@@ -1300,7 +1294,11 @@ export function validateEditorialAnalysis(
 }
 
 function normalizeEvidence(value: string): string {
-  return value.normalize("NFKC").replace(/\s+/g, " ").trim()
+  return value.normalize("NFKC")
+    .replace(/[’‘`´]/g, "'")
+    .replace(/[“”«»]/g, '"')
+    .replace(/[–—]/g, "-")
+    .replace(/\s+/g, " ").trim()
     .toLocaleLowerCase("fr");
 }
 
@@ -1387,6 +1385,24 @@ export function buildNarrativeContract(
     ? factSheet.jet as Record<string, unknown>
     : {};
   const outcome = narrativeOutcome(jet.outcome);
+  const publicFacts = (Array.isArray(factSheet.faits_publics)
+    ? factSheet.faits_publics
+    : []).flatMap((item): NarrativePublicFact[] => {
+      if (!item || typeof item !== "object" || Array.isArray(item)) return [];
+      const value = item as Record<string, unknown>;
+      const text = typeof value.text === "string" ? value.text.trim() : "";
+      if (!text) return [];
+      const origin = ["engine", "mechanics", "mj"].includes(String(value.origin))
+        ? value.origin as NarrativePublicFact["origin"]
+        : "engine";
+      return [{
+        text,
+        origin,
+        ...(typeof value.attribution === "string" && value.attribution.trim()
+          ? { attribution: value.attribution.trim() }
+          : {}),
+      }];
+    }).slice(0, 8);
   const effects: string[] = [];
   if (publicAttribution && outcome.status === "achieved") {
     for (const operation of plan) {
@@ -1433,13 +1449,14 @@ export function buildNarrativeContract(
     ? ["atmosphère sensorielle locale sans acteur ni conséquence"]
     : ["style, rythme et agencement uniquement"];
   return {
-    version: 1,
+    version: 2,
     action_key: String(actionType.key ?? "unknown"),
     action: String(actionType.libellé ?? factSheet.type_action ?? "Action"),
     date_rp: typeof factSheet.date_rp === "string" ? factSheet.date_rp : null,
     participants,
     public_attribution: publicAttribution,
     outcome,
+    public_facts: publicFacts,
     effects,
     ...(typeof factSheet.intention === "string" && factSheet.intention.trim()
       ? { intent: factSheet.intention.trim() }
@@ -1597,163 +1614,8 @@ function contractFromFactSheet(
     : buildNarrativeContract(factSheet);
 }
 
-const CONTRACT_SUPPORT_REFS = new Set([
-  "action",
-  "date_rp",
-  "participants",
-  "outcome",
-  "effects",
-  "intent",
-  "stakes",
-  "narrative_guidance",
-]);
-
-function articleClaimTexts(raw: string): string[] {
-  try {
-    const parsed = JSON.parse(
-      raw.trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, ""),
-    ) as Record<string, unknown>;
-    const segmenter = new Intl.Segmenter("fr", { granularity: "sentence" });
-    const sentences = (value: unknown) =>
-      typeof value === "string"
-        ? [...segmenter.segment(value)].map(({ segment }) => segment.trim()).filter(
-          Boolean,
-        )
-        : [];
-    const sections = Array.isArray(parsed.sections)
-      ? parsed.sections.filter((section): section is Record<string, unknown> =>
-        Boolean(section) && typeof section === "object" && !Array.isArray(section)
-      )
-      : [];
-    return [
-      ...(typeof parsed.title === "string" ? [parsed.title.trim()] : []),
-      ...sentences(parsed.description),
-      ...sections.flatMap((section) => [
-        ...(typeof section.title === "string" ? [section.title.trim()] : []),
-        ...sentences(section.body),
-      ]),
-    ].filter(Boolean);
-  } catch {
-    return [];
-  }
-}
-
-function evidenceBySource(raw: string): Map<string, string[]> {
-  try {
-    const parsed = JSON.parse(
-      raw.trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, ""),
-    ) as Record<string, unknown>;
-    const result = new Map<string, string[]>();
-    for (const item of Array.isArray(parsed.evidence) ? parsed.evidence : []) {
-      if (!item || typeof item !== "object" || Array.isArray(item)) continue;
-      const evidence = item as Record<string, unknown>;
-      if (
-        typeof evidence.source_id !== "string" ||
-        typeof evidence.excerpt !== "string" ||
-        !["continuity", "contradiction"].includes(String(evidence.use))
-      ) continue;
-      result.set(evidence.source_id, [
-        ...(result.get(evidence.source_id) ?? []),
-        evidence.excerpt,
-      ]);
-    }
-    return result;
-  } catch {
-    return new Map();
-  }
-}
-
-function safeCreativeClaim(text: string, contract: NarrativeContract): boolean {
-  const normalized = normalizeEvidence(text);
-  if (
-    !normalized || text.length > 180 || /\d|[«»"]/.test(text) ||
-    contract.participants.some(({ name }) => textMentionsCountry(text, name))
-  ) return false;
-  return !/\b(?:pays|état|gouvernement|diplomat|délégation|armée|population|opinion|région|relation|réputation|image|accord|alliance|traité|sanction|guerre|conflit|crise|protest|condamn|soutien|menac|départ|arriv|annonce|déclar|affirm|jug|perç|provoqu|entraîn|condui|risqu|pourr|devr|désormais|dorénavant|fragil|renfor|dégrad|amélior|terni)\w*/iu.test(
-    normalized,
-  );
-}
-
-const CLAIM_STOP_WORDS = new Set([
-  "alors",
-  "apres",
-  "avant",
-  "avec",
-  "cette",
-  "comme",
-  "dans",
-  "depuis",
-  "des",
-  "deux",
-  "donc",
-  "elle",
-  "entre",
-  "leur",
-  "leurs",
-  "mais",
-  "pour",
-  "sans",
-  "selon",
-  "sous",
-  "tandis",
-  "toute",
-  "vers",
-]);
-const CLAIM_NEUTRAL_WORDS = new Set([
-  "actuel",
-  "annonce",
-  "bilateral",
-  "chapitre",
-  "clairement",
-  "confirme",
-  "contexte",
-  "decisif",
-  "diplomatie",
-  "diplomatique",
-  "dossier",
-  "entame",
-  "episode",
-  "incident",
-  "limite",
-  "majeur",
-  "marque",
-  "mineur",
-  "nouveau",
-  "objectif",
-  "officiel",
-  "ouverture",
-  "pays",
-  "public",
-  "relation",
-  "significatif",
-  "tentative",
-]);
-
-function claimVocabulary(value: string): string[] {
-  return (normalizeEvidence(value).match(/\p{L}{4,}/gu) ?? [])
-    .filter((word) => !CLAIM_STOP_WORDS.has(word))
-    .map((word) => word.slice(0, 5));
-}
-
-function vocabularySupportsClaim(
-  claim: string,
-  evidence: string,
-  contract: NarrativeContract,
-): boolean {
-  const allowed = new Set([
-    ...claimVocabulary(evidence),
-    ...contract.participants.flatMap(({ name }) => claimVocabulary(name)),
-    ...[...CLAIM_NEUTRAL_WORDS].map((word) => word.slice(0, 5)),
-  ]);
-  return claimVocabulary(claim).every((word) => allowed.has(word));
-}
-
 export function parseCriticReport(
   raw: string,
-  contract: NarrativeContract,
-  allowedSourceIds: string[],
-  articleRaw = "",
-  analysisRaw = "",
 ): { report?: CriticReport; errors: string[] } {
   let parsed: unknown;
   try {
@@ -1801,152 +1663,17 @@ export function parseCriticReport(
   if (!Array.isArray(value.issues) || issues.length !== value.issues.length) {
     errors.push("Problèmes critiques invalides");
   }
-  const allowedCreativeCategories = new Set(contract.creative_permissions);
-  const evidence = evidenceBySource(analysisRaw);
-  const expectedClaims = articleClaimTexts(articleRaw).map((text, index) => ({
-    claim_id: `c${index + 1}`,
-    text,
-  }));
-  const expectedById = new Map(expectedClaims.map((claim) => [
-    claim.claim_id,
-    claim.text,
-  ]));
-  const claims = Array.isArray(value.claims)
-    ? value.claims.flatMap((item): CriticClaim[] => {
-      if (!item || typeof item !== "object" || Array.isArray(item)) return [];
-      const claim = item as Record<string, unknown>;
-      const claimId = typeof claim.claim_id === "string" ? claim.claim_id : "";
-      const text = expectedById.get(claimId) ?? "";
-      const support = String(claim.support ?? "");
-      const sourceId = typeof claim.source_id === "string"
-        ? claim.source_id
-        : undefined;
-      const supportQuote = typeof claim.support_quote === "string"
-        ? claim.support_quote.trim()
-        : undefined;
-      const supportRef = typeof claim.support_ref === "string"
-        ? claim.support_ref
-        : undefined;
-      const category = typeof claim.category === "string"
-        ? claim.category
-        : undefined;
-      const sourceValid = support === "source" && sourceId && supportQuote &&
-        allowedSourceIds.includes(sourceId) &&
-        (evidence.get(sourceId) ?? []).some((excerpt) =>
-          normalizeEvidence(excerpt).includes(normalizeEvidence(supportQuote))
-        ) && vocabularySupportsClaim(text, supportQuote, contract);
-      const contractValid = support === "contract" && supportRef &&
-        CONTRACT_SUPPORT_REFS.has(supportRef) &&
-        vocabularySupportsClaim(
-          text,
-          JSON.stringify(
-            (contract as unknown as Record<string, unknown>)[supportRef],
-          ) ?? "",
-          contract,
-        );
-      const creativeValid = support === "creative" && category &&
-        contract.creative_license === "controlled" &&
-        allowedCreativeCategories.has(category) &&
-        safeCreativeClaim(text, contract);
-      const unsupportedValid = support === "unsupported";
-      const fallbackSource = !unsupportedValid && support !== "source"
-        ? [...evidence.entries()].flatMap(([id, excerpts]) =>
-          allowedSourceIds.includes(id)
-            ? excerpts.map((quote) => ({ id, quote }))
-            : []
-        ).find(({ quote }) => vocabularySupportsClaim(text, quote, contract))
-        : undefined;
-      const fallbackContractRef = !unsupportedValid && support !== "source"
-        ? [...CONTRACT_SUPPORT_REFS].find((ref) =>
-          vocabularySupportsClaim(
-            text,
-            JSON.stringify(
-              (contract as unknown as Record<string, unknown>)[ref],
-            ) ?? "",
-            contract,
-          )
-        )
-        : undefined;
-      const resolvedSupport = sourceValid
-        ? "source"
-        : contractValid
-        ? "contract"
-        : creativeValid
-        ? "creative"
-        : fallbackSource
-        ? "source"
-        : fallbackContractRef
-        ? "contract"
-        : "unsupported";
-      const resolvedSourceId = sourceValid ? sourceId : fallbackSource?.id;
-      const resolvedQuote = sourceValid ? supportQuote : fallbackSource?.quote;
-      const resolvedContractRef = contractValid
-        ? supportRef
-        : fallbackContractRef;
-      return text
-        ? [{
-          claim_id: claimId,
-          text,
-          support: resolvedSupport as CriticClaim["support"],
-          ...(resolvedSupport === "source" && resolvedSourceId
-            ? { source_id: resolvedSourceId }
-            : {}),
-          ...(resolvedSupport === "source" && resolvedQuote
-            ? { support_quote: resolvedQuote }
-            : {}),
-          ...(resolvedSupport === "contract" && resolvedContractRef
-            ? { support_ref: resolvedContractRef }
-            : {}),
-          ...(creativeValid && category ? { category } : {}),
-        }]
-        : [];
-    })
-    : [];
-  const reportedClaimIds = claims.map(({ claim_id }) => claim_id);
-  if (
-    !Array.isArray(value.claims) || claims.length !== value.claims.length ||
-    (expectedClaims.length &&
-      (expectedClaims.length !== reportedClaimIds.length ||
-        expectedClaims.some(({ claim_id }) =>
-          !reportedClaimIds.includes(claim_id)
-        )))
-  ) errors.push("Justification des affirmations invalide");
-  const unsupportedClaims = claims.filter(({ support }) =>
-    support === "unsupported"
-  );
-  const reportIssues = [
-    ...issues,
-    ...unsupportedClaims.map(({ claim_id }) => ({
-      code: "unsupported_claim",
-      detail: `${claim_id} n'est pas entièrement soutenue par sa justification.`,
-    })),
-  ].filter((issue, index, all) =>
-    all.findIndex((candidate) =>
-      candidate.code === issue.code && candidate.detail === issue.detail
-    ) === index
-  );
-  const reportVerdict = unsupportedClaims.length
-    ? "repair"
-    : value.verdict as "pass" | "repair";
-  const creativeFacts = claims.flatMap(({ text, support, category }) =>
-    support === "creative" && category ? [{ text, category }] : []
-  );
-  const usedSourceIds = [...new Set(claims.flatMap(({ support, source_id }) =>
-    support === "source" && source_id ? [source_id] : []
-  ))];
-  if (reportVerdict === "pass" && reportIssues.length) {
+  const reportVerdict = value.verdict as "pass" | "repair";
+  if (reportVerdict === "pass" && issues.length) {
     errors.push("Une critique réussie ne peut contenir de problème");
   }
-  if (reportVerdict === "repair" && !reportIssues.length) {
+  if (reportVerdict === "repair" && !issues.length) {
     errors.push("Une réparation doit nommer au moins un problème");
   }
   return errors.length ? { errors } : {
     report: {
       verdict: reportVerdict,
-      issues: reportIssues,
-      claims,
-      creative_facts: creativeFacts,
-      used_source_ids: usedSourceIds,
+      issues,
     },
     errors,
   };
@@ -2005,7 +1732,6 @@ async function runGenerationStage(params: {
   knownCountries: string[];
   sourceIds: string[];
   analysis?: string;
-  draft?: string;
   final?: string;
   critic?: string;
   previousErrors?: string[];
@@ -2024,6 +1750,11 @@ async function runGenerationStage(params: {
   const targetChars = Math.round(
     limits.min + (limits.max - limits.min) / 3,
   );
+  const targetWords = params.profile === "brief"
+    ? "55 à 85"
+    : params.profile === "standard"
+    ? "90 à 160"
+    : "300 à 500";
   const voiceInstruction = editorialVoiceForStage(
     params.stage,
     params.editorialVoice,
@@ -2054,11 +1785,7 @@ async function runGenerationStage(params: {
     params.analysis ?? "",
     params.input,
   );
-  const editorialFactsText = JSON.stringify(editorialFacts, null, 2);
   const canonicalFactsText = JSON.stringify(editorialFacts.canon ?? {}, null, 2);
-  const claimsForCritic = articleClaimTexts(params.final ?? "").map(
-    (text, index) => ({ claim_id: `c${index + 1}`, text }),
-  );
   if (params.stage === "analysis") {
     raw = await callMagnum({
       apiKey,
@@ -2069,55 +1796,18 @@ async function runGenerationStage(params: {
 Réponds en JSON avec exactement:
 {"angle":string,"event":{"action":string,"author":string|null,"target":string|null,"status":"prevented"|"achieved"},"evidence":[{"source_id":string,"excerpt":string,"use":"continuity"|"background"|"contradiction"}],"contradictions":[{"sources":string[],"désaccord":string}],"exclusions":string[]}.
 Recopie event exactement depuis evenement_canonique. Une archive décrit le passé
-et ne remplace jamais cet événement. Pour evidence, copie un extrait exact et
-court de la source : aucune paraphrase. Ne retiens que les extraits réellement
-utiles. Une liste vide est préférable à un contexte forcé. Cite uniquement les
-identifiants fournis. Le rôle continuity est réservé à une source exact_pair.
+ et ne remplace jamais cet événement. Pour evidence, copie un extrait exact et
+ court de la source : aucune paraphrase. Ne retiens que les extraits réellement
+ utiles. Une liste vide est préférable à un contexte forcé. Cite uniquement les
+ identifiants présents dans le tableau sources. Les faits publics n’ont aucun
+ source_id : ils sont déjà canoniques et ne doivent pas être recités dans evidence.
+ Le rôle continuity est réservé à une source exact_pair.
 Une source background décrit seulement l'arrière-plan : elle ne prouve jamais
 un motif, une cause ou un lien avec l'événement courant. Limite chaque extrait
 background et exact_pair à 500 caractères. Signale les
 contradictions sans les résoudre.`,
       user:
         `Prépare l'analyse éditoriale de cet article.\n<données>\n${params.input}\n</données>`,
-    });
-  } else if (params.stage === "draft") {
-    const creativeInstruction =
-      params.contract.creative_license === "controlled"
-        ? `Tu peux créer uniquement : ${
-          params.contract.creative_permissions.join(", ")
-        }.
-Ces détails ne peuvent contenir aucun nom propre, chiffre, citation exacte,
-victime, dégât, unité, traité, sanction ou conséquence.`
-        : "N'invente aucun détail factuel. Ta liberté porte uniquement sur le style, le rythme et l'agencement.";
-    raw = await callMagnum({
-      apiKey,
-      temperature: 0.85,
-      topK: 64,
-      maxTokens: limits.maxTokens,
-      useCreativePreset: true,
-      system: `${systemBase}
-${creativeInstruction}
-La consigne narrative du contrat définit strictement ce que cette action signifie.
-Tout accord, engagement ou escalade qu'elle exclut est interdit, même si le
-brouillon ou une archive le suggère.
-Rédige un article de ${limits.min} à ${limits.max} caractères hors titre.
-Vise environ ${targetChars} caractères et ne descends jamais sous ${limits.min}.
-Le titre doit rester sous ${params.profile === "brief" ? 90 : 140} caractères
-et partir du détail concret le plus marquant, pas du libellé générique de l'action.
-Le plafond de ${limits.max} caractères est absolu et couvre le chapeau plus
-tous les corps de sections. ${sectionGuidance}${retryInstruction}
-Le premier paragraphe raconte exclusivement l'événement courant. Les pays auteur
-et cible publics y apparaissent par leur nom complet. Le contexte historique ne
-dépasse jamais un quart de l'article et aucun pays tiers n'apparaît dans le titre
-ou le premier paragraphe. Une preuve background ne devient jamais la cause ou le
-motif de l'action. Elle ne fournit jamais non plus le lieu, l'heure, le geste,
-les paroles ou les participants de l'événement courant. Si tu l'emploies, présente-la
-explicitement comme un fait antérieur distinct. Chaque paragraphe apporte un détail distinct.
-Réponds uniquement en JSON avec exactement:
-{"title":string,"description":string,"sections":[{"title":string,"body":string}]}
-Les sections sont facultatives. Markdown Discord simple seulement. Aucune mention Discord.`,
-      user: `Rédige depuis ce contrat et ces preuves validées.
-<contrat_preuves_et_plan>\n${editorialFactsText}\n</contrat_preuves_et_plan>`,
     });
   } else if (params.stage === "final") {
     const canonicalFacts = editorialFacts.canon &&
@@ -2127,26 +1817,18 @@ Les sections sont facultatives. Markdown Discord simple seulement. Aucune mentio
       : {};
     finalAllowedNumbers = collectNumbers(canonicalFacts);
     finalAllowedCountries = params.allowedCountries;
-    const draftBlocked = containsNsfw(params.draft ?? "");
-    const draftValidation = draftBlocked
-      ? { errors: ["Contenu NSFW bloqué"] }
-      : parseArticle(
-        params.draft ?? "",
-        params.profile,
-        params.allowedNumbers,
-        params.allowedCountries,
-        params.knownCountries,
-      );
     raw = await callMagnum({
       apiKey,
-      temperature: voiceInstruction ? 0.3 : 0.15,
-      topK: voiceInstruction ? 32 : 24,
+      temperature: 0.85,
+      topK: 64,
       maxTokens: lengthRetry && params.profile === "brief"
         ? 300
         : limits.maxTokens,
+      useCreativePreset: true,
       system: `${systemBase}
-Tu es le rédacteur final. Le bloc canon est la seule autorité factuelle. Rédige
-une version neuve depuis ce canon. Le brouillon
+ Tu es le rédacteur final. Le bloc canon est la seule autorité factuelle. Les
+ faits publics sont les briques concrètes de l’événement : raconte-les clairement,
+ sans en ajouter. Rédige une version neuve depuis ce canon. Le brouillon
 créatif n'est volontairement pas transmis : aucun de ses détails ne doit survivre
 sans apparaître dans le canon. Le plan éditorial sert seulement à organiser le récit.
 Applique littéralement la consigne narrative du contrat : une ouverture, une
@@ -2156,8 +1838,8 @@ ou de personne, causalité, interprétation, prédiction, réaction ou conséque
 n'est pas explicitement fourni. En cas de doute, supprime la phrase au lieu de la compléter.
 Un élément du contexte de référence ne peut jamais fournir le lieu, l'heure, le geste,
 les paroles ou les participants de l'événement courant. Il reste un antécédent explicite.
-Respecte ${limits.min} à ${limits.max} caractères hors titre.
-Vise environ ${targetChars} caractères et ne descends jamais sous ${limits.min}.
+Ne dépasse jamais ${limits.max} caractères hors titre.
+Vise ${targetWords} mots, environ ${targetChars} caractères.
 Le titre doit rester sous ${params.profile === "brief" ? 90 : 140} caractères
 et partir du détail concret le plus marquant, pas du libellé générique de l'action.
 Le plafond de ${limits.max} caractères est absolu et couvre le chapeau plus
@@ -2171,9 +1853,7 @@ Réponds uniquement en JSON avec exactement:
 Les sections sont facultatives. Aucun autre champ, identifiant, rôle, salon, image ou fait mécanique.`,
       user: `Rédige l'article final uniquement avec le canon fourni.
 <canon>\n${canonicalFactsText}\n</canon>
-<erreurs_serveur>\n${
-        draftValidation.errors.join("; ") || "aucune"
-      }\n</erreurs_serveur>`,
+ <erreurs_serveur>\n${params.previousErrors?.join("; ") || "aucune"}\n</erreurs_serveur>`,
     });
   } else if (params.stage === "critic") {
     raw = await callMagnum({
@@ -2186,38 +1866,22 @@ Les sections sont facultatives. Aucun autre champ, identifiant, rôle, salon, im
         ? 2_400
         : 1_200,
       system: `${SAFE_SYSTEM_BASE}
-Tu es un contrôleur indépendant, pas un rédacteur. Compare chaque affirmation
-de l'article au contrat et aux preuves. Vérifie surtout acteur, cible, action,
-résultat, sens des effets, confidentialité, pays tiers, contexte dominant,
-invention hors licence, faux lien causal, platitude et répétition.
-La consigne narrative du contrat est normative : toute escalade qu'elle exclut
-impose wrong_action ou unsupported_claim.
-Une catégorie créative décrit la nature réelle de la phrase, pas l'étiquette choisie
-par le rédacteur. Une perception, une réputation ternie, une opinion prêtée à des pays
-tiers ou un effet régional est une conséquence factuelle : sans preuve explicite,
-signale unsupported_claim. La seule création autorisée est une atmosphère sensorielle
-locale, sans acteur, opinion, réaction ni conséquence. Si un détail background devient le lieu, l'heure,
-le geste, les paroles ou les participants de l'événement courant, signale
-context_replaces_event. Recopie chaque catégorie créative mot pour mot depuis
-creative_permissions ; toute autre catégorie impose creative_scope_violation.
-Contrôle chaque entrée fournie dans affirmations_a_controler et recopie seulement
-son claim_id exactement une fois dans claims. Pour chaque entrée, indique une seule justification : contract avec support_ref parmi action,
-date_rp, participants, outcome, effects, intent, stakes, narrative_guidance ; source
-avec source_id et support_quote copié exactement depuis une preuve ; creative avec
-la catégorie exacte autorisée ; ou unsupported. Un support_quote doit établir toute
-l'affirmation, pas seulement un mot voisin. Toute claim unsupported impose verdict
-repair et un problème unsupported_claim.
+Tu es un contrôleur indépendant, pas un rédacteur. Compare l'article au contrat
+et aux preuves. Le contrat et ses faits publics sont l'unique autorité sur
+l'événement courant. Les sources donnent seulement le contexte explicitement cité.
+Signale toute affirmation absente de ces données, tout acteur, cible, résultat ou
+effet incorrect, toute fuite mécanique, contradiction masquée, répétition ou
+platitude. La liberté créative ne couvre que le style et l'atmosphère sans acteur,
+réaction, causalité ni conséquence. Pour chaque problème, cite dans detail le
+passage précis et explique brièvement la correction attendue.
 Réponds en JSON avec exactement:
-{"verdict":"pass"|"repair","issues":[{"code":string,"detail":string}],"claims":[{"claim_id":string,"support":"contract"|"source"|"creative"|"unsupported","support_ref":string|null,"source_id":string|null,"support_quote":string|null,"category":string|null}]}.
+{"verdict":"pass"|"repair","issues":[{"code":string,"detail":string}]}.
 Codes autorisés : wrong_actor, wrong_target, wrong_action, wrong_outcome,
 wrong_effect_direction, secret_leak, unsupported_claim, context_replaces_event,
 third_country_dominates, creative_scope_violation, contradiction_hidden,
 style_flat, repetition, length. Un verdict pass impose issues:[].`,
       user: `<contrat_et_preuves>\n${canonicalFactsText}\n</contrat_et_preuves>
 <article>\n${cleanDiscordText(params.final ?? "")}\n</article>
-<affirmations_a_controler>\n${
-        JSON.stringify(claimsForCritic, null, 2)
-      }\n</affirmations_a_controler>
 <erreurs_serveur>\n${
         params.previousErrors?.join("; ") || "aucune"
       }\n</erreurs_serveur>`,
@@ -2238,10 +1902,11 @@ Une phrase doit pouvoir être rattachée entièrement à un seul champ du contra
 ou à une citation exacte. Supprime toute phrase qui mélange fait établi et
 déduction. N'ajoute ni lieu, cause, acteur, réaction, calendrier, secteur,
 institution, citation, intention ou conséquence pour remplir la longueur.
-Préfère une description courte sans sections si les preuves sont rares.
+Préfère une description sans sections si les preuves sont rares.
 Un détail du contexte de référence ne décrit jamais la scène courante : garde-le
 seulement comme antécédent explicite, sinon supprime-le.
-Respecte ${limits.min} à ${limits.max} caractères hors titre. ${sectionGuidance}
+Ne dépasse jamais ${limits.max} caractères hors titre. Vise ${targetWords} mots,
+environ ${targetChars} caractères. ${sectionGuidance}
 Réponds uniquement en JSON avec exactement:
 {"title":string,"description":string,"sections":[{"title":string,"body":string}]}.`,
       user: `<contrat_et_preuves>\n${canonicalFactsText}\n</contrat_et_preuves>
@@ -2275,13 +1940,7 @@ Réponds uniquement en JSON avec exactement:
     )
     : undefined;
   const criticReport = params.stage === "critic"
-    ? parseCriticReport(
-      content,
-      params.contract,
-      params.sourceIds,
-      params.final ?? "",
-      params.analysis ?? "",
-    )
+    ? parseCriticReport(content)
     : undefined;
   return {
     content,
@@ -2439,6 +2098,19 @@ async function loadGenerationInput(supabase: SupabaseClient, job: Job) {
     return current ? [current as Record<string, unknown>] : [];
   });
   const publicAttribution = action.payload?.attribution_publique !== false;
+  const publicFacts = Array.isArray(action.public_facts)
+    ? action.public_facts.filter((fact: unknown) =>
+      Boolean(fact) && typeof fact === "object" && !Array.isArray(fact) &&
+      typeof (fact as Record<string, unknown>).text === "string" &&
+      String((fact as Record<string, unknown>).text).trim()
+    ).slice(0, 8)
+    : [];
+  if (publicFacts.length < 2) {
+    throw new PipelineError(
+      "Ajoutez au moins deux faits publics à l’action avant la rédaction.",
+      "review",
+    );
+  }
   let roleplayDate = typeof worldSnapshot.roleplay_date === "string"
     ? worldSnapshot.roleplay_date
     : typeof action.roleplay_date === "string"
@@ -2614,6 +2286,7 @@ async function loadGenerationInput(supabase: SupabaseClient, job: Job) {
       (typeof action.payload?.stakes === "string"
         ? action.payload.stakes
         : null),
+    faits_publics: publicFacts,
     ligne_editoriale: typeof action.payload?.editorial_voice === "string"
       ? action.payload.editorial_voice
       : null,
@@ -3352,14 +3025,16 @@ async function processGeneration(
   const validatedKnownCountries = knownCountries.length
     ? knownCountries
     : allowedCountries;
-  const stage: GenerationStage = [
+  const requestedStage = String(payload.stage);
+  const stage: GenerationStage = requestedStage === "draft"
+    ? "final"
+    : [
       "analysis",
-      "draft",
       "final",
       "critic",
       "repair",
     ].includes(
-      String(payload.stage),
+      requestedStage,
     )
     ? payload.stage as GenerationStage
     : "analysis";
@@ -3384,7 +3059,6 @@ async function processGeneration(
     analysis: typeof payload.analysis === "string"
       ? payload.analysis
       : undefined,
-    draft: typeof payload.draft === "string" ? payload.draft : undefined,
     final: typeof payload.final === "string" ? payload.final : undefined,
     critic: typeof payload.critic === "string" ? payload.critic : undefined,
     previousErrors: [
@@ -3460,7 +3134,7 @@ async function processGeneration(
       status: "pending",
       payload: {
         ...payload,
-        stage: "draft",
+        stage: "final",
         analysis: result.content,
         allowed_countries: countriesAllowedByPrompt(
           knownCountries,
@@ -3471,18 +3145,6 @@ async function processGeneration(
       },
     };
   }
-  if (stage === "draft") {
-    return {
-      status: "pending",
-      payload: {
-        ...payload,
-        stage: "final",
-        draft: result.content,
-        blocked_nsfw: blockedNsfw,
-      },
-    };
-  }
-
   if (stage === "final") {
     return {
       status: "pending",
@@ -3595,13 +3257,7 @@ async function processGeneration(
     : "";
   const criticReport = stage === "critic"
     ? result.criticReport?.report
-    : parseCriticReport(
-      criticRaw,
-      contractFromFactSheet(factSheet),
-      prompt.sourceIds,
-      finalRaw,
-      typeof payload.analysis === "string" ? payload.analysis : "",
-    ).report;
+    : parseCriticReport(criticRaw).report;
   const currentAttempt: EditorialAttempt = {
     attemptNo: editorialAttempt,
     analysis: typeof payload.analysis === "string" ? payload.analysis : "",

@@ -49,6 +49,33 @@ function parseEffects(formData: FormData) {
   return effects;
 }
 
+function parsePublicFacts(formData: FormData) {
+  const facts = String(formData.get("public_facts") ?? "")
+    .split(/\r?\n/)
+    .map((text) => text.trim())
+    .filter(Boolean);
+  if (facts.length < 2 || facts.length > 8 || facts.some((text) => text.length > 500)) {
+    throw new Error("Saisissez entre deux et huit faits publics, un par ligne.");
+  }
+  return facts.map((text, index) => ({ id: `f${index + 1}`, text, origin: "mj" }));
+}
+
+function parseFactBlueprints(formData: FormData) {
+  const blueprints = String(formData.get("fact_blueprints") ?? "")
+    .split(/\r?\n/)
+    .map((line) => line.split("|").map((fact) => fact.trim()).filter(Boolean))
+    .filter((facts) => facts.length > 0);
+  if (
+    blueprints.length < 1 || blueprints.length > 12 ||
+    blueprints.some((facts) =>
+      facts.length < 2 || facts.length > 6 || facts.some((fact) => fact.length > 500)
+    )
+  ) {
+    throw new Error("Ajoutez 1 à 12 scènes de 2 à 6 faits, séparés par |.");
+  }
+  return blueprints;
+}
+
 export async function createManualRpAction(formData: FormData) {
   const { supabase } = await getAuthorizedClient();
   const countryId = requiredText(formData, "country_id", 64);
@@ -70,8 +97,20 @@ export async function createManualRpAction(formData: FormData) {
     p_mj_notes: notes || null,
     p_parent_action_id: parentActionId,
     p_effects: parseEffects(formData),
+    p_public_facts: parsePublicFacts(formData),
   });
   if (error) throw new Error(`Impossible de créer l’action : ${error.message}`);
+  revalidatePath(pagePath);
+}
+
+export async function saveActionPublicFacts(formData: FormData) {
+  const { supabase } = await getAuthorizedClient();
+  const actionId = requiredText(formData, "action_id", 64);
+  const { error } = await supabase.rpc("set_rp_action_public_facts", {
+    p_action_id: actionId,
+    p_public_facts: parsePublicFacts(formData),
+  });
+  if (error) throw new Error(`Impossible d’enregistrer les faits publics : ${error.message}`);
   revalidatePath(pagePath);
 }
 
@@ -389,6 +428,7 @@ export async function saveActionAutomationConfig(formData: FormData) {
         ? "controlled"
         : "strict",
       narrative_guidance: narrativeGuidance,
+      fact_blueprints: parseFactBlueprints(formData),
       preconditions,
     })
     .eq("action_type_id", actionTypeId);

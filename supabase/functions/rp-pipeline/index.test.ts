@@ -38,8 +38,7 @@ Deno.test("la voix belliqueuse reste une consigne de style fermée", () => {
     "une voix libre ou inconnue doit être ignorée",
   );
   assert(
-    editorialVoiceForStage("draft", "state_agency_belligerent").length > 0 &&
-      editorialVoiceForStage("analysis", "state_agency_belligerent") === "" &&
+    editorialVoiceForStage("analysis", "state_agency_belligerent") === "" &&
       editorialVoiceForStage("final", "state_agency_belligerent").length > 0 &&
       editorialVoiceForStage("repair", "state_agency_belligerent") === "",
     "la voix créative doit survivre à la révision sans contaminer les contrôles",
@@ -224,38 +223,27 @@ Deno.test("un jet raté impose une tentative empêchée", () => {
   );
 });
 
-Deno.test("la critique doit être structurée et respecter la licence créative", () => {
+Deno.test("les faits publics deviennent le canon concret de la narration", () => {
   const contract = buildNarrativeContract({
     type_action: { libellé: "Ouverture diplomatique" },
+    faits_publics: [
+      { id: "f1", text: "La France remet une note officielle à la Pologne.", origin: "mj" },
+      { id: "f2", text: "La note propose de rouvrir un canal ministériel.", origin: "mj" },
+      { id: "f3", text: "La Pologne n’annonce ni sanction ni rupture.", origin: "mj" },
+    ],
     jet: { outcome: "minor_success" },
   });
-  const article = JSON.stringify({
-    title: "Ouverture diplomatique",
-    description: "L'objectif est atteint.",
-    sections: [],
-  });
-  const supportedClaims = [
-    {
-      claim_id: "c1",
-      support: "contract",
-      support_ref: "action",
-    },
-    {
-      claim_id: "c2",
-      support: "contract",
-      support_ref: "outcome",
-    },
-  ];
+  assert(contract.version === 2, "le nouveau contrat doit être identifiable");
+  assert(
+    contract.public_facts.map(({ text }) => text).join(" ").includes("canal ministériel"),
+    "les faits publics doivent être transmis sans être réduits à l’intention abstraite",
+  );
+});
+
+Deno.test("la critique expose seulement un verdict cohérent et des problèmes connus", () => {
   assert(
     parseCriticReport(
-      JSON.stringify({
-        verdict: "pass",
-        issues: [],
-        claims: supportedClaims,
-      }),
-      contract,
-      [],
-      article,
+      JSON.stringify({ verdict: "pass", issues: [] }),
     ).errors.length === 0,
     "une critique propre doit passer",
   );
@@ -264,197 +252,36 @@ Deno.test("la critique doit être structurée et respecter la licence créative"
       JSON.stringify({
         verdict: "repair",
         issues: [{ code: "code_inventé", detail: "Erreur" }],
-        claims: supportedClaims,
       }),
-      contract,
-      [],
-      article,
     ).errors.length > 0,
     "un code critique libre ne doit pas contourner le contrôle",
   );
   assert(
     parseCriticReport(
       JSON.stringify({
-        verdict: "pass",
-        issues: [],
-        claims: [{
-          claim_id: "c1",
-          support: "creative",
-          category: "atmosphère sensorielle locale sans acteur ni conséquence",
+        verdict: "repair",
+        issues: [{
+          code: "unsupported_claim",
+          detail: "Le passage « une sanction immédiate » n'apparaît dans aucun fait.",
         }],
-      }),
-      contract,
-      [],
-      JSON.stringify({ title: "Une foule applaudit.", description: "", sections: [] }),
-    ).report?.verdict === "repair",
-    "la licence stricte doit interdire tout détail créatif déclaré",
-  );
-  const controlled = buildNarrativeContract(
-    { type_action: { libellé: "Ouverture diplomatique" } },
-    "controlled",
-  );
-  assert(
-    parseCriticReport(
-      JSON.stringify({
-        verdict: "pass",
-        issues: [],
-        claims: [{
-          claim_id: "c1",
-          support: "creative",
-          category: "atmosphère sensorielle locale sans acteur ni conséquence",
-        }],
-      }),
-      controlled,
-      [],
-      JSON.stringify({
-        title: "Un silence bref précède la réponse.",
-        description: "",
-        sections: [],
-      }),
-    ).errors.length === 0,
-    "une catégorie explicitement autorisée doit passer",
-  );
-  assert(
-    parseCriticReport(
-      JSON.stringify({
-        verdict: "pass",
-        issues: [],
-        claims: [{
-          claim_id: "c1",
-          support: "creative",
-          category: "réaction",
-        }],
-      }),
-      controlled,
-      [],
-      JSON.stringify({
-        title: "La région condamne l'annonce.",
-        description: "",
-        sections: [],
       }),
     ).report?.verdict === "repair",
-    "une catégorie libre ne doit pas contourner les permissions",
+    "un problème précis doit demander une réécriture",
   );
   assert(
     parseCriticReport(
       JSON.stringify({
         verdict: "pass",
-        issues: [],
-        claims: supportedClaims.slice(0, 1),
+        issues: [{ code: "repetition", detail: "Le second paragraphe répète le premier." }],
       }),
-      contract,
-      [],
-      article,
-    ).errors.includes("Justification des affirmations invalide"),
-    "chaque phrase doit être justifiée",
+    ).errors.length > 0,
+    "un verdict réussi ne peut masquer un problème",
   );
   assert(
     parseCriticReport(
-      JSON.stringify({
-        verdict: "pass",
-        issues: [],
-        claims: [{
-          claim_id: "c1",
-          support: "contract",
-          support_ref: "narrative_guidance",
-        }],
-      }),
-      controlled,
-      [],
-      JSON.stringify({
-        title: "Une poignée de main historique au palais Hofburg",
-        description: "",
-        sections: [],
-      }),
-    ).report?.verdict === "repair",
-    "une consigne d'ouverture ne doit pas justifier une scène inventée",
-  );
-  const sourceArticle = JSON.stringify({
-    title: "La délégation quitte la séance.",
-    description: "",
-    sections: [],
-  });
-  const sourceAnalysis = JSON.stringify({
-    evidence: [{
-      source_id: "source-a",
-      excerpt: "La délégation quitte la séance avant la clôture.",
-      use: "continuity",
-    }],
-  });
-  assert(
-    parseCriticReport(
-      JSON.stringify({
-        verdict: "pass",
-        issues: [],
-        claims: [{
-          claim_id: "c1",
-          support: "source",
-          source_id: "source-a",
-          support_quote: "La délégation quitte la séance avant la clôture.",
-        }],
-      }),
-      contract,
-      ["source-a"],
-      sourceArticle,
-      sourceAnalysis,
-    ).errors.length === 0,
-    "une citation exacte d'une preuve doit justifier une affirmation",
-  );
-  assert(
-    parseCriticReport(
-      JSON.stringify({
-        verdict: "pass",
-        issues: [],
-        claims: [{
-          claim_id: "c1",
-          support: "contract",
-          support_ref: "action",
-        }],
-      }),
-      contract,
-      ["source-a"],
-      sourceArticle,
-      sourceAnalysis,
-    ).report?.used_source_ids.includes("source-a"),
-    "le serveur doit retrouver une preuve canonique même si Magnum cite le mauvais champ",
-  );
-  assert(
-    parseCriticReport(
-      JSON.stringify({
-        verdict: "pass",
-        issues: [],
-        claims: [{
-          claim_id: "c1",
-          support: "source",
-          source_id: "source-a",
-          support_quote: "La délégation quitte la séance avant la clôture.",
-        }],
-      }),
-      contract,
-      ["source-a"],
-      sourceArticle,
-      sourceAnalysis.replace('"continuity"', '"background"'),
-    ).report?.verdict === "repair",
-    "un arrière-plan ne doit jamais devenir une preuve par recherche automatique",
-  );
-  assert(
-    parseCriticReport(
-      JSON.stringify({
-        verdict: "pass",
-        issues: [],
-        claims: [{
-          claim_id: "c1",
-          support: "source",
-          source_id: "source-a",
-          support_quote: "Une sanction est annoncée.",
-        }],
-      }),
-      contract,
-      ["source-a"],
-      sourceArticle,
-      sourceAnalysis,
-    ).report?.verdict === "repair",
-    "une fausse citation ne doit pas certifier l'article",
+      JSON.stringify({ verdict: "repair", issues: [] }),
+    ).errors.length > 0,
+    "une réparation doit expliquer le problème",
   );
 });
 
@@ -525,6 +352,18 @@ Deno.test("la validation Magnum accepte les nombres sourcés et bloque les sorti
     parseArticle(valid, "standard", new Set(["2040"]), ["France"]).errors
       .length === 0,
     "un article standard factuel ne doit pas être artificiellement gonflé",
+  );
+  assert(
+    parseArticle(
+      JSON.stringify({
+        title: "Accord de Paris",
+        description: "La France confirme l’accord.",
+      }),
+      "brief",
+      new Set(),
+      ["France"],
+    ).errors.length === 0,
+    "un article exact ne doit pas être refusé parce qu’il est concis",
   );
   const unsafe = JSON.stringify({
     title: "@everyone",
@@ -815,6 +654,22 @@ Deno.test("l'analyse ne peut remplacer l'action ni inventer une preuve", () => {
       [source],
     ).length === 0,
     "un événement exact et une citation exacte doivent passer",
+  );
+  assert(
+    validateEditorialAnalysis(
+      JSON.stringify({
+        ...analysis,
+        evidence: [{
+          source_id: "source-a",
+          excerpt: "L'Autriche maintient le contact.",
+          use: "continuity",
+        }],
+      }),
+      [source.id],
+      contract,
+      [{ ...source, clean_content: "L’Autriche maintient le contact." }],
+    ).length === 0,
+    "une apostrophe typographique ne doit pas invalider une citation exacte",
   );
   assert(
     validateEditorialAnalysis(

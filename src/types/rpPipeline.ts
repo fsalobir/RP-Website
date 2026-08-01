@@ -10,6 +10,13 @@ export type ArticleProfile = "brief" | "standard" | "dossier";
 export type StaffDecisionMode = "auto" | "mj";
 export type CreativeLicense = "strict" | "controlled";
 
+export interface ActionPublicFact {
+  id: string;
+  text: string;
+  origin: "engine" | "mechanics" | "mj";
+  attribution?: string;
+}
+
 export interface ActionAutomationConfig {
   action_type_id: string;
   enabled_for_major: boolean;
@@ -29,6 +36,7 @@ export interface ActionAutomationConfig {
   image_urls: string[];
   creative_license: CreativeLicense;
   narrative_guidance: string;
+  fact_blueprints: string[][];
 }
 
 export interface MagnumArticleSection {

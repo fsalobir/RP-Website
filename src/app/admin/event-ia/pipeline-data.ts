@@ -435,6 +435,13 @@ export async function loadRpPipelineDashboard(
       roll: number(row, "d100_roll", "roll") ?? number(successRoll, "total", "roll"),
       rollOutcome: text(row, "d100_outcome", "roll_outcome") ?? text(dice, "outcome"),
       selectionExplanation: text(row, "selection_explanation"),
+      publicFacts: Array.isArray(row.public_facts)
+        ? row.public_facts.flatMap((fact) => {
+            const value = object(fact);
+            const factText = text(value, "text");
+            return factText ? [factText] : [];
+          })
+        : [],
       sourceIds: sourcesByAction.get(id) ?? textList(row.context_source_ids ?? article.source_ids),
       factSheet: readable(row.context_fact_sheet ?? row.fact_sheet) ?? readable(article.fact_sheet),
       articleTitle: text(article, "title") ?? text(output, "title"),
@@ -597,6 +604,11 @@ export async function loadRpPipelineDashboard(
         ? "controlled"
         : "strict",
       narrativeGuidance: text(row, "narrative_guidance") ?? "",
+      factBlueprints: Array.isArray(row.fact_blueprints)
+        ? row.fact_blueprints.filter(Array.isArray).map((facts) =>
+            facts.filter((fact): fact is string => typeof fact === "string")
+          )
+        : [],
       };
     }),
     continents: ((continentsResult.data ?? []) as Row[]).map((row) => ({

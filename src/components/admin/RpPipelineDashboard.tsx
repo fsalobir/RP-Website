@@ -11,6 +11,7 @@ import {
   queueNarrativeRepair,
   retryPipelineJob,
   saveActionEffects,
+  saveActionPublicFacts,
   saveActionAutomationConfig,
   saveArticleReview,
   saveCountryDiscordMapping,
@@ -46,6 +47,7 @@ export type RpPipelineActionView = {
   roll: number | null;
   rollOutcome: string | null;
   selectionExplanation: string | null;
+  publicFacts: string[];
   sourceIds: string[];
   factSheet: string | null;
   articleTitle: string | null;
@@ -138,6 +140,7 @@ export type RpPipelineDashboardData = {
     discordDestination: string;
     creativeLicense: "strict" | "controlled";
     narrativeGuidance: string;
+    factBlueprints: string[][];
   }>;
   staffCandidates: Array<{
     userId: string;
@@ -366,6 +369,18 @@ function PipelineView({ data }: { data: RpPipelineDashboardData }) {
             Enjeux narratifs
             <input name="stakes" maxLength={1000} className="w-full rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 text-[var(--foreground)]" />
           </label>
+          <label className="space-y-1 text-sm text-[var(--foreground-muted)] md:col-span-2 xl:col-span-4">
+            Faits publics établis · un par ligne
+            <textarea
+              name="public_facts"
+              required
+              minLength={10}
+              rows={4}
+              placeholder={"La délégation remet une note officielle à la cible.\nLa note propose la reprise d’un canal ministériel.\nAucun accord n’est encore conclu."}
+              className="w-full resize-y rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-[var(--foreground)]"
+            />
+            <span className="block text-xs">Deux à huit faits concrets. Magnum les raconte mais ne peut pas les compléter.</span>
+          </label>
           <label className="space-y-1 text-sm text-[var(--foreground-muted)] md:col-span-2">
             Phase précédente
             <select name="parent_action_id" className="w-full rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 text-[var(--foreground)]">
@@ -439,6 +454,25 @@ function PipelineView({ data }: { data: RpPipelineDashboardData }) {
                         <div className="flex justify-between gap-4"><dt className="text-[var(--foreground-muted)]">Résultat</dt><dd className="text-right text-[var(--foreground)]">{stateLabel(action.rollOutcome)}</dd></div>
                       </dl>
                       {action.selectionExplanation && <p className="mt-3 text-xs leading-5 text-[var(--foreground-muted)]">{action.selectionExplanation}</p>}
+                      <details className="mt-3 border-t border-[var(--border)] pt-3" open={action.publicFacts.length < 2}>
+                        <summary className="cursor-pointer text-xs font-semibold text-[var(--foreground)]">
+                          Faits publics · {action.publicFacts.length}
+                        </summary>
+                        <form action={saveActionPublicFacts} className="mt-3 space-y-2">
+                          <input type="hidden" name="action_id" value={action.id} />
+                          <textarea
+                            name="public_facts"
+                            required
+                            rows={5}
+                            defaultValue={action.publicFacts.join("\n")}
+                            placeholder="Un fait concret par ligne"
+                            className="w-full resize-y rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-xs leading-5 text-[var(--foreground)]"
+                          />
+                          <button className="rounded-lg border border-[var(--border)] px-3 py-1.5 text-xs font-semibold text-[var(--foreground)] hover:bg-[var(--background-elevated)]">
+                            Enregistrer et régénérer
+                          </button>
+                        </form>
+                      </details>
                       {action.decisionStatus === "pending" && (
                         <form action={decideRpAction} className="mt-4 flex gap-2">
                           <input type="hidden" name="action_id" value={action.id} />
@@ -1197,6 +1231,18 @@ function AutomationSettingsView({
                       placeholder="Ex. ton d’agence officielle, éléments à mettre en avant, limites particulières…"
                       className="w-full resize-y rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-sm leading-5 text-[var(--foreground)]"
                     />
+                  </label>
+                  <label className="space-y-1 text-xs text-[var(--foreground-muted)] md:col-span-2 xl:col-span-4">
+                    Scènes factuelles automatiques
+                    <textarea
+                      name="fact_blueprints"
+                      rows={5}
+                      required
+                      defaultValue={config.factBlueprints.map((facts) => facts.join(" | ")).join("\n")}
+                      placeholder="Une scène par ligne ; séparez ses faits avec |. Variables : {auteur}, {cible}, {action}."
+                      className="w-full resize-y rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-sm leading-5 text-[var(--foreground)]"
+                    />
+                    <span className="block">Le moteur tire une ligne au hasard puis fige ses faits avant Magnum.</span>
                   </label>
                   <details className="md:col-span-2 xl:col-span-4">
                     <summary className="cursor-pointer text-sm font-semibold text-[var(--foreground)]">Préconditions facultatives</summary>
