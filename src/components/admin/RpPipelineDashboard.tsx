@@ -8,6 +8,7 @@ import {
   decideRpAction,
   queueDiscordSync,
   queueDiscordDelivery,
+  queueNarrativeRepair,
   retryPipelineJob,
   saveActionEffects,
   saveActionAutomationConfig,
@@ -52,6 +53,8 @@ export type RpPipelineActionView = {
   articleSections: Array<{ title: string; body: string }>;
   articleId: string | null;
   articleStatus: string | null;
+  narrativeCertified: boolean;
+  narrativeProvenance: string | null;
   discordMessageId: string | null;
   adminEffects: AdminEffectAdded[];
   consequencesApplied: boolean;
@@ -71,6 +74,7 @@ export type LoreArticleView = {
   rpDate: string | null;
   status: string;
   discordMessageId: string | null;
+  narrativeCertified: boolean;
 };
 
 export type PipelineAlertView = {
@@ -132,6 +136,8 @@ export type RpPipelineDashboardData = {
     maxContextArticles: number;
     contextWindowRpMonths: number;
     discordDestination: string;
+    creativeLicense: "strict" | "controlled";
+    narrativeGuidance: string;
   }>;
   staffCandidates: Array<{
     userId: string;
@@ -479,6 +485,11 @@ function PipelineView({ data }: { data: RpPipelineDashboardData }) {
                         {action.sourceIds.length} source{action.sourceIds.length > 1 ? "s" : ""} retenue{action.sourceIds.length > 1 ? "s" : ""}
                       </p>
                       {action.articleId && (
+                        <p className={`mt-2 text-xs font-medium ${action.narrativeCertified ? "text-emerald-300" : "text-amber-200"}`}>
+                          {action.narrativeCertified ? "Narration certifiée" : "Narration à certifier"}
+                        </p>
+                      )}
+                      {action.articleId && (
                         <details className="mt-3 border-t border-[var(--border)] pt-3">
                           <summary className="cursor-pointer text-xs font-semibold text-[var(--foreground)]">Corriger ou valider l’article</summary>
                           <form action={saveArticleReview} className="mt-3 space-y-2">
@@ -604,11 +615,17 @@ function PipelineView({ data }: { data: RpPipelineDashboardData }) {
                       )}
                     </section>
                   </div>
-                  {(action.factSheet || action.ledger.length > 0) && (
+                  {(action.factSheet || action.narrativeProvenance || action.ledger.length > 0) && (
                     <div className="grid gap-6 border-t border-[var(--border)] bg-[var(--background)] p-4 md:grid-cols-2">
                       <section>
                         <h4 className="text-sm font-semibold text-[var(--foreground)]">Fiche factuelle transmise</h4>
                         <p className="mt-2 whitespace-pre-wrap text-xs leading-5 text-[var(--foreground-muted)]">{action.factSheet ?? "Aucune fiche enregistrée."}</p>
+                        {action.narrativeProvenance && (
+                          <details className="mt-3">
+                            <summary className="cursor-pointer text-xs font-semibold text-[var(--foreground)]">Traçabilité narrative</summary>
+                            <pre className="mt-2 max-h-72 overflow-auto whitespace-pre-wrap text-xs leading-5 text-[var(--foreground-muted)]">{action.narrativeProvenance}</pre>
+                          </details>
+                        )}
                       </section>
                       <section>
                         <h4 className="text-sm font-semibold text-[var(--foreground)]">Registre des conséquences</h4>
@@ -643,13 +660,28 @@ function PipelineView({ data }: { data: RpPipelineDashboardData }) {
             </span>
           </summary>
           <div className="divide-y border-t" style={{ borderColor: "var(--border)" }}>
-            {completedActions.slice(0, 20).map((action) => (
+            {completedActions.slice(0, 50).map((action) => (
               <div key={action.id} className="flex flex-wrap items-center justify-between gap-2 px-1 py-2.5 text-sm">
                 <span className="min-w-0">
                   <span className="font-medium text-[var(--foreground)]">{action.countryName}</span>
                   <span className="text-[var(--foreground-muted)]"> · {action.actionLabel}</span>
                 </span>
-                <span className="text-xs text-[var(--foreground-muted)]">{formatDate(action.createdAt)}</span>
+                <div className="flex items-center gap-2">
+                  {action.articleId && (
+                    <span className={`text-xs font-medium ${action.narrativeCertified ? "text-emerald-300" : "text-amber-200"}`}>
+                      {action.narrativeCertified ? "Certifiée" : "Non certifiée"}
+                    </span>
+                  )}
+                  <span className="text-xs text-[var(--foreground-muted)]">{formatDate(action.createdAt)}</span>
+                  {action.articleId && action.consequencesApplied && (
+                    <form action={queueNarrativeRepair}>
+                      <input type="hidden" name="action_id" value={action.id} />
+                      <button className="rounded-lg border border-[var(--border)] px-2.5 py-1 text-xs font-semibold text-[var(--foreground)] hover:bg-[var(--background-elevated)]">
+                        Régénérer la narration
+                      </button>
+                    </form>
+                  )}
+                </div>
               </div>
             ))}
           </div>
@@ -718,6 +750,11 @@ function LibraryView({
                 <div className="flex flex-wrap items-center gap-2">
                   <h3 className="font-semibold text-[var(--foreground)]">{article.title}</h3>
                   <StateBadge value={article.status} />
+                  {article.authority === "engine" && (
+                    <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${article.narrativeCertified ? "bg-emerald-500/10 text-emerald-300" : "bg-amber-500/10 text-amber-200"}`}>
+                      {article.narrativeCertified ? "Narration certifiée" : "Non certifiée"}
+                    </span>
+                  )}
                 </div>
                 <p className="mt-1 line-clamp-2 text-sm leading-6 text-[var(--foreground-muted)]">{article.excerpt}</p>
                 <div className="mt-3 flex flex-wrap gap-1.5">
@@ -1122,6 +1159,13 @@ function AutomationSettingsView({
                       <option value="dossier">Dossier · 2 000–3 500</option>
                     </select>
                   </label>
+                  <label className="space-y-1 text-xs text-[var(--foreground-muted)]">
+                    Liberté narrative
+                    <select name="creative_license" defaultValue={config.creativeLicense} className="w-full rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 text-sm text-[var(--foreground)]">
+                      <option value="strict">Stricte · aucun détail inventé</option>
+                      <option value="controlled">Contrôlée · détails non mécaniques</option>
+                    </select>
+                  </label>
                   <div className="grid grid-cols-2 gap-3">
                     <label className="space-y-1 text-xs text-[var(--foreground-muted)]">
                       Sources max.
@@ -1142,6 +1186,17 @@ function AutomationSettingsView({
                   <label className="flex items-center gap-2 self-end text-sm text-[var(--foreground-muted)]">
                     <input name="publish_failures" type="checkbox" defaultChecked={config.publishFailures} />
                     Publier aussi les échecs
+                  </label>
+                  <label className="space-y-1 text-xs text-[var(--foreground-muted)] md:col-span-2 xl:col-span-4">
+                    Consigne narrative propre à ce type d’action
+                    <textarea
+                      name="narrative_guidance"
+                      rows={3}
+                      maxLength={1000}
+                      defaultValue={config.narrativeGuidance}
+                      placeholder="Ex. ton d’agence officielle, éléments à mettre en avant, limites particulières…"
+                      className="w-full resize-y rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-sm leading-5 text-[var(--foreground)]"
+                    />
                   </label>
                   <details className="md:col-span-2 xl:col-span-4">
                     <summary className="cursor-pointer text-sm font-semibold text-[var(--foreground)]">Préconditions facultatives</summary>

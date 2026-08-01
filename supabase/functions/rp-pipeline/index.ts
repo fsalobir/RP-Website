@@ -16,6 +16,47 @@ const ARTICLE_LIMITS = {
 } as const;
 
 type ArticleProfile = keyof typeof ARTICLE_LIMITS;
+type CreativeLicense = "strict" | "controlled";
+type ContextRole =
+  | "exact_pair"
+  | "author_background"
+  | "target_background"
+  | "regional_background";
+type NarrativeOutcome = {
+  code: string;
+  status: "prevented" | "achieved";
+  degree: "minor" | "major" | "critical";
+  instruction: string;
+};
+type NarrativeParticipant = {
+  role: "author" | "target" | "affected";
+  name: string;
+};
+type NarrativeContract = {
+  version: 1;
+  action: string;
+  date_rp: string | null;
+  participants: NarrativeParticipant[];
+  public_attribution: boolean;
+  outcome: NarrativeOutcome;
+  effects: string[];
+  intent?: string;
+  stakes?: string;
+  creative_license: CreativeLicense;
+  narrative_guidance?: string;
+  creative_permissions: string[];
+  prohibitions: string[];
+};
+type CriticIssue = {
+  code: string;
+  detail: string;
+};
+type CriticReport = {
+  verdict: "pass" | "repair";
+  issues: CriticIssue[];
+  creative_facts: Array<{ text: string; category: string }>;
+  used_source_ids: string[];
+};
 type JobStatus =
   | "pending"
   | "running"
@@ -44,6 +85,8 @@ type EditorialAttempt = {
   analysis: string;
   draft: string;
   final: string;
+  critic: string;
+  repair: string;
   errors: string[];
 };
 type GeneratedArticleResult = {
@@ -51,11 +94,15 @@ type GeneratedArticleResult = {
   attempts: EditorialAttempt[];
   sourceIds: string[];
   blockedNsfw: boolean;
+  provenance?: Record<string, unknown>;
 };
-type GenerationStage = "analysis" | "draft" | "final";
+type GenerationStage = "analysis" | "draft" | "final" | "critic" | "repair";
 type ContextArticle = {
   id: string;
   source_kind: string;
+  action_id?: string | null;
+  narrative_certified_at?: string | null;
+  context_role?: ContextRole;
   rp_year: number | null;
   rp_month: number | null;
   rp_day: number | null;
@@ -783,9 +830,15 @@ export function collectNumbers(
   return output;
 }
 
-function authorityScore(kind: string): number {
-  if (kind === "engine" || kind === "mj") return 4;
+function authorityScore(value: ContextArticle | string): number {
+  const kind = typeof value === "string" ? value : value.source_kind;
+  if (kind === "mj") return 4;
   if (kind === "official") return 3;
+  if (
+    typeof value !== "string" && value.action_id &&
+    value.narrative_certified_at
+  ) return 2.5;
+  if (kind === "engine") return 4;
   if (kind === "player") return 2;
   return 0;
 }
@@ -819,7 +872,9 @@ function retryAfterSeconds(response: Response): number | undefined {
 export function selectContext(
   rows: ContextArticle[],
   filters: {
-    countryIds: string[];
+    authorCountryId: string | null;
+    targetCountryId: string | null;
+    affectedCountryIds: string[];
     regionIds: string[];
     tags: string[];
     roleplayDate: string | null;
@@ -827,7 +882,10 @@ export function selectContext(
   maxArticles: number,
   preferredAgeMonths: number,
 ): ContextArticle[] {
-  const wantedCountries = new Set(filters.countryIds);
+  const wantedTargets = new Set([
+    filters.targetCountryId,
+    ...filters.affectedCountryIds,
+  ].filter((id): id is string => Boolean(id)));
   const wantedRegions = new Set(filters.regionIds);
   const wantedTags = new Set(filters.tags);
   const targetDate = filters.roleplayDate
@@ -856,6 +914,7 @@ export function selectContext(
           row.editorial_status === "published") &&
         (row.source_kind !== "engine" ||
           row.editorial_status === "published") &&
+        (!row.action_id || Boolean(row.narrative_certified_at)) &&
         (targetOrder === null || row.rp_year === null ||
           row.rp_month === null ||
           row.rp_year * 372 + (row.rp_month - 1) * 31 +
@@ -875,33 +934,48 @@ export function selectContext(
             : []
         ),
       ];
-      const relevance = countries.filter((id) =>
-            wantedCountries.has(id)
-          ).length * 100 +
-        (row.region_ids ?? []).filter((id) => wantedRegions.has(id)).length *
-          4 +
-        tags.filter((tag) => wantedTags.has(tag)).length * 6;
+      const authorMatch = Boolean(
+        filters.authorCountryId && countries.includes(filters.authorCountryId),
+      );
+      const targetMatch = countries.some((id) => wantedTargets.has(id));
+      const exactPair = Boolean(filters.targetCountryId) && authorMatch &&
+        countries.includes(filters.targetCountryId!);
+      const tagMatches = tags.filter((tag) => wantedTags.has(tag)).length;
+      const regionMatch = (row.region_ids ?? []).some((id) =>
+        wantedRegions.has(id)
+      );
+      const contextRole: ContextRole | null = exactPair
+        ? "exact_pair"
+        : authorMatch
+        ? "author_background"
+        : targetMatch
+        ? "target_background"
+        : regionMatch && tagMatches > 0
+        ? "regional_background"
+        : null;
+      const relevance = exactPair
+        ? 300 + tagMatches * 10
+        : authorMatch || targetMatch
+        ? 100 + tagMatches * 20
+        : contextRole === "regional_background"
+        ? 40 + tagMatches * 10
+        : 0;
       const rpDate = row.rp_year && row.rp_month
         ? `${row.rp_year}-${String(row.rp_month).padStart(2, "0")}`
         : null;
-      return { row, relevance, age: monthDistance(rpDate) };
+      return {
+        row: contextRole ? { ...row, context_role: contextRole } : row,
+        relevance,
+        age: monthDistance(rpDate),
+        contextRole,
+      };
     });
-  // ponytail: seuil relatif simple; passer aux embeddings seulement si le rappel mesuré devient insuffisant.
-  const relevanceFloor = Math.max(
-    1,
-    Math.ceil(
-      scored.reduce(
-        (maximum, { relevance }) => Math.max(maximum, relevance),
-        0,
-      ) * 0.6,
-    ),
-  );
   const ranked = scored
-    .filter(({ relevance }) => relevance >= relevanceFloor)
+    .filter(({ contextRole }) => Boolean(contextRole))
     .sort(
       (a, b) =>
         b.relevance - a.relevance ||
-        authorityScore(b.row.source_kind) - authorityScore(a.row.source_kind) ||
+        authorityScore(b.row) - authorityScore(a.row) ||
         Number(a.age > preferredAgeMonths) -
           Number(b.age > preferredAgeMonths) ||
         a.age - b.age ||
@@ -910,14 +984,34 @@ export function selectContext(
     );
   const selected: ContextArticle[] = [];
   let tokens = 0;
-  for (const { row } of ranked) {
-    if (selected.length >= maxArticles) break;
-    const cost = estimateTokens(
-      `${row.title ?? ""}\n${contextArticleContent(row)}`,
-    );
-    if (tokens + cost > MAX_CONTEXT_TOKENS) continue;
-    selected.push(row);
-    tokens += cost;
+  const quotas: Record<ContextRole, number> = {
+    exact_pair: 4,
+    author_background: 2,
+    target_background: 2,
+    regional_background: 1,
+  };
+  for (
+    const role of [
+      "exact_pair",
+      "author_background",
+      "target_background",
+      "regional_background",
+    ] as ContextRole[]
+  ) {
+    let roleCount = 0;
+    for (const { row, contextRole } of ranked) {
+      if (
+        contextRole !== role || roleCount >= quotas[role] ||
+        selected.length >= maxArticles
+      ) continue;
+      const cost = estimateTokens(
+        `${row.title ?? ""}\n${contextArticleContent(row)}`,
+      );
+      if (tokens + cost > MAX_CONTEXT_TOKENS) continue;
+      selected.push(row);
+      tokens += cost;
+      roleCount += 1;
+    }
   }
   return selected;
 }
@@ -1004,7 +1098,9 @@ export function editorialVoiceForStage(
   stage: GenerationStage,
   value: unknown,
 ): string {
-  return stage === "analysis" ? "" : editorialVoiceInstruction(value);
+  return ["draft", "final", "repair"].includes(stage)
+    ? editorialVoiceInstruction(value)
+    : "";
 }
 
 async function hashText(value: string): Promise<string> {
@@ -1049,6 +1145,8 @@ export function contradictorySourceIds(
 export function validateEditorialAnalysis(
   raw: string,
   allowedSourceIds: string[],
+  contract?: NarrativeContract,
+  sources: ContextArticle[] = [],
 ): string[] {
   let value: unknown;
   try {
@@ -1064,10 +1162,10 @@ export function validateEditorialAnalysis(
   const record = value as Record<string, unknown>;
   const expectedKeys = [
     "angle",
-    "faits_utilisables",
-    "chronologie",
+    "event",
+    "evidence",
     "contradictions",
-    "interdictions",
+    "exclusions",
   ];
   const errors: string[] = [];
   if (
@@ -1079,13 +1177,11 @@ export function validateEditorialAnalysis(
   if (typeof record.angle !== "string" || !record.angle.trim()) {
     errors.push("Angle éditorial invalide");
   }
-  for (const key of ["faits_utilisables", "chronologie", "interdictions"]) {
-    if (
-      !Array.isArray(record[key]) ||
-      (record[key] as unknown[]).some((item) => typeof item !== "string")
-    ) {
-      errors.push(`${key} invalide`);
-    }
+  if (
+    !Array.isArray(record.exclusions) ||
+    record.exclusions.some((item) => typeof item !== "string")
+  ) {
+    errors.push("exclusions invalide");
   }
   const sourceIsAllowed = (value: unknown) =>
     typeof value === "string" &&
@@ -1109,71 +1205,255 @@ export function validateEditorialAnalysis(
   ) {
     errors.push("Contradictions invalides");
   }
+  const event = record.event && typeof record.event === "object" &&
+      !Array.isArray(record.event)
+    ? record.event as Record<string, unknown>
+    : null;
+  const author = contract?.participants.find(({ role }) => role === "author")
+    ?.name ?? null;
+  const target = contract?.participants.find(({ role }) => role === "target")
+    ?.name ?? null;
+  if (
+    !event || typeof event.action !== "string" ||
+    !(typeof event.author === "string" || event.author === null) ||
+    !(typeof event.target === "string" || event.target === null) ||
+    typeof event.status !== "string"
+  ) {
+    errors.push("Événement canonique invalide");
+  } else if (
+    contract &&
+    (event.action !== contract.action || event.author !== author ||
+      event.target !== target || event.status !== contract.outcome.status)
+  ) {
+    errors.push("L'analyse a remplacé l'événement courant");
+  }
+  const normalizedSourceContent = new Map(
+    sources.map((source) => [
+      source.id,
+      normalizeEvidence(contextArticleContent(source)),
+    ]),
+  );
+  const sourceById = new Map(sources.map((source) => [source.id, source]));
+  if (!Array.isArray(record.evidence) || record.evidence.length > 8) {
+    errors.push("Preuves invalides");
+  } else {
+    for (const item of record.evidence) {
+      if (!item || typeof item !== "object" || Array.isArray(item)) {
+        errors.push("Preuve invalide");
+        continue;
+      }
+      const evidence = item as Record<string, unknown>;
+      const sourceId = typeof evidence.source_id === "string"
+        ? allowedSourceIds.find((id) => id === evidence.source_id) ??
+          allowedSourceIds.find((id) =>
+            id.startsWith(evidence.source_id as string)
+          )
+        : undefined;
+      if (
+        !sourceId || typeof evidence.excerpt !== "string" ||
+        !["continuity", "background", "contradiction"].includes(
+          String(evidence.use),
+        ) ||
+        !normalizeEvidence(evidence.excerpt).length ||
+        (normalizedSourceContent.has(sourceId) &&
+          !normalizedSourceContent.get(sourceId)!.includes(
+            normalizeEvidence(evidence.excerpt),
+          ))
+      ) errors.push("Preuve absente de sa source");
+      const sourceRole = sourceId
+        ? sourceById.get(sourceId)?.context_role
+        : undefined;
+      if (
+        typeof evidence.excerpt === "string" &&
+        evidence.excerpt.length > (sourceRole === "exact_pair" ? 500 : 240)
+      ) errors.push("Extrait de contexte trop long");
+      if (
+        sourceId && evidence.use === "continuity" &&
+        sourceRole !== "exact_pair"
+      ) {
+        errors.push("Continuité réservée aux sources du couple exact");
+      }
+    }
+  }
   return errors;
 }
 
-export function factSheetForPrompt(
+function normalizeEvidence(value: string): string {
+  return value.normalize("NFKC").replace(/\s+/g, " ").trim()
+    .toLocaleLowerCase("fr");
+}
+
+function narrativeOutcome(value: unknown): NarrativeOutcome {
+  const code = typeof value === "string" ? value : "minor_success";
+  const failure = code.endsWith("failure");
+  const degree = code.startsWith("critical")
+    ? "critical"
+    : code.startsWith("major")
+    ? "major"
+    : "minor";
+  const instruction = failure
+    ? degree === "minor"
+      ? "La tentative commence mais elle est empêchée avant d'atteindre son objectif."
+      : degree === "major"
+      ? "La tentative est clairement empêchée avant sa réalisation."
+      : "La tentative s'effondre avant sa réalisation, sans inventer de contrecoup."
+    : degree === "minor"
+    ? "L'objectif est atteint de façon limitée."
+    : degree === "major"
+    ? "L'objectif est clairement atteint."
+    : "L'objectif est atteint de façon décisive, sans inventer d'effet supplémentaire.";
+  return {
+    code,
+    status: failure ? "prevented" : "achieved",
+    degree,
+    instruction,
+  };
+}
+
+function countryNameById(
+  countries: Array<Record<string, unknown>>,
+  id: unknown,
+): string | null {
+  return typeof id === "string"
+    ? String(countries.find((country) => country.id === id)?.name ?? "") || null
+    : null;
+}
+
+export function buildNarrativeContract(
   factSheet: Record<string, unknown>,
-): Record<string, unknown> {
+  creativeLicense: CreativeLicense = "strict",
+  narrativeGuidance = "",
+): NarrativeContract {
   const parameters = factSheet.intention_et_paramètres &&
       typeof factSheet.intention_et_paramètres === "object" &&
       !Array.isArray(factSheet.intention_et_paramètres)
     ? factSheet.intention_et_paramètres as Record<string, unknown>
     : {};
   const publicAttribution = parameters.attribution_publique !== false;
+  const countries = Array.isArray(factSheet.pays)
+    ? factSheet.pays.filter((country): country is Record<string, unknown> =>
+      Boolean(country) && typeof country === "object" && !Array.isArray(country)
+    )
+    : [];
   const authorId = factSheet.pays_auteur_id;
   const targetId = factSheet.pays_cible_id ?? factSheet.cible_id;
-  const countries = Array.isArray(factSheet.pays)
-    ? factSheet.pays.flatMap((country) => {
-      if (!country || typeof country !== "object" || Array.isArray(country)) {
-        return [];
-      }
-      const row = country as Record<string, unknown>;
-      if (
-        typeof row.name !== "string" ||
-        (!publicAttribution && row.id === authorId)
-      ) {
-        return [];
-      }
-      return [{
-        rôle: row.id === targetId
-          ? "cible"
-          : row.id === authorId
-          ? "auteur"
-          : "mentionné",
-        nom: row.name,
-      }];
-    })
+  const participants: NarrativeParticipant[] = [];
+  const authorName = countryNameById(countries, authorId);
+  const targetName = countryNameById(countries, targetId);
+  if (publicAttribution && authorName) {
+    participants.push({ role: "author", name: authorName });
+  }
+  if (targetName) participants.push({ role: "target", name: targetName });
+  const plan = Array.isArray(factSheet.consequence_plan)
+    ? factSheet.consequence_plan.filter((
+      item,
+    ): item is Record<string, unknown> =>
+      Boolean(item) && typeof item === "object" && !Array.isArray(item)
+    )
     : [];
+  for (const operation of plan) {
+    for (const [key, id] of Object.entries(operation)) {
+      if (!key.endsWith("country_id")) continue;
+      const name = countryNameById(countries, id);
+      if (
+        name && name !== authorName && name !== targetName &&
+        !participants.some((participant) => participant.name === name)
+      ) participants.push({ role: "affected", name });
+    }
+  }
+  const jet = factSheet.jet && typeof factSheet.jet === "object" &&
+      !Array.isArray(factSheet.jet)
+    ? factSheet.jet as Record<string, unknown>
+    : {};
+  const outcome = narrativeOutcome(jet.outcome);
+  const effects: string[] = [];
+  if (publicAttribution && outcome.status === "achieved") {
+    for (const operation of plan) {
+      const kind = String(operation.kind ?? "");
+      const delta = Number(operation.delta ?? 0);
+      if (!Number.isFinite(delta) || delta === 0) continue;
+      const primary = countryNameById(
+        countries,
+        operation.country_id ?? operation.observer_country_id ??
+          operation.controller_country_id,
+      );
+      const secondary = countryNameById(
+        countries,
+        operation.target_country_id ?? operation.controller_country_id,
+      );
+      if (kind === "relation_delta" && primary && secondary) {
+        effects.push(
+          `Les relations entre ${primary} et ${secondary} doivent ${
+            delta > 0 ? "s'améliorer" : "se dégrader"
+          }.`,
+        );
+      } else if (kind === "control_delta" && primary && secondary) {
+        effects.push(
+          `${secondary} doit ${
+            delta > 0 ? "accroître" : "réduire"
+          } son emprise sur ${primary}.`,
+        );
+      } else if (kind === "country_delta" && primary) {
+        const metric = String(operation.column ?? "situation nationale");
+        effects.push(
+          `La ${metric} de ${primary} doit ${
+            delta > 0 ? "s'améliorer" : "se dégrader"
+          }.`,
+        );
+      }
+    }
+  }
   const actionType = factSheet.type_action &&
       typeof factSheet.type_action === "object" &&
       !Array.isArray(factSheet.type_action)
-    ? (factSheet.type_action as Record<string, unknown>).libellé
-    : factSheet.type_action;
-  const intention = factSheet.intention ?? parameters.intent;
-  const stakes = factSheet.enjeux ?? parameters.stakes;
+    ? factSheet.type_action as Record<string, unknown>
+    : {};
+  const permissions = creativeLicense === "controlled"
+    ? [
+      "atmosphère non factuelle",
+      "type générique de scène compatible avec l'action",
+      "réaction collective anonyme",
+      "discours indirect sans citation exacte",
+    ]
+    : ["style, rythme et agencement uniquement"];
   return {
-    ...(typeof actionType === "string" ? { action: actionType } : {}),
-    ...(typeof factSheet.date_rp === "string"
-      ? { date_rp: factSheet.date_rp }
+    version: 1,
+    action: String(actionType.libellé ?? factSheet.type_action ?? "Action"),
+    date_rp: typeof factSheet.date_rp === "string" ? factSheet.date_rp : null,
+    participants,
+    public_attribution: publicAttribution,
+    outcome,
+    effects,
+    ...(typeof factSheet.intention === "string" && factSheet.intention.trim()
+      ? { intent: factSheet.intention.trim() }
       : {}),
-    ...(countries.length ? { pays: countries } : {}),
-    ...(typeof intention === "string" && intention.trim()
-      ? { intention: intention.trim() }
+    ...(typeof factSheet.enjeux === "string" && factSheet.enjeux.trim()
+      ? { stakes: factSheet.enjeux.trim() }
       : {}),
-    ...(typeof stakes === "string" && stakes.trim()
-      ? { enjeux: stakes.trim() }
+    creative_license: creativeLicense,
+    ...(narrativeGuidance.trim()
+      ? { narrative_guidance: narrativeGuidance.trim() }
       : {}),
-    ...(typeof factSheet.interdictions === "string"
-      ? { interdictions: factSheet.interdictions }
-      : {}),
-    ...(!publicAttribution
-      ? {
-        confidentialité:
-          "L'auteur de l'action n'est pas établi publiquement. Ne l'attribue à aucun pays, même par déduction.",
-      }
-      : {}),
+    creative_permissions: permissions,
+    prohibitions: [
+      "Aucun chiffre, nom propre, organisme, citation exacte, victime, dégât, unité, traité, sanction ou changement territorial absent des preuves.",
+      "Le contexte ne remplace jamais l'événement courant.",
+      outcome.status === "prevented"
+        ? "Ne jamais présenter l'action comme accomplie."
+        : "Ne jamais ajouter de conséquence absente du contrat.",
+    ],
   };
+}
+
+export function factSheetForPrompt(
+  factSheet: Record<string, unknown>,
+): Record<string, unknown> {
+  const embedded = factSheet.narrative_contract;
+  const contract = embedded && typeof embedded === "object" &&
+      !Array.isArray(embedded)
+    ? embedded
+    : buildNarrativeContract(factSheet);
+  return { evenement_canonique: contract };
 }
 
 async function preparePromptData(params: {
@@ -1189,6 +1469,7 @@ async function preparePromptData(params: {
   const selectedSources = params.sources.map((source) => ({
     id: source.id,
     autorité: source.source_kind,
+    rôle_de_contexte: source.context_role ?? "regional_background",
     date_rp: source.rp_year && source.rp_month
       ? `${source.rp_year}-${String(source.rp_month).padStart(2, "0")}-${
         String(source.rp_day ?? 1).padStart(2, "0")
@@ -1218,7 +1499,7 @@ async function preparePromptData(params: {
   }
   const allowedNumbers = collectNumbers({
     fiche_factuelle: promptFactSheet,
-    sources: selectedSources.map(({ id: _id, ...source }) => source),
+    sources: selectedSources,
   });
   return {
     input,
@@ -1231,11 +1512,11 @@ async function preparePromptData(params: {
 function countriesAllowedByPrompt(
   knownCountries: string[],
   factSheet: Record<string, unknown>,
-  sources: ContextArticle[],
+  analysis = "",
 ): string[] {
   const corpus = JSON.stringify({
     factSheet: factSheetForPrompt(factSheet),
-    sources,
+    analyse_validée: analysis,
   });
   return knownCountries.filter((country) =>
     textMentionsCountry(corpus, country)
@@ -1252,19 +1533,19 @@ export function finalEditorialFacts(
     ) as Record<string, unknown>;
     const parsedInput = JSON.parse(input) as {
       fiche_factuelle?: Record<string, unknown>;
-      sources?: unknown[];
     };
     return {
       canon: {
         fiche_factuelle: parsedInput.fiche_factuelle ?? {},
-        sources: Array.isArray(parsedInput.sources) ? parsedInput.sources : [],
+        preuves: Array.isArray(parsedAnalysis.evidence)
+          ? parsedAnalysis.evidence
+          : [],
       },
       plan_editorial_non_canonique: {
         angle: parsedAnalysis.angle,
-        faits_utilisables: parsedAnalysis.faits_utilisables,
-        chronologie: parsedAnalysis.chronologie,
+        event: parsedAnalysis.event,
         contradictions: parsedAnalysis.contradictions,
-        interdictions: parsedAnalysis.interdictions,
+        exclusions: parsedAnalysis.exclusions,
       },
     };
   } catch {
@@ -1277,9 +1558,152 @@ export function finalEditorialFacts(
   }
 }
 
+function contractFromFactSheet(
+  factSheet: Record<string, unknown>,
+): NarrativeContract {
+  const embedded = factSheet.narrative_contract;
+  return embedded && typeof embedded === "object" && !Array.isArray(embedded)
+    ? embedded as NarrativeContract
+    : buildNarrativeContract(factSheet);
+}
+
+export function parseCriticReport(
+  raw: string,
+  contract: NarrativeContract,
+  allowedSourceIds: string[],
+): { report?: CriticReport; errors: string[] } {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(
+      raw.trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, ""),
+    );
+  } catch {
+    return { errors: ["Critique JSON invalide"] };
+  }
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    return { errors: ["Objet de critique attendu"] };
+  }
+  const value = parsed as Record<string, unknown>;
+  const errors: string[] = [];
+  const allowedIssueCodes = new Set([
+    "wrong_actor",
+    "wrong_target",
+    "wrong_action",
+    "wrong_outcome",
+    "wrong_effect_direction",
+    "secret_leak",
+    "unsupported_claim",
+    "context_replaces_event",
+    "third_country_dominates",
+    "creative_scope_violation",
+    "contradiction_hidden",
+    "style_flat",
+    "repetition",
+    "length",
+  ]);
+  if (!["pass", "repair"].includes(String(value.verdict))) {
+    errors.push("Verdict critique invalide");
+  }
+  const issues = Array.isArray(value.issues)
+    ? value.issues.flatMap((item): CriticIssue[] => {
+      if (!item || typeof item !== "object" || Array.isArray(item)) return [];
+      const issue = item as Record<string, unknown>;
+      return typeof issue.code === "string" &&
+          allowedIssueCodes.has(issue.code) &&
+          typeof issue.detail === "string" && issue.detail.trim()
+        ? [{ code: issue.code, detail: issue.detail }]
+        : [];
+    })
+    : [];
+  if (!Array.isArray(value.issues) || issues.length !== value.issues.length) {
+    errors.push("Problèmes critiques invalides");
+  }
+  const creativeFacts = Array.isArray(value.creative_facts)
+    ? value.creative_facts.flatMap((item) => {
+      if (!item || typeof item !== "object" || Array.isArray(item)) return [];
+      const fact = item as Record<string, unknown>;
+      return typeof fact.text === "string" && typeof fact.category === "string"
+        ? [{ text: fact.text.trim(), category: fact.category }]
+        : [];
+    })
+    : [];
+  if (
+    !Array.isArray(value.creative_facts) ||
+    creativeFacts.length !== value.creative_facts.length ||
+    (contract.creative_license === "strict" && creativeFacts.length)
+  ) errors.push("Détails créatifs invalides");
+  const usedSourceIds = Array.isArray(value.used_source_ids)
+    ? value.used_source_ids.filter((id): id is string =>
+      typeof id === "string" && allowedSourceIds.includes(id)
+    )
+    : [];
+  if (
+    !Array.isArray(value.used_source_ids) ||
+    usedSourceIds.length !== value.used_source_ids.length
+  ) errors.push("Sources de critique invalides");
+  if (String(value.verdict) === "pass" && issues.length) {
+    errors.push("Une critique réussie ne peut contenir de problème");
+  }
+  if (String(value.verdict) === "repair" && !issues.length) {
+    errors.push("Une réparation doit nommer au moins un problème");
+  }
+  return errors.length ? { errors } : {
+    report: {
+      verdict: value.verdict as "pass" | "repair",
+      issues,
+      creative_facts: creativeFacts,
+      used_source_ids: usedSourceIds,
+    },
+    errors,
+  };
+}
+
+function validateNarrativeArticle(
+  raw: string,
+  profile: ArticleProfile,
+  allowedNumbers: Set<string>,
+  allowedCountries: string[],
+  knownCountries: string[],
+  contract: NarrativeContract,
+): ReturnType<typeof parseArticle> {
+  const parsed = parseArticle(
+    raw,
+    profile,
+    allowedNumbers,
+    allowedCountries,
+    knownCountries,
+  );
+  if (!parsed.output) return parsed;
+  const errors = [...parsed.errors];
+  const lead = `${parsed.output.title}\n${
+    parsed.output.description.split(/\n\n+/)[0]
+  }`;
+  const coreCountries = contract.participants
+    .filter(({ role }) => role === "author" || role === "target")
+    .map(({ name }) => name);
+  for (const country of coreCountries) {
+    if (!textMentionsCountry(lead, country)) {
+      errors.push(`Pays central absent du début: ${country}`);
+    }
+  }
+  const thirdCountries = allowedCountries.filter((country) =>
+    !coreCountries.some((core) =>
+      core.localeCompare(country, "fr", { sensitivity: "base" }) === 0
+    )
+  );
+  for (const country of thirdCountries) {
+    if (textMentionsCountry(lead, country)) {
+      errors.push(`Pays de contexte placé au premier plan: ${country}`);
+    }
+  }
+  return errors.length ? { errors } : parsed;
+}
+
 async function runGenerationStage(params: {
   stage: GenerationStage;
   input: string;
+  contract: NarrativeContract;
+  sources: ContextArticle[];
   profile: ArticleProfile;
   editorialVoice?: unknown;
   allowedNumbers: Set<string>;
@@ -1288,12 +1712,15 @@ async function runGenerationStage(params: {
   sourceIds: string[];
   analysis?: string;
   draft?: string;
+  final?: string;
+  critic?: string;
   previousErrors?: string[];
 }): Promise<{
   content: string;
   blockedNsfw: boolean;
   validation?: ReturnType<typeof parseArticle>;
   analysisErrors?: string[];
+  criticReport?: ReturnType<typeof parseCriticReport>;
 }> {
   const apiKey = Deno.env.get("INFERMATIC_API_KEY");
   if (!apiKey) {
@@ -1329,6 +1756,11 @@ async function runGenerationStage(params: {
   let finalAllowedNumbers = params.allowedNumbers;
   let finalAllowedCountries = params.allowedCountries;
   let raw: string;
+  const editorialFacts = finalEditorialFacts(
+    params.analysis ?? "",
+    params.input,
+  );
+  const editorialFactsText = JSON.stringify(editorialFacts, null, 2);
   if (params.stage === "analysis") {
     raw = await callMagnum({
       apiKey,
@@ -1337,20 +1769,28 @@ async function runGenerationStage(params: {
       maxTokens: 1_400,
       system: `${systemBase}
 Réponds en JSON avec exactement:
-{"angle":string,"faits_utilisables":string[],"chronologie":string[],"contradictions":[{"sources":string[],"désaccord":string}],"interdictions":string[]}.
-Reste compact : huit faits, six étapes chronologiques, trois contradictions et
-six interdictions au maximum. Chaque élément tient en une phrase courte.
-Dans contradictions, cite uniquement les identifiants de sources fournis.
-Signale les contradictions sans choisir arbitrairement une version.
-Dans faits_utilisables, conserve seulement les faits explicitement écrits dans
-la fiche ou les sources et directement utiles à l'action. Le type d'action
-n'établit ni lieu, ni scène, ni paroles exactes, ni réaction, ni motif, ni
-historique des relations. N'infère aucun de ces éléments. Ton analyse est un
-plan éditorial, jamais une nouvelle source de faits.`,
+{"angle":string,"event":{"action":string,"author":string|null,"target":string|null,"status":"prevented"|"achieved"},"evidence":[{"source_id":string,"excerpt":string,"use":"continuity"|"background"|"contradiction"}],"contradictions":[{"sources":string[],"désaccord":string}],"exclusions":string[]}.
+Recopie event exactement depuis evenement_canonique. Une archive décrit le passé
+et ne remplace jamais cet événement. Pour evidence, copie un extrait exact et
+court de la source : aucune paraphrase. Ne retiens que les extraits réellement
+utiles. Une liste vide est préférable à un contexte forcé. Cite uniquement les
+identifiants fournis. Le rôle continuity est réservé à une source exact_pair.
+Une source background décrit seulement l'arrière-plan : elle ne prouve jamais
+un motif, une cause ou un lien avec l'événement courant. Limite chaque extrait
+background à 240 caractères et chaque extrait exact_pair à 500. Signale les
+contradictions sans les résoudre.`,
       user:
         `Prépare l'analyse éditoriale de cet article.\n<données>\n${params.input}\n</données>`,
     });
   } else if (params.stage === "draft") {
+    const creativeInstruction =
+      params.contract.creative_license === "controlled"
+        ? `Tu peux créer uniquement : ${
+          params.contract.creative_permissions.join(", ")
+        }.
+Ces détails ne peuvent contenir aucun nom propre, chiffre, citation exacte,
+victime, dégât, unité, traité, sanction ou conséquence.`
+        : "N'invente aucun détail factuel. Ta liberté porte uniquement sur le style, le rythme et l'agencement.";
     raw = await callMagnum({
       apiKey,
       temperature: 0.85,
@@ -1358,43 +1798,32 @@ plan éditorial, jamais une nouvelle source de faits.`,
       maxTokens: limits.maxTokens,
       useCreativePreset: true,
       system: `${systemBase}
+${creativeInstruction}
 Rédige un article de ${limits.min} à ${limits.max} caractères hors titre.
 Vise environ ${targetChars} caractères et ne descends jamais sous ${limits.min}.
 Le titre doit rester sous ${params.profile === "brief" ? 90 : 140} caractères
 et partir du détail concret le plus marquant, pas du libellé générique de l'action.
 Le plafond de ${limits.max} caractères est absolu et couvre le chapeau plus
 tous les corps de sections. ${sectionGuidance}${retryInstruction}
-Mentionne au moins une fois les pays auteur et cible par leur nom complet tel
-qu'il apparaît dans la fiche factuelle.
-Chaque phrase factuelle doit provenir directement des données. N'ajoute aucun
-contexte géopolitique générique, institution, personne, projection ou conséquence.
-Chaque paragraphe doit apporter un détail concret différent tiré des sources :
-ne répète pas le titre sous plusieurs formulations. Transforme ces détails en
-un récit vif, avec un rythme et une structure variés, sans altérer les faits.
+Le premier paragraphe raconte exclusivement l'événement courant. Les pays auteur
+et cible publics y apparaissent par leur nom complet. Le contexte historique ne
+dépasse jamais un quart de l'article et aucun pays tiers n'apparaît dans le titre
+ou le premier paragraphe. Une preuve background ne devient jamais la cause ou le
+motif de l'action. Chaque paragraphe apporte un détail distinct.
 Réponds uniquement en JSON avec exactement:
 {"title":string,"description":string,"sections":[{"title":string,"body":string}]}
 Les sections sont facultatives. Markdown Discord simple seulement. Aucune mention Discord.`,
-      user: `Rédige depuis les données et l'analyse, sans ajouter de fait.
-<données>\n${params.input}\n</données>
-<analyse_rédactionnelle>\n${
-        cleanDiscordText(params.analysis ?? "")
-      }\n</analyse_rédactionnelle>`,
+      user: `Rédige depuis ce contrat et ces preuves validées.
+<contrat_preuves_et_plan>\n${editorialFactsText}\n</contrat_preuves_et_plan>`,
     });
-  } else {
-    const finalFacts = finalEditorialFacts(
-      params.analysis ?? "",
-      params.input,
-    );
-    const finalFactsText = JSON.stringify(finalFacts, null, 2);
-    const canonicalFacts = finalFacts.canon &&
-        typeof finalFacts.canon === "object" &&
-        !Array.isArray(finalFacts.canon)
-      ? finalFacts.canon
+  } else if (params.stage === "final") {
+    const canonicalFacts = editorialFacts.canon &&
+        typeof editorialFacts.canon === "object" &&
+        !Array.isArray(editorialFacts.canon)
+      ? editorialFacts.canon
       : {};
     finalAllowedNumbers = collectNumbers(canonicalFacts);
-    finalAllowedCountries = params.knownCountries.filter((country) =>
-      textMentionsCountry(JSON.stringify(canonicalFacts), country)
-    );
+    finalAllowedCountries = params.allowedCountries;
     const draftBlocked = containsNsfw(params.draft ?? "");
     const draftValidation = draftBlocked
       ? { errors: ["Contenu NSFW bloqué"] }
@@ -1434,7 +1863,7 @@ Réponds uniquement en JSON avec exactement:
 {"title":string,"description":string,"sections":[{"title":string,"body":string}]}
 Les sections sont facultatives. Aucun autre champ, identifiant, rôle, salon, image ou fait mécanique.`,
       user: `Révise cet article uniquement avec le canon fourni.
-<canon_et_plan>\n${finalFactsText}\n</canon_et_plan>
+<canon_et_plan>\n${editorialFactsText}\n</canon_et_plan>
 <brouillon_style_uniquement>\n${
         cleanDiscordText(params.draft ?? "")
       }\n</brouillon_style_uniquement>
@@ -1442,23 +1871,82 @@ Les sections sont facultatives. Aucun autre champ, identifiant, rôle, salon, im
         draftValidation.errors.join("; ") || "aucune"
       }\n</erreurs_serveur>`,
     });
+  } else if (params.stage === "critic") {
+    raw = await callMagnum({
+      apiKey,
+      temperature: 0.05,
+      topK: 16,
+      maxTokens: 1_200,
+      system: `${SAFE_SYSTEM_BASE}
+Tu es un contrôleur indépendant, pas un rédacteur. Compare chaque affirmation
+de l'article au contrat et aux preuves. Vérifie surtout acteur, cible, action,
+résultat, sens des effets, confidentialité, pays tiers, contexte dominant,
+invention hors licence, faux lien causal, platitude et répétition.
+Réponds en JSON avec exactement:
+{"verdict":"pass"|"repair","issues":[{"code":string,"detail":string}],"creative_facts":[{"text":string,"category":string}],"used_source_ids":string[]}.
+Codes autorisés : wrong_actor, wrong_target, wrong_action, wrong_outcome,
+wrong_effect_direction, secret_leak, unsupported_claim, context_replaces_event,
+third_country_dominates, creative_scope_violation, contradiction_hidden,
+style_flat, repetition, length. Un verdict pass impose issues:[].`,
+      user: `<contrat_et_preuves>\n${editorialFactsText}\n</contrat_et_preuves>
+<article>\n${cleanDiscordText(params.final ?? "")}\n</article>
+<erreurs_serveur>\n${
+        params.previousErrors?.join("; ") || "aucune"
+      }\n</erreurs_serveur>`,
+    });
+  } else {
+    raw = await callMagnum({
+      apiKey,
+      temperature: voiceInstruction ? 0.3 : 0.15,
+      topK: voiceInstruction ? 32 : 24,
+      maxTokens: limits.maxTokens,
+      system: `${systemBase}
+Répare l'article selon tous les problèmes listés. Le contrat est la seule
+autorité sur l'événement et les preuves sont les seules sources de contexte.
+Conserve la vivacité du texte mais supprime toute affirmation non soutenue.
+Respecte ${limits.min} à ${limits.max} caractères hors titre. ${sectionGuidance}
+Réponds uniquement en JSON avec exactement:
+{"title":string,"description":string,"sections":[{"title":string,"body":string}]}.`,
+      user: `<contrat_et_preuves>\n${editorialFactsText}\n</contrat_et_preuves>
+<article_a_reparer>\n${
+        cleanDiscordText(params.final ?? "")
+      }\n</article_a_reparer>
+<critique>\n${cleanDiscordText(params.critic ?? "")}\n</critique>`,
+    });
   }
 
   const blockedNsfw = containsNsfw(raw);
   const content = blockedNsfw ? "[contenu bloqué]" : raw;
-  const validation = params.stage === "final"
-    ? blockedNsfw ? { errors: ["Contenu NSFW bloqué"] } : parseArticle(
-      content,
-      params.profile,
-      finalAllowedNumbers,
-      finalAllowedCountries,
-      params.knownCountries,
-    )
+  const validation = params.stage === "final" || params.stage === "repair"
+    ? blockedNsfw
+      ? { errors: ["Contenu NSFW bloqué"] }
+      : validateNarrativeArticle(
+        content,
+        params.profile,
+        finalAllowedNumbers,
+        finalAllowedCountries,
+        params.knownCountries,
+        params.contract,
+      )
     : undefined;
   const analysisErrors = params.stage === "analysis"
-    ? validateEditorialAnalysis(content, params.sourceIds)
+    ? validateEditorialAnalysis(
+      content,
+      params.sourceIds,
+      params.contract,
+      params.sources,
+    )
     : undefined;
-  return { content, blockedNsfw, validation, analysisErrors };
+  const criticReport = params.stage === "critic"
+    ? parseCriticReport(content, params.contract, params.sourceIds)
+    : undefined;
+  return {
+    content,
+    blockedNsfw,
+    validation,
+    analysisErrors,
+    criticReport,
+  };
 }
 
 async function storeContradictions(
@@ -1511,7 +1999,29 @@ async function loadGenerationInput(supabase: SupabaseClient, job: Job) {
     : typeof action.payload?.target_country_id === "string"
     ? action.payload.target_country_id
     : null;
-  const countryIds = [action.country_id, targetId].filter((
+  const consequencePlan = job.payload?.recalculation === true &&
+      Array.isArray(action.pending_consequence_plan)
+    ? action.pending_consequence_plan
+    : Array.isArray(action.consequence_plan)
+    ? action.consequence_plan
+    : [];
+  const consequenceCountryIds = consequencePlan.flatMap((operation: unknown) =>
+    operation && typeof operation === "object" && !Array.isArray(operation)
+      ? Object.entries(operation as Record<string, unknown>).flatMap(
+        ([key, value]) =>
+          key.endsWith("country_id") && typeof value === "string"
+            ? [value]
+            : [],
+      )
+      : []
+  );
+  const countryIds = [
+    ...new Set([
+      action.country_id,
+      targetId,
+      ...consequenceCountryIds,
+    ]),
+  ].filter((
     value,
   ): value is string => Boolean(value));
   const [
@@ -1541,7 +2051,9 @@ async function loadGenerationInput(supabase: SupabaseClient, job: Job) {
 
   const configResult = await supabase
     .from("action_automation_configs")
-    .select("article_profile,max_context_articles,context_window_rp_months")
+    .select(
+      "article_profile,max_context_articles,context_window_rp_months,creative_license,narrative_guidance",
+    )
     .eq("action_type_id", action.action_type_id)
     .maybeSingle();
   if (configResult.error || !configResult.data) {
@@ -1556,6 +2068,8 @@ async function loadGenerationInput(supabase: SupabaseClient, job: Job) {
     article_profile?: ArticleProfile;
     max_context_articles?: number;
     context_window_rp_months?: number;
+    creative_license?: CreativeLicense;
+    narrative_guidance?: string;
   };
   const configuredProfile = config.article_profile;
   const profile = action.article_profile in ARTICLE_LIMITS
@@ -1573,6 +2087,15 @@ async function loadGenerationInput(supabase: SupabaseClient, job: Job) {
   ].filter((country): country is Record<string, unknown> =>
     Boolean(country) && typeof country === "object" && !Array.isArray(country)
   );
+  const mergedCountries = countryIds.flatMap((id) => {
+    const snapshot = snapshotCountries.find((country) => country.id === id);
+    if (snapshot) return [snapshot];
+    const current = (countries ?? []).find((country: Record<string, unknown>) =>
+      country.id === id
+    );
+    return current ? [current as Record<string, unknown>] : [];
+  });
+  const publicAttribution = action.payload?.attribution_publique !== false;
   let roleplayDate = typeof worldSnapshot.roleplay_date === "string"
     ? worldSnapshot.roleplay_date
     : typeof action.roleplay_date === "string"
@@ -1598,10 +2121,13 @@ async function loadGenerationInput(supabase: SupabaseClient, job: Job) {
       }-${String(probable.rp_day ?? 1).padStart(2, "0")}`;
     }
   }
-  const regionIds =
-    (snapshotCountries.length ? snapshotCountries : countries ?? [])
-      .map((country: Record<string, unknown>) => country.continent_id)
-      .filter((value: unknown): value is string => typeof value === "string");
+  const contextCountryIds = countryIds.filter((id) =>
+    publicAttribution || id !== action.country_id
+  );
+  const regionIds = mergedCountries
+    .filter((country) => contextCountryIds.includes(String(country.id)))
+    .map((country: Record<string, unknown>) => country.continent_id)
+    .filter((value: unknown): value is string => typeof value === "string");
   const tags = [
     actionType.key,
     ...classifyTags(
@@ -1630,7 +2156,7 @@ async function loadGenerationInput(supabase: SupabaseClient, job: Job) {
   }
   const relevantCountryIds = [
     ...new Set([
-      ...countryIds,
+      ...contextCountryIds,
       ...(regionCountries ?? []).map(({ id }: { id: string }) => id),
     ]),
   ];
@@ -1672,7 +2198,7 @@ async function loadGenerationInput(supabase: SupabaseClient, job: Job) {
     const { data, error } = await supabase
       .from("lore_articles")
       .select(
-        "id,source_kind,rp_year,rp_month,rp_day,rp_week,real_published_at,title,clean_content,sections,editorial_status,deleted_at,nsfw_quarantined,lore_article_countries(country_id,relation_role),lore_article_tags(lore_tags(key))",
+        "id,source_kind,action_id,narrative_certified_at,rp_year,rp_month,rp_day,rp_week,real_published_at,title,clean_content,sections,editorial_status,deleted_at,nsfw_quarantined,lore_article_countries(country_id,relation_role),lore_article_tags(lore_tags(key))",
       )
       .in("id", candidateIdList.slice(offset, offset + 100))
       .is("deleted_at", null)
@@ -1714,30 +2240,27 @@ async function loadGenerationInput(supabase: SupabaseClient, job: Job) {
   }));
   const context = selectContext(
     loreWithRegions,
-    { countryIds, regionIds, tags, roleplayDate },
+    {
+      authorCountryId: publicAttribution ? action.country_id : null,
+      targetCountryId: targetId,
+      affectedCountryIds: consequenceCountryIds.filter((id: string) =>
+        id !== action.country_id && id !== targetId
+      ),
+      regionIds,
+      tags,
+      roleplayDate,
+    },
     Math.max(1, Math.min(8, Number(config?.max_context_articles ?? 8))),
     Math.max(1, Number(config?.context_window_rp_months ?? 12)),
   );
-  const factSheet = {
+  const baseFactSheet = {
     action_id: action.id,
     type_action: { key: actionType.key, libellé: actionType.label_fr },
     importance: action.importance,
     statut_décision: action.decision_status,
     pays_auteur_id: action.country_id,
     pays_cible_id: targetId,
-    pays: snapshotCountries.length ? snapshotCountries : (countries ?? []).map(
-      (
-        { id, name, continent_id }: {
-          id: string;
-          name: string;
-          continent_id: string | null;
-        },
-      ) => ({
-        id,
-        name,
-        continent_id,
-      }),
-    ),
+    pays: mergedCountries,
     cible_id: targetId,
     intention_et_paramètres: action.payload,
     intention: action.intent ??
@@ -1754,11 +2277,23 @@ async function loadGenerationInput(supabase: SupabaseClient, job: Job) {
     jet: job.payload?.recalculation === true && action.pending_dice_results
       ? action.pending_dice_results
       : action.dice_results,
+    consequence_plan: consequencePlan,
     date_rp: roleplayDate,
     photographie_initiale_du_monde: worldSnapshot,
     explication_de_sélection: action.selection_explanation,
     interdictions:
       "Aucun fait mécanique supplémentaire. Aucune citation, victime, réaction ou conséquence absente de cette fiche.",
+  };
+  const creativeLicense = config.creative_license === "controlled"
+    ? "controlled"
+    : "strict";
+  const factSheet = {
+    ...baseFactSheet,
+    narrative_contract: buildNarrativeContract(
+      baseFactSheet,
+      creativeLicense,
+      config.narrative_guidance ?? "",
+    ),
   };
   const knownCountries = (knownCountryRows ?? [])
     .map((country: Record<string, unknown>) => country.name)
@@ -1800,6 +2335,10 @@ async function storeGeneratedArticle(
     sections: generated.output?.sections ?? [],
     current_output: generated.output ?? {},
     current_version: actionExecutionVersion,
+    narrative_certified_at: generated.output && generated.provenance
+      ? new Date().toISOString()
+      : null,
+    narrative_provenance: generated.provenance ?? {},
     source_ids: generated.sourceIds,
     real_published_at: null,
     rp_year: rpMatch ? Number(rpMatch[1]) : null,
@@ -1977,7 +2516,13 @@ async function storeGeneratedArticle(
       ["analysis", attempt.analysis, []],
       ["draft", attempt.draft, []],
       ["final", attempt.final, attempt.errors],
-    ] as const).map(([stage, rawContent, validationErrors]) => ({
+      ["critic", attempt.critic, []],
+      ["repair", attempt.repair, attempt.errors],
+    ] as const).filter(([, rawContent]) => rawContent.length > 0).map(([
+      stage,
+      rawContent,
+      validationErrors,
+    ]) => ({
       ...(containsNsfw(rawContent)
         ? {
           output: { content: "[contenu bloqué]" },
@@ -2050,8 +2595,9 @@ async function storeContextSelection(
         action_id: actionId,
         lore_article_id: source.id,
         source_rank: index + 1,
-        authority_score: authorityScore(source.source_kind),
+        authority_score: authorityScore(source),
         relevance_score: sources.length - index,
+        context_role: source.context_role ?? "regional_background",
         is_contradictory: false,
       })),
     );
@@ -2124,7 +2670,7 @@ async function loadFrozenContext(
   const { data, error } = await supabase
     .from("lore_articles")
     .select(
-      "id,source_kind,rp_year,rp_month,rp_day,rp_week,real_published_at,title,clean_content,sections,editorial_status,deleted_at,nsfw_quarantined,lore_article_countries(country_id,relation_role),lore_article_tags(lore_tags(key))",
+      "id,source_kind,action_id,narrative_certified_at,rp_year,rp_month,rp_day,rp_week,real_published_at,title,clean_content,sections,editorial_status,deleted_at,nsfw_quarantined,lore_article_countries(country_id,relation_role),lore_article_tags(lore_tags(key))",
     )
     .in("id", sourceIds);
   if (error) {
@@ -2142,6 +2688,7 @@ async function loadFrozenContext(
       article.deleted_at ||
       article.nsfw_quarantined ||
       article.source_kind === "unclassified" ||
+      (article.action_id && !article.narrative_certified_at) ||
       !["approved", "published"].includes(article.editorial_status ?? "") ||
       (article.source_kind === "engine" &&
         article.editorial_status !== "published")
@@ -2170,7 +2717,9 @@ async function processGeneration(
       .single();
     const { data: article, error: articleError } = await supabase
       .from("lore_articles")
-      .select("editorial_status,approved_for_execution_version")
+      .select(
+        "editorial_status,approved_for_execution_version,current_version,discord_message_id,narrative_certified_at",
+      )
       .eq("id", job.lore_article_id)
       .single();
     if (actionError || articleError || !action || !article) {
@@ -2194,6 +2743,85 @@ async function processGeneration(
         "L'article n'est pas approuvé pour cette version d'exécution.",
         "review",
       );
+    }
+    if (job.payload?.article_only_repair === true) {
+      if (
+        !action.consequences_applied_at ||
+        Number(action.execution_version) !== targetVersion ||
+        article.editorial_status !== "approved" ||
+        !article.narrative_certified_at
+      ) {
+        throw new PipelineError(
+          "La réparation narrative ne correspond plus à la version exécutée.",
+          "warning",
+        );
+      }
+      const publicationPayload = {
+        execution_version: targetVersion,
+        article_version: Number(article.current_version ?? 1),
+        edit_existing: Boolean(article.discord_message_id),
+      };
+      const { data: activePublication, error: activePublicationError } =
+        await supabase
+          .from("rp_pipeline_jobs")
+          .select("id,status")
+          .eq("lore_article_id", job.lore_article_id)
+          .eq("job_type", "publish_discord")
+          .in("status", ["pending", "running", "retry", "warning"])
+          .order("created_at", { ascending: true })
+          .limit(1)
+          .maybeSingle();
+      if (activePublicationError) {
+        throw new PipelineError(
+          `Recherche de livraison impossible: ${activePublicationError.message}`,
+        );
+      }
+      if (activePublication?.status === "running") {
+        throw new PipelineError("Une livraison Discord est encore en cours.");
+      }
+      if (activePublication) {
+        const { error } = await supabase.from("rp_pipeline_jobs").update({
+          payload: publicationPayload,
+          priority: 10,
+          status: "pending",
+          attempt_count: 0,
+          next_attempt_at: new Date().toISOString(),
+          locked_at: null,
+          locked_by: null,
+          last_error: null,
+          finished_at: null,
+        }).eq("id", activePublication.id);
+        if (error) {
+          throw new PipelineError(
+            `Relance Discord impossible: ${error.message}`,
+          );
+        }
+      } else {
+        const { error } = await supabase.from("rp_pipeline_jobs").insert({
+          job_type: "publish_discord",
+          action_id: action.id,
+          lore_article_id: job.lore_article_id,
+          payload: publicationPayload,
+          priority: 10,
+          idempotency_key:
+            `publish:${job.lore_article_id}:narrative:${article.current_version}`,
+        });
+        if (error) {
+          throw new PipelineError(
+            `Livraison Discord impossible: ${error.message}`,
+          );
+        }
+      }
+      const { error: actionStatusError } = await supabase
+        .from("ai_event_requests")
+        .update({ execution_status: "publishing" })
+        .eq("id", action.id);
+      if (actionStatusError) {
+        throw new PipelineError(
+          `État de publication impossible: ${actionStatusError.message}`,
+        );
+      }
+      return { status: "succeeded" };
     }
     if (
       action.consequences_applied_at &&
@@ -2235,7 +2863,6 @@ async function processGeneration(
     const promptAllowedCountries = countriesAllowedByPrompt(
       knownCountries,
       factSheet,
-      usedSources,
     );
     await storeContextSelection(
       supabase,
@@ -2251,6 +2878,12 @@ async function processGeneration(
         editorial_attempt: 1,
         editorial_history: [],
         source_ids: prompt.sourceIds,
+        context_roles: Object.fromEntries(
+          usedSources.map((source) => [
+            source.id,
+            source.context_role ?? "regional_background",
+          ]),
+        ),
         fact_sheet: factSheet,
         context_hash: prompt.contextHash,
         article_profile: profile,
@@ -2274,19 +2907,44 @@ async function processGeneration(
     );
   }
   const factSheet = payload.fact_sheet as Record<string, unknown>;
+  const articleOnlyRepair = payload.article_only_repair === true;
+  const nextExecutionVersion = articleOnlyRepair
+    ? Number(action.execution_version)
+    : Number(
+      job.payload?.execution_version ??
+        action.pending_execution_version ??
+        Number(action.execution_version ?? 0) + 1,
+    );
   const sourceIds = (payload.source_ids as unknown[]).filter((
     id,
   ): id is string => typeof id === "string").slice(0, 8);
-  const sources = await loadFrozenContext(supabase, sourceIds);
-  if (sources === null) {
+  const frozenSources = await loadFrozenContext(supabase, sourceIds);
+  if (frozenSources === null) {
     return {
       status: "pending",
       payload: {
         execution_version: payload.execution_version,
         recalculation: payload.recalculation === true,
+        article_only_repair: articleOnlyRepair,
       },
     };
   }
+  const contextRoles = payload.context_roles &&
+      typeof payload.context_roles === "object" &&
+      !Array.isArray(payload.context_roles)
+    ? payload.context_roles as Record<string, unknown>
+    : {};
+  const sources = frozenSources.map((source) => ({
+    ...source,
+    context_role: [
+        "exact_pair",
+        "author_background",
+        "target_background",
+        "regional_background",
+      ].includes(String(contextRoles[source.id]))
+      ? contextRoles[source.id] as ContextRole
+      : "regional_background" as ContextRole,
+  }));
   const prompt = await preparePromptData({ factSheet, sources });
   const knownCountries = Array.isArray(payload.known_countries)
     ? payload.known_countries.filter((
@@ -2298,7 +2956,7 @@ async function processGeneration(
   const promptAllowedCountries = countriesAllowedByPrompt(
     knownCountries,
     factSheet,
-    usedSources,
+    typeof payload.analysis === "string" ? payload.analysis : "",
   );
   if (prompt.contextHash !== payload.context_hash) {
     await storeContextSelection(
@@ -2316,7 +2974,16 @@ async function processGeneration(
         editorial_history: [],
         analysis: null,
         draft: null,
+        final: null,
+        critic: null,
+        repair: null,
         source_ids: prompt.sourceIds,
+        context_roles: Object.fromEntries(
+          usedSources.map((source) => [
+            source.id,
+            source.context_role ?? "regional_background",
+          ]),
+        ),
         context_hash: prompt.contextHash,
         allowed_countries: promptAllowedCountries,
         blocked_nsfw: false,
@@ -2335,7 +3002,13 @@ async function processGeneration(
   const validatedKnownCountries = knownCountries.length
     ? knownCountries
     : allowedCountries;
-  const stage: GenerationStage = ["analysis", "draft", "final"].includes(
+  const stage: GenerationStage = [
+      "analysis",
+      "draft",
+      "final",
+      "critic",
+      "repair",
+    ].includes(
       String(payload.stage),
     )
     ? payload.stage as GenerationStage
@@ -2350,6 +3023,8 @@ async function processGeneration(
   const result = await runGenerationStage({
     stage,
     input: prompt.input,
+    contract: contractFromFactSheet(factSheet),
+    sources: usedSources,
     profile,
     editorialVoice: payload.editorial_voice,
     allowedNumbers: prompt.allowedNumbers,
@@ -2360,9 +3035,16 @@ async function processGeneration(
       ? payload.analysis
       : undefined,
     draft: typeof payload.draft === "string" ? payload.draft : undefined,
-    previousErrors: history.flatMap(({ errors }) =>
-      Array.isArray(errors) ? errors : []
-    ),
+    final: typeof payload.final === "string" ? payload.final : undefined,
+    critic: typeof payload.critic === "string" ? payload.critic : undefined,
+    previousErrors: [
+      ...history.flatMap(({ errors }) => Array.isArray(errors) ? errors : []),
+      ...(Array.isArray(payload.final_validation_errors)
+        ? payload.final_validation_errors.filter((error): error is string =>
+          typeof error === "string"
+        )
+        : []),
+    ],
   });
   const blockedNsfw = payload.blocked_nsfw === true || result.blockedNsfw;
   if (stage === "analysis") {
@@ -2372,6 +3054,8 @@ async function processGeneration(
         analysis: result.content,
         draft: "",
         final: "",
+        critic: "",
+        repair: "",
         errors: result.analysisErrors,
       };
       const invalidAttempts = [...history, invalidAttempt];
@@ -2389,11 +3073,6 @@ async function processGeneration(
           },
         };
       }
-      const nextExecutionVersion = Number(
-        job.payload?.execution_version ??
-          action.pending_execution_version ??
-          Number(action.execution_version ?? 0) + 1,
-      );
       await storeGeneratedArticle(
         supabase,
         job,
@@ -2433,6 +3112,11 @@ async function processGeneration(
         ...payload,
         stage: "draft",
         analysis: result.content,
+        allowed_countries: countriesAllowedByPrompt(
+          knownCountries,
+          factSheet,
+          result.content,
+        ),
         blocked_nsfw: blockedNsfw,
       },
     };
@@ -2449,40 +3133,147 @@ async function processGeneration(
     };
   }
 
-  const currentAttempt: EditorialAttempt = {
-    attemptNo: editorialAttempt,
-    analysis: typeof payload.analysis === "string" ? payload.analysis : "",
-    draft: typeof payload.draft === "string" ? payload.draft : "",
-    final: result.content,
-    errors: result.validation?.errors ?? ["Révision finale absente"],
-  };
-  const attempts = [...history, currentAttempt];
-  if (!result.validation?.output && editorialAttempt === 1) {
+  if (stage === "final") {
     return {
       status: "pending",
       payload: {
         ...payload,
-        stage: "final",
-        editorial_attempt: 2,
-        editorial_history: attempts,
+        stage: "critic",
+        final: result.content,
+        final_validation_errors: result.validation?.output
+          ? []
+          : result.validation?.errors ?? ["Révision finale absente"],
+        critic_attempt: 1,
         blocked_nsfw: blockedNsfw,
       },
     };
   }
+  if (stage === "critic") {
+    if (!result.criticReport?.report) {
+      const criticAttempt = payload.critic_attempt === 2 ? 2 : 1;
+      if (criticAttempt === 1) {
+        return {
+          status: "pending",
+          payload: {
+            ...payload,
+            stage: "critic",
+            critic_attempt: 2,
+            blocked_nsfw: blockedNsfw,
+          },
+        };
+      }
+      throw new PipelineError(
+        `Critique Magnum invalide: ${
+          result.criticReport?.errors.join("; ") ?? "réponse absente"
+        }`,
+        "warning",
+      );
+    }
+    const serverErrors = Array.isArray(payload.final_validation_errors)
+      ? payload.final_validation_errors.filter((error): error is string =>
+        typeof error === "string"
+      )
+      : [];
+    if (
+      result.criticReport.report.verdict === "repair" || serverErrors.length
+    ) {
+      const report = result.criticReport.report;
+      const critic = JSON.stringify({
+        ...report,
+        verdict: "repair",
+        issues: [
+          ...report.issues,
+          ...serverErrors.map((detail) => ({
+            code: "unsupported_claim",
+            detail,
+          })),
+        ],
+      });
+      return {
+        status: "pending",
+        payload: {
+          ...payload,
+          stage: "repair",
+          critic,
+          blocked_nsfw: blockedNsfw,
+        },
+      };
+    }
+  }
+
+  const finalRaw = stage === "repair"
+    ? result.content
+    : typeof payload.final === "string"
+    ? payload.final
+    : "";
+  const canonicalFacts = finalEditorialFacts(
+    typeof payload.analysis === "string" ? payload.analysis : "",
+    prompt.input,
+  ).canon;
+  const finalValidation = validateNarrativeArticle(
+    finalRaw,
+    profile,
+    collectNumbers(canonicalFacts),
+    allowedCountries,
+    validatedKnownCountries,
+    contractFromFactSheet(factSheet),
+  );
+  const criticRaw = stage === "critic"
+    ? result.content
+    : typeof payload.critic === "string"
+    ? payload.critic
+    : "";
+  const criticReport = stage === "critic"
+    ? result.criticReport?.report
+    : parseCriticReport(
+      criticRaw,
+      contractFromFactSheet(factSheet),
+      prompt.sourceIds,
+    ).report;
+  const currentAttempt: EditorialAttempt = {
+    attemptNo: editorialAttempt,
+    analysis: typeof payload.analysis === "string" ? payload.analysis : "",
+    draft: typeof payload.draft === "string" ? payload.draft : "",
+    final: typeof payload.final === "string" ? payload.final : finalRaw,
+    critic: criticRaw,
+    repair: stage === "repair" ? result.content : "",
+    errors: finalValidation?.errors ?? ["Article final absent"],
+  };
+  const attempts = [...history, currentAttempt];
   const generated: GeneratedArticleResult = {
-    ...(result.validation?.output ? { output: result.validation.output } : {}),
+    ...(finalValidation?.output ? { output: finalValidation.output } : {}),
     attempts,
     sourceIds,
-    blockedNsfw: result.validation?.output ? false : blockedNsfw,
+    blockedNsfw: finalValidation?.output ? false : blockedNsfw,
+    ...(finalValidation?.output && criticReport
+      ? {
+        provenance: {
+          certified: true,
+          repaired: stage === "repair",
+          contract: contractFromFactSheet(factSheet),
+          evidence: (() => {
+            try {
+              const parsed = JSON.parse(
+                String(payload.analysis).replace(/^```(?:json)?\s*/i, "")
+                  .replace(/\s*```$/, ""),
+              );
+              return Array.isArray(parsed.evidence) ? parsed.evidence : [];
+            } catch {
+              return [];
+            }
+          })(),
+          context_sources: usedSources.map((source) => ({
+            id: source.id,
+            role: source.context_role,
+          })),
+          critic: criticReport,
+        },
+      }
+      : {}),
   };
   const roleplayDate = typeof factSheet.date_rp === "string"
     ? factSheet.date_rp
     : null;
-  const nextExecutionVersion = Number(
-    job.payload?.execution_version ??
-      action.pending_execution_version ??
-      Number(action.execution_version ?? 0) + 1,
-  );
   const articleId = await storeGeneratedArticle(
     supabase,
     job,
@@ -2522,7 +3313,11 @@ async function processGeneration(
   }
   const { error: actionResetError } = await supabase
     .from("ai_event_requests")
-    .update({ article_invalid_attempts: 0, execution_status: "ready" })
+    .update(
+      articleOnlyRepair
+        ? { article_invalid_attempts: 0 }
+        : { article_invalid_attempts: 0, execution_status: "ready" },
+    )
     .eq("id", action.id);
   if (actionResetError) {
     throw new PipelineError(

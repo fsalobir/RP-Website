@@ -94,6 +94,16 @@ export async function retryPipelineJob(formData: FormData) {
   revalidatePath(pagePath);
 }
 
+export async function queueNarrativeRepair(formData: FormData) {
+  const { supabase } = await getAuthorizedClient();
+  const actionId = requiredText(formData, "action_id", 64);
+  const { error } = await supabase.rpc("enqueue_rp_narrative_repair", {
+    p_action_id: actionId,
+  });
+  if (error) throw new Error(`Impossible de régénérer la narration : ${error.message}`);
+  revalidatePath(pagePath);
+}
+
 export async function decideRpAction(formData: FormData) {
   const { supabase } = await getAuthorizedClient();
   const actionId = requiredText(formData, "action_id", 64);
@@ -218,6 +228,22 @@ export async function saveArticleReview(formData: FormData) {
     },
   });
   if (error) throw new Error(`Impossible de valider l’article : ${error.message}`);
+  const certifiedAt = new Date().toISOString();
+  const { error: certificationError } = await serviceSupabase
+    .from("lore_articles")
+    .update({
+      narrative_certified_at: certifiedAt,
+      narrative_provenance: {
+        certified: true,
+        method: "manual_review",
+        certified_at: certifiedAt,
+        source_ids: sourceIds,
+      },
+    })
+    .eq("id", articleId);
+  if (certificationError) {
+    throw new Error(`Article validé mais certification narrative impossible : ${certificationError.message}`);
+  }
   revalidatePath(pagePath);
 }
 
@@ -337,6 +363,10 @@ export async function saveActionAutomationConfig(formData: FormData) {
   const continentRule = String(formData.get("continent_rule") ?? "any");
   if (continentRule === "same") preconditions.same_continent = true;
   if (continentRule === "different") preconditions.different_continent = true;
+  const narrativeGuidance = String(formData.get("narrative_guidance") ?? "").trim();
+  if (narrativeGuidance.length > 1000) {
+    throw new Error("La consigne narrative ne peut pas dépasser 1 000 caractères.");
+  }
 
   const { error } = await supabase
     .from("action_automation_configs")
@@ -355,6 +385,10 @@ export async function saveActionAutomationConfig(formData: FormData) {
       max_context_articles: number("max_context_articles", 1, 8),
       context_window_rp_months: number("context_window_rp_months", 1, 120),
       discord_destination: formData.get("discord_destination") === "national" ? "national" : "international",
+      creative_license: formData.get("creative_license") === "controlled"
+        ? "controlled"
+        : "strict",
+      narrative_guidance: narrativeGuidance,
       preconditions,
     })
     .eq("action_type_id", actionTypeId);

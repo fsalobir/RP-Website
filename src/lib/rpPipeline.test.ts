@@ -74,6 +74,8 @@ describe("pipeline RP", () => {
       editorial_status: "approved",
       deleted_at: null,
       nsfw_quarantined: false,
+      narrative_certified_at: null,
+      narrative_provenance: null,
     };
     const official = { ...base, id: "official", source_kind: "official" as const };
     const quarantined = { ...base, id: "bad", source_kind: "engine" as const, nsfw_quarantined: true };
@@ -106,6 +108,8 @@ describe("pipeline RP", () => {
       editorial_status: "approved" as const,
       deleted_at: null,
       nsfw_quarantined: false,
+      narrative_certified_at: null,
+      narrative_provenance: null,
     };
     const regionalMj = {
       ...direct,

@@ -377,6 +377,7 @@ export async function loadRpPipelineDashboard(
             ? "ambiguous"
             : text(row, "editorial_status", "status") ?? classificationStatus ?? "published",
       discordMessageId: text(row, "discord_message_id"),
+      narrativeCertified: Boolean(row.narrative_certified_at),
     };
   };
   const articleViewsById = new Map(
@@ -441,6 +442,10 @@ export async function loadRpPipelineDashboard(
       articleSections: articleSections(article.sections ?? output.sections),
       articleId: text(article, "id"),
       articleStatus: text(article, "editorial_status", "status"),
+      narrativeCertified: Boolean(article.narrative_certified_at),
+      narrativeProvenance: Object.keys(object(article.narrative_provenance)).length
+        ? readable(article.narrative_provenance)
+        : null,
       discordMessageId: text(article, "discord_message_id"),
       adminEffects: normalizeAdminEffectsAdded(row.admin_effect_added),
       consequencesApplied: row.consequences_applied_at != null,
@@ -588,6 +593,10 @@ export async function loadRpPipelineDashboard(
       maxContextArticles: number(row, "max_context_articles") ?? 8,
       contextWindowRpMonths: number(row, "context_window_rp_months") ?? 12,
       discordDestination: text(row, "discord_destination") ?? "international",
+      creativeLicense: text(row, "creative_license") === "controlled"
+        ? "controlled"
+        : "strict",
+      narrativeGuidance: text(row, "narrative_guidance") ?? "",
       };
     }),
     continents: ((continentsResult.data ?? []) as Row[]).map((row) => ({

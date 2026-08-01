@@ -1,5 +1,6 @@
 import {
   buildDiscordEmbeds,
+  buildNarrativeContract,
   collectNumbers,
   containsNsfw,
   contradictorySourceIds,
@@ -14,6 +15,7 @@ import {
   formatDiscordConsequences,
   isDiscordMessageContentUnavailable,
   parseArticle,
+  parseCriticReport,
   sameDiscordSections,
   selectContext,
   validateEditorialAnalysis,
@@ -69,7 +71,7 @@ Deno.test("une opération secrète masque son auteur dans le prompt", () => {
   );
 });
 
-Deno.test("la fiche Magnum exclut les paramètres mécaniques", () => {
+Deno.test("la fiche Magnum traduit la mécanique en contrat narratif", () => {
   const sanitized = factSheetForPrompt({
     action_id: "action-technique",
     type_action: {
@@ -83,11 +85,17 @@ Deno.test("la fiche Magnum exclut les paramètres mécaniques", () => {
       { id: "saudi-id", name: "Arabie saoudite", science: 10 },
     ],
     intention_et_paramètres: {
-      intent: "Dénoncer le projet portuaire.",
       selection: { weight: 1 },
       target_country_id: "saudi-id",
     },
-    jet: { roll: 84 },
+    intention: "Dénoncer le projet portuaire.",
+    jet: { roll: 84, outcome: "major_success" },
+    consequence_plan: [{
+      kind: "relation_delta",
+      country_id: "angola-id",
+      target_country_id: "saudi-id",
+      delta: -20,
+    }],
     photographie_initiale_du_monde: { ideology_merina_monarchy: 28 },
     date_rp: "2040-05-01",
   });
@@ -95,7 +103,9 @@ Deno.test("la fiche Magnum exclut les paramètres mécaniques", () => {
   assert(
     serialized.includes("Angola") &&
       serialized.includes("Arabie saoudite") &&
-      serialized.includes("Dénoncer le projet portuaire"),
+      serialized.includes("Dénoncer le projet portuaire") &&
+      serialized.includes("achieved") &&
+      serialized.includes("se dégrader"),
     "les faits narratifs utiles doivent rester disponibles",
   );
   assert(
@@ -109,38 +119,117 @@ Deno.test("la fiche Magnum exclut les paramètres mécaniques", () => {
   );
 });
 
-Deno.test("la révision finale distingue le canon du plan Magnum", () => {
+Deno.test("la révision finale ne conserve que les preuves citées", () => {
   const facts = finalEditorialFacts(
     JSON.stringify({
       angle: "Documents commerciaux chinois",
-      faits_utilisables: ["La Chine conteste les documents."],
-      chronologie: ["Le Japon poursuit un autre chantier."],
+      event: {
+        action: "Contestation diplomatique",
+        author: "Chine",
+        target: "Japon",
+        status: "achieved",
+      },
+      evidence: [{
+        source_id: "source-a",
+        excerpt: "La Chine conteste les documents.",
+        use: "continuity",
+      }],
       contradictions: [{
         sources: ["source-a", "source-b"],
         désaccord: "Authenticité contestée",
       }],
-      interdictions: ["Auteur inconnu"],
+      exclusions: ["Auteur inconnu"],
     }),
     JSON.stringify({
       fiche_factuelle: { date_rp: "2040-05-01" },
       sources: [{
         id: "source-a",
-        contenu: "Contexte périphérique japonais",
+        contenu:
+          "La Chine conteste les documents. Contexte périphérique japonais.",
       }],
     }),
   );
   const canon = JSON.stringify(facts.canon);
   const plan = JSON.stringify(facts.plan_editorial_non_canonique);
   assert(
-    canon.includes("Contexte périphérique japonais") &&
+    canon.includes("La Chine conteste les documents") &&
       canon.includes("2040-05-01") &&
-      !canon.includes("La Chine conteste"),
-    "la fiche et les sources brutes doivent rester l'unique canon",
+      !canon.includes("Contexte périphérique japonais"),
+    "seul l'extrait cité doit rejoindre le canon",
   );
   assert(
-    plan.includes("La Chine conteste") &&
+    plan.includes("Documents commerciaux chinois") &&
       plan.includes("Authenticité contestée"),
     "l'analyse reste disponible seulement comme plan non canonique",
+  );
+});
+
+Deno.test("un jet raté impose une tentative empêchée", () => {
+  const contract = buildNarrativeContract({
+    type_action: { libellé: "Insulte diplomatique" },
+    pays_auteur_id: "argentine",
+    pays_cible_id: "australie",
+    pays: [
+      { id: "argentine", name: "Argentine" },
+      { id: "australie", name: "Australie" },
+    ],
+    jet: { outcome: "minor_failure" },
+    consequence_plan: [],
+  });
+  assert(
+    contract.outcome.status === "prevented" &&
+      contract.outcome.instruction.includes("empêchée") &&
+      contract.effects.length === 0,
+    "un échec ne doit jamais être raconté comme une action accomplie",
+  );
+});
+
+Deno.test("la critique doit être structurée et respecter la licence créative", () => {
+  const contract = buildNarrativeContract({
+    type_action: { libellé: "Ouverture diplomatique" },
+    jet: { outcome: "minor_success" },
+  });
+  assert(
+    parseCriticReport(
+      JSON.stringify({
+        verdict: "pass",
+        issues: [],
+        creative_facts: [],
+        used_source_ids: ["source-a"],
+      }),
+      contract,
+      ["source-a"],
+    ).errors.length === 0,
+    "une critique propre doit passer",
+  );
+  assert(
+    parseCriticReport(
+      JSON.stringify({
+        verdict: "repair",
+        issues: [{ code: "code_inventé", detail: "Erreur" }],
+        creative_facts: [],
+        used_source_ids: [],
+      }),
+      contract,
+      [],
+    ).errors.length > 0,
+    "un code critique libre ne doit pas contourner le contrôle",
+  );
+  assert(
+    parseCriticReport(
+      JSON.stringify({
+        verdict: "pass",
+        issues: [],
+        creative_facts: [{
+          text: "Une foule applaudit.",
+          category: "réaction",
+        }],
+        used_source_ids: [],
+      }),
+      contract,
+      [],
+    ).errors.includes("Détails créatifs invalides"),
+    "la licence stricte doit interdire tout détail créatif déclaré",
   );
 });
 
@@ -332,13 +421,18 @@ Deno.test("les contradictions ne référencent que les sources fournies", () => 
   const second = "1fad0c07-1a96-4485-9f65-dbaf2938dc87";
   const shortened = JSON.stringify({
     angle: "Renseignement",
-    faits_utilisables: [],
-    chronologie: [],
+    event: {
+      action: "Incident",
+      author: "France",
+      target: "Italie",
+      status: "achieved",
+    },
+    evidence: [],
     contradictions: [{
       sources: ["1912ee76", "1fad0c07"],
       désaccord: "Versions opposées",
     }],
-    interdictions: [],
+    exclusions: [],
   });
   assert(
     validateEditorialAnalysis(shortened, [first, second]).length === 0 &&
@@ -357,12 +451,17 @@ Deno.test("les contradictions ne référencent que les sources fournies", () => 
   const valid = validateEditorialAnalysis(
     JSON.stringify({
       angle: "Diplomatie",
-      faits_utilisables: ["Accord annoncé"],
-      chronologie: ["Annonce"],
+      event: {
+        action: "Accord",
+        author: "France",
+        target: "Italie",
+        status: "achieved",
+      },
+      evidence: [],
       contradictions: [
         { sources: ["source-a", "source-b"], désaccord: "Date" },
       ],
-      interdictions: ["Ne rien inventer"],
+      exclusions: ["Ne rien inventer"],
     }),
     ["source-a", "source-b"],
   );
@@ -377,16 +476,128 @@ Deno.test("les contradictions ne référencent que les sources fournies", () => 
     validateEditorialAnalysis(
       JSON.stringify({
         angle: "Diplomatie",
-        faits_utilisables: [],
-        chronologie: [],
+        event: {
+          action: "Accord",
+          author: "France",
+          target: "Italie",
+          status: "achieved",
+        },
+        evidence: [],
         contradictions: [
           { sources: ["source-a", "source-inventée"], désaccord: "Date" },
         ],
-        interdictions: [],
+        exclusions: [],
       }),
       ["source-a"],
     ).includes("Contradictions invalides"),
     "une contradiction ne peut pas inventer de source",
+  );
+});
+
+Deno.test("l'analyse ne peut remplacer l'action ni inventer une preuve", () => {
+  const contract = buildNarrativeContract({
+    type_action: { libellé: "Ouverture diplomatique" },
+    pays_auteur_id: "autriche",
+    pays_cible_id: "angola",
+    pays: [
+      { id: "autriche", name: "Autriche" },
+      { id: "angola", name: "Angola" },
+    ],
+    jet: { outcome: "minor_failure" },
+  });
+  const source = {
+    id: "source-a",
+    source_kind: "official",
+    rp_year: 2040,
+    rp_month: 5,
+    rp_day: 1,
+    rp_week: 1,
+    real_published_at: "2026-07-01T00:00:00Z",
+    title: "Archives portuaires",
+    clean_content: "Le port est resté fermé durant les pourparlers.",
+    context_role: "exact_pair" as const,
+  };
+  const analysis = {
+    angle: "Une tentative empêchée",
+    event: {
+      action: "Ouverture diplomatique",
+      author: "Autriche",
+      target: "Angola",
+      status: "prevented",
+    },
+    evidence: [{
+      source_id: "source-a",
+      excerpt: "Le port est resté fermé durant les pourparlers.",
+      use: "continuity",
+    }],
+    contradictions: [],
+    exclusions: [],
+  };
+  assert(
+    validateEditorialAnalysis(
+      JSON.stringify(analysis),
+      [source.id],
+      contract,
+      [source],
+    ).length === 0,
+    "un événement exact et une citation exacte doivent passer",
+  );
+  assert(
+    validateEditorialAnalysis(
+      JSON.stringify({
+        ...analysis,
+        event: { ...analysis.event, status: "achieved" },
+      }),
+      [source.id],
+      contract,
+      [source],
+    ).includes("L'analyse a remplacé l'événement courant"),
+    "un échec ne peut pas devenir un succès",
+  );
+  assert(
+    validateEditorialAnalysis(
+      JSON.stringify({
+        ...analysis,
+        evidence: [{
+          ...analysis.evidence[0],
+          excerpt: "Un accord a été signé.",
+        }],
+      }),
+      [source.id],
+      contract,
+      [source],
+    ).includes("Preuve absente de sa source"),
+    "une paraphrase inventée ne doit pas devenir un fait canonique",
+  );
+  assert(
+    validateEditorialAnalysis(
+      JSON.stringify(analysis),
+      [source.id],
+      contract,
+      [{ ...source, context_role: "target_background" }],
+    ).includes("Continuité réservée aux sources du couple exact"),
+    "une archive concernant seulement la cible ne doit pas devenir la suite directe de l'action",
+  );
+  const longExcerpt = "Contexte diplomatique ancien. ".repeat(12);
+  assert(
+    validateEditorialAnalysis(
+      JSON.stringify({
+        ...analysis,
+        evidence: [{
+          source_id: source.id,
+          excerpt: longExcerpt,
+          use: "background",
+        }],
+      }),
+      [source.id],
+      contract,
+      [{
+        ...source,
+        clean_content: longExcerpt,
+        context_role: "target_background",
+      }],
+    ).includes("Extrait de contexte trop long"),
+    "un arrière-plan ne doit pas prendre plus de place que l'événement courant",
   );
 });
 
@@ -434,7 +645,14 @@ Deno.test("le contexte exclut les sources supprimées et complète avec une sour
       { ...base, id: "future", rp_year: 2041 },
       { ...base, id: "deleted", deleted_at: "2026-07-02T00:00:00Z" },
     ],
-    { countryIds: ["fr"], regionIds: [], tags: [], roleplayDate: "2040-06-01" },
+    {
+      authorCountryId: "fr",
+      targetCountryId: null,
+      affectedCountryIds: [],
+      regionIds: [],
+      tags: [],
+      roleplayDate: "2040-06-01",
+    },
     2,
     12,
   );
@@ -481,17 +699,86 @@ Deno.test("le contexte pertinent prime sur une note MJ seulement régionale", ()
       },
     ],
     {
-      countryIds: ["kr"],
+      authorCountryId: "kr",
+      targetCountryId: null,
+      affectedCountryIds: [],
       regionIds: ["asia"],
       tags: ["crise", "diplomatie"],
       roleplayDate: "2040-06-01",
     },
-    2,
+    1,
     12,
   );
   assert(
     selected.map(({ id }) => id).join(",") === "direct-official",
     "une source seulement régionale ne doit pas remplir artificiellement le quota",
+  );
+});
+
+Deno.test("le couple exact prime et une narration moteur non certifiée est exclue", () => {
+  const base = {
+    source_kind: "official",
+    action_id: null,
+    narrative_certified_at: null,
+    rp_year: 2040,
+    rp_month: 5,
+    rp_day: 1,
+    rp_week: 1,
+    real_published_at: "2026-07-01T00:00:00Z",
+    title: "Titre",
+    clean_content: "Contexte",
+    sections: [],
+    editorial_status: "approved",
+    deleted_at: null,
+    nsfw_quarantined: false,
+    lore_article_tags: [],
+    region_ids: ["europe"],
+  };
+  const selected = selectContext(
+    [
+      {
+        ...base,
+        id: "austria-south-africa",
+        lore_article_countries: [
+          { country_id: "za", relation_role: "author" },
+          { country_id: "at", relation_role: "target" },
+        ],
+      },
+      {
+        ...base,
+        id: "austria-angola",
+        lore_article_countries: [
+          { country_id: "at", relation_role: "author" },
+          { country_id: "ao", relation_role: "target" },
+        ],
+      },
+      {
+        ...base,
+        id: "uncertified-engine",
+        source_kind: "engine",
+        action_id: "bad-action",
+        lore_article_countries: [
+          { country_id: "at", relation_role: "author" },
+          { country_id: "ao", relation_role: "target" },
+        ],
+        editorial_status: "published",
+      },
+    ],
+    {
+      authorCountryId: "at",
+      targetCountryId: "ao",
+      affectedCountryIds: [],
+      regionIds: ["europe"],
+      tags: [],
+      roleplayDate: "2040-06-01",
+    },
+    1,
+    12,
+  );
+  assert(
+    selected.length === 1 && selected[0].id === "austria-angola" &&
+      selected[0].context_role === "exact_pair",
+    "une archive tierce ou non certifiée ne doit pas remplacer le couple courant",
   );
 });
 
@@ -709,7 +996,7 @@ Deno.test("la réconciliation Discord retrouve un article sur la deuxième page"
   ];
   const originalFetch = globalThis.fetch;
   let calls = 0;
-  globalThis.fetch = (_input: string | URL | Request) =>
+  globalThis.fetch = () =>
     Promise.resolve(
       new Response(JSON.stringify(pages[calls++] ?? []), {
         status: 200,

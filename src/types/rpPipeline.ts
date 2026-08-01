@@ -8,6 +8,7 @@ export type D100Outcome =
 
 export type ArticleProfile = "brief" | "standard" | "dossier";
 export type StaffDecisionMode = "auto" | "mj";
+export type CreativeLicense = "strict" | "controlled";
 
 export interface ActionAutomationConfig {
   action_type_id: string;
@@ -26,6 +27,8 @@ export interface ActionAutomationConfig {
   discord_destination: "national" | "international";
   embed_color: number;
   image_urls: string[];
+  creative_license: CreativeLicense;
+  narrative_guidance: string;
 }
 
 export interface MagnumArticleSection {
@@ -69,6 +72,8 @@ export interface LoreArticle {
   editorial_status: "draft" | "review" | "approved" | "published" | "quarantined";
   deleted_at: string | null;
   nsfw_quarantined: boolean;
+  narrative_certified_at: string | null;
+  narrative_provenance: Record<string, unknown> | null;
 }
 
 export type PipelineJobStatus =
